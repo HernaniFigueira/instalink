@@ -348,11 +348,11 @@ describe('A3.4 · ENCAIXE — o passado de hoje não é encaixável', () => {
 
 // ═══════════════════════════════════════════════════════════════
 describe('A3.4 · COR — encaixe e atenção não misturam fundos', () => {
-  it('o selo do encaixe é CONTORNO âmbar, nunca preenchimento sobre o status', () => {
+  it('o selo do encaixe é acento LARANJA próprio, sem alterar a base do status', () => {
     expect(FIT_IN_MARK_CLS).toMatch(/border-dashed/);
-    expect(FIT_IN_MARK_CLS).toMatch(/var\(--attention-mark\)/);
-    expect(FIT_IN_MARK_CLS).not.toMatch(/bg-/);          // sem fundo âmbar sobre o verde
-    expect(FIT_IN_STRIPE_CLS).toMatch(/var\(--attention-mark\)/);
+    expect(FIT_IN_MARK_CLS).toMatch(/var\(--fit-in\)/);
+    expect(FIT_IN_MARK_CLS).toContain('bg-[var(--fit-in-bg)]');          // sem fundo âmbar sobre o verde
+    expect(FIT_IN_STRIPE_CLS).toMatch(/var\(--fit-in\)/);
     expect(FIT_IN_STRIPE_CLS).toMatch(/absolute/);
   });
 

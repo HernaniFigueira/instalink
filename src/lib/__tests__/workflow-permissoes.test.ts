@@ -9,7 +9,7 @@ import './helpers/temp-db';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { emptyDB, writeDB, readDB } from '../db';
+import { emptyDB, writeDB, readDB, updateDB } from '../db';
 import { createSession } from '../auth';
 import { biz, service, user } from './helpers/automation-fixtures';
 import { PATCH as bookingsPATCH, GET as bookingsGET } from '@/app/api/bookings/route';
@@ -544,6 +544,8 @@ describe('Profissional · Oportunidades, Pendências e Conversas', () => {
     const own = await j(await leadsGET(req('GET', `/api/leads?businessId=${B}`, T.orlando)));
     expect(own.leads.map((l: any) => l.id)).toEqual(['ld-a']);
     expect((await leadsPATCH(req('PATCH', '/api/leads', T.orlando, { businessId: B, id: 'ld-b', priority: 'high' }))).status).toBe(404);
+    expect((await leadsGET(req('GET', `/api/leads?businessId=${B}`, T.maria))).status).toBe(403);
+    await updateDB(db => { db.members.find(m => m.id === 'm-maria')!.permissions = { leads: true }; });
     expect((await j(await leadsGET(req('GET', `/api/leads?businessId=${B}`, T.maria)))).leads).toHaveLength(2);
   });
   it('Pendências: só as ligadas ao próprio trabalho; PATCH alheio é 404; contadores recortados', async () => {

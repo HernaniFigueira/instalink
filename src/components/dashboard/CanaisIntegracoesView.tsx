@@ -14,6 +14,7 @@
 //
 // Webhooks de SAÍDA continuam na aba Integrações (canal assinado do P3) — a
 // fonte de verdade não foi duplicada.
+import { isLegacyPagesEnabled } from '@/lib/product';
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -199,7 +200,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
 
   const groups: Array<{ key: string; title: string; hint: string; items: ProviderView[] }> = [
     { key: 'channel', title: 'Canais', hint: 'Por onde a conversa acontece com o cliente.', items: data?.channels || [] },
-    { key: 'source', title: 'Fontes', hint: 'De onde o lead chega até você.', items: data?.sources || [] },
+    { key: 'source', title: 'Fontes', hint: 'De onde o lead chega até você.', items: (data?.sources || []).filter(p => isLegacyPagesEnabled() || p.provider !== 'public_page') },
     { key: 'technical', title: 'Integrações', hint: 'Por onde os dados viajam (webhook, n8n, APIs).', items: data?.technical || [] },
   ].filter((g) => !only || g.key === only);
   const showTechnical = !only || only === 'technical';

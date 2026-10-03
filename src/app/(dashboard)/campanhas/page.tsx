@@ -98,7 +98,7 @@ export default function CampanhasPage() {
       <PageHeader
         icon="megaphone"
         title="Campanhas"
-        hint="Mensagens para clientes que autorizaram receber. Promoção de setembro, retorno, data especial — você escolhe o público."
+        hint="Mensagens para clientes que autorizaram receber. Retornos, orientações, data especial — você escolhe o público."
         action={
           <span className="flex items-center gap-2">
             <Link2 href={`/clientes${q}`} label="Clientes" />
@@ -123,14 +123,14 @@ export default function CampanhasPage() {
           autorizou fica de fora. Verde/laranja com ícone, não texto corrido. */}
       <div className="mb-5 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-soft)]/60 p-4">
         <p className="text-sm font-semibold text-[var(--accent-fg)] inline-flex items-center gap-2">
-          <Icon n="shield" size={16} /> Quem pode receber promoção?
+          <Icon n="shield" size={16} /> Quem pode receber comunicações?
         </p>
         <ul className="mt-2.5 grid sm:grid-cols-2 gap-2">
           <li className="flex items-start gap-2 text-xs bg-white border border-[var(--success-border)] rounded-md px-3 py-2.5">
             <span className="w-5 h-5 shrink-0 rounded-full bg-[var(--success)] text-white flex items-center justify-center mt-px"><Icon n="check" size={11} strokeWidth={3} /></span>
             <span className="text-[var(--text)]">
-              <strong className="text-[var(--success-fg)]">Aceitou receber promoções</strong> — {data.consent.optedIn} pessoa(s).
-              Ligado na ficha do cliente (“Autoriza receber promoções”).
+              <strong className="text-[var(--success-fg)]">Autorizou comunicações</strong> — {data.consent.optedIn} pessoa(s).
+              Consentimento registrado para este contato.
             </span>
           </li>
           <li className="flex items-start gap-2 text-xs bg-white border border-[var(--warning-border)] rounded-md px-3 py-2.5">
@@ -142,8 +142,7 @@ export default function CampanhasPage() {
           </li>
         </ul>
         <p className="text-xs text-[var(--accent-fg)]/90 mt-2.5">
-          <strong>Regra de consentimento:</strong> {data.consent.rule} O sistema nunca presume autorização — promoções por
-          WhatsApp/E-mail só vão para quem marcou a autorização no cadastro do cliente.
+          <strong>Regra de consentimento:</strong> O sistema nunca presume autorização. Comunicações por WhatsApp/E-mail só são enviadas a contatos com consentimento registrado.
         </p>
       </div>
 
@@ -250,7 +249,7 @@ export default function CampanhasPage() {
             </div>
             <div className="px-5 py-4 space-y-3.5">
               <label className="block"><span className="text-xs font-semibold text-zinc-500">NOME *</span>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex: Promoção de Setembro" /></label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Lembretes de retorno" /></label>
               <div>
                 <span className="text-xs font-semibold text-zinc-500">PÚBLICO</span>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">

@@ -1,0 +1,350 @@
+arquivo	linha	classe	ocorrência
+src/app/(auth)/login/page.tsx	48	C — navegação/termo genérico, não comércio legado	Entramos na sua conta, mas não conseguimos manter a sessão neste navegador. Tente recarregar a página e entrar de novo.
+src/app/(dashboard)/agente/page.tsx	70	B — identificador/metadado/compatibilidade legado preservado	Agente salvo. A página pública já usa esta configuração.
+src/app/(dashboard)/agente/page.tsx	105	B — identificador/metadado/compatibilidade legado preservado	O assistente que responde na sua página usando os dados reais do negócio — sem inventar e sem mexer na sua agenda.
+src/app/(dashboard)/agente/page.tsx	113	B — identificador/metadado/compatibilidade legado preservado	Módulo ativo na página
+src/app/(dashboard)/configuracoes/page.tsx	288	B — identificador/metadado/compatibilidade legado preservado	A capa da página pública, quando usada, é editada em Página → Perfil.
+src/app/(dashboard)/configuracoes/page.tsx	352	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/app/(dashboard)/configuracoes/page.tsx	353	B — identificador/metadado/compatibilidade legado preservado	Cadastro legado — editor e publicação da página/presença online.
+src/app/(dashboard)/configuracoes/page.tsx	355	B — identificador/metadado/compatibilidade legado preservado	Editar página pública
+src/app/(dashboard)/dashboard/page.tsx	409	B — identificador/metadado/compatibilidade legado preservado	Agenda, serviços e página já estão ativos.
+src/app/(dashboard)/dashboard/page.tsx	583	B — identificador/metadado/compatibilidade legado preservado	Editar página →
+src/app/(dashboard)/dashboard/page.tsx	588	B — identificador/metadado/compatibilidade legado preservado	Página · no período
+src/app/(dashboard)/dashboard/page.tsx	591	B — identificador/metadado/compatibilidade legado preservado	Página
+src/app/(dashboard)/dashboard/page.tsx	592	B — identificador/metadado/compatibilidade legado preservado	Página ainda
+src/app/(dashboard)/dashboard/page.tsx	602	B — identificador/metadado/compatibilidade legado preservado	Sem módulo de página nesta unidade.
+src/app/(dashboard)/dashboard/page.tsx	770	B — identificador/metadado/compatibilidade legado preservado	Nenhum pedido ainda.
+src/app/(dashboard)/dashboard/page.tsx	775	B — identificador/metadado/compatibilidade legado preservado	/pedidos
+src/app/(dashboard)/dashboard/page.tsx	786	B — identificador/metadado/compatibilidade legado preservado	Sem agenda ou pedidos neste contexto.
+src/app/(dashboard)/dashboard/page.tsx	906	B — identificador/metadado/compatibilidade legado preservado	· pedido
+src/app/(dashboard)/dashboard/page.tsx	938	B — identificador/metadado/compatibilidade legado preservado	Editar página
+src/app/(dashboard)/dashboard/page.tsx	997	B — identificador/metadado/compatibilidade legado preservado	Visitas à página por dia
+src/app/(dashboard)/pagina/page.tsx	34	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Seções da página
+src/app/(dashboard)/pagina/page.tsx	69	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	93	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	100	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	104	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	114	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	137	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	144	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Alterações salvas. A página pública já foi atualizada.
+src/app/(dashboard)/pagina/page.tsx	162	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	236	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	oculto na página
+src/app/(dashboard)/pagina/page.tsx	271	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Editor da página
+src/app/(dashboard)/pagina/page.tsx	282	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Ver página
+src/app/(dashboard)/pagina/page.tsx	300	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Seções do editor da página
+src/app/(dashboard)/pagina/page.tsx	322	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Itens do menu e blocos da página
+src/app/(dashboard)/pagina/page.tsx	323	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Seções da página
+src/app/(dashboard)/pagina/page.tsx	326	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Abrir Seções da página
+src/app/(dashboard)/pagina/page.tsx	359	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Seções da página ·
+src/app/(dashboard)/pagina/page.tsx	383	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	está desligado — o bloco fica salvo, mas não aparece na página até o módulo voltar em Recursos.
+src/app/(dashboard)/pagina/page.tsx	457	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Capa da página
+src/app/(dashboard)/pagina/page.tsx	458	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Aparece no topo da página pública. A logo fica em Configurações → Identidade.
+src/app/(dashboard)/pagina/page.tsx	690	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Modo automático: a página monta o menu conforme módulos e conteúdo preenchido. Qualquer ajuste abaixo vira configuração sua.
+src/app/(dashboard)/pagina/page.tsx	711	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Seções da página
+src/app/(dashboard)/pagina/page.tsx	742	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Itens “Indisponível” ficam de fora do menu público até existir conteúdo — a página nunca aponta para seção vazia.
+src/app/(dashboard)/pagina/page.tsx	770	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Aparece na página logo abaixo do Perfil, quando ativado e com conteúdo.
+src/app/(dashboard)/pagina/page.tsx	920	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página
+src/app/(dashboard)/pagina/page.tsx	948	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	da página (hero). Ele não se repete em outras seções — a barra inferior cuida do acesso persistente, e cada serviço pode ter o seu atalho “Agendar”.
+src/app/(dashboard)/pagina/page.tsx	965	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Vitrine de produtos
+src/app/(dashboard)/pagina/page.tsx	976	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	A vitrine mostra os produtos ativos com foto, nome, preço e o botão
+src/app/(dashboard)/pagina/page.tsx	976	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	, que abre o WhatsApp do negócio com mensagem pronta — sem carrinho nem pedido.
+src/app/(dashboard)/pagina/page.tsx	983	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/produtos?b=
+src/app/(dashboard)/pagina/page.tsx	983	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Gerenciar produtos →
+src/app/(dashboard)/pagina/page.tsx	984	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	● Módulo Produtos ativo
+src/app/(dashboard)/pagina/page.tsx	988	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	○ Com o módulo desligado, a vitrine não aparece na página (nada foi apagado).
+src/app/(dashboard)/pagina/page.tsx	996	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Ativar Produtos agora
+src/app/(dashboard)/pagina/page.tsx	1049	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Até 6 fotos aparecem na página, em grade. Com o módulo Galeria ativo, a seção entra no ar na hora de salvar.
+src/app/(dashboard)/pagina/page.tsx	1137	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	na página.
+src/app/(dashboard)/pagina/page.tsx	1328	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	AVALIAÇÕES DOS CLIENTES (vão para a página ao publicar — máx. 4 no ar)
+src/app/(dashboard)/pagina/page.tsx	1333	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Nenhuma ainda. Quando um cliente receber o pedido ou concluir um agendamento, ele é convidado a avaliar — e cai aqui para você aprovar.
+src/app/(dashboard)/pagina/page.tsx	1397	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	loja
+src/app/(dashboard)/pagina/page.tsx	1550	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Sua página está no ar.
+src/app/(dashboard)/pagina/page.tsx	1550	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Sua página está como rascunho (só você vê).
+src/app/(dashboard)/pagina/page.tsx	1553	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Publicar página
+src/app/(dashboard)/pagina/page.tsx	1567	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	QR Code da sua página
+src/app/(dashboard)/pagina/page.tsx	1569	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	QR Code da página
+src/app/(dashboard)/pedidos/page.tsx	35	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Pedidos
+src/app/(dashboard)/pedidos/page.tsx	40	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Pedidos
+src/app/(dashboard)/pedidos/page.tsx	54	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Pedidos
+src/app/(dashboard)/pedidos/page.tsx	61	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/pedidos
+src/app/(dashboard)/pedidos/page.tsx	70	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Pedidos
+src/app/(dashboard)/pedidos/page.tsx	70	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Acompanhe e atualize o status de cada pedido.
+src/app/(dashboard)/pedidos/page.tsx	80	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Pedidos
+src/app/(dashboard)/pedidos/page.tsx	83	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Nenhum pedido
+src/app/(dashboard)/pedidos/page.tsx	130	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	! Sobre seu pedido
+src/app/(dashboard)/perfil/page.tsx	146	C — biografia/preferência do software, não vitrine	pf-bio
+src/app/(dashboard)/perfil/page.tsx	147	C — biografia/preferência do software, não vitrine	pf-bio
+src/app/(dashboard)/produtos/page.tsx	50	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	55	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	67	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	87	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/produtos
+src/app/(dashboard)/produtos/page.tsx	94	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Vitrine de produtos
+src/app/(dashboard)/produtos/page.tsx	94	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	96	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos exibidos na sua página com CTA “Tenho interesse” direto no WhatsApp. Sem carrinho, sem checkout.
+src/app/(dashboard)/produtos/page.tsx	97	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Cadastro de produtos existente. Este módulo não movimenta estoque, registra vendas ou controla dispensação; sua continuidade operacional será decidida separadamente.
+src/app/(dashboard)/produtos/page.tsx	101	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto
+src/app/(dashboard)/produtos/page.tsx	117	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	119	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Não foi possível carregar produtos
+src/app/(dashboard)/produtos/page.tsx	123	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Nenhum produto cadastrado
+src/app/(dashboard)/produtos/page.tsx	125	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Cadastre um produto (ex: pomada, sérum, kit de cuidados). Quem se interessar fala com você no WhatsApp.
+src/app/(dashboard)/produtos/page.tsx	126	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	O cadastro legado guarda dados de apresentação, sem estoque, venda, pedidos ou dispensação. A utilidade no fluxo da clínica será decidida à parte; não representa um módulo de Farmácia.
+src/app/(dashboard)/produtos/page.tsx	127	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Adicionar produto
+src/app/(dashboard)/produtos/page.tsx	131	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto
+src/app/(dashboard)/produtos/page.tsx	157	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Visível na página
+src/app/(dashboard)/produtos/page.tsx	189	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	A vitrine aparece na página pública enquanto o módulo
+src/app/(dashboard)/produtos/page.tsx	189	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/app/(dashboard)/produtos/page.tsx	236	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Descartar alterações do produto?
+src/app/(dashboard)/produtos/page.tsx	236	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Descartar novo produto?
+src/app/(dashboard)/produtos/page.tsx	264	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Editar produto
+src/app/(dashboard)/produtos/page.tsx	264	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Novo produto da vitrine
+src/app/(dashboard)/produtos/page.tsx	264	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Novo produto
+src/app/(dashboard)/produtos/page.tsx	265	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Informações que aparecem na página pública.
+src/app/(dashboard)/produtos/page.tsx	271	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Salvar produto
+src/app/(dashboard)/produtos/page.tsx	278	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Foto do produto
+src/app/(dashboard)/produtos/page.tsx	280	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Nome do produto
+src/app/(dashboard)/produtos/page.tsx	283	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Descreva o produto
+src/app/(dashboard)/produtos/page.tsx	297	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto ativo
+src/app/(dashboard)/produtos/page.tsx	297	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto ativo
+src/app/(dashboard)/produtos/page.tsx	298	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto em destaque
+src/app/(dashboard)/produtos/page.tsx	298	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produto em destaque
+src/app/(dashboard)/produtos/page.tsx	301	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Na página pública, o visitante pode demonstrar interesse pelo WhatsApp do negócio. Nenhum pedido é gerado.
+src/app/(dashboard)/recursos/page.tsx	165	B — identificador/metadado/compatibilidade legado preservado	Os recursos (agendamentos, serviços, produtos…) pertencem a uma empresa. Crie a sua para ativar o que você precisa.
+src/app/(dashboard)/recursos/page.tsx	209	B — identificador/metadado/compatibilidade legado preservado	Ligue e desligue o que existe no seu negócio. A página pública, o menu e os atalhos obedecem na hora.
+src/app/(dashboard)/recursos/page.tsx	214	B — identificador/metadado/compatibilidade legado preservado	Página
+src/app/(dashboard)/recursos/page.tsx	238	C — navegação/termo genérico, não comércio legado	Recarregue a página — se o problema continuar, fale com o suporte.
+src/app/(dashboard)/recursos/page.tsx	287	B — identificador/metadado/compatibilidade legado preservado	Ative para cadastrar e exibir a vitrine. Produtos salvos continuam guardados.
+src/app/(dashboard)/recursos/page.tsx	303	B — identificador/metadado/compatibilidade legado preservado	Configuração da página
+src/app/(dashboard)/resultados/page.tsx	169	B — identificador/metadado/compatibilidade legado preservado	Carregando estatísticas da página pública…
+src/app/(dashboard)/resultados/page.tsx	170	B — identificador/metadado/compatibilidade legado preservado	estatísticas da página pública
+src/app/(dashboard)/resultados/page.tsx	174	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/app/(dashboard)/resultados/page.tsx	175	B — identificador/metadado/compatibilidade legado preservado	Visitas, cliques e produtos em destaque (movimento recente da página).
+src/app/(dashboard)/resultados/page.tsx	180	B — identificador/metadado/compatibilidade legado preservado	Visitas à página
+src/app/(dashboard)/resultados/page.tsx	182	B — identificador/metadado/compatibilidade legado preservado	Leads na página
+src/app/(dashboard)/resultados/page.tsx	195	B — identificador/metadado/compatibilidade legado preservado	Funil de pedidos
+src/app/(dashboard)/resultados/page.tsx	212	B — identificador/metadado/compatibilidade legado preservado	Cliques na página
+src/app/(dashboard)/resultados/page.tsx	222	B — identificador/metadado/compatibilidade legado preservado	Produtos em destaque
+src/app/[slug]/page.tsx	30	B — superfície pública/legal/master fora do Clinical OS autenticado	Página não encontrada — GoDoutor
+src/app/[slug]/page.tsx	57	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta página ainda não foi publicada.
+src/app/[slug]/page.tsx	120	B — superfície pública/legal/master fora do Clinical OS autenticado	Pré-visualização — sua página ainda não está publicada.
+src/app/admin/empresas/[id]/page.tsx	29	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos
+src/app/admin/empresas/[id]/page.tsx	98	B — superfície pública/legal/master fora do Clinical OS autenticado	Abrir página pública
+src/app/admin/empresas/[id]/page.tsx	124	B — superfície pública/legal/master fora do Clinical OS autenticado	Ex: cliente sem conseguir publicar a página
+src/app/admin/page.tsx	24	B — superfície pública/legal/master fora do Clinical OS autenticado	Produtos
+src/app/admin/page.tsx	24	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos
+src/app/admin/page.tsx	102	B — superfície pública/legal/master fora do Clinical OS autenticado	pedidos
+src/app/admin/page.tsx	120	B — superfície pública/legal/master fora do Clinical OS autenticado	Página pública
+src/app/agendar/page.tsx	68	B — superfície pública/legal/master fora do Clinical OS autenticado	A página de agendamentos deste negócio ainda não está aberta ao público.
+src/app/exclusao-de-dados/page.tsx	27	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta página explica como pedir a exclusão de dados tratados pelo GoDoutor. A pessoa titular pode solicitar a exclusão dos próprios dados. O administrador autorizado da clínica pode solicitar a exclusão da conta da clínica e dos dados inseridos sob sua responsabilidade.
+src/app/exclusao-de-dados/page.tsx	34	B — superfície pública/legal/master fora do Clinical OS autenticado	Como fazer o pedido
+src/app/exclusao-de-dados/page.tsx	38	B — superfície pública/legal/master fora do Clinical OS autenticado	envie o pedido ao administrador da clínica ou pelo canal de suporte disponibilizado na sua conta ou na contratação do GoDoutor;
+src/app/exclusao-de-dados/page.tsx	39	B — superfície pública/legal/master fora do Clinical OS autenticado	informe que deseja “solicitar a exclusão de dados” e indique se o pedido é sobre uma conta, clínica, paciente/cliente, contato, conversa, agenda, arquivo ou integração;
+src/app/exclusao-de-dados/page.tsx	43	B — superfície pública/legal/master fora do Clinical OS autenticado	O canal eletrônico oficial de privacidade ainda não foi cadastrado no projeto. Até que seja preenchido, o caminho operacional é o administrador da clínica ou o canal de suporte fornecido na contratação. A clínica não deve pedir senha ou credencial de integração para receber o pedido.
+src/app/exclusao-de-dados/page.tsx	93	B — superfície pública/legal/master fora do Clinical OS autenticado	Para proteger titulares e clínicas, podemos confirmar identidade, pedir esclarecimento do escopo e verificar se o solicitante tem autorização para excluir dados de uma clínica. Não excluímos dados de outra pessoa ou unidade apenas com nome, telefone ou pedido de terceiro não autorizado.
+src/app/exclusao-de-dados/page.tsx	94	B — superfície pública/legal/master fora do Clinical OS autenticado	Depois da validação, o pedido será analisado e executado sem demora indevida, respeitando a complexidade, as retenções legais e as dependências de provedores. O retorno será feito pelo meio seguro informado no pedido. Se a exclusão não puder ser integral, explicaremos a categoria retida e o motivo aplicável, na medida permitida pela lei.
+src/app/exclusao-de-dados/page.tsx	103	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos sobre dados inseridos pela clínica devem ser dirigidos primeiro à clínica responsável. O GoDoutor apoia a clínica quando atua como operador. Se a resposta não for suficiente, o titular pode procurar a Autoridade Nacional de Proteção de Dados (ANPD).
+src/app/exclusao-de-dados/page.tsx	105	B — superfície pública/legal/master fora do Clinical OS autenticado	Canal para o pedido
+src/app/exclusao-de-dados/page.tsx	114	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta página pode ser atualizada quando o fluxo de exclusão, os recursos do GoDoutor, as integrações ou as exigências legais mudarem. A versão vigente ficará disponível nesta mesma URL, com a data da última atualização.
+src/app/exclusao-de-dados/page.tsx	124	B — superfície pública/legal/master fora do Clinical OS autenticado	se seus dados foram cadastrados por uma clínica, procure primeiro essa clínica. Para proteger sua conta, nunca envie senha, token ou credencial de integração no pedido.
+src/app/master/unidades/[id]/page.tsx	26	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos
+src/app/master/unidades/[id]/page.tsx	100	B — superfície pública/legal/master fora do Clinical OS autenticado	Página pública
+src/app/onboarding/page.tsx	69	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/app/onboarding/page.tsx	137	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Nome e como você atende — só isso. Sua página e módulos nascem prontos, e você ajusta tudo depois em Recursos.
+src/app/onboarding/page.tsx	148	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	(endereço público da página)
+src/app/onboarding/page.tsx	181	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Isso define a terminologia, a ficha de anamnese inicial e as sugestões do painel — o produto é o mesmo, só o preset muda.
+src/app/page.tsx	7	B — superfície pública/legal/master fora do Clinical OS autenticado	Organize serviços, equipe e unidades. Acompanhe os indicadores disponíveis e configure a página que apresenta sua clínica ao paciente.
+src/app/page.tsx	11	B — superfície pública/legal/master fora do Clinical OS autenticado	Não. A página da clínica, o agendamento e a área da conta abrem no navegador. As opções de acompanhamento, cancelamento e remarcação seguem as regras configuradas pela clínica.
+src/app/page.tsx	12	B — superfície pública/legal/master fora do Clinical OS autenticado	Sim. Sua página pública tem logo, conteúdo, cores e aparência próprios. O painel da equipe mantém uma interface consistente para o trabalho diário.
+src/app/page.tsx	14	B — superfície pública/legal/master fora do Clinical OS autenticado	Crie seu acesso, configure a clínica e cadastre os serviços, profissionais e horários. Revise a página e as regras de reserva antes de compartilhar o link com pacientes.
+src/app/page.tsx	22	B — superfície pública/legal/master fora do Clinical OS autenticado	#produto
+src/app/page.tsx	22	B — superfície pública/legal/master fora do Clinical OS autenticado	O produto
+src/app/page.tsx	29	B — superfície pública/legal/master fora do Clinical OS autenticado	Da recepção ao acompanhamento do paciente. Agenda, equipe, atendimento e sua página online em um só lugar — cada pessoa com o acesso de que precisa.
+src/app/page.tsx	30	B — superfície pública/legal/master fora do Clinical OS autenticado	#produto
+src/app/page.tsx	30	B — superfície pública/legal/master fora do Clinical OS autenticado	Conhecer o produto ↓
+src/app/page.tsx	46	B — superfície pública/legal/master fora do Clinical OS autenticado	produto
+src/app/page.tsx	50	B — superfície pública/legal/master fora do Clinical OS autenticado	Uma página própria para apresentar serviços, equipe e localização. O paciente escolhe o atendimento e consulta os horários realmente disponíveis.
+src/app/page.tsx	50	B — superfície pública/legal/master fora do Clinical OS autenticado	Página com suas cores e seu conteúdo
+src/app/page.tsx	57	B — superfície pública/legal/master fora do Clinical OS autenticado	Confira sua página e as regras de reserva antes de compartilhar.
+src/app/politica-de-privacidade/page.tsx	53	B — superfície pública/legal/master fora do Clinical OS autenticado	GoDoutor, página inicial
+src/app/politica-de-privacidade/page.tsx	78	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta política explica, em linguagem clara, como o GoDoutor trata dados para oferecer uma plataforma de organização para clínicas, equipes e atendimento — incluindo páginas públicas, agenda, contatos, conversas e a integração oficial com WhatsApp e Meta.
+src/app/politica-de-privacidade/page.tsx	89	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta política vale para o site, o painel da equipe, páginas públicas de clínicas, fluxos de agendamento, APIs e integrações operadas pelo GoDoutor. Ela não substitui o aviso de privacidade da clínica nem as políticas da Meta.
+src/app/politica-de-privacidade/page.tsx	96	B — superfície pública/legal/master fora do Clinical OS autenticado	nome de exibição, logotipo, descrição, serviços, profissionais, horários, localização, canais de contato, configurações da página e preferências operacionais.
+src/app/politica-de-privacidade/page.tsx	100	B — superfície pública/legal/master fora do Clinical OS autenticado	endereço IP, data e hora de acesso, navegador, sistema, páginas e APIs acessadas, eventos de segurança, identificadores de sessão e registros necessários para diagnóstico e prevenção de abuso.
+src/app/politica-de-privacidade/page.tsx	109	B — superfície pública/legal/master fora do Clinical OS autenticado	publicar a página da clínica e permitir agendamentos, confirmações, cancelamentos e acompanhamento;
+src/app/politica-de-privacidade/page.tsx	164	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos sobre dados cadastrados por uma clínica devem ser enviados primeiro à própria clínica, que é quem conhece a finalidade do atendimento e pode precisar preservar informações por obrigação legal. O GoDoutor apoiará a clínica quando atuar como operador. Pedidos sobre a conta e o uso direto da plataforma podem ser feitos pelo canal de contato indicado abaixo. Também é possível peticionar à Autoridade Nacional de Proteção de Dados (ANPD).
+src/app/politica-de-privacidade/page.tsx	173	B — superfície pública/legal/master fora do Clinical OS autenticado	Podemos atualizar esta política para refletir mudanças no produto, na legislação, nos provedores ou nas integrações. A versão vigente ficará disponível nesta mesma URL, com a data de atualização no início da página. Mudanças relevantes poderão ser comunicadas pelo produto ou por outro canal apropriado.
+src/app/politica-de-privacidade/page.tsx	182	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta página é pública e pode ser consultada sem login. Para voltar ao site do produto, acesse a
+src/app/politica-de-privacidade/page.tsx	182	B — superfície pública/legal/master fora do Clinical OS autenticado	página inicial
+src/app/recuperar/page.tsx	95	B — identificador/metadado/compatibilidade legado preservado	Você já está logado. Volte para a página para continuar.
+src/app/recuperar/page.tsx	97	B — identificador/metadado/compatibilidade legado preservado	Voltar para a página
+src/app/termos-de-servico/page.tsx	6	B — superfície pública/legal/master fora do Clinical OS autenticado	Termos de uso do GoDoutor para clínicas, equipes, páginas públicas e integrações oficiais com WhatsApp e Meta.
+src/app/termos-de-servico/page.tsx	27	B — superfície pública/legal/master fora do Clinical OS autenticado	Estes Termos de Serviço regulam o acesso e o uso do GoDoutor, uma plataforma SaaS para organização de clínicas e negócios de atendimento. A plataforma pode oferecer painel da equipe, página pública da clínica, agendamento, agenda, contatos, atendimentos, conversas, automações e integrações habilitadas pela clínica.
+src/app/termos-de-servico/page.tsx	28	B — superfície pública/legal/master fora do Clinical OS autenticado	Ao criar uma conta, acessar o painel ou usar uma página e um recurso do GoDoutor, você declara que leu estes Termos. Se estiver usando o serviço em nome de uma clínica, declara que tem autorização para vinculá-la a estas regras. A Política de Privacidade explica como dados pessoais são tratados e complementa estes Termos.
+src/app/termos-de-servico/page.tsx	140	B — superfície pública/legal/master fora do Clinical OS autenticado	Podemos atualizar estes Termos para refletir mudanças no produto, na legislação, nos provedores ou nas integrações. A versão vigente permanecerá nesta URL, com sua data de atualização. Mudanças relevantes poderão ser comunicadas no produto ou por outro canal apropriado.
+src/app/termos-de-servico/page.tsx	144	B — superfície pública/legal/master fora do Clinical OS autenticado	Para dúvidas sobre estes Termos, use o canal de suporte disponibilizado na conta GoDoutor ou procure a clínica responsável. A razão social, o CNPJ, o endereço oficial e o e-mail jurídico do controlador ainda precisam ser preenchidos antes da publicação jurídica definitiva; nenhum desses dados foi inventado nesta página.
+src/components/DashboardShell.tsx	479	B — identificador/metadado/compatibilidade legado preservado	página pública /
+src/components/dashboard/AccountMenu.tsx	157	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Ver página pública
+src/components/dashboard/ClientProfileDrawer.tsx	1323	B — identificador/metadado/compatibilidade legado preservado	A ficha completa (agenda, atendimentos, arquivos e financeiro) abre em página própria — a lista continua onde estava.
+src/components/dashboard/ClinicPreview.tsx	42	B — identificador/metadado/compatibilidade legado preservado	Prévia local da página em edição
+src/components/dashboard/EncounterSheet.tsx	510	B — identificador/metadado/compatibilidade legado preservado	Pedido registrado como tarefa para a recepção.
+src/components/dashboard/HelpCenter.tsx	38	B — identificador/metadado/compatibilidade legado preservado	Configurar a página
+src/components/dashboard/IntegracoesView.tsx	623	B — identificador/metadado/compatibilidade legado preservado	Copie e cole este código dentro de qualquer página HTML, WordPress (bloco HTML) ou Webflow.
+src/components/dashboard/NewBookingSheet.tsx	461	B — identificador/metadado/compatibilidade legado preservado	o cliente pode já ter conta na sua página.
+src/components/dashboard/ShellAppearance.tsx	91	C — biografia/preferência do software, não vitrine	· a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto.
+src/components/dashboard/WorkspaceNavigation.tsx	129	B — identificador/metadado/compatibilidade legado preservado	/produtos
+src/components/dashboard/WorkspaceNavigation.tsx	129	B — identificador/metadado/compatibilidade legado preservado	/pedidos
+src/components/dashboard/WorkspaceSheet.tsx	55	B — identificador/metadado/compatibilidade legado preservado	Abrir página completa
+src/components/public/AgendarFlow.tsx	226	B — superfície pública/legal/master fora do Clinical OS autenticado	Recebemos seu pedido na
+src/components/public/LegalDocument.tsx	42	B — superfície pública/legal/master fora do Clinical OS autenticado	GoDoutor, página inicial
+src/components/public/LegalDocument.tsx	75	B — superfície pública/legal/master fora do Clinical OS autenticado	Esta página é pública e pode ser consultada sem login. Consulte também a
+src/components/public/customer.tsx	82	B — superfície pública/legal/master fora do Clinical OS autenticado	produtos
+src/components/public/customer.tsx	293	B — superfície pública/legal/master fora do Clinical OS autenticado	Não foi possível carregar seus pedidos.
+src/components/public/customer.tsx	391	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedidos
+src/components/public/customer.tsx	417	B — superfície pública/legal/master fora do Clinical OS autenticado	Você ainda não fez pedidos aqui.
+src/components/public/customer.tsx	438	B — superfície pública/legal/master fora do Clinical OS autenticado	Avaliar pedido
+src/components/public/customer.tsx	509	B — superfície pública/legal/master fora do Clinical OS autenticado	Ver produtos
+src/components/public/customer.tsx	662	B — superfície pública/legal/master fora do Clinical OS autenticado	com o pedido
+src/components/public/showcase.tsx	32	B — superfície pública/legal/master fora do Clinical OS autenticado	produtos
+src/components/public/widgets.tsx	128	B — superfície pública/legal/master fora do Clinical OS autenticado	produtos
+src/components/public/widgets.tsx	129	B — superfície pública/legal/master fora do Clinical OS autenticado	Produtos
+src/components/public/widgets.tsx	411	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedido
+src/components/public/widgets.tsx	416	B — superfície pública/legal/master fora do Clinical OS autenticado	Olá! Fiz o pedido
+src/components/public/widgets.tsx	421	B — superfície pública/legal/master fora do Clinical OS autenticado	Acompanhar pedido
+src/components/public/widgets.tsx	422	B — superfície pública/legal/master fora do Clinical OS autenticado	Voltar à página
+src/components/public/widgets.tsx	428	B — superfície pública/legal/master fora do Clinical OS autenticado	Seu pedido
+src/components/public/widgets.tsx	462	B — superfície pública/legal/master fora do Clinical OS autenticado	Finalizar pedido
+src/components/public/widgets.tsx	507	B — superfície pública/legal/master fora do Clinical OS autenticado	O pagamento via PIX é combinado no WhatsApp após o pedido.
+src/components/public/widgets.tsx	519	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedido mínimo de
+src/components/public/widgets.tsx	524	B — superfície pública/legal/master fora do Clinical OS autenticado	Confirmar pedido ·
+src/components/public/widgets2.tsx	368	B — superfície pública/legal/master fora do Clinical OS autenticado	Aceito receber informações, novidades e promoções pelo WhatsApp.
+src/components/public/widgets2.tsx	443	B — superfície pública/legal/master fora do Clinical OS autenticado	Pedido enviado! Retornamos rapidinho.
+src/components/public/widgets2.tsx	562	B — superfície pública/legal/master fora do Clinical OS autenticado	#produtos
+src/components/public/widgets2.tsx	564	B — superfície pública/legal/master fora do Clinical OS autenticado	#produtos
+src/components/ui.tsx	901	B — identificador/metadado/compatibilidade legado preservado	Carregando página
+src/lib/agent-tools/guard.ts	70	B — identificador/metadado/compatibilidade legado preservado	Unidade do pedido não corresponde à sessão — negado.
+src/lib/agent.ts	190	B — identificador/metadado/compatibilidade legado preservado	Ver produtos
+src/lib/agent.ts	190	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/ai/planner.ts	265	B — identificador/metadado/compatibilidade legado preservado	o pedido contém trecho que não pode ser interpretado como automação
+src/lib/concierge.ts	83	B — identificador/metadado/compatibilidade legado preservado	ver produtos
+src/lib/concierge.ts	94	B — identificador/metadado/compatibilidade legado preservado	Ver produtos
+src/lib/concierge.ts	94	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	105	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/concierge.ts	123	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/concierge.ts	125	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	138	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/concierge.ts	140	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	166	B — identificador/metadado/compatibilidade legado preservado	pedido
+src/lib/concierge.ts	173	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	190	B — identificador/metadado/compatibilidade legado preservado	Trabalhamos com entrega e retirada. Você escolhe na hora de finalizar o pedido!
+src/lib/concierge.ts	190	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	192	B — identificador/metadado/compatibilidade legado preservado	Por aqui nosso atendimento é com hora marcada (ou pelo WhatsApp). Entrega, só se a loja combinar direto com você!
+src/lib/concierge.ts	207	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/concierge.ts	214	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/concierge.ts	216	B — identificador/metadado/compatibilidade legado preservado	#produtos
+src/lib/contact-profile.ts	363	B — identificador/metadado/compatibilidade legado preservado	Aceita promoções
+src/lib/contacts.ts	115	B — identificador/metadado/compatibilidade legado preservado	pedido
+src/lib/dashboard.ts	160	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/dashboard.ts	295	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/dashboard.ts	387	B — identificador/metadado/compatibilidade legado preservado	Monte sua vitrine de produtos
+src/lib/dashboard.ts	387	B — identificador/metadado/compatibilidade legado preservado	/produtos
+src/lib/dashboard.ts	393	B — identificador/metadado/compatibilidade legado preservado	Personalize a página
+src/lib/dashboard.ts	396	B — identificador/metadado/compatibilidade legado preservado	Publique a página
+src/lib/entity-deletion.ts	15	B — identificador/metadado/compatibilidade legado preservado	Página personalizada
+src/lib/entity-deletion.ts	15	B — identificador/metadado/compatibilidade legado preservado	Pedidos / registros financeiros
+src/lib/entity-deletion.ts	40	B — identificador/metadado/compatibilidade legado preservado	Página publicada
+src/lib/entity-deletion.ts	41	B — identificador/metadado/compatibilidade legado preservado	Página principal de organização
+src/lib/entity-deletion.ts	51	B — identificador/metadado/compatibilidade legado preservado	Página inicial não editada e não publicada
+src/lib/equipe-access.ts	45	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/features.ts	64	B — identificador/metadado/compatibilidade legado preservado	Cliente escolhe dia e horário na sua página
+src/lib/features.ts	65	B — identificador/metadado/compatibilidade legado preservado	Some a agenda, o botão Agendar e o agendamento da página pública.
+src/lib/features.ts	71	B — identificador/metadado/compatibilidade legado preservado	A vitrine de serviços sai da página (os serviços continuam salvos).
+src/lib/features.ts	74	B — identificador/metadado/compatibilidade legado preservado	Produtos
+src/lib/features.ts	76	B — identificador/metadado/compatibilidade legado preservado	Vitrine de produtos com CTA direto para o WhatsApp
+src/lib/features.ts	77	B — identificador/metadado/compatibilidade legado preservado	A vitrine sai da página (os produtos continuam salvos).
+src/lib/features.ts	84	B — identificador/metadado/compatibilidade legado preservado	A seção de avaliações e o item de menu somem da página.
+src/lib/features.ts	90	B — identificador/metadado/compatibilidade legado preservado	O FAQ some da página e do assistente.
+src/lib/features.ts	96	B — identificador/metadado/compatibilidade legado preservado	A galeria some da página (as fotos continuam salvas).
+src/lib/features.ts	108	B — identificador/metadado/compatibilidade legado preservado	A seção "Sobre" e o item de menu somem da página.
+src/lib/features.ts	114	B — identificador/metadado/compatibilidade legado preservado	O botão do assistente some da página (a configuração fica salva).
+src/lib/features.ts	119	B — identificador/metadado/compatibilidade legado preservado	Atalho de conversa na página pública
+src/lib/features.ts	120	B — identificador/metadado/compatibilidade legado preservado	Some o botão de WhatsApp da página pública.
+src/lib/features.ts	138	B — identificador/metadado/compatibilidade legado preservado	Pedidos
+src/lib/features.ts	140	B — identificador/metadado/compatibilidade legado preservado	Pedidos com entrega ou retirada (legado — fora do produto)
+src/lib/features.ts	141	B — identificador/metadado/compatibilidade legado preservado	A página para de aceitar pedidos novos.
+src/lib/http.ts	164	B — identificador/metadado/compatibilidade legado preservado	Pedidos
+src/lib/http.ts	170	B — identificador/metadado/compatibilidade legado preservado	Página
+src/lib/insights.ts	503	B — identificador/metadado/compatibilidade legado preservado	Nenhum pedido não cancelado foi criado neste período.
+src/lib/integrations/catalog.ts	64	B — identificador/metadado/compatibilidade legado preservado	Conversas da página do Facebook.
+src/lib/integrations/catalog.ts	88	B — identificador/metadado/compatibilidade legado preservado	Página de campanha com formulário próprio.
+src/lib/integrations/catalog.ts	107	B — identificador/metadado/compatibilidade legado preservado	Página pública do GoDoutor
+src/lib/integrations/catalog.ts	108	B — identificador/metadado/compatibilidade legado preservado	A sua página, com formulário e agendamento.
+src/lib/integrations/catalog.ts	110	B — identificador/metadado/compatibilidade legado preservado	A captação pela sua página já é nativa do GoDoutor (CRM + analytics). A lista de origens aqui é informativa.
+src/lib/integrations/connectors.ts	38	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/leads.ts	17	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	18	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	19	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	25	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	26	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	32	B — identificador/metadado/compatibilidade legado preservado	Pedido
+src/lib/leads.ts	42	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/leads.ts	43	B — identificador/metadado/compatibilidade legado preservado	Pedido
+src/lib/leads.ts	59	B — identificador/metadado/compatibilidade legado preservado	Página pública
+src/lib/legacy-surfaces.ts	20	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/produtos
+src/lib/legacy-surfaces.ts	22	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	A vitrine de Produtos pertence ao antigo fluxo de páginas (GODOUTOR_LEGACY_PAGES). Nada foi apagado: os dados permanecem guardados e a experiência volta quando o modo legado é reativado. No dia a dia da clínica, use Serviços e a Agenda.
+src/lib/legacy-surfaces.ts	26	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/pedidos
+src/lib/legacy-surfaces.ts	28	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	O fluxo de Pedidos é do antigo produto universal (GODOUTOR_LEGACY_PAGES) e não faz parte do Clinical OS. Os pedidos registrados permanecem no banco; nenhum dado foi perdido. A operação da clínica acontece na Agenda.
+src/lib/legacy-surfaces.ts	34	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	A Página pública (site builder) saiu da navegação operacional do Clinical OS. Seu link público continua no ar, e /pagina volta a abrir para edição com GODOUTOR_LEGACY_PAGES=1.
+src/lib/legacy-surfaces.ts	41	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/produtos
+src/lib/legacy-surfaces.ts	41	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	/pedidos
+src/lib/mailer.ts	40	C — navegação/termo genérico, não comércio legado	! Recebemos um pedido de nova senha para sua conta de
+src/lib/onboarding.ts	30	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/onboarding.ts	45	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/onboarding.ts	46	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Produtos
+src/lib/onboarding.ts	47	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Vitrine de produtos com CTA direto para o seu WhatsApp.
+src/lib/onboarding.ts	51	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Serviços + produtos
+src/lib/onboarding.ts	52	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Agenda de atendimentos e vitrine de produtos na mesma página.
+src/lib/onboarding.ts	59	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/onboarding.ts	68	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/onboarding.ts	119	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/onboarding.ts	119	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Vitrine de produtos com CTA no WhatsApp
+src/lib/onboarding.ts	120	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Página pública pronta para publicar
+src/lib/onboarding.ts	121	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	Vitrine de produtos (opcional — ative em Recursos)
+src/lib/onboarding.ts	122	B — superfície/ramo de compatibilidade; flag OFF não oferece operação legada	produtos
+src/lib/panel.ts	77	B — identificador/metadado/compatibilidade legado preservado	Página
+src/lib/panel.ts	323	B — identificador/metadado/compatibilidade legado preservado	/pedidos
+src/lib/panel.ts	323	B — identificador/metadado/compatibilidade legado preservado	Pedidos
+src/lib/panel.ts	325	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/panel.ts	325	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/panel.ts	326	B — identificador/metadado/compatibilidade legado preservado	Pedidos registrados, com status, itens e histórico de cada cliente.
+src/lib/panel.ts	356	B — identificador/metadado/compatibilidade legado preservado	/produtos
+src/lib/panel.ts	356	B — identificador/metadado/compatibilidade legado preservado	Produtos
+src/lib/panel.ts	359	B — identificador/metadado/compatibilidade legado preservado	Cadastro de produtos com preço, categoria e apresentação; não controla estoque, pedidos ou dispensação.
+src/lib/panel.ts	435	B — identificador/metadado/compatibilidade legado preservado	Página
+src/lib/panel.ts	440	B — identificador/metadado/compatibilidade legado preservado	O editor da sua página pública: blocos, navegação, visual, avaliações e publicação.
+src/lib/panel.ts	724	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/panel.ts	724	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/panel.ts	733	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/permissions.ts	21	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/permissions.ts	21	B — identificador/metadado/compatibilidade legado preservado	Pedidos
+src/lib/permissions.ts	21	B — identificador/metadado/compatibilidade legado preservado	Pedidos do catálogo e status
+src/lib/permissions.ts	23	B — identificador/metadado/compatibilidade legado preservado	Página
+src/lib/permissions.ts	23	B — identificador/metadado/compatibilidade legado preservado	Editor da página, tema e avaliações
+src/lib/revenue.ts	59	B — identificador/metadado/compatibilidade legado preservado	Soma dos pedidos não cancelados criados no período.
+src/lib/revenue.ts	64	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/showcase.ts	36	B — identificador/metadado/compatibilidade legado preservado	produto
+src/lib/showcase.ts	39	B — identificador/metadado/compatibilidade legado preservado	Olá! Tenho interesse no produto
+src/lib/showcase.ts	40	B — identificador/metadado/compatibilidade legado preservado	Olá! Tenho interesse no produto
+src/lib/status.ts	54	B — identificador/metadado/compatibilidade legado preservado	Pedido recebido, aguardando aceite.
+src/lib/status.ts	76	B — identificador/metadado/compatibilidade legado preservado	Virou pedido/agendamento.
+src/lib/templates.ts	39	B — identificador/metadado/compatibilidade legado preservado	Ver produtos
+src/lib/templates.ts	78	B — identificador/metadado/compatibilidade legado preservado	Botão de conversão da página
+src/lib/templates.ts	83	B — identificador/metadado/compatibilidade legado preservado	Vitrine de produtos
+src/lib/templates.ts	83	B — identificador/metadado/compatibilidade legado preservado	Produtos com CTA "Tenho interesse" no WhatsApp
+src/lib/types.ts	82	B — identificador/metadado/compatibilidade legado preservado	loja
+src/lib/types.ts	86	B — identificador/metadado/compatibilidade legado preservado	loja
+src/lib/types.ts	1630	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/utils.ts	59	B — identificador/metadado/compatibilidade legado preservado	produtos
+src/lib/utils.ts	59	B — identificador/metadado/compatibilidade legado preservado	pedidos
+src/lib/whatsapp-onboarding.ts	54	C — navegação/termo genérico, não comércio legado	Nenhuma versão da Graph API configurada — uso a padrão do produto.
+src/lib/workspace-navigation.ts	85	B — identificador/metadado/compatibilidade legado preservado	/produtos
+src/lib/workspace-navigation.ts	85	B — identificador/metadado/compatibilidade legado preservado	/pedidos
+src/lib/workspace-navigation.ts	88	B — identificador/metadado/compatibilidade legado preservado	Página

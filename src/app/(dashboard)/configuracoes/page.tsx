@@ -14,23 +14,26 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BookingConfig, Business, ScheduleResource } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
-import { Button, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
+import { Button, buttonCls, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { ShellAppearance } from '@/components/dashboard/ShellAppearance';
 import { isLegacyPagesEnabled } from '@/lib/product';
 
-type ConfigTab = 'negocio' | 'agenda';
+type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
 
 const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
   negocio: 'store',
   agenda: 'calendar',
+  aparencia: 'spark',
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
   ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
+  ['aparencia', 'Aparência'],
 ];
 
 const LEGACY_TAB_REDIRECT: Record<string, string> = {
@@ -114,7 +117,7 @@ function BookingRules({ businessId, initial, onSaved }: {
         )}
         <label className="block"><span className="text-xs font-semibold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga. Vale para agenda interna e pública (grade).</span></label>
+          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga. Antecedência mínima para novos agendamentos.</span></label>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">PREPARAÇÃO ANTES (MIN)</span>
           <input type="number" min={0} max={240} value={cfg.bufferBeforeMin ?? 0} onChange={(e) => setCfg({ ...cfg, bufferBeforeMin: Number(e.target.value) })} className={num} />
           <span className="text-[11px] text-zinc-500">Reserva capacidade antes do atendimento; não aumenta o cartão.</span></label>
@@ -126,13 +129,13 @@ function BookingRules({ businessId, initial, onSaved }: {
           <p className="text-xs text-zinc-500">Um recurso não pode atender dois profissionais ao mesmo tempo. Desative os que têm histórico.</p>
           {resources.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border rounded-md px-3 py-2 text-sm">
             <span>{r.name} · {r.kind === 'room' ? 'Sala' : 'Equipamento'}{!r.active && ' · Inativo'}</span>
-            <span className="flex gap-2"><button type="button" className="underline" onClick={() => { setEditingResource(r); setResourceName(r.name); setResourceKind(r.kind); }}>Editar</button>
-              <button type="button" className="underline" onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
+            <span className="flex gap-2"><button type="button" className={buttonCls('secondary', 'sm')} onClick={() => { setEditingResource(r); setResourceName(r.name); setResourceKind(r.kind); }}>Editar</button>
+              <button type="button" className={buttonCls('secondary', 'sm')} onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
           </div>)}
           <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala 1 ou Ultrassom 01" className="border rounded-md px-2 py-2 text-sm flex-1 min-w-36" />
             <select aria-label="Tipo do recurso" value={resourceKind} onChange={e => setResourceKind(e.target.value as 'room' | 'equipment')} className="border rounded-md px-2 py-2 text-sm"><option value="room">Sala</option><option value="equipment">Equipamento</option></select>
-            <button type="button" className="border rounded-md px-3 py-2 text-sm font-semibold" onClick={() => void saveResource({ action: 'resource.save', id: editingResource?.id, name: resourceName, kind: resourceKind, active: editingResource?.active ?? true })}>{editingResource ? 'Salvar recurso' : 'Adicionar recurso'}</button>
-            {editingResource && <button type="button" onClick={() => { setEditingResource(null); setResourceName(''); }}>Cancelar</button>}
+            <button type="button" className={buttonCls('secondary', 'sm')} onClick={() => void saveResource({ action: 'resource.save', id: editingResource?.id, name: resourceName, kind: resourceKind, active: editingResource?.active ?? true })}>{editingResource ? 'Salvar recurso' : 'Adicionar recurso'}</button>
+            {editingResource && <button type="button" className={buttonCls('ghost', 'sm')} onClick={() => { setEditingResource(null); setResourceName(''); }}>Cancelar</button>}
           </div>
         </div>
         {legacyPagesEnabled && (
@@ -364,7 +367,7 @@ export default function ConfigPage() {
           />
         )}
 
-        {/* Aparência movida para Perfil — tema do navegador (preferência do usuário), não tenant */}
+        {tab === 'aparencia' && <ShellAppearance />}
 
 
       </div>

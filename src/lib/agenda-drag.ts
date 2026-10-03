@@ -201,25 +201,25 @@ export function clampMinuteToGrid(
 
 /**
  * A3.4 — minuto do dia a partir do Y de um clique dentro da coluna.
- * Snap curto (5 min por padrão) para o clique não cair num horário "quebrado"
+ * Snap curto (15 min por padrão) para o clique não cair num horário "quebrado"
  * como 09:37; o resultado nunca sai da grade visível. O horário sugerido é
  * apenas uma INTENÇÃO: quem confirma se ele existe é a grade real de
  * disponibilidade (`mode=slots-admin`) — nenhuma disponibilidade é inventada
  * no cliente.
  */
-/** B2 gesture snap: nearest five minutes; independent of public slotMin. */
+/** B2 gesture snap: nearest fifteen minutes; independent of public slotMin. */
 export function snapGestureMinute(minute: number): number {
-  return Math.round(minute / 5) * 5;
+  return Math.round(minute / 15) * 15;
 }
 
 export function minuteFromOffsetY(
   offsetY: number,
   g: { startMinute: number; endMinute: number; pxPerHour: number },
-  stepMin = 5,
+  stepMin = 15,
 ): number {
   const perHour = g.pxPerHour > 0 ? g.pxPerHour : 60;
   const raw = g.startMinute + (offsetY / perHour) * 60;
-  const snapped = Math.floor(raw / stepMin) * stepMin;
+  const snapped = Math.round(raw / stepMin) * stepMin;
   return Math.max(g.startMinute, Math.min(g.endMinute, snapped));
 }
 
@@ -282,7 +282,7 @@ export function emptyDragSlots(): DragSlots {
 
 /** One bounded staff request per gesture (Day and Week). No network on pointermove. */
 export function dragSlotUrl(businessId: string, serviceId: string, dates: string[], gestureBookingId: string): string {
-  return `/api/bookings?mode=slots-admin&businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&internalSnap=5&gestureBookingId=${encodeURIComponent(gestureBookingId)}&dates=${encodeURIComponent(dates.join(','))}`;
+  return `/api/bookings?mode=slots-admin&businessId=${encodeURIComponent(businessId)}&serviceId=${encodeURIComponent(serviceId)}&internalSnap=15&gestureBookingId=${encodeURIComponent(gestureBookingId)}&dates=${encodeURIComponent(dates.join(','))}`;
 }
 
 /**

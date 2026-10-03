@@ -11,11 +11,10 @@ export function ShellAppearance() {
   return (
     <section className="bg-white border border-zinc-200 p-4 space-y-3" data-testid="shell-appearance">
       <div>
-        <h3 className="font-semibold text-sm">Aparência do sistema</h3>
+        <h3 className="font-semibold text-sm">Aparência da interface</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Tema da clínica: cor da barra lateral, da topo suave e dos CTAs principais.
-          O texto e as cores de erro/sucesso não mudam. É uma preferência pessoal deste navegador —
-          a identidade da clínica no painel continua sendo o logo e o nome.
+          Escolha a cor da navegação e das ações principais neste navegador.
+          Esta preferência vale somente para você neste navegador e não altera a identidade visual da clínica para outros usuários.
         </p>
       </div>
       <div role="group" aria-label="Cor da navegação" className="space-y-3">
@@ -66,7 +65,7 @@ export function ShellAppearance() {
           <div
             className="h-8 border-b border-zinc-200"
             style={{
-              background: `linear-gradient(90deg, ${navVars['--il-nav']}22, transparent)`,
+              background: `${navVars['--il-nav']}22`,
             }}
           />
           <div className="space-y-2 p-2.5">

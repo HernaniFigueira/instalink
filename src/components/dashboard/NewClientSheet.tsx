@@ -203,8 +203,6 @@ export function NewClientForm({
             <p className="font-semibold text-emerald-900 flex items-center gap-2"><span className="text-lg">✓</span> Cadastro salvo</p>
             <p className="text-sm text-emerald-800 mt-1">O registro está no CRM e permanece mesmo se o agendamento for abandonado.</p>
             {savedResult?.petId && <p className="text-sm text-emerald-800 mt-1">Pet vinculado ao tutor.</p>}
-            <p className="text-xs text-emerald-800 mt-2">Consentimento de marketing: {marketingOptIn ? 'concedido' : 'não concedido'}.</p>
-            <p className="text-xs text-emerald-800 mt-1">Conta do cliente: {saved.contact?.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}.</p>
           </div>
           {saved.temporaryPassword ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 space-y-2">
@@ -324,15 +322,9 @@ export function NewClientForm({
             </section>
           )}
 
-          <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
-            <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="il-check mt-0.5" />
-            <span><span className="block text-sm font-semibold text-[var(--text)]">Aceita receber promoções?</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Não marcado por padrão. Só entra em campanhas se a pessoa autorizar.</span></span>
-          </label>
 
-          <label className="flex items-start gap-3 rounded-xl border border-[var(--border)] px-3.5 py-3 cursor-pointer transition-colors hover:border-[var(--brand-border)] hover:bg-[var(--brand-soft)]">
-            <input type="checkbox" checked={createAccess} onChange={(e) => setCreateAccess(e.target.checked)} className="il-check mt-0.5" />
-            <span><span className="block text-sm font-semibold text-[var(--text)]">Criar acesso do cliente</span><span className="block text-xs text-[var(--text-muted)] mt-0.5">Cria ou vincula a conta usada pelo cliente para acessar consultas e pedidos. Uma senha temporária é exibida somente quando uma nova credencial é criada.</span></span>
-          </label>
+
+
 
           {error && <Notice tone="error">{error}</Notice>}
         </div>

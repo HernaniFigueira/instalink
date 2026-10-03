@@ -314,7 +314,7 @@ describe('A1.2 B2 — configurações, tarefas e execuções não atravessam ten
     // A mesma regra usada pelo DashboardShell, useBusinessId e usePanelPermissions
     const list = [{ id: 'a1' }, { id: 'a2' }];
     expect(businessIdInList('b1', list)).toBe(false);
-    expect(resolveActiveBusinessId('b1', list)).toBe('a1'); // cai para unidade própria
+    expect(resolveActiveBusinessId('b1', list)).toBe(''); // ambíguo: exige escolha explícita, nunca ordem
     expect(resolveActiveBusinessId('a2', list)).toBe('a2');
     // e no servidor: acesso a unidade alheia é nulo (sem sessão de suporte)
     const db = emptyDB();

@@ -73,7 +73,7 @@ describe('Perfil, role e cargo profissional', () => {
     expect(profile).not.toContain('<Avatar');
     expect(profile).toContain('accessRoleLabel(me?.role)');
     expect(profile).toContain('<Badge tone="blue"');
-    for (const title of ['Dados pessoais', 'Identidade profissional', 'Preferências', 'Segurança']) expect(profile).toContain(title);
+    for (const title of ['Dados pessoais', 'Identidade profissional', 'Segurança']) expect(profile).toContain(title);
     expect(profile).toContain('Cargo / função');
     expect(profile).toContain('Conselho profissional');
     expect(profile).toContain('Formação e especialidades');
@@ -81,7 +81,7 @@ describe('Perfil, role e cargo profissional', () => {
     expect(profile).toContain('Também realiza atendimentos');
     expect(profile).toContain('Vincule seu perfil à equipe clínica');
     expect(profile).not.toContain('seu acesso é o User; quem atende na agenda é o Professional');
-    expect(profile).toContain('ShellAppearance');
+    expect(profile).not.toContain('ShellAppearance');
   });
 
   it('official role labels are normalized and never inferred from professional title', () => {
@@ -113,11 +113,11 @@ describe('legacy copy without data or route removal', () => {
     for (const field of ['LOGO DA CLÍNICA', 'WhatsApp', 'Telefone', 'Instagram', 'Facebook', 'YouTube', 'LinkedIn', 'Meu site', 'Endereço', 'Link do mapa', 'Agenda']) {
       expect(settings).toContain(field);
     }
-    expect(settings).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(settings).toMatch(/\['aparencia', 'Aparência'\]/);
     expect(settings).not.toMatch(/CONFIG_TAB_ICON.*aparencia/);
     const perfil = read('src/app/(dashboard)/perfil/page.tsx');
-    expect(perfil).toContain('Aparência');
-    expect(perfil).toContain('ShellAppearance');
+    expect(settings).toContain('Aparência');
+    expect(perfil).not.toContain('ShellAppearance');
     expect(settings).toContain('{legacyPagesEnabled && <section');
     expect(settings).toContain('Informações da clínica e regras de agendamento.');
   });

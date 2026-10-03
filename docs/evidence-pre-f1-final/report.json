@@ -1,0 +1,39 @@
+{
+  "checks": [
+    "Real login owner",
+    "Hernani 09:15–12:45 / 210 min / service30 / UTC / success",
+    "Hernani block13–17:30 Cirurgia Day+Week and edit",
+    "Library scrollbar / dermatology BRL90 30min Michelle / group persistence",
+    "Michelle canonical team linkage",
+    "Ana dirty draft outside / continue / Escape / discard",
+    "Theme azul-profundo F5 / secondary / WhatsApp green",
+    "Theme verde-equilibrado F5 / secondary / WhatsApp green",
+    "Real login recepcao",
+    "recepcao scope and navigation",
+    "Real login orlando",
+    "orlando scope and navigation"
+  ],
+  "failures": [],
+  "console": [],
+  "network": [],
+  "screens": [
+    "01-range-210-closed.png",
+    "02-advanced.png",
+    "03-success.png",
+    "04-block-day.png",
+    "05-block-week.png",
+    "06-block-edit.png",
+    "07-service-scroll.png",
+    "08-dermatology-group.png",
+    "09-service-reopened.png",
+    "10-michelle-team.png",
+    "11-ana-draft.png",
+    "12-ana-guard.png",
+    "13-config-azul-profundo.png",
+    "14-client-azul-profundo.png",
+    "13-config-verde-equilibrado.png",
+    "14-client-verde-equilibrado.png",
+    "15-recepcao.png",
+    "15-orlando.png"
+  ]
+}

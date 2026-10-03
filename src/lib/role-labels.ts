@@ -12,7 +12,7 @@ export const ROLE_LABEL: Record<string, string> = {
   OWNER: 'Proprietário',
   ADMIN: 'Administrador',
   SECRETARIA: 'Recepção', // ID interno SECRETARIA preservado (compatibilidade)
-  ATENDENTE: 'Atendente',
+  ATENDENTE: 'Recepção',
   VENDEDOR: 'Vendedor',
   VIEWER: 'Visualizador',
   MASTER: 'Suporte da plataforma',

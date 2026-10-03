@@ -115,7 +115,7 @@ export function computeSlots(q: SlotQuery): SlotResult {
     if (!(end > start)) continue;
     // Passo da grade: configurado no período ou, por padrão, a duração
     // do próprio serviço (45min → 09:00, 09:45, 10:30…).
-    const step = q.startStepMin === 5 ? 5 : Math.max(10, r.slotMin || q.durationMin || 30);
+    const step = (q.startStepMin === 5 || q.startStepMin === 15) ? q.startStepMin : Math.max(10, r.slotMin || q.durationMin || 30);
     if (q.professionalId) {
       // Escopo de UM profissional: herda o geral OU usa o próprio.
       if (follows(q.professionalId)) {

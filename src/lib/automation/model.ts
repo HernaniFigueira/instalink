@@ -37,7 +37,7 @@ export interface AutomationEventDef {
 }
 
 export const AUTOMATION_EVENT_DEFS: AutomationEventDef[] = [
-  { id: 'lead.created', label: 'Lead criado', hint: 'Alguém pediu contato (página, API ou assistente).', entity: 'lead', source: 'lib/pipeline.ts · ingestLead' },
+  { id: 'lead.created', label: 'Lead criado', hint: 'Alguém solicitou contato por um canal da clínica, API ou assistente.', entity: 'lead', source: 'lib/pipeline.ts · ingestLead' },
   { id: 'lead.updated', label: 'Lead atualizado', hint: 'Dados do lead mudaram.', entity: 'lead', source: 'lib/pipeline.ts · ingestLead' },
   { id: 'lead.stage_changed', label: 'Lead mudou de etapa', hint: 'Movimentação na esteira.', entity: 'lead', source: 'lib/pipeline.ts · moveLeadStage' },
   { id: 'lead.assigned', label: 'Lead atribuído', hint: 'Responsável definido (ou removido).', entity: 'lead', source: 'lib/pipeline.ts · assignLead' },

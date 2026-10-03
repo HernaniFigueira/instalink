@@ -94,7 +94,7 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
     // Largura operacional compartilhada (nem esticado, nem estreito).
     expect(document.querySelector('.il-drawer__strip')?.className).toContain('max-w-2xl');
-    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar cliente' }), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar cliente' }), { target: { value: 'Alex' } });
     fireEvent.click(dialog.querySelector('[aria-hidden="true"]')!);
     const confirmation = await screen.findByRole('alertdialog');
     expect(confirmation).toBeTruthy();
@@ -102,7 +102,7 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect((screen.getByRole('textbox', { name: 'Buscar cliente' }) as HTMLInputElement).value).toBe('Alex');
+    expect((screen.getByRole('searchbox', { name: 'Buscar cliente' }) as HTMLInputElement).value).toBe('Alex');
     expect(onClose).not.toHaveBeenCalled();
   });
 });

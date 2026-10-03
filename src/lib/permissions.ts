@@ -17,9 +17,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'dashboard', label: 'Visão geral', hint: 'O dia de hoje: o que precisa de atenção agora' },
   { id: 'agenda', label: 'Agenda', hint: 'Ver e operar a agenda (confirmar, concluir, remarcar)' },
   { id: 'clientes', label: 'Clientes', hint: 'CRM de clientes e histórico 360' },
-  { id: 'leads', label: 'Oportunidades', hint: 'Interesses e conversas captadas na página' },
+  { id: 'leads', label: 'Oportunidades', hint: 'Oportunidades e contatos recebidos pelos canais da clínica.' },
   { id: 'pedidos', label: 'Pedidos', hint: 'Pedidos do catálogo e status' },
-  { id: 'catalogo', label: 'Catálogo', hint: 'Produtos, serviços, profissionais e horários' },
+  { id: 'catalogo', label: 'Catálogo', hint: 'Serviços, profissionais e horários da clínica' },
   { id: 'pagina', label: 'Página', hint: 'Editor da página, tema e avaliações' },
   { id: 'agente', label: 'Assistente', hint: 'Configurar o agente de atendimento' },
   { id: 'whatsapp', label: 'WhatsApp', hint: 'Conexão e conversas do WhatsApp' },
@@ -64,15 +64,15 @@ export const ROLES: RoleDef[] = [
   },
   {
     // Preset de PRODUTO (PR #46 · Equipe UX closure): Recepção opera Agenda,
-    // Clientes, Oportunidades e WhatsApp/Conversas. NÃO recebe por padrão
+    // Clientes e WhatsApp/Conversas. NÃO recebe por padrão
     // Visão geral, Pedidos, Catálogo, Página, Assistente, Campanhas, Equipe,
     // Configuração, Financeiro, Administração nem Atendimento clínico. O ID
     // interno permanece SECRETARIA (compatibilidade com dados existentes).
-    id: 'SECRETARIA', label: 'Recepção', hint: 'Agenda, clientes, oportunidades e conversas',
-    permissions: ['agenda', 'clientes', 'leads', 'whatsapp'],
+    id: 'SECRETARIA', label: 'Recepção', hint: 'Agenda, clientes e conversas',
+    permissions: ['agenda', 'clientes', 'whatsapp'],
   },
   {
-    id: 'ATENDENTE', label: 'Atendente', hint: 'Agenda, clientes e WhatsApp',
+    id: 'ATENDENTE', label: 'Recepção', hint: 'Agenda, clientes e WhatsApp',
     permissions: ['dashboard', 'agenda', 'clientes', 'whatsapp'],
   },
   {

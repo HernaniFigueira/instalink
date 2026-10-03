@@ -63,6 +63,7 @@ function mockApi(opts: { teamMembers?: any[]; pros?: any[]; rules?: any[]; servi
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.show = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
   ownRules = [];
   vi.mocked(apiSend).mockReset();
@@ -85,7 +86,7 @@ describe('Equipe UX — papéis como presets (render)', () => {
     const d = within(dialog());
     expect(d.getByRole('button', { name: /Recepção/ }).getAttribute('aria-pressed')).toBe('true');
     const summary = d.getByTestId('preset-summary');
-    expect(summary.textContent).toContain('Agenda · Clientes · Oportunidades · WhatsApp');
+    expect(summary.textContent).toContain('Agenda · Clientes · WhatsApp');
     expect(summary.textContent).not.toMatch(/Visão geral|Pedidos|Página|Assistente|Atendimento/);
     expect(dialog().textContent).not.toMatch(/\bajuste\b/);
     // personalização recolhida por padrão
@@ -268,5 +269,22 @@ describe('Equipe UX — rótulo do Proprietário (render)', () => {
     // coluna FUNÇÃO / PAPEL (desktop)
     const roleCell = [...row.querySelectorAll('span')].find((e) => e.className.includes('hidden sm:block') && e.textContent === 'Proprietário');
     expect(roleCell).toBeTruthy();
+  });
+});
+
+describe('Pré-F1 — canonical draft guard',()=>{
+  it.each(['backdrop','escape','close'])('dirty new Ana survives %s until explicit discard',async reason=>{
+    mockApi();render(<EquipePage />);await screen.findByText('Maria Recepção');
+    fireEvent.click(screen.getByRole('button',{name:'Adicionar pessoa'}));
+    const d=within(dialog());
+    const name=d.getByLabelText(/^Nome/);fireEvent.change(name,{target:{value:'Ana Souza'}});
+    if(reason==='escape')fireEvent(dialog(), new Event('cancel', { bubbles: true, cancelable: true }));
+    else if(reason==='close')fireEvent.click(d.getByRole('button',{name:'Fechar'}));
+    else fireEvent.click(dialog().querySelector('[aria-hidden="true"]')!);
+    expect(await screen.findByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByText('Continuar editando'));
+    expect((name as HTMLInputElement).value).toBe('Ana Souza');
+    fireEvent.click(d.getByRole('button',{name:'Fechar'}));fireEvent.click(await screen.findByText('Descartar'));
+    await waitFor(()=>expect(document.querySelector('dialog')).toBeNull());
   });
 });

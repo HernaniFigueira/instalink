@@ -53,12 +53,12 @@ const BASE_PERSON = {
 };
 
 describe('PR46 · Equipe — papéis como presets simples (puro)', () => {
-  it('Recepção (SECRETARIA): só Agenda, Clientes, Oportunidades e WhatsApp', () => {
+  it('Recepção (SECRETARIA): só Agenda, Clientes e WhatsApp; Oportunidades requer override', () => {
     const def = ROLES.find((r) => r.id === 'SECRETARIA')!;
     expect(def.label).toBe('Recepção');
-    expect([...def.permissions].sort()).toEqual(['agenda', 'clientes', 'leads', 'whatsapp']);
+    expect([...def.permissions].sort()).toEqual(['agenda', 'clientes', 'whatsapp']);
     const p = permissionsFor('SECRETARIA');
-    for (const id of ['dashboard', 'pedidos', 'catalogo', 'pagina', 'agente', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento'] as PermissionId[]) {
+    for (const id of ['leads', 'dashboard', 'pedidos', 'catalogo', 'pagina', 'agente', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento'] as PermissionId[]) {
       expect(p[id], id).toBe(false);
     }
   });
@@ -80,14 +80,14 @@ describe('PR46 · Equipe — papéis como presets simples (puro)', () => {
     const roles = ROLES.filter((r) => r.id !== 'OWNER');
     const s = splitRolesForEditor(roles, 'SECRETARIA');
     expect(s.primary.map((r) => r.id)).toEqual(['ADMIN', 'SECRETARIA', 'PROFISSIONAL']);
-    expect(s.other.map((r) => r.id)).toEqual(['ATENDENTE', 'VENDEDOR', 'VIEWER']);
+    expect(s.other.map((r) => r.id)).toEqual(['VENDEDOR', 'VIEWER']);
     expect(s.openOther).toBe(false);
     expect(splitRolesForEditor(roles, 'ATENDENTE').openOther).toBe(true); // registro legado continua editável
     expect(isLegacyRole('VIEWER')).toBe(true);
   });
 
   it('resumo do preset descreve o acesso padrão sem Pedidos/Página com legado OFF', () => {
-    expect(presetSummary('SECRETARIA', { legacyPages: false })).toEqual(['Agenda', 'Clientes', 'Oportunidades', 'WhatsApp']);
+    expect(presetSummary('SECRETARIA', { legacyPages: false })).toEqual(['Agenda', 'Clientes', 'WhatsApp']);
     expect(presetSummary('ADMIN', { legacyPages: false })).not.toContain('Pedidos');
     expect(presetSummary('ADMIN', { legacyPages: true })).toContain('Pedidos');
   });
@@ -109,7 +109,7 @@ describe('PR46 · Equipe — papéis como presets simples (puro)', () => {
   });
 
   it('`ajuste` só existe com diferença REAL do preset (override igual ao preset é normalizado)', () => {
-    expect(minimalOverrides('SECRETARIA', { agenda: true, clientes: true, leads: true, whatsapp: true, dashboard: false })).toEqual({});
+    expect(minimalOverrides('SECRETARIA', { agenda: true, clientes: true, leads: true, whatsapp: true, dashboard: false })).toEqual({ leads: true });
     expect(hasRealAdjustments('SECRETARIA', { agenda: true, dashboard: false })).toBe(false);
     expect(minimalOverrides('SECRETARIA', { dashboard: true, agenda: true })).toEqual({ dashboard: true });
     expect(hasRealAdjustments('SECRETARIA', { dashboard: true })).toBe(true);
@@ -190,7 +190,7 @@ describe('PR46 · Equipe — rotas reais (person.save / team GET / catalog)', ()
   it('override redundante (igual ao preset) é normalizado ao salvar; diferença real persiste', async () => {
     const created = await createPerson({ name: 'Maria', hasClinical: false, role: 'SECRETARIA', permissionOverrides: { agenda: true, leads: true, dashboard: true } });
     const db = await readDB();
-    expect(db.members.find((m) => m.id === created.memberId)!.permissions).toEqual({ dashboard: true });
+    expect(db.members.find((m) => m.id === created.memberId)!.permissions).toEqual({ dashboard: true, leads: true });
   });
 
   it('GET /api/team normaliza Member legado (override idêntico ao preset não vira `ajuste`)', async () => {

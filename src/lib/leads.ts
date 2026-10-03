@@ -1,3 +1,4 @@
+import { isLegacyPagesEnabled } from './product';
 // ═══════════════════════════════════════════════════════════════
 // LEADS — rótulos de origem (FONTE ÚNICA)
 // ═══════════════════════════════════════════════════════════════
@@ -43,17 +44,23 @@ export const LEAD_ORIGIN_ORDER: string[] = [
 ];
 
 /** Rótulo de uma origem gravada (`''`/ausente → "Não informada"). */
-export function leadOriginLabel(origin: unknown): string {
+export function leadOriginLabel(origin: unknown, legacyPagesEnabled = isLegacyPagesEnabled()): string {
   const raw = String(origin ?? '').trim();
   if (!raw) return 'Não informada';
   const known = LEAD_ORIGIN_LABELS[raw.toLowerCase()];
-  if (known) return known;
+  if (known) return originDisplayLabel(known, legacyPagesEnabled);
   // Valor desconhecido: mostra o dado REAL (nunca um rótulo inventado).
   return raw.slice(0, 40);
 }
 
+// Historical identifiers stay untouched; only active Clinical OS copy changes.
+function originDisplayLabel(label: string, legacy: boolean): string {
+  if (legacy) return label;
+  return ({ 'Página pública': 'Cadastro online (legado)', Pedido: 'Registro comercial (legado)', Carrinho: 'Interesse comercial (legado)' } as Record<string, string>)[label] || label;
+}
+
 /** Ordem dos rótulos na apresentação (desconhecidos ao final, alfabético). */
 export function leadOriginRank(label: string): number {
-  const i = LEAD_ORIGIN_ORDER.indexOf(label);
+  const i = LEAD_ORIGIN_ORDER.map(value => originDisplayLabel(value, isLegacyPagesEnabled())).indexOf(label);
   return i === -1 ? LEAD_ORIGIN_ORDER.length : i;
 }
