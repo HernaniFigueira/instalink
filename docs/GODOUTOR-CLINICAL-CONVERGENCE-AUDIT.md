@@ -372,3 +372,71 @@ Itens da auditoria tratados nesta etapa (mesma PR; sem merge):
 ### Observações da renderização real — CORRIGIDAS
 - Lista da Equipe: o Proprietário aparecia como enum cru `OWNER`; agora `roleLabel` (`role-labels.ts`) → `Proprietário`.
 - 390px: o drawer ficava estreito (faixa de 46vw ≈ 180px); regra mobile em `globals.css` (<768px) — título, footer e botão Salvar íntegros, zero overflow. Teste: `pr46-drawer-mobile.test.ts`; browser 17/17 em 390, 23/23 em 1024 e 1366.
+
+---
+
+## VARREDURA GLOBAL — onda 2 · convergência (2026-10-02)
+
+Pós-PR #50 (single-read guard em produção via `dbf7d68`), a varredura
+inventariou TODA superfície que ainda cheirava a "página universal" e a
+classificou em quatro cestos. Regra-mãe da onda: **renomear não apaga dado
+nem desloga ninguém** — tudo que sai do caminho padrão vira RAMO DE
+COMPATIBILIDADE lido pela mesma flag (`GODOUTOR_LEGACY_PAGES`).
+
+### A — Convertido ao Clinical OS (comportamento mudou)
+| Superfície | Antes | Depois |
+| --- | --- | --- |
+| Cookie de sessão app | `il_session` único | canônico `godoutor_session`; `il_session` só lido (fallback de drenagem); login purga legado; logout limpa os dois — `sessionCookieId` ponto único, 9 consumidores migrados |
+| Env do banco local | só `INSTALINK_DB_FILE` | `GODOUTOR_DB_FILE` vence; legado é alias; só `instalink.db.json` existente é PRESERVADO como destino (runtime + `seed/retention/master`) |
+| Preset inicial de unidade | `defaultPresetId(niche)` | OFF ⇒ sempre clínico (`clinica-geral`); nicho só no ramo ON |
+| Catálogo de modelos de página | THEME_PRESETS inteiro | OFF ⇒ `CLINIC_THEME_PRESETS` (sem `limao/pordosol/noite/cafe`, agora marcados `commerce`); ids legados continuam resolvíveis por `presetById` |
+| Cópia da API de criação | "seu negócio" | "sua clínica" (400/429/500) fora do ramo legado |
+| Evento postMessage do widget | `instalink:height` | `godoutor:height` nos dois lados + id canônico `godoutor-booking` (legado resolvido) |
+| Eventos internos de sessão | `instalink:session-expired/forbidden` | `godoutor:*` via constantes (`client-auth.ts`) |
+| Atores de sistema | `*@instalink.app` | `*@godoutor.app` (webhook/instagram/system/master/demo + seed/QA) |
+| Tag de export de clientes | `instalink.customers.full` | `godoutor.customers.full` |
+| Header de ação admin | `x-instalink-action` | `x-godoutor-action` primário; legado aceito |
+| User-Agent de saída | `InstaLink-Webhook*` | `GoDoutor-Webhook*` |
+| Salt de diagnóstico (fingerprint IG) | `instalink-key-fingerprint` | `godoutor-key-fingerprint` (saída é só exibição) |
+| Prefixo R2 | `instalink/<biz>/` | `godoutor/<biz>/` (chaves antigas intactas — URL completa persiste) |
+| Seed de demo | Burger House + Barbearia + Vitta | VidaVet + Odonto Vitta + Clínica Geral; produtos/pedidos `[]` de propósito |
+| Painel: bloco de pedidos | visível com módulo ON | só com `legacyPagesEnabled && modules.orders` |
+| Onboarding | preview `instalink.app/<slug>` | preview removido do caminho padrão; rascunho `gd-biz-draft`; rótulos clínicos no OFF |
+
+### B — Confinado com plano (nome técnico congelado)
+| Item | Por que não renomeou | Plano |
+| --- | --- | --- |
+| Tabela Postgres `instalink_doc` | já existe em produção; renomeação = migração big-bang (proibida) | P1 em onda própria: `godoutor_doc` + dual-write + backfill + renomear legado; hoje o identificador só existe em `LEGACY_DOC_TABLE` + no texto do plano (inclusive caminho de bootstrap do `db.ts` e `scripts/master.mjs`, que ainda escrevia o nome cru — corrigido, inclusive a coluna `doc`→`data`) |
+| Arquivo `data/instalink.db.json` | dados de dev reais de terceiros | lido como destino quando único; some naturalmente quando `godoutor.db.json` existir |
+| `x-instalink-action`, `instalink:height` | embeds/clients publicados | lidos para sempre como fallback até drenar |
+
+### C — Mantido como compatibilidade pura (zero mudança de comportamento)
+- `niche`/`modes` no POST `/api/businesses` (admin/e2e/integrações) — agora documentados como payload de compatibilidade; nada novo os pergunta.
+- `lib/onboarding.ts` (mapeamento "como sua empresa atende") intacto para chamadores antigos; some da TELA no OFF.
+- `LEGACY_FEATURES` (pedidos/orçamento) resolvíveis; fora do catálogo do painel.
+- `NICHE_PRESET`/`defaultTheme(niche)`/`blocksFor` legados — só o ramo ON usa.
+
+### D — Recusado explicitamente nesta onda
+- **Clinical Encounter F1 (prontuário)**: NÃO entra aqui — fila própria do Master Plan, bloqueada até a revisão deste PR de convergência + autorização explícita.
+- Merge automático: NÃO — PR para revisão humana.
+- Rename destrutiva de rotas/APIs/`b` do dashboard: NÃO (quebraria links salvos sem entregar valor).
+
+### Evidências da onda 2 (QA local, banco descartável, sem produção)
+- `tsc --noEmit` 0 erros · `next build` OK.
+- Vitest completo: **2939 passed / 4 failed** — os 4 são os falhos de
+  baseline reconfirmados no worktree exato da `dbf7d68` (3× `a34-instagram`,
+  1× `automation-audit-p4`); travas novas da onda: `convergence-wave2.test.ts`
+  22/22.
+- Suítes de runtime contra servidor local com o seed clínico:
+  `smoke.mjs` **67/0** · `smoke-ux.mjs` **88/0** (fechamento pelo caminho
+  clínico real: fila→registro→finalizar conclui pelo serviço oficial) ·
+  `smoke-agendar.mjs` **25/0** · `smoke-p3.mjs` **15 fluxos** ·
+  `smoke-p4.mjs` **18/18** (toggle + kick-once no template interno) ·
+  `e2e-merchant.mjs` **28/0**.
+- Sonda de personas com a flag OFF: **4/4** (Owner units=3 overview=200 ·
+  Maria units=1 overview=403 por DESIGN — preset SECRETARIA não inclui
+  dashboard · Profissional units=1 200 · Master units=0 403), com
+  `godoutor_session` gravado, `il_session` purgado no login, dual-read do
+  legado 200 e 401 após logout em ambos os cookies.
+- Visual/browser: **NÃO executado** — sem Chromium instalável neste sandbox;
+  declarado como pendência na homologação, não como aprovado.

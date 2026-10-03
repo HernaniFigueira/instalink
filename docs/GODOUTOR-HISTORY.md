@@ -12,6 +12,21 @@
 - **Gates:** typecheck 0; build de produção OK; suíte completa **2930 PASS / 4 baseline intocadas** (3× `a34-instagram`, 1× `automation-audit-p4`); harness HTTP local com seed descartável: smoke 67/0 · smoke-ux 84/0 · smoke-agendar 25/0 · smoke-p3 15 fluxos · smoke-p4 18/18 · e2e-legacy 28/0. Personas login real: Owner/Maria(Recepção)/Orlando(Prof.)/Master com papéis e escopos corretos (403 amigável da Recepção na Visão geral = preset da PR #46, por design). `git diff --check` limpo. **Sem Chromium no sandbox — homologação visual NÃO executada (limitação declarada, não contornada com claims).**
 - **Portão de varredura:** produto ativo → 0 ocorrências conceituais (link na bio, negócio-como-metáfora, demos comerciais, vitrine no caminho padrão); o resto em `src/` é C (compat justificado com comentário no local) ou D (docs/testes históricos intocados). Matriz completa e vereditos por id técnico: `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (seção onda 2) e `docs/AUTO-HOMOLOGACAO-CLINICAL-CONVERGENCE.md`.
 
+- **Reexecução reconstruída (2026-10-02, pós-reset do sandbox que apagou os
+  commits originais não-pushados):** onda reaplicada do zero sobre `dbf7d68`
+  com push a cada bloco. Números do ciclo reconstruído: vitest completo
+  **2939 PASS** / 4 baseline reconfirmadas em worktree exato da base ·
+  `convergence-wave2.test.ts` 22/22 · harness 67/0, smoke-ux **88/0** (1
+  check a mais: criação da unidade de varejo efêmera pelo próprio smoke),
+  agendar 25/0, p3 15 fluxos, p4 18/18, e2e 28/0 · personas 4/4 (16/16
+  verificações com dual-read + purga + pós-logout 401 nos dois cookies) ·
+  typecheck/build limpos · rename do pacote (`godoutor`) e README clínico
+  incluídos. Duas correções extras encontradas no caminho: `master.mjs`
+  escrevia coluna errada no UPDATE Postgres do doc (`doc`→`data`, bug
+  pré-existente da base) e o `db.ts` tinha SQL cru do `instalink_doc` no
+  bootstrap (~800) que entrou de vez sob `LEGACY_DOC_TABLE`. Homologação
+  visual segue NÃO executada (sem Chromium) — declarada pendente.
+
 ## 2026-10-02 — P0 Infra · single-read authenticated guard
 
 > Branch `arena/01a0feb4-instalink`, base `main` em `02389c44b6eeaf1bd164ce54834d6442da62c515`; PR #50 (https://github.com/HernaniFigueira/instalink/pull/50) aberta, aguardando revisão. Produção não usada para QA; Clinical Encounter F1 não iniciado.
