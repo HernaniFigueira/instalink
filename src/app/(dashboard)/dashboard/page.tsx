@@ -320,11 +320,13 @@ export default function DashboardPage() {
 
   const { user, business, totals, upcoming, checklist, pct, recent, today, crm, pageStats, whatsapp, ordersPanel, productsPanel, context } = data;
   const legacyPagesEnabled = isLegacyPagesEnabled();
+  // BLOQUEIO final (PR #51): o item de Produtos NÃO existe no OFF — a API já
+  // o supprime pela projeção operacional; não há mais "relabel" de revisão de
+  // legado (Dashboard clínica não é lugar de módulo comercial). Sobram apenas
+  // os filtros de superfície da Página fora do caminho.
   const operationalChecklist = legacyPagesEnabled
     ? checklist
-    : checklist
-      .filter((item) => item.href.split('?')[0] !== '/pagina')
-      .map((item) => item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' } : item);
+    : checklist.filter((item) => item.href.split('?')[0] !== '/pagina');
   const operationalSetupPct = legacyPagesEnabled
     ? pct
     : operationalChecklist.length
@@ -365,7 +367,9 @@ export default function DashboardPage() {
   const links = data.links || {};
   const q = `?b=${business.id}`;
   const hasSetupPending = operationalChecklist.some((c) => !c.done);
-  const hasActivity = recent.orders.length + recent.bookings.length + recent.leads.length > 0;
+  // Defesa em camadas: a API já entrega recent.orders [] no OFF, mas a UI
+  // também não conta pedido para "existe atividade" com a flag desligada.
+  const hasActivity = recent.bookings.length + recent.leads.length + (legacyPagesEnabled ? recent.orders.length : 0) > 0;
   const canalConnected = whatsapp?.status === 'connected';
   const orderDef = (s: string): StatusDef => (ORDER_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
@@ -897,7 +901,7 @@ export default function DashboardPage() {
                     <strong className="font-semibold text-[var(--text)]">{l.name}</strong> · lead {leadDef(l.status).panel.toLowerCase()} · {l.origin}
                   </ListRow>
                 ))}
-                {recent.orders.slice(0, 2).map((o) => (
+                {legacyPagesEnabled && recent.orders.slice(0, 2).map((o) => (
                   <p key={o.id} className="text-[12px] text-[var(--text-soft)] truncate">
                     <strong className="font-semibold text-[var(--text)]">{o.customerName}</strong> · pedido {o.code}
                   </p>

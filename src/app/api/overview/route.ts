@@ -4,7 +4,7 @@ import { can } from '@/lib/access';
 import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
 import { integrationStatus } from '@/lib/whatsapp';
-import { enabledFeatureIds } from '@/lib/features';
+import { operationalEnabledFeatureIds } from '@/lib/features';
 import { dashboardAttention, dashboardContext, dashboardLinks, pageIsCustomized, recentActivityLists, setupChecklist, setupProgress, type PageCustomizationInput } from '@/lib/dashboard';
 import { isLegacyPagesEnabled } from '@/lib/product';
 import { summarizeTasks } from '@/lib/automation/tasks';
@@ -18,7 +18,6 @@ import { addDaysISO, nowHM, todayISO } from '@/lib/tz';
 import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
-import { isFeatureEnabled } from '@/lib/features';
 import { automationHealthSummary, computeIntelligenceMetrics, intelligenceHealth } from '@/lib/intelligence-metrics';
 
 // GET ?businessId=&period=7|30|90|365|0 — dados da Dashboard.
@@ -68,7 +67,13 @@ export async function GET(req: NextRequest) {
   const bookings = scopeBookings(allBookings, professionalScope);
 
   // ── Contexto: módulos ativos decidem o que a Dashboard mostra ──
-  const context = dashboardContext(business);
+  // BLOQUEIO FINAL da PR #51: o contexto é a PROJEÇÃO OPERACIONAL do
+  // Clinical OS. Unidade LEGADA com modes products/orders/quote mantém os
+  // dados intactos no storage, mas com a flag OFF nada disso contamina a
+  // Dashboard: módulos, receita, painéis, totais, atividade e checklist
+  // nascem da máscara em lib/dashboard.ts (dashboardModules(business, legacy)).
+  const legacy = isLegacyPagesEnabled();
+  const context = dashboardContext(business, legacy);
   const m = context.modules;
   const activity = recentActivityLists(m);
 
@@ -136,12 +141,16 @@ export async function GET(req: NextRequest) {
 
   // Compatibilidade com o formato anterior (a tela nova usa `revenuePayload`,
   // mas manter o campo evita quebrar qualquer consumidor existente).
+  // Compat com o formato antigo: sem FONTE de receita na projeção (unidade
+  // comercial legada com a flag OFF cai aqui) o número NÃO pode cair no
+  // fallback de pedidos — seria Order revenue entrando no resumo do Clinical
+  // OS. Sem fonte, receita operacional é explicitamente vazia (nada inventado).
   const primaryRevenue = revenueSources.includes('orders') && !revenueSources.includes('bookings')
     ? orderRevenueResult
     : revenueSources.includes('bookings')
       ? bookingRevenueResult
-      : orderRevenueResult;
-  const revenue = showMoney
+      : null;
+  const revenue = showMoney && primaryRevenue
     ? {
       total: primaryRevenue.total,
       prev: primaryRevenue.prev,
@@ -326,8 +335,9 @@ export async function GET(req: NextRequest) {
     },
     pageCustomized,
     whatsappConnected: business.whatsappIntegration?.status === 'connected',
-    // Clinical OS (flag OFF): checklist sem itens da Página legada.
-    legacyPages: isLegacyPagesEnabled(),
+    // Clinical OS (flag OFF): checklist sem itens da Página legada (e o
+    // defensivo em setupChecklist garante o mesmo p/ vitrine por dado legado).
+    legacyPages: legacy,
   });
   const checklist = setupItems.map((c) => ({
     done: c.done, label: c.label, href: `${c.href}${q}`,
@@ -347,8 +357,11 @@ export async function GET(req: NextRequest) {
         db,
         [{
           id: bId,
-          hasBookings: isFeatureEnabled(business, 'bookings') || isFeatureEnabled(business, 'services'),
-          hasOrders: isFeatureEnabled(business, 'orders'),
+          // BLOQUEIO final: o recorte de "Resultados do período" da Dashboard
+          // é projeção operacional — com a flag OFF, receita de pedido não
+          // entra aqui (o motor recebe a máscara, não o storage).
+          hasBookings: m.bookings || m.services,
+          hasOrders: m.orders,
         }],
         { from: spec.from, to: spec.to },
         spec.hasPrevious ? { from: spec.prevFrom, to: spec.prevTo } : null,
@@ -390,7 +403,7 @@ export async function GET(req: NextRequest) {
     attention,
     links,
     tasksSummary,
-    modules: enabledFeatureIds(business),
+    modules: operationalEnabledFeatureIds(business, legacy),
     hasBookingsModule: m.bookings,
     hasOrdersModule: m.orders,
     hasProductsModule: m.products,

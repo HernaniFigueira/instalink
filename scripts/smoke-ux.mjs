@@ -110,16 +110,42 @@ check('clínica: regra da receita documentada no hint', /não é dinheiro recebi
 check('clínica: receita de pedidos ausente (sem módulo)', c.revenueDetail?.orders === null, JSON.stringify(c.revenueDetail?.orders));
 check('clínica: identidade da empresa no payload (logo/nome)', c.business?.name === 'Clínica Odonto Vitta' && 'logo' in (c.business || {}), JSON.stringify(c.business));
 
+// ── 2b. varejo LEGADO sob flag OFF: projeção mascara o comércio (bloqueio final PR #51) ──
+// A unidade B1 tem products+orders NO STORAGE (criada pelo payload de
+// compatibilidade). Com GODOUTOR_LEGACY_PAGES OFF nada disso pode contaminar a
+// Dashboard/Overview — mas os dados têm de permanecer vivos na API.
+const catProd = await api('POST', '/api/catalog', {
+  businessId: B1, action: 'product.save', name: `Produto ${TAG}`, price: 2500, active: true,
+}, ownerToken);
+check('varejo OFF: cadastro de produto legado funciona (storage preservado)', catProd.status < 300, `(${catProd.status}) ${JSON.stringify(catProd.data).slice(0, 120)}`);
+const prodId = catProd.data?.product?.id || catProd.data?.id || '';
+const custReg = await api('POST', '/api/customer/register', {
+  name: `Cliente ${TAG}`, phone: ph(31), email: `${TAG}.cust@smoke.test`, password: 'smoke1234',
+});
+const custTok = custReg.data.token || '';
+const legacyOrder = await api('POST', '/api/orders', {
+  businessId: B1, customerName: `Cliente ${TAG}`, customerPhone: ph(31),
+  type: 'pickup', payment: 'pix', items: prodId ? [{ productId: prodId, qty: 1, options: [] }] : [],
+}, custTok);
+check('varejo OFF: API de pedidos segue aceitando pedido legado (módulo ativo no dado)', legacyOrder.status < 300, `(${legacyOrder.status}) ${JSON.stringify(legacyOrder.data).slice(0, 140)}`);
+const ordersList = await api('GET', `/api/orders?businessId=${B1}`, null, ownerToken);
+check('varejo OFF: lojista ainda lista os pedidos no storage', (ordersList.data.orders || []).length >= 1, `(total=${ordersList.data.total})`);
+
 const retailOv = await api('GET', `/api/overview?businessId=${B1}&period=30`, null, ownerToken);
 const r = retailOv.data;
 check('varejo: overview 200', retailOv.status === 200, `(${retailOv.status})`);
 check('varejo: módulos de agenda desligados', r.context?.modules?.bookings === false, JSON.stringify(r.context?.modules));
-check('varejo: painel de pedidos presente', !!r.ordersPanel, JSON.stringify(r.ordersPanel));
+check('varejo OFF: Dashboard SEM painel de pedidos (projeção mascarada)', r.ordersPanel === null && r.hasOrdersModule === false, JSON.stringify(r.ordersPanel));
+check('varejo OFF: SEM painel de produtos na projeção', r.productsPanel === null && r.hasProductsModule === false, JSON.stringify(r.productsPanel));
+check('varejo OFF: totais de pedidos zerados no payload', r.totals?.orders === 0 && r.totals?.newOrders === 0, JSON.stringify(r.totals));
+check('varejo OFF: atividade recente sem pedidos', Array.isArray(r.recent?.orders) && r.recent.orders.length === 0, JSON.stringify(r.recent?.orders));
+check('varejo OFF: receita de pedido fora do resumo financeiro', r.revenueDetail?.orders === null && !(r.context?.revenue || []).includes('orders'), JSON.stringify(r.revenueDetail?.orders));
+check('varejo OFF: receita ocultada sem fonte (nada cai em fallback)', r.revenue?.total === 0 && r.revenue?.hasData === false, JSON.stringify(r.revenue));
+check('varejo OFF: payload modules não anuncia commerce', ['products', 'orders', 'quote'].every((m) => !(r.modules || []).includes(m)), JSON.stringify(r.modules));
 check('varejo: SEM operação de hoje nem próximos atendimentos', r.today === null && Array.isArray(r.upcoming) && r.upcoming.length === 0, `today=${JSON.stringify(r.today)} upcoming=${r.upcoming?.length}`);
-check('varejo: vocabulário "pedidos"', r.context?.labels?.activityUnit === 'pedidos', r.context?.labels?.activityUnit);
-check('varejo: receita vem de pedidos e chama "Receita"', JSON.stringify(r.context?.revenue) === JSON.stringify(['orders']) && r.revenueDetail?.orders?.label === 'Receita', JSON.stringify(r.context?.revenue));
-check('varejo: KPIs sem "attendance"', !(r.context?.kpis || []).includes('attendance'), JSON.stringify(r.context?.kpis));
-check('varejo: checklist não pede agenda/horários', !(r.checklist || []).some((i) => /horários/i.test(i.label)), JSON.stringify(r.checklist?.map((i) => i.label)));
+check('varejo OFF: vocabulário sem pedidos na projeção', r.context?.labels?.showsOrders === false && r.context?.labels?.activityUnit !== 'pedidos', JSON.stringify(r.context?.labels));
+check('varejo: KPIs sem "attendance" e sem "orders" na projeção', !(r.context?.kpis || []).includes('attendance') && !(r.context?.kpis || []).includes('orders'), JSON.stringify(r.context?.kpis));
+check('varejo OFF: checklist sem agenda/horários E sem vitrine/pedidos', !(r.checklist || []).some((i) => /horários|vitrine|produtos|pedidos/i.test(i.label)), JSON.stringify(r.checklist?.map((i) => i.label)));
 
 const poorOv = await api('GET', `/api/overview?businessId=${B1}&period=7`, null, ownerToken);
 check('sem dados no período → hasData false (nada de valor inventado)', typeof poorOv.data.revenue?.hasData === 'boolean', JSON.stringify(poorOv.data.revenue));

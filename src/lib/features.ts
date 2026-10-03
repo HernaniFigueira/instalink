@@ -259,6 +259,22 @@ export function enabledFeatureIds(business: Pick<Business, 'modes' | 'features'>
 }
 
 /**
+ * PROJEÇÃO OPERACIONAL do payload (Dashboard/overview `modules`) — não é
+ * verdade sobre o storage, é a oferta do Clinical OS: com a flag OFF, os
+ * módulos do comércio legado (products) e os puros de compatibilidade
+ * (orders, quote) saem da lista, MESMO ativos em dados antigos.
+ * O storage permanece intacto; `enabledFeatureIds` continua a leitura real.
+ */
+export function operationalEnabledFeatureIds(
+  business: Pick<Business, 'modes' | 'features'>,
+  legacyPagesEnabled: boolean,
+): FeatureId[] {
+  const ids = enabledFeatureIds(business);
+  if (legacyPagesEnabled) return ids;
+  return ids.filter((id) => !isCommerceFeature(id) && !isLegacyFeature(id));
+}
+
+/**
  * Ativar/desativar sem perder configuração: devolve o PATCH a aplicar no
  * negócio (modes para módulos comerciais; features para os opcionais).
  * Desativar nunca apaga dados — só o flag.

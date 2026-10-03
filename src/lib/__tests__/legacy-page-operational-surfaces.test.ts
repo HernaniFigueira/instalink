@@ -76,7 +76,17 @@ describe('Clinical OS · superfícies operacionais da Página legada', () => {
     expect(read('src/app/(dashboard)/produtos/page.tsx')).toMatch(/blockedLegacySurface\('\/produtos', legacyPagesEnabled\)/);
     expect(read('src/app/(dashboard)/pedidos/page.tsx')).toMatch(/blockedLegacySurface\('\/pedidos', legacyPagesEnabled\)/);
     expect(professionals).not.toContain('aparece na página pública');
-    expect(dashboard).toContain("item.id === 'products' ? { ...item, label: 'Revise dados legados de produtos' }");
+    // BLOQUEIO final: sem relabel de "revisão de legado" — no OFF o item
+    // Produtos NÃO EXISTE (a projeção operacional o suprime na fonte).
+    expect(dashboard).not.toContain('Revise dados legados de produtos');
+    expect(dashboard).toMatch(/legacyPagesEnabled \? recent\.orders\.length : 0/);
+    expect(dashboard).toMatch(/legacyPagesEnabled && recent\.orders\.slice\(0, 2\)/);
+    // contexto do Overview vem da máscara compartilhada (lib/dashboard.ts)
+    const ovApi = read('src/app/api/overview/route.ts');
+    expect(ovApi).toMatch(/dashboardContext\(business, legacy\)/);
+    expect(ovApi).toMatch(/operationalEnabledFeatureIds\(business, legacy\)/);
+    expect(ovApi).toMatch(/hasOrders: m\.orders/);
+    expect(ovApi).toMatch(/const primaryRevenue = revenueSources\.includes\('orders'\)[\s\S]{0,180}: null;/);
     // CORREÇÃO FINAL: OFF não renderiza a pergunta comercial nem menciona
     // vitrine no "Você começa com" — as listas vêm das funções puras de
     // lib/onboarding.ts (contrato testado em convergence-final.test.ts).
