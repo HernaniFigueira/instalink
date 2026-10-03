@@ -105,3 +105,30 @@ Chromium no sandbox); cookies de protocolo `il_session/il_cust_session/il_suppor
 tabela `instalink_doc`, alias `INSTALINK_DB_FILE` e namespace CSS `il-*`
 permanecem como LEGACY_COMPAT/LEGACY_STORAGE/CSS_NAMESPACE_LEGACY com plano
 próprio — ver matriz em `GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md`.
+
+---
+
+## Bloqueio final da PR #51 — projeção operacional do Overview (commit `afb6d8b`)
+
+Contexto: unidade LEGADA com `modes [services, bookings, products, orders, quote]`,
+produto e pedido gravados. Com a flag OFF, a Dashboard/Overview não pode absorver
+o comércio; com a flag ON, a compatibilidade continua visível.
+
+| Verificação | Resultado |
+| --- | --- |
+| `legacy-commerce-off-overview.test.ts` (fixture OFF + ON, rota real) | **7/7** |
+| Focado (convergence-final · wave2 · legacy-page · product-positioning · clinical-convergence · overview-access) | **119/119** |
+| Vitest completo | **2975 pass · 4 fail = baseline exata** (a34-instagram×3, automation-audit-p4×1) |
+| `tsc --noEmit` (npm run typecheck) · `next build` · `git diff --check` | limpos |
+| Smoke-UX (reescrito p/ novo contrato varejista: máscara na Dashboard + dados vivos na API) | **96 ok / 0** |
+| Smoke · Agendar · E2E-legacy (consomem overview/rotas) | **67/0 · 25/0 · 28/0** |
+| p3/p4 | não reexecutados — alteração restrita a dashboard/overview/helpers (permitido pelo bloqueio) |
+
+Provas do teste novo (flag OFF): `context.modules.{products,orders,quote}=false` ·
+`recent.orders=[]` · `ordersPanel/productsPanel=null` · `totals.{orders,newOrders}=0` ·
+`revenueDetail.orders=null` e `sources` sem `orders` · `revenue` oculto/zero (sem
+fallback) · `hasOrdersModule/hasProductsModule=false` · payload `modules` sem
+products/orders/quote · checklist sem `Produtos/Pedidos/Vitrine` e sem
+`/produtos`,`/pedidos` · **storage intacto** (modes, produto e pedido continuam no DB).
+Flag ON: painéis, totais, atividade, `vitrine` no checklist e `sources` com `orders`
+todos de volta. Smoke-UX ancora o mesmo comportamento em HTTP contra o build real.
