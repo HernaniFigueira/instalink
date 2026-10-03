@@ -14,26 +14,26 @@ import { useRouter } from 'next/navigation';
 import { slugify } from '@/lib/utils';
 import { isLegacyPagesEnabled } from '@/lib/product';
 import { Icon } from '@/components/icons';
-import { SERVICE_MODEL_OPTIONS, modesForServiceModel, type ServiceModel } from '@/lib/onboarding';
-import { CLINIC_PRESETS } from '@/lib/clinic-presets';
+import {
+  SERVICE_MODEL_OPTIONS, businessCreationPayload, clinicTypeOptions,
+  showsServiceModelQuestion, startWithItems, type ServiceModel,
+} from '@/lib/onboarding';
 import { VALID_CLINIC_TYPES, type ClinicType } from '@/lib/types';
 
 // FASE 2 · P5 — "Qual é o tipo da sua clínica?" (preset, não aplicação
 // separada): define terminologia, ficha de anamnese inicial e sugestões.
-// 'Outro' cobre negócios que não são clínica — ninguém é forçado.
-const CLINIC_TYPE_OPTIONS: Array<{ id: ClinicType; label: string; hint: string }> = [
-  { id: 'medica', label: CLINIC_PRESETS.medica.label, hint: 'Consultas e exames — paciente, consultas, profissionais de saúde.' },
-  { id: 'odontologica', label: CLINIC_PRESETS.odontologica.label, hint: 'Procedimentos odontológicos — pacientes e dentistas.' },
-  { id: 'veterinaria', label: CLINIC_PRESETS.veterinaria.label, hint: 'Tutores e pets — o pet é o paciente da agenda.' },
-  { id: 'estetica', label: CLINIC_PRESETS.estetica.label, hint: 'Procedimentos estéticos — clientes e profissionais.' },
-  { id: 'geral', label: 'Outro tipo de negócio', hint: 'Não é clínica (salão, estúdio, consultório único…) — tudo funciona igual.' },
-];
-
-const WHATSAPP_DRAFT_KEY = 'gd-biz-draft';
+// CORREÇÃO FINAL: a lista (incl. o rótulo de 'geral') vem da função pura
+// clinicTypeOptions(legacy) — com a flag OFF não há porta "não é clínica".
+//
+// DRAFT: chave canônica `godoutor-biz-draft`; a antiga `il-biz-draft` é lida
+// como fallback e removida na primeira escrita (renome sem perda).
+const WHATSAPP_DRAFT_KEY = 'godoutor-biz-draft';
+const WHATSAPP_DRAFT_KEY_LEGACY = 'il-biz-draft';
 
 export default function CreateBusinessPage() {
   const router = useRouter();
   const legacyPagesEnabled = isLegacyPagesEnabled();
+  const CLINIC_OPTIONS = clinicTypeOptions(legacyPagesEnabled);
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [model, setModel] = useState<ServiceModel>('agenda');
@@ -61,7 +61,7 @@ export default function CreateBusinessPage() {
   // que digitou (não é onboarding multi-tela — só conveniência).
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(WHATSAPP_DRAFT_KEY);
+      const raw = localStorage.getItem(WHATSAPP_DRAFT_KEY) ?? localStorage.getItem(WHATSAPP_DRAFT_KEY_LEGACY);
       if (!raw) return;
       const d = JSON.parse(raw);
       if (typeof d.name === 'string') setName(d.name);
@@ -76,7 +76,8 @@ export default function CreateBusinessPage() {
     try {
       if (name || whatsapp || model !== 'agenda' || clinicType !== 'geral') {
         localStorage.setItem(WHATSAPP_DRAFT_KEY, JSON.stringify({ name, whatsapp, model, clinicType }));
-      } else localStorage.removeItem(WHATSAPP_DRAFT_KEY);
+        try { localStorage.removeItem(WHATSAPP_DRAFT_KEY_LEGACY); } catch { /* noop */ }
+      } else { localStorage.removeItem(WHATSAPP_DRAFT_KEY); localStorage.removeItem(WHATSAPP_DRAFT_KEY_LEGACY); }
     } catch { /* storage bloqueado: segue sem rascunho */ }
   }, [name, whatsapp, model, clinicType]);
 
@@ -89,19 +90,18 @@ export default function CreateBusinessPage() {
       const res = await fetch('/api/businesses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // A pergunta "Como sua empresa atende?" define a BASE de módulos
-        // (lib/onboarding.ts). O TIPO DE CLÍNICA é preset (terminologia +
+        // CORREÇÃO FINAL: OFF NÃO envia `modes` — a base services + bookings é
+        // decisão canônica server-side (lib/templates.ts); a pergunta comercial
+        // só existe no ramo ON. O TIPO DE CLÍNICA é preset (terminologia +
         // anamnese inicial) — nada definitivo: Recursos/Configurações mudam depois.
-        body: JSON.stringify({
-          name, whatsapp, slug: slugify(name),
-          modes: modesForServiceModel(model),
-          clinicType,
-        }),
+        body: JSON.stringify(businessCreationPayload({
+          legacyPagesEnabled, name, whatsapp, slug: slugify(name), model, clinicType,
+        })),
       });
       if (res.status === 401) { router.replace('/login?session=expired'); return; }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      try { localStorage.removeItem(WHATSAPP_DRAFT_KEY); } catch { /* noop */ }
+      try { localStorage.removeItem(WHATSAPP_DRAFT_KEY); localStorage.removeItem(WHATSAPP_DRAFT_KEY_LEGACY); } catch { /* noop */ }
       router.push(`/dashboard?b=${data.businessId}&welcome=1`);
       router.refresh();
     } catch (err: any) {
@@ -141,7 +141,7 @@ export default function CreateBusinessPage() {
           <div className="mt-5 space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="biz">{legacyPagesEnabled ? 'Nome do negócio *' : 'Nome da clínica *'}</label>
-              <input id="biz" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Studio Bela Vida, Clínica Odonto Sorriso, Estúdio Pilates Fluxo"
+              <input id="biz" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={legacyPagesEnabled ? 'Ex: Studio Bela Vida, Clínica Odonto Sorriso, Estúdio Pilates Fluxo' : 'Ex: Clínica Vida, Odonto Vitta, VetCare'}
                 className="w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
               {name.trim() && legacyPagesEnabled && (
                 <p className="text-xs text-zinc-500 mt-1.5">
@@ -160,7 +160,7 @@ export default function CreateBusinessPage() {
             <fieldset>
               <legend className="text-sm font-medium text-zinc-700">Qual é o tipo da sua clínica?</legend>
               <div className="mt-1.5 grid gap-2" role="radiogroup" aria-label="Qual é o tipo da sua clínica?">
-                {CLINIC_TYPE_OPTIONS.map((opt) => (
+                {CLINIC_OPTIONS.map((opt) => (
                   <label key={opt.id}
                     className={`flex items-start gap-2.5 rounded-md border px-3.5 py-2.5 cursor-pointer transition-colors ${
                       clinicType === opt.id ? 'border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-500' : 'border-zinc-200 hover:border-zinc-300'
@@ -182,10 +182,13 @@ export default function CreateBusinessPage() {
               </p>
             </fieldset>
 
-            {/* A base de módulos — uma pergunta, três respostas (lib/onboarding.ts).
-                Nada definitivo: Recursos liga/desliga qualquer módulo depois. */}
+            {/* A pergunta comercial ("Como sua empresa atende?" → produtos) é
+                RAMO DE COMPATIBILIDADE: com GODOUTOR_LEGACY_PAGES OFF ela não
+                existe — a base (services + bookings) é decisão canônica do
+                servidor, não escolha do usuário (lib/onboarding.ts). */}
+            {showsServiceModelQuestion(legacyPagesEnabled) && (
             <fieldset>
-              <legend className="text-sm font-medium text-zinc-700">{legacyPagesEnabled ? 'Como sua empresa atende?' : 'Como sua clínica atende?'}</legend>
+              <legend className="text-sm font-medium text-zinc-700">Como sua empresa atende?</legend>
               <div className="mt-1.5 grid gap-2" role="radiogroup" aria-label="Como sua empresa atende?">
                 {SERVICE_MODEL_OPTIONS.map((opt) => (
                   <label key={opt.id}
@@ -199,41 +202,23 @@ export default function CreateBusinessPage() {
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-zinc-900">{opt.label}</span>
-                      <span className="block text-xs text-zinc-500 mt-0.5">
-                        {legacyPagesEnabled
-                          ? opt.hint
-                          : opt.id === 'produtos'
-                            ? 'Cadastro legado de dados de produtos; sem estoque, vendas ou dispensação. O uso clínico será decidido separadamente.'
-                            : opt.id === 'ambos'
-                              ? 'Agenda de atendimentos e cadastro legado de produtos; uso clínico definido separadamente.'
-                              : opt.hint}
-                      </span>
+                      <span className="block text-xs text-zinc-500 mt-0.5">{opt.hint}</span>
                     </span>
                   </label>
                 ))}
               </div>
             </fieldset>
+            )}
           </div>
 
           <div className="mt-5 rounded-md border border-zinc-200 bg-zinc-50 px-3.5 py-3">
             <p className="text-xs font-semibold text-zinc-700 mb-1.5">Você começa com:</p>
             <ul className="space-y-1 text-xs text-zinc-600">
-              {(model === 'agenda' || model === 'ambos') && (
-                <>
-                  <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Agenda de atendimentos ativa</li>
-                  <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> Catálogo de serviços com agendamento</li>
-                </>
-              )}
-              {(model === 'produtos' || model === 'ambos') && (
-                <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> {legacyPagesEnabled ? 'Vitrine de produtos com CTA no WhatsApp' : 'Cadastro legado de produtos (sem estoque, vendas ou dispensação; uso clínico definido separadamente)'}</li>
-              )}
-              <li className="flex items-center gap-1.5"><Icon n="check" size={12} className="text-emerald-600" /> {legacyPagesEnabled ? 'Página pública pronta para publicar' : 'Painel pronto para uso'}</li>
-              {model === 'agenda' && (
-                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> {legacyPagesEnabled ? 'Vitrine de produtos (opcional — ative em Recursos)' : 'Cadastro legado de produtos (opcional — uso clínico definido separadamente)'}</li>
-              )}
-              {model === 'produtos' && (
-                <li className="flex items-center gap-1.5 text-zinc-400"><Icon n="x" size={12} /> Agenda e serviços (opcionais — ative em Recursos)</li>
-              )}
+              {startWithItems(legacyPagesEnabled, model).map((it) => (
+                <li key={it.text} className={`flex items-center gap-1.5${it.on ? '' : ' text-zinc-400'}`}>
+                  <Icon n={it.on ? 'check' : 'x'} size={12} className={it.on ? 'text-emerald-600' : ''} /> {it.text}
+                </li>
+              ))}
             </ul>
           </div>
 
