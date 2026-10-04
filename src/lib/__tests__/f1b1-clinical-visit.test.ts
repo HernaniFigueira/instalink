@@ -24,7 +24,10 @@ import { emptyDB, readDB, writeDB } from '../db';
 import { createSession } from '../auth';
 import { GET as encountersGET, POST as encountersPOST, PATCH as encountersPATCH } from '@/app/api/encounters/route';
 import { ENCOUNTER_LABELS } from '../encounters';
-import { ENCOUNTER_SECTIONS, availableEncounterSections } from '../encounter-sections';
+import {
+  ENCOUNTER_SECTIONS, availableEncounterSections, clinicalBranchesForClinic,
+  encounterModulesForClinic, isEncounterSectionEnabled,
+} from '../encounter-sections';
 import {
   EMPTY_ENCOUNTER_CLINICAL, VETERINARY_ASSESSMENT_NUMBER_LIMITS,
   applyEncounterClinicalPatch, clinicalWriteError, encounterClinicalAccess, normalizeEncounterClinical,
@@ -42,9 +45,10 @@ const OUTRA_USER = 'user-outra';
 const PET = 'pet-mel';
 const TUTOR = 'ct-isabelle';
 
-function business(id: string, ownerId = OWNER): Business {
+function business(id: string, ownerId = OWNER, clinicType: Business['clinicType'] = 'veterinaria'): Business {
   return {
     id, ownerId, organizationId: `org-${id}`, name: `Clínica ${id}`, slug: id,
+    clinicType,
     description: '', logo: '', cover: '', niche: 'pet', modes: ['services', 'bookings'],
     features: { reviews: false, faq: false, gallery: false, location: false, whatsapp: false, about: false, agent: false },
     phone: '', whatsapp: '', email: '', instagram: '', tiktok: '', address: '', mapsUrl: '',
@@ -147,7 +151,9 @@ beforeEach(async () => {
 
 describe('F1B1 · estrutura de seções e copy clínica', () => {
   it('as três seções do recorte estão REAIS; o resto continua declarado e indisponível', () => {
-    expect(availableEncounterSections().map((s) => s.id)).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    // A vertical é a autoridade: VET liga as três; sem vertical, só o CORE.
+    expect(availableEncounterSections('veterinaria').map((s) => s.id)).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    expect(availableEncounterSections(undefined).map((s) => s.id)).toEqual(['atendimento']);
     for (const id of ['problemas', 'conduta', 'procedimentos', 'anexos']) {
       expect(ENCOUNTER_SECTIONS.find((s) => s.id === id)?.available).toBe(false);
     }
@@ -220,7 +226,9 @@ describe('F1B1 · permissões de escrita clínica (servidor)', () => {
     // E o Owner continua LENDO e INICIANDO (a leitura não é escrita clínica).
     const read = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${encounterId}`, undefined, tokenOwner, 'GET'));
     expect(read.status).toBe(200);
-    expect((await json(read)).encounter.access.canEditClinical).toBe(false);
+    const readBody = await json(read);            // o corpo só pode ser lido UMA vez
+    expect(readBody.encounter.access.canEditVisitAnamnesis).toBe(false);
+    expect(readBody.encounter.access.canEditVeterinaryAssessment).toBe(false);
   });
 
   it('B · profissional diferente do responsável não edita (mesmo sendo da unidade)', async () => {
@@ -278,9 +286,15 @@ describe('F1B1 · permissões de escrita clínica (servidor)', () => {
 
   it('a leitura devolve a capacidade de escrita resolvida no SERVIDOR', async () => {
     const asMichelle = await json(await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${encounterId}`, undefined, tokenMichelle, 'GET')));
-    expect(asMichelle.encounter.access).toMatchObject({ canEditCore: true, canEditClinical: true, reason: 'editable' });
+    expect(asMichelle.encounter.access).toMatchObject({
+      canEditCore: true, canEditVisitAnamnesis: true, canEditVeterinaryAssessment: true,
+      modules: ['core', 'vet'], reason: 'editable',
+    });
     const asOwner = await json(await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${encounterId}`, undefined, tokenOwner, 'GET')));
-    expect(asOwner.encounter.access).toMatchObject({ canEditCore: false, canEditClinical: false, reason: 'professional_required' });
+    expect(asOwner.encounter.access).toMatchObject({
+      canEditCore: false, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false,
+      reason: 'professional_required',
+    });
   });
 });
 
@@ -377,7 +391,7 @@ describe('F1B1 · validação do payload clínico (unidades e limites técnicos)
   });
 
   it('regra pura: access e mensagens de recusa (mesma régua do servidor)', () => {
-    const db = { professionals: [], pets: [] } as unknown as Pick<DB, 'professionals' | 'pets'>;
+    const db = { professionals: [], pets: [], businesses: [] } as unknown as Pick<DB, 'professionals' | 'pets' | 'businesses'>;
     const draft = { businessId: BIZ, professionalId: 'p', petId: PET, status: 'draft' as const };
     expect(encounterClinicalAccess(db, draft, 'u', 'OWNER')).toMatchObject({ canEditCore: false, reason: 'professional_required' });
     const finalized = encounterClinicalAccess(db, { ...draft, status: 'finalized' }, 'u', 'OWNER');
@@ -392,6 +406,106 @@ describe('F1B1 · validação do payload clínico (unidades e limites técnicos)
       expect(merged.clinical.anamnesis.appetite).toBe('changed');
       expect(merged.clinical.anamnesis.history).toBe('');
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ISOLAMENTO POR VERTICAL (revisão): o módulo VET é da clínica veterinária.
+// O CORE (Atendimento) é universal; Anamnese/Avaliação NÃO vazam para
+// odontologia, medicina, estética ou clínica genérica — e esconder o módulo
+// jamais apaga dado já gravado.
+// ═══════════════════════════════════════════════════════════════
+describe('F1B1 · isolamento por vertical (clinicType é a ÚNICA autoridade)', () => {
+  const ids = (clinicType?: unknown) => availableEncounterSections(clinicType).map((section) => section.id);
+
+  it('resolução canônica de módulos e seções por vertical (sem hard-code espalhado)', () => {
+    expect(encounterModulesForClinic('veterinaria')).toEqual(['core', 'vet']);
+    expect(encounterModulesForClinic('odontologica')).toEqual(['core', 'odontology']);
+    expect(encounterModulesForClinic('estetica')).toEqual(['core', 'aesthetics']);
+    expect(encounterModulesForClinic('medica')).toEqual(['core']);
+    expect(encounterModulesForClinic('geral')).toEqual(['core']);
+    // Ausente/inválido = fallback CONSERVADOR (nunca promove vertical por omissão).
+    expect(encounterModulesForClinic(undefined)).toEqual(['core']);
+    expect(encounterModulesForClinic('pizzaria')).toEqual(['core']);
+
+    expect(ids('veterinaria')).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    expect(ids('odontologica')).toEqual(['atendimento']);
+    expect(ids('medica')).toEqual(['atendimento']);
+    expect(ids('estetica')).toEqual(['atendimento']);
+    expect(ids('geral')).toEqual(['atendimento']);
+    expect(ids(undefined)).toEqual(['atendimento']);
+
+    expect(isEncounterSectionEnabled('avaliacao', 'veterinaria')).toBe(true);
+    expect(isEncounterSectionEnabled('anamnese', 'odontologica')).toBe(false);
+    expect(isEncounterSectionEnabled('atendimento', undefined)).toBe(true);
+    // Ramos de `clinical` aceitos por vertical (é o que a rota impõe).
+    expect(clinicalBranchesForClinic('veterinaria')).toEqual(['anamnesis', 'assessment']);
+    expect(clinicalBranchesForClinic('odontologica')).toEqual([]);
+    expect(clinicalBranchesForClinic('geral')).toEqual([]);
+  });
+
+  it('ODONTO: CORE funciona, e o módulo vet NÃO é ligado — nem com Pet válido', async () => {
+    const db = await readDB();
+    db.businesses.find((b) => b.id === BIZ)!.clinicType = 'odontologica';
+    await writeDB(db);
+    const aberto = await openEncounter();
+    expect(aberto.clinicType).toBe('odontologica');
+    expect(aberto.access.canEditCore).toBe(true);                 // Atendimento é universal
+    expect(aberto.access.canEditVisitAnamnesis).toBe(false);
+    expect(aberto.access.canEditVeterinaryAssessment).toBe(false);
+    expect(aberto.access.modules).toEqual(['core', 'odontology']);
+    expect(aberto.access.reason).toBe('module_unavailable');      // a verdade: vertical, não Pet
+    // O Pet EXISTE no tenant — provando que NADA é inferido do Pet.
+    expect((await readDB()).pets.some((pet) => pet.id === PET && pet.businessId === BIZ)).toBe(true);
+    // Escrita de ramo vet: recusada pelo servidor (a UI esconder não é o gate).
+    expect((await patchClinical({ clinical: { anamnesis: { history: 'não deve gravar' } } }, tokenMichelle)).status).toBe(400);
+    expect((await patchClinical({ clinical: { assessment: { veterinary: { weightKg: 7 } } } }, tokenMichelle)).status).toBe(400);
+    // O núcleo continua editável — a vertical desliga o módulo, não a clínica.
+    expect((await patchClinical({ complaint: 'Queixa no CORE da odonto' }, tokenMichelle)).status).toBe(200);
+    const row = (await readDB()).encounters.find((e) => e.id === encounterId)!;
+    expect(row.complaint).toBe('Queixa no CORE da odonto');
+    expect(row.clinical!.anamnesis.history).toBe('');
+  });
+
+  it('GERAL sem clinicType: CORE somente e nenhum módulo vet ligado por inferência', async () => {
+    const db = await readDB();
+    const biz = db.businesses.find((b) => b.id === BIZ)!;
+    delete (biz as Partial<typeof biz>).clinicType;               // documento legado
+    await writeDB(db);
+    const aberto = await openEncounter();
+    expect(aberto.clinicType).toBe('geral');                      // normalização no servidor
+    expect(aberto.access.modules).toEqual(['core']);
+    expect(aberto.access.canEditVisitAnamnesis).toBe(false);
+    expect(aberto.access.canEditVeterinaryAssessment).toBe(false);
+    expect((await patchClinical({ clinical: { assessment: { veterinary: { weightKg: 7 } } } }, tokenMichelle)).status).toBe(400);
+  });
+
+  it('mudar a vertical NÃO apaga o clínico já gravado (esconder módulo ≠ apagar dado)', async () => {
+    await openEncounter();
+    const gravado = await patchClinical({
+      clinical: { anamnesis: ANAMNESIS, assessment: { veterinary: { weightKg: 9.1, temperatureC: 38.4 } } },
+    }, tokenMichelle);
+    expect(gravado.status).toBe(200);
+
+    // A unidade deixa de ser veterinária.
+    const db = await readDB();
+    db.businesses.find((b) => b.id === BIZ)!.clinicType = 'estetica';
+    await writeDB(db);
+
+    // Leitura: TUDO continua lá, intacto — só as capacidades vet desligam.
+    const res = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${encounterId}`, undefined, tokenMichelle, 'GET'));
+    expect(res.status).toBe(200);
+    const payload = await json(res);
+    expect(payload.encounter.clinicType).toBe('estetica');
+    expect(payload.encounter.clinical.anamnesis.history).toContain('Coceira');
+    expect(payload.encounter.clinical.assessment.veterinary.weightKg).toBe(9.1);
+    expect(payload.encounter.access.canEditVisitAnamnesis).toBe(false);
+    expect(payload.encounter.access.canEditCore).toBe(true);
+    // Escrita vet recusada E o dado anterior permanece EXATAMENTE como estava.
+    expect((await patchClinical({ clinical: { anamnesis: { observations: 'não deve gravar' } } }, tokenMichelle)).status).toBe(400);
+    const depois = (await readDB()).encounters.find((e) => e.id === encounterId)!;
+    expect(depois.clinical!.anamnesis.observations).toContain('quieta');
+    expect(depois.clinical!.assessment.veterinary.temperatureC).toBe(38.4);
   });
 });
 

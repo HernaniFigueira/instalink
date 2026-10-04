@@ -22,6 +22,8 @@ if (process.env.DATABASE_URL) throw Error('DATABASE_URL must be absent (local di
 if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw Error('Local disposable QA only');
 
 const BIZ = 'f1b1-vet-qa';
+const OD = 'f1b1-odonto-qa';
+const ES = 'f1b1-estetica-qa';
 const OTHER = 'f1b1-outra-qa';
 const password = 'GodoutorF1B12026!';
 const today = new Date().toISOString().slice(0, 10);
@@ -101,7 +103,10 @@ try {
   const encounterId = started.data.encounter.id;
   assert.equal(started.data.outcome, 'created');
   assert.equal(started.data.encounter.petId, 'pet-mel');
-  assert.equal(started.data.encounter.access.canEditClinical, true);
+  assert.equal(started.data.encounter.access.canEditVisitAnamnesis, true);
+  assert.equal(started.data.encounter.access.canEditVeterinaryAssessment, true);
+  assert.deepEqual(started.data.encounter.access.modules, ['core', 'vet']);
+  assert.equal(started.data.encounter.clinicType, 'veterinaria');
   ok(`iniciar atendimento → mesmo encounterId canônico (${encounterId.slice(0, 8)}…)`);
 
   // ── 2 · Atendimento (queixa principal) com a versão da autoridade ───────
@@ -201,7 +206,8 @@ try {
   result.expected.push({ status: 403, who: 'Owner', route: '/api/encounters' });
   const ownerRead = await owner.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
   assert.equal(ownerRead.status, 200);
-  assert.equal(ownerRead.data.encounter.access.canEditClinical, false);
+  assert.equal(ownerRead.data.encounter.access.canEditVisitAnamnesis, false);
+  assert.equal(ownerRead.data.encounter.access.canEditVeterinaryAssessment, false);
   ok('Owner sem vínculo Professional: lê o atendimento e NÃO escreve conteúdo clínico (403)');
 
   const mariaRead = await maria.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
@@ -247,6 +253,45 @@ try {
   const workspace = await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
   assert.equal(workspace.data.encounter.clinical.anamnesis.history, 'Texto local (retry após o conflito).');
   ok('leitura final devolve o Encounter com anamnese + avaliação + contexto do Pet');
+
+  // ── 10b · ISOLAMENTO POR VERTICAL (odonto/estética): o módulo vet não
+  // existe lá — nem para ler, nem para escrever; o CORE continua vivo.
+  for (const [tenant, email, encounterId, label] of [
+    [OD, 'odonto.f1b1', 'enc-odonto-qa', 'odontológica'],
+    [ES, 'estetica.f1b1', 'enc-estetica-qa', 'estética'],
+  ]) {
+    const doctor = await login(email);
+    const read = await doctor.request('GET', `/api/encounters?businessId=${tenant}&id=${encounterId}`);
+    assert.equal(read.status, 200, `${label}: leitura`);
+    const view = read.data.encounter;
+    assert.equal(view.clinicType, label === 'odontológica' ? 'odontologica' : 'estetica');
+    assert.equal(view.access.canEditCore, true, `${label}: CORE é universal`);
+    assert.equal(view.access.canEditVisitAnamnesis, false, `${label}: anamnese vet ligada`);
+    assert.equal(view.access.canEditVeterinaryAssessment, false, `${label}: avaliação vet ligada`);
+    // Escrita de ramo da especialidade veterinária: recusada pelo SERVIDOR.
+    const vetWrite = await doctor.request('PATCH', '/api/encounters', {
+      businessId: tenant, id: encounterId, expectedVersion: view.version,
+      clinical: {
+        anamnesis: { history: 'não pode gravar' },
+        assessment: { veterinary: { weightKg: 7 } },
+      },
+    });
+    assert.equal(vetWrite.status, 400, `${label}: ramo vet aceito (${vetWrite.status})`);
+    assert.match(String(vetWrite.data?.error || ''), /não está disponível nesta unidade/i);
+    result.expected.push({ status: 400, who: label, route: '/api/encounters' });
+    // CORE grava de verdade (a vertical não é uma tela morta).
+    const core = await doctor.request('PATCH', '/api/encounters', {
+      businessId: tenant, id: encounterId, expectedVersion: view.version,
+      complaint: `Queixa principal na vertical ${label}`,
+    });
+    assert.equal(core.status, 200, `${label}: CORE deveria gravar`);
+    // E o clínico NÃO foi tocado por tabela.
+    const after = (await doctor.request('GET', `/api/encounters?businessId=${tenant}&id=${encounterId}`)).data.encounter;
+    assert.equal(after.clinical.anamnesis.history, '', `${label}: anamnese vet recebeu dado`);
+    assert.equal(after.clinical.assessment.veterinary.weightKg, null, `${label}: avaliação vet recebeu dado`);
+    assert.equal(after.complaint, `Queixa principal na vertical ${label}`);
+    ok(`vertical ${label}: só CORE · leitura/escrita vet recusadas (400) · nada gravado`);
+  }
 
   // ── 11 · a rota do registro COMPLETO (legado) continua viva ─────────────
   const legacyPage = await michelle.request('GET', `/atendimento/${encounterId}/registro?b=${BIZ}`);

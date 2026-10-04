@@ -1,4 +1,5 @@
 import type { DB, Encounter } from './types';
+import { encounterModulesForClinic, normalizeClinicType, type EncounterModuleId } from './encounter-sections';
 
 /** A reported change, not an automated clinical assessment. */
 export type VisitChangeStatus = 'not_reported' | 'usual' | 'changed';
@@ -104,20 +105,34 @@ export type ClinicalWriteReason =
   | 'responsible_unavailable'
   | 'pet_required'
   | 'pet_invalid'
+  /** A vertical desta unidade não liga o módulo da seção (ex.: vet em odonto). */
+  | 'module_unavailable'
   | 'finalized';
 
 export interface EncounterClinicalAccess {
   /**
    * Campos do núcleo (queixa/evolução/orientações/retorno/nota): exigem
-   * profissional responsável + atendimento em andamento.
+   * profissional responsável + atendimento em andamento. Vale em QUALQUER
+   * vertical — o CORE não depende de especialidade nem de Pet.
    */
   canEditCore: boolean;
   /**
-   * Dado clínico da visita (anamnese + avaliação veterinária): exige TAMBÉM
-   * um Pet VÁLIDO no tenant. Atendimento sem paciente não grava seção clínica
-   * (nem anamnese relatada) — o vínculo é revalidado aqui, não no cliente.
+   * Anamnese DA VISITA: capacidade com nome próprio (não uma flag genérica).
+   * Nesta entrega a anamnese é a da visita veterinária e depende do paciente
+   * do Encounter (Pet VÁLIDO no tenant) — o vínculo é revalidado no servidor.
    */
-  canEditClinical: boolean;
+  canEditVisitAnamnesis: boolean;
+  /**
+   * Avaliação veterinária (medidas e achados do exame): mesma régua da
+   * anamnese — profissional responsável + Pet válido + módulo VET ligado.
+   */
+  canEditVeterinaryAssessment: boolean;
+  /**
+   * Módulos que a VERTICAL desta unidade liga (autoridade única:
+   * `encounterModulesForClinic(Business.clinicType)`). A tela resolve a
+   * navegação por aqui em vez de adivinhar por nome/serviço/Pet.
+   */
+  modules: EncounterModuleId[];
   reason: ClinicalWriteReason;
 }
 
@@ -298,17 +313,24 @@ export function applyEncounterClinicalPatch(
  * explicit Pet relationship blocks every clinical write.
  */
 export function encounterClinicalAccess(
-  db: Pick<DB, 'professionals' | 'pets'>,
+  db: Pick<DB, 'professionals' | 'pets' | 'businesses'>,
   encounter: Pick<Encounter, 'businessId' | 'professionalId' | 'petId' | 'status'>,
   actorId: string,
   role: string,
 ): EncounterClinicalAccess {
-  if (encounter.status !== 'draft') {
-    return { canEditCore: false, canEditClinical: false, reason: 'finalized' };
-  }
-  if (role !== 'OWNER' && role !== 'ADMIN' && role !== 'PROFISSIONAL') {
-    return { canEditCore: false, canEditClinical: false, reason: 'professional_required' };
-  }
+  // MÓDULOS da vertical vêm do SERVIDOR (Business.clinicType normalizado) —
+  // nunca do cliente, nunca inferidos de nome/serviço/Pet. Clínica não
+  // veterinária simplesmente NÃO tem as capacidades vet (e não é uma regra
+  // de Pet: é a vertical desligando o módulo).
+  const business = db.businesses.find((item) => item.id === encounter.businessId);
+  const modules = encounterModulesForClinic(normalizeClinicType(business?.clinicType));
+  const vetEnabled = modules.includes('vet');
+  const denied = (reason: ClinicalWriteReason): EncounterClinicalAccess => ({
+    canEditCore: false, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false, modules, reason,
+  });
+
+  if (encounter.status !== 'draft') return denied('finalized');
+  if (role !== 'OWNER' && role !== 'ADMIN' && role !== 'PROFISSIONAL') return denied('professional_required');
 
   const linked = db.professionals.filter((professional) =>
     professional.businessId === encounter.businessId
@@ -316,7 +338,7 @@ export function encounterClinicalAccess(
     && professional.active !== false,
   );
   if (linked.length !== 1 || linked[0].id !== encounter.professionalId) {
-    return { canEditCore: false, canEditClinical: false, reason: 'professional_required' };
+    return denied('professional_required');
   }
 
   const responsible = db.professionals.find((professional) =>
@@ -324,21 +346,24 @@ export function encounterClinicalAccess(
     && professional.businessId === encounter.businessId
     && professional.active !== false,
   );
-  if (!responsible) {
-    return { canEditCore: false, canEditClinical: false, reason: 'responsible_unavailable' };
-  }
+  if (!responsible) return denied('responsible_unavailable');
 
   const hasPetId = Boolean(encounter.petId);
   const petValid = hasPetId && db.pets.some((pet) =>
     pet.id === encounter.petId && pet.businessId === encounter.businessId,
   );
-  if (hasPetId && !petValid) {
-    return { canEditCore: false, canEditClinical: false, reason: 'pet_invalid' };
-  }
-  if (!petValid) {
-    return { canEditCore: true, canEditClinical: false, reason: 'pet_required' };
-  }
-  return { canEditCore: true, canEditClinical: true, reason: 'editable' };
+  // Vínculo explícito com Pet de FORA do tenant continua bloqueando tudo.
+  if (hasPetId && !petValid) return denied('pet_invalid');
+
+  const clinicalOk = vetEnabled && petValid;
+  return {
+    canEditCore: true,
+    canEditVisitAnamnesis: clinicalOk,
+    canEditVeterinaryAssessment: clinicalOk,
+    modules,
+    // A razão diz a VERDADE: módulo desligado na vertical ≠ falta de Pet.
+    reason: clinicalOk ? 'editable' : vetEnabled ? 'pet_required' : 'module_unavailable',
+  };
 }
 
 export function clinicalWriteError(access: EncounterClinicalAccess, section: 'core' | 'clinical' = 'core'): {
@@ -356,6 +381,9 @@ export function clinicalWriteError(access: EncounterClinicalAccess, section: 'co
   }
   if (section === 'clinical' && access.reason === 'pet_required') {
     return { status: 409, message: 'Vincule o Pet ao atendimento antes de gravar a anamnese e a avaliação.' };
+  }
+  if (section === 'clinical' && access.reason === 'module_unavailable') {
+    return { status: 400, message: 'Esta seção clínica não está disponível nesta unidade.' };
   }
   return { status: 403, message: 'Este atendimento não está disponível para edição clínica.' };
 }

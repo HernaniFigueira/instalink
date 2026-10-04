@@ -46,11 +46,22 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
     authority, row: current, saveState, saveError, conflictMessage, dirtySections,
     publish, clearConflict, pendingSections, anyDirty,
   } = useEncounterAuthority(row, onRow);
-  const [sectionId, setSectionId] = useState<string>(() => resolveEncounterSection('atendimento').id);
+  // A NAVEGAÇÃO vem da VERTICAL (Business.clinicType resolvido no servidor):
+  // clínica veterinária liga Anamnese/Avaliação; as demais ficam só com o CORE
+  // até que a abstração de paciente daquela vertical seja fechada. Nenhum
+  // `if (clinicType === ...)` aqui: a autoridade é `availableEncounterSections`.
+  const [sectionId, setSectionId] = useState<string>(() => resolveEncounterSection('atendimento', row.clinicType).id);
   const [adoptToken, setAdoptToken] = useState(0);
   const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null);
   const leaving = useRef(false);
-  const sectionsAvailable = useMemo(() => availableEncounterSections(), []);
+  const sectionsAvailable = useMemo(() => availableEncounterSections(current.clinicType), [current.clinicType]);
+
+  // A vertical mudou (ou a seção ativa deixou de existir nesta unidade): cai
+  // para a inicial SEM apagar nada — o dado clínico continua no Encounter.
+  useEffect(() => {
+    if (sectionsAvailable.some((section) => section.id === sectionId)) return;
+    setSectionId(sectionsAvailable[0]?.id || 'atendimento');
+  }, [sectionId, sectionsAvailable]);
 
   // Identidades ESTÁVEIS para as seções: props novas a cada render fazem a
   // seção re-registrar o flush sem necessidade (e o re-registro não pode, em
@@ -129,8 +140,11 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
   }, [businessId, clearConflict, current.id, publish]);
 
   const access = current.access;
+  // Capacidades SEPARADAS (não uma flag ambígua): o núcleo é universal; a
+  // anamnese da visita e a avaliação veterinária são do módulo VET + Pet válido.
   const canEditCore = access ? access.canEditCore : false;
-  const canEditClinical = access ? access.canEditClinical : false;
+  const canEditVisitAnamnesis = access ? access.canEditVisitAnamnesis : false;
+  const canEditVeterinaryAssessment = access ? access.canEditVeterinaryAssessment : false;
   const readOnlyHint = useMemo(() => {
     const reason = access?.reason;
     if (reason === 'finalized') {
@@ -200,7 +214,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
           authority={authority}
           adoptToken={adoptToken}
           blocked={Boolean(conflictMessage)}
-          editable={canEditClinical}
+          editable={canEditVisitAnamnesis}
           readOnlyHint={readOnlyHint}
         />
       )}
@@ -212,7 +226,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
           authority={authority}
           adoptToken={adoptToken}
           blocked={Boolean(conflictMessage)}
-          editable={canEditClinical}
+          editable={canEditVeterinaryAssessment}
           readOnlyHint={readOnlyHint}
           petWeightKg={current.context?.patient?.weightKg || 0}
         />

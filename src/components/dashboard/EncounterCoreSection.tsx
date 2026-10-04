@@ -267,6 +267,12 @@ export function EncounterCoreSection({
       setPendingLeave(null);
       // Publica na autoridade: TODAS as seções passam a usar a versão nova.
       authority?.publish(serverRow);
+      // §19 · o indicador do WORKSPACE volta a dizer a verdade. Sem isto, uma
+      // unidade cujo único editor é o CORE (vertical sem módulo de
+      // especialidade) ficaria "Salvando…" para sempre depois de GRAVAR. Se
+      // ainda houver texto mais novo na tela, o `dirty` do rodapé prevalece —
+      // nunca se anuncia "Salvo agora" com pendência real.
+      authority?.status('saved', '', 'atendimento');
       onSaved?.();
       return true;
     })();

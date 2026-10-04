@@ -36,7 +36,11 @@ function row(extra: Partial<EncounterAuthorityRow> = {}): EncounterAuthorityRow 
     createdAt: '2026-10-04T17:00:00.000Z', updatedAt: '2026-10-04T17:00:00.000Z',
     createdBy: 'u1', updatedBy: 'u1', finalizedAt: '', finalizedBy: '', signedBy: '',
     petId: 'pet-mel',
-    access: { canEditCore: true, canEditClinical: true, reason: 'editable' },
+    clinicType: 'veterinaria',
+    access: {
+      canEditCore: true, canEditVisitAnamnesis: true, canEditVeterinaryAssessment: true,
+      modules: ['core', 'vet'], reason: 'editable',
+    },
     context: {
       clinicalState: 'in_progress',
       patient: { id: 'pet-mel', name: 'Mel', speciesLabel: 'Cachorro', breed: 'SRD', ageLabel: '2 anos', weightKg: 8.4 },
@@ -318,6 +322,38 @@ describe('F1B1 · troca de seção grava antes (mesma regra de saída do F1A)', 
     expect(screen.getByTestId('encounter-workspace-save-state').getAttribute('data-persistence-state')).toBe('error');
   });
 
+  it('CORE-only (vertical sem módulo): gravar o Atendimento encerra o "Salvando…" no rodapé', async () => {
+    // Regressão do patch: numa unidade sem módulo de especialidade o CORE é o
+    // ÚNICO editor. Se o sucesso do CORE não publicasse "salvo" na autoridade,
+    // a tela ficaria "Salvando…" para sempre depois de gravar de verdade.
+    send.mockResolvedValue(okResult(row({ version: 8, complaint: 'Queixa gravada no CORE', clinicType: 'odontologica' })));
+    render(
+      createElement(
+        () => {
+          const [r, setR] = useState(row({
+            clinicType: 'odontologica',
+            access: {
+              canEditCore: true, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false,
+              modules: ['core', 'odontology'], reason: 'module_unavailable',
+            },
+          } as never));
+          return createElement(EncounterWorkspaceBody, {
+            businessId: 'b1', row: r, onRow: (next: EncounterAuthorityRow) => setR((prev) => ({ ...prev, ...next })),
+            registerLeave: () => {},
+          } as never);
+        },
+        null,
+      ),
+    );
+    const status = () => screen.getByTestId('encounter-workspace-save-state');
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Queixa principal/), { target: { value: 'Queixa gravada no CORE' } });
+    });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(status().getAttribute('data-persistence-state')).toBe('saved'));
+    expect(status().textContent).toMatch(/Salvo agora/);
+  });
+
   it('enquanto há texto pendente, o indicador do workspace NÃO mente que está salvo', async () => {
     render(
       createElement(
@@ -460,6 +496,70 @@ describe('F1B1 · troca de seção grava antes (mesma regra de saída do F1A)', 
     await waitFor(() => expect((screen.getByLabelText(/Queixa principal/) as HTMLTextAreaElement).value).toBe('Da outra tela'));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Anamnese' })); });
     await waitFor(() => expect(screen.getByLabelText(/História atual/)).toBeTruthy());
+  });
+});
+
+describe('F1B1 · navegação por vertical (o módulo vet NÃO vaza)', () => {
+  const odontoRow = () => row({
+    clinicType: 'odontologica',
+    access: {
+      canEditCore: true, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false,
+      modules: ['core', 'odontology'], reason: 'module_unavailable',
+    },
+  } as never);
+
+  function renderWorkspace(initial: EncounterAuthorityRow) {
+    render(
+      createElement(
+        () => {
+          const [r, setR] = useState(initial);
+          return createElement(EncounterWorkspaceBody, {
+            businessId: 'b1', row: r,
+            onRow: (next: EncounterAuthorityRow) => setR((prev) => ({ ...prev, ...next })),
+            registerLeave: () => {},
+          } as never);
+        },
+        null,
+      ),
+    );
+  }
+
+  it('ODONTOLÓGICA: só Atendimento no DOM — sem Anamnese/Avaliação e nenhuma escrita vet', async () => {
+    send.mockResolvedValue(okResult(row({ version: 5 })));
+    renderWorkspace(odontoRow());
+    // Nenhuma aba de especialidade é renderizada (nem botão morto).
+    expect(document.querySelectorAll('.encounter-workspace__nav-item')).toHaveLength(0);
+    expect(screen.getByLabelText(/Queixa principal/)).toBeTruthy();      // CORE presente
+    expect(screen.queryByLabelText(/História atual/)).toBeNull();        // anamnese vet fora
+    expect(screen.queryByLabelText('Peso (kg)')).toBeNull();             // avaliação vet fora
+    expect(screen.queryByLabelText(/Exame físico/)).toBeNull();
+    // A escrita do CORE continua funcionando — e o payload NÃO carrega `clinical`.
+    await act(async () => { fireEvent.change(screen.getByLabelText(/Queixa principal/), { target: { value: 'Queixa da odonto' } }); });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    const body = send.mock.calls[0][2] as any;
+    expect(body.complaint).toBe('Queixa da odonto');
+    expect(body.clinical).toBeUndefined();
+  });
+
+  it('GERAL/clinicType ausente: o vet não é ativado por inferência', async () => {
+    renderWorkspace(row({
+      clinicType: 'geral',
+      access: {
+        canEditCore: true, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false,
+        modules: ['core'], reason: 'module_unavailable',
+      },
+    } as never));
+    expect(document.querySelectorAll('.encounter-workspace__nav-item')).toHaveLength(0);
+    expect(screen.queryByLabelText('Peso (kg)')).toBeNull();
+    expect(screen.queryByLabelText(/História atual/)).toBeNull();
+    expect(screen.getByLabelText(/Queixa principal/)).toBeTruthy();
+  });
+
+  it('VETERINÁRIA: as três seções continuam lá (regressão do recorte)', () => {
+    renderWorkspace(row());                                 // fixture vet
+    expect(document.querySelectorAll('.encounter-workspace__nav-item')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Anamnese' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Avaliação' })).toBeTruthy();
   });
 });
 

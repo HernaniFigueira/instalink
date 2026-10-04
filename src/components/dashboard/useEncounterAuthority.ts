@@ -20,7 +20,7 @@
 //     gravar ANTES de navegar — e não navegue quando falhar.
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api-client';
-import type { Encounter } from '@/lib/types';
+import type { ClinicType, Encounter } from '@/lib/types';
 import type { EncounterClinicalAccess } from '@/lib/encounter-clinical';
 import type { EncounterWorkspaceView } from '@/lib/encounters';
 
@@ -32,6 +32,8 @@ import type { EncounterWorkspaceView } from '@/lib/encounters';
  */
 export type EncounterAuthorityRow = Encounter & { version: number } & {
   access?: EncounterClinicalAccess | null;
+  /** Vertical da unidade (resolvida no servidor): decide as SEÇÕES reais. */
+  clinicType?: ClinicType;
   context?: EncounterWorkspaceView['context'];
   petName?: string;
   serviceName?: string;

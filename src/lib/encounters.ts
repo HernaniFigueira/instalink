@@ -12,7 +12,8 @@
 // Sem I/O e sem relógio global: o servidor passa `now` e o autor.
 import { PET_SPECIES_LABELS, petAgeLabel } from './pets';
 import { encounterClinicalAccess, type EncounterClinicalAccess } from './encounter-clinical';
-import type { DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
+import { normalizeClinicType } from './encounter-sections';
+import type { ClinicType, DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
 
 export interface EncounterStatusDef {
   id: EncounterStatus;
@@ -558,6 +559,7 @@ export function encounterView(
     ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
     : undefined;
   const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
+  const business = (db.businesses || []).find((item) => item.id === e.businessId);
   return {
     ...e,
     professionalName: pro?.name || '',
@@ -597,9 +599,11 @@ export function encounterView(
       booking: booking ? { id: booking.id, date: booking.date, time: booking.time, status: booking.status } : null,
       queue: queue ? { id: queue.id, date: queue.date } : null,
     },
-    // F1B1 — capacidade de escrita CLÍNICA resolvida no SERVIDOR (vínculo real
-    // do profissional responsável). É o que a tela usa para habilitar/desabilitar
-    // as seções; a imposição continua no PATCH, nunca aqui.
+    // F1B1 — capacidades + MÓDULOS da vertical resolvidos no SERVIDOR (vínculo
+    // real do profissional responsável + `Business.clinicType`). É o que a tela
+    // usa para montar a navegação e habilitar cada seção; a imposição continua
+    // no PATCH, nunca aqui.
+    clinicType: normalizeClinicType(business?.clinicType),
     access: actor
       ? encounterClinicalAccess(db, e, actor.id, actor.role)
       : null,
@@ -625,6 +629,8 @@ export interface EncounterWorkspaceView extends Encounter {
     booking: { id: string; date: string; time: string; status: string } | null;
     queue: { id: string; date: string } | null;
   };
+  /** Vertical da unidade (autoridade para resolver as SEÇÕES do workspace). */
+  clinicType: ClinicType;
   /** F1B1 — o que ESTE ator pode editar (resolvido no servidor). */
   access: EncounterClinicalAccess | null;
 }

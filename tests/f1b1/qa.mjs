@@ -32,6 +32,8 @@ if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw Error('L
 
 const A = 'f1b1-vet-qa';
 const B = 'f1b1-outra-qa';
+const OD = 'f1b1-odonto-qa';
+const ES = 'f1b1-estetica-qa';
 const password = 'GodoutorF1B12026!';
 const today = new Date().toISOString().slice(0, 10);
 
@@ -125,13 +127,14 @@ async function section(page, name) {
   await page.locator('.encounter-workspace__nav-item', { hasText: name }).click();
 }
 
-/** Versão ATUAL do servidor (leitura crua) — para provar quem ganhou no 409. */
-async function serverRow(page, id) {
+/** Versão ATUAL do servidor (leitura crua) — para provar quem ganhou no 409.
+ *  `businessId` é explícito: a QA também prova tenants de OUTRAS verticais. */
+async function serverRow(page, id, businessId = A) {
   return page.evaluate(async ({ businessId, encounterId }) => {
     const res = await fetch(`/api/encounters?businessId=${encodeURIComponent(businessId)}&id=${encodeURIComponent(encounterId)}`);
     const data = await res.json().catch(() => ({}));
     return data.encounter || null;
-  }, { businessId: A, encounterId: id });
+  }, { businessId, encounterId: id });
 }
 
 try {
@@ -370,6 +373,118 @@ try {
   await fora.goto(`${base}/atendimento/${encounterId}?b=${B}`);
   await fora.getByText(/não encontrado|não está disponível/i).first().waitFor();
   ok('outra unidade: atendimento não encontrado (sem vazar dado)');
+
+  // ── 12b · ISOLAMENTO POR VERTICAL no WORKSPACE REAL (§patch) ───────────
+  // Não basta a função de resolução: o workspace de verdade precisa renderizar
+  // só o CORE em odontologia/estética — mesmo com Pet LEGADO no tenant — e
+  // recusar escrita vet no servidor.
+  for (const [tenant, email, encounterId, label] of [
+    [OD, 'odonto.f1b1@godoutor.local', 'enc-odonto-qa', 'odontológica'],
+    [ES, 'estetica.f1b1@godoutor.local', 'enc-estetica-qa', 'estética'],
+  ]) {
+    const vertical = await login(email);
+    await vertical.goto(`${base}/atendimento/${encounterId}?b=${tenant}`);
+    await vertical.locator('.encounter-workspace__patient').waitFor();
+    assert.equal(await vertical.locator('.encounter-workspace__nav-item').count(), 0,
+      `${label}: nenhuma aba de especialidade pode existir`);
+    await vertical.getByLabel(/Queixa principal/).waitFor();                 // CORE renderiza
+    assert.equal(await vertical.getByLabel(/História atual/).count(), 0, `${label}: anamnese vet vazou`);
+    assert.equal(await vertical.getByLabel('Peso (kg)').count(), 0, `${label}: avaliação vet vazou`);
+    // O CORE grava de verdade (a vertical não é uma tela morta).
+    inducedMode = { statuses: [] };
+    await vertical.getByLabel(/Queixa principal/).fill(`Queixa da vertical ${label}`);
+    await waitUntil(async () => (await saveState(vertical)).state === 'saved', `${label}: CORE salvou`);
+    const core = await serverRow(vertical, encounterId, tenant);
+    assert.equal(core.complaint, `Queixa da vertical ${label}`);
+    // Escrita de ramo vet pelo SERVIDOR: 400 (o eixo não é a UI esconder).
+    inducedMode = { statuses: [400] };
+    const vetWrite = await vertical.evaluate(async ({ businessId, id, version }) => {
+      const res = await fetch('/api/encounters', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          businessId, id, expectedVersion: version,
+          clinical: { anamnesis: { history: 'não pode entrar' }, assessment: { veterinary: { weightKg: 7 } } },
+        }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    }, { businessId: tenant, id: encounterId, version: core.version });
+    assert.equal(vetWrite.status, 400, `${label}: ramo vet aceito (deveria ser 400)`);
+    assert.match(String(vetWrite.body?.error || ''), /não está disponível nesta unidade/i);
+    const depois = await serverRow(vertical, encounterId, tenant);
+    assert.equal(depois.clinical?.anamnesis?.history || '', '', `${label}: anamnese vet gravou dado`);
+    assert.equal(depois.clinical?.assessment?.veterinary?.weightKg ?? null, null, `${label}: avaliação vet gravou dado`);
+    inducedMode = null;
+    ok(`vertical ${label}: workspace REAL só com CORE, escrita vet recusada (400) e nada gravado`);
+  }
+
+  // ── 13·ADVERSARIAL · a vertical MUDA com o atendimento aberto ─────────
+  // Tentativa deliberada de provar vazamento e perda:
+  //   • a unidade veterinária (com Pet, niche 'pet' e serviço veterinário —
+  //     todas as iscas de INFERÊNCIA) vira odontológica com o registro já
+  //     preenchido: o workspace real tem de cair para o CORE e esconder o
+  //     módulo vet;
+  //   • o clínico gravado NÃO pode perder um caractere;
+  //   • escrita de ramo vet tem de morrer no SERVIDOR (400), não na UI;
+  //   • voltar a vertical reexibe o módulo COM o dado intacto (ocultar ≠ apagar).
+  const clinicTypePath = '.cache/f1b1/qa.json';
+  const setClinicType = async (clinicType) => {
+    const raw = JSON.parse(await fs.readFile(clinicTypePath, 'utf8'));
+    const biz = raw.businesses.find((b) => b.id === A);
+    assert.ok(biz, 'ADV: unidade A não encontrada no banco de QA');
+    if (clinicType) biz.clinicType = clinicType; else delete biz.clinicType;
+    await fs.writeFile(clinicTypePath, JSON.stringify(raw, null, 2));
+  };
+  const workspaceOfVertical = async (expectNav, expectWeight, label) => {
+    await page.goto(`${base}/atendimento/${encounterId}?b=${A}`);
+    await page.locator('.encounter-workspace__patient').waitFor();
+    await page.getByLabel(/Queixa principal/).waitFor();
+    if (expectNav) {
+      assert.equal(await page.locator('.encounter-workspace__nav-item').count(), 3, `ADV ${label}: navegação vet ausente`);
+      // A Avaliação só existe quando ABERTA (não é aba morta): clicar e ver.
+      await section(page, 'Avaliação');
+      await page.getByLabel('Peso (kg)').waitFor();
+    } else {
+      assert.equal(await page.locator('.encounter-workspace__nav-item').count(), 0, `ADV ${label}: aba de especialidade vazou`);
+      assert.equal(await page.getByLabel(/História atual/).count(), 0, `ADV ${label}: anamnese vet vazou`);
+      assert.equal(await page.getByLabel('Peso (kg)').count(), 0, `ADV ${label}: avaliação vet vazou`);
+    }
+    assert.equal(expectWeight ? await page.getByLabel('Peso (kg)').count() : 0, expectWeight ? 1 : 0);
+  };
+
+  inducedMode = { statuses: [400] };
+  await setClinicType('odontologica');
+  await workspaceOfVertical(false, false, 'odonto');
+  const preservado = await serverRow(page, encounterId);
+  assert.ok((preservado.clinical.anamnesis.history || '').includes('Coceira há 3 dias'),
+    'ADV: a anamnese da visita sumiu ao trocar de vertical');
+  assert.equal(preservado.clinical.assessment.veterinary.weightKg, 9.1, 'ADV: peso da avaliação sumiu');
+  assert.equal(preservado.clinicType, 'odontologica');
+  const vetAfterFlip = await page.evaluate(async ({ businessId, id, version }) => {
+    const res = await fetch('/api/encounters', {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ businessId, id, expectedVersion: version, clinical: { assessment: { veterinary: { weightKg: 99 } } } }),
+    });
+    return res.status;
+  }, { businessId: A, id: encounterId, version: preservado.version });
+  assert.equal(vetAfterFlip, 400, 'ADV: o servidor aceitou escrita vet numa unidade odontológica');
+  const intacto = await serverRow(page, encounterId);
+  assert.equal(intacto.clinical.assessment.veterinary.weightKg, 9.1, 'ADV: a recusa sobrescreveu o dado existente');
+
+  // ISCA DE INFERÊNCIA: sem clinicType (clínica genérica) o vet NÃO pode ligar
+  // — mesmo com Pet vinculado, niche 'pet' e serviço veterinário na unidade.
+  await setClinicType(null);
+  await workspaceOfVertical(false, false, 'sem clinicType');
+  assert.equal((await serverRow(page, encounterId)).clinicType, 'geral', 'ADV: ausente deveria normalizar para geral');
+
+  // Volta a vertical: o módulo REAPARECE com o dado no lugar.
+  await setClinicType('veterinaria');
+  await workspaceOfVertical(true, true, 'volta para vet');
+  const reaberto = await serverRow(page, encounterId);
+  assert.equal(reaberto.clinical.anamnesis.history.includes('Coceira há 3 dias'), true);
+  assert.equal(reaberto.clinical.assessment.veterinary.weightKg, 9.1);
+  inducedMode = null;
+  ok('§13 ADVERSARIAL · trocar a vertical esconde o módulo, RECUSA escrita vet (400) e nunca apaga o dado');
+  ok('§13 ADVERSARIAL · clínica sem clinicType (com Pet/niche/serviço vet como isca) NÃO liga o módulo vet');
 
   // ── 13 · viewports ─────────────────────────────────────────────────────
   for (const [width, height] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]]) {

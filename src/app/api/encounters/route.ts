@@ -31,6 +31,9 @@ import { startOrResumeEncounter } from '@/lib/encounter-start';
 import {
   applyEncounterClinicalPatch, clinicalWriteError, encounterClinicalAccess,
 } from '@/lib/encounter-clinical';
+// Isolamento por vertical: os ramos de `clinical` que ESTA unidade aceita
+// (autoridade única em `encounter-sections`, nunca `if (clinicType === ...)`).
+import { CLINICAL_BRANCH_MODULES, clinicalBranchesForClinic, normalizeClinicType } from '@/lib/encounter-sections';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
@@ -272,14 +275,35 @@ export async function PATCH(req: NextRequest) {
       // real Professional.userId === ator). Recepção/outros papéis não
       // escrevem; o dado clínico da visita exige também Pet VÁLIDO no tenant.
       const writesCore = ENCOUNTER_TEXT_FIELDS.some((field) => body[field] !== undefined)
-        || body.tags !== undefined
-        || body.clinical !== undefined;
-      const writesClinical = body.clinical !== undefined;
+        || body.tags !== undefined;
+      const clinicalPresent = body.clinical !== undefined;
+      const clinicalObject = clinicalPresent && body.clinical && typeof body.clinical === 'object'
+        && !Array.isArray(body.clinical)
+        ? body.clinical as Record<string, unknown>
+        : null;
+      const clinicalBranches = clinicalObject ? Object.keys(clinicalObject) : [];
       const access = encounterClinicalAccess(d, target, guard.ctx.user.id, String(guard.ctx.role || ''));
-      if (writesCore && !access.canEditCore) {
+      if ((writesCore || clinicalPresent) && !access.canEditCore) {
         throw err(clinicalWriteError(access, 'core').message, clinicalWriteError(access, 'core').status);
       }
-      if (writesClinical && !access.canEditClinical) {
+      // ── ISOLAMENTO POR VERTICAL (defesa em profundidade) ────────────────
+      // A UI esconder a seção não é o gate: o SERVIDOR recusa escrita de um
+      // ramo clínico que a vertical da unidade não liga. Esconder módulo não
+      // apaga nada — o dado já gravado permanece legível e intocado.
+      const enabledBranches = clinicalBranchesForClinic(
+        normalizeClinicType(d.businesses.find((item) => item.id === target.businessId)?.clinicType),
+      );
+      // Só ramos CONHECIDOS passam por este gate: chave futura/desconhecida
+      // segue para a validação (400 específico), nunca é "aceita em silêncio".
+      const knownBranches = clinicalBranches.filter((branch) => branch in CLINICAL_BRANCH_MODULES);
+      const outsideVertical = knownBranches.find((branch) => !enabledBranches.includes(branch));
+      if (outsideVertical) {
+        throw err('Esta seção clínica não está disponível nesta unidade.', 400);
+      }
+      if (clinicalBranches.includes('anamnesis') && !access.canEditVisitAnamnesis) {
+        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
+      }
+      if (clinicalBranches.includes('assessment') && !access.canEditVeterinaryAssessment) {
         throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
       }
       const before = { ...target };
