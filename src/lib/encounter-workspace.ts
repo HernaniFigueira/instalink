@@ -7,6 +7,11 @@
 //                                            abre direto pelo ID, sobrevive a
 //                                            F5, volta, link compartilhado e
 //                                            "Retomar atendimento";
+//   /atendimento/<id>/registro            → REGISTRO COMPLETO (LEGADO): o
+//                                            EncounterSheet com finalização,
+//                                            reabertura, anamnese, anexos e
+//                                            pós-atendimento — fora do
+//                                            workspace F1A, intacto;
 //   /atendimento?b=&bookingId=&queueId=   → RESOLVER (entrada operacional):
 //                                            a Agenda/Fila/Cliente 360 pedem
 //                                            "abrir o atendimento deste
@@ -71,6 +76,21 @@ export function encounterResolveHref(target: Omit<EncounterWorkspaceTarget, 'id'
 export function encounterWorkspaceHref(target: EncounterWorkspaceTarget): string {
   if (target.id) return encounterHref(target.id, target.businessId, target.returnTo);
   return encounterResolveHref(target);
+}
+
+/**
+ * REGISTRO COMPLETO (LEGADO) de um atendimento que já existe.
+ *
+ * F1A não implementa finalização, reabertura, anexos, anamnese nem
+ * pós-atendimento — tudo isso continua existindo no `EncounterSheet`, que
+ * mora nesta rota. O workspace canônico fica só com o núcleo; quem abre o
+ * HISTÓRICO (Cliente 360 / Pet 360) continua caindo no registro completo,
+ * exatamente como caía antes do F1A. Nada foi apagado do sistema.
+ */
+export function encounterLegacyRecordHref(encounterId: string, businessId: string, returnTo?: string): string {
+  const id = encodeURIComponent(String(encounterId || ''));
+  const b = encodeURIComponent(String(businessId || ''));
+  return `${ENCOUNTER_WORKSPACE_ROUTE}/${id}/registro?b=${b}${returnParam(returnTo)}`;
 }
 
 /** Volta do workspace: `returnTo` válido ou a Agenda da unidade. */

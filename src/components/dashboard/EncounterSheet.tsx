@@ -100,14 +100,8 @@ interface Props {
    * anamnese). Ainda NÃO fecha este sheet — o pós-atendimento abre aqui.
    */
   onChanged?: () => void;
-  /**
-   * `page`    → página própria (rota legada `/atendimento?bookingId=`);
-   * `section` → corpo do WORKSPACE clínico F1A (`/atendimento/[encounterId]`):
-   *             entrega conteúdo + rodapé e deixa o CABEÇALHO CONTEXTUAL com o
-   *             workspace (um só cabeçalho, sem duplicar paciente/status);
-   * `sheet`   → painel lateral (compatibilidade/legado).
-   */
-  layout?: 'page' | 'section' | 'sheet';
+  /** `page` is the canonical clinical workspace; `sheet` is retained only for compatibility tests. */
+  layout?: 'page' | 'sheet';
 }
 
 const EMPTY = {
@@ -167,7 +161,7 @@ export function EncounterSheet({
   // quando ele cruza a topbar. O header continua sticky: nenhum conteúdo fica
   // escondido sob a topbar durante a transição.
   useEffect(() => {
-    if (layout !== 'page' && layout !== 'section') { setCompactHeader(false); return; }
+    if (layout !== 'page') { setCompactHeader(false); return; }
     const marker = compactSentinel.current;
     if (!marker) return;
     const update = () => {
@@ -542,11 +536,7 @@ export function EncounterSheet({
               {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
               {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
               {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
-              {/* V09 — o "Salvo agora" NÃO se duplica: nos layouts `page` e
-                  `section` quem diz isso é o indicador do rodapé (ao lado do
-                  estado do registro). Só o painel lateral (sem esse
-                  indicador) repete o rótulo aqui. */}
-              {layout === 'sheet' && isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
+              {layout !== 'page' && isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
               {isDraft && autoState === 'error'
                 && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
@@ -663,11 +653,6 @@ export function EncounterSheet({
               </p>
             )}
 
-            {/* F1A — no workspace (`layout='section'`) o CABEÇALHO CONTEXTUAL
-                já é o dono de paciente/tutor/serviço/profissional: repetir aqui
-                seria card dentro de card. Só as telas sem esse cabeçalho
-                (sheet legado e página antiga) mantêm a linha de contexto. */}
-            {layout === 'sheet' && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
                 <Icon n="user" size={13} /> {row.petName || row.customerName || 'Cliente'}
@@ -678,7 +663,6 @@ export function EncounterSheet({
               {row.bookingId && <span className="inline-flex items-center gap-1.5"><Icon n="calendar" size={13} /> veio de um agendamento</span>}
               {row.queueId && <span className="inline-flex items-center gap-1.5"><Icon n="clock" size={13} /> veio da fila do balcão</span>}
             </div>
-            )}
 
             {/* ── Conteúdo do registro ── */}
             <Field label={ENCOUNTER_LABELS.complaint}>
@@ -887,24 +871,6 @@ export function EncounterSheet({
   const compactEncounterMeta = row
     ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}${row.professionalName ? ` · ${row.professionalName}` : ''}`
     : 'Registro clínico do atendimento';
-
-  // F1A · SECTION — corpo do workspace: sem cabeçalho próprio (o workspace
-  // entrega o cabeçalho contextual persistente) e com o MESMO rodapé de ações.
-  if (layout === 'section') {
-    return (
-      <section className="encounter-workspace__section" data-persistence-state={persistence} aria-label="Registro do atendimento">
-        <div className="encounter-workspace__content">{encounterContent}</div>
-        <footer className="encounter-page__footer">
-          <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
-            {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
-          </span>
-          {encounterFooter}
-        </footer>
-        {routeDismiss.dialog}
-        {closeDismiss.dialog}
-      </section>
-    );
-  }
 
   return layout === 'page' ? (
     <main className="encounter-page" data-persistence-state={persistence}>

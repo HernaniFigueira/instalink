@@ -21,9 +21,10 @@ import { POST as startPOST } from '@/app/api/encounters/start/route';
 import { encounterVersion } from '../encounters';
 import { availableEncounterSections, resolveEncounterSection, ENCOUNTER_SECTIONS } from '../encounter-sections';
 import {
-  ENCOUNTER_CLINICAL_STATE, encounterClinicalState, encounterIsInProgress,
-  encounterPatientId, encounterResponsibleId,
+  ENCOUNTER_CLINICAL_STATE, ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR, encounterClinicalState,
+  encounterIsInProgress, encounterPatientId, encounterResponsibleId,
 } from '../encounters';
+import { PROFESSIONAL_NOT_ELIGIBLE_ERROR } from '../booking';
 import type { Business, BusinessMember, DB, Encounter, Professional, Service } from '../types';
 import { TEMP_DB_FILE } from './helpers/temp-db';
 
@@ -95,6 +96,12 @@ async function seed() {
     description: '', active: true, bookable: true, professionalIds: [],
     categoryId: '', image: '', featured: false, questions: [],
   } as Service);
+  // Serviço restrito: SÓ a pro-b atende (régua revalidada no start).
+  db.services.push({
+    id: 'svc-cirurgia', businessId: BIZ, name: 'Cirurgia', durationMin: 60, price: 50000,
+    description: '', active: true, bookable: true, professionalIds: ['pro-b'],
+    categoryId: '', image: '', featured: false, questions: [],
+  } as Service);
   db.contacts.push(
     { id: 'ct-tutor', businessId: BIZ, customerId: '', name: 'Isabelle Tutora', phone: '11999990001', email: '', createdAt: NOW, updatedAt: NOW, source: 'manual', lastInteraction: NOW, marketingOptIn: true },
   );
@@ -110,6 +117,9 @@ async function seed() {
     booking('bk-pet-outra-unidade', BIZ, { petId: 'pet-outra', petName: 'Pet de fora' }),
     booking('bk-prof-outra-unidade', BIZ, { professionalId: 'pro-outra' }),
     booking('bk-sem-pet', BIZ, { petId: '', petName: '' }),
+    // Sem PROFISSIONAL na origem: quem inicia precisa resolver um responsável.
+    booking('bk-sem-prof', BIZ, { professionalId: '' }),
+    booking('bk-cirurgia-sem-prof', BIZ, { professionalId: '', serviceId: 'svc-cirurgia' }),
     { ...booking('bk-outra-unidade', OTHER, { petId: '', petName: '' }), } as DB['bookings'][number],
   );
   await writeDB(db);
@@ -325,9 +335,17 @@ describe('F1A · isolamento multi-tenant e permissões', () => {
   });
 
   it('ID de profissional enviado PELO CLIENTE não concede vínculo cross-tenant', async () => {
-    const { res } = await start({ businessId: BIZ, bookingId: 'bk-mel', professionalId: 'pro-outra' });
-    expect(res.status).toBe(409);
-    expect((await readDB()).encounters.length).toBe(0);
+    // (a) agendamento COM profissional: o PROFISSIONAL DO AGENDAMENTO é
+    //     autoritativo — o id mandado pelo cliente é ignorado, nunca sobrescreve.
+    const authoritative = await start({ businessId: BIZ, bookingId: 'bk-mel', professionalId: 'pro-outra' });
+    expect(authoritative.res.status).toBe(200);
+    expect(authoritative.body.encounter.professionalId).toBe('pro-a');
+    expect(authoritative.body.encounter.context.professional.id).toBe('pro-a');
+    // (b) agendamento SEM profissional: o id de OUTRA unidade não vira
+    //     responsável deste atendimento (409 — não existe nesta clínica).
+    const stranger = await start({ businessId: BIZ, bookingId: 'bk-sem-prof', professionalId: 'pro-outra' });
+    expect(stranger.res.status).toBe(409);
+    expect((await readDB()).encounters.length).toBe(1);   // só o de (a)
   });
 
   it('Recepção (SECRETARIA) NÃO inicia nem lê atendimento clínico', async () => {
@@ -374,6 +392,96 @@ describe('F1A · isolamento multi-tenant e permissões', () => {
     // Não inventa identidade profissional: assume a do agendamento.
     expect(body.encounter.professionalId).toBe('pro-a');
     expect(body.encounter.createdBy).toBe(OWNER);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// 3.1 · PROFISSIONAL RESPONSÁVEL É OBRIGATÓRIO (invariante clínica)
+// ═══════════════════════════════════════════════════════════════
+// Um atendimento clínico sem profissional responsável não é um atendimento:
+// o registro NÃO nasce órfão e nenhum profissional é fabricado (nada de
+// "primeiro da lista", User, BusinessMember ou e-mail como identidade).
+describe('F1A · profissional responsável (obrigatório e nunca fabricado)', () => {
+  it('Owner + agendamento COM profissional: inicia sem virar profissional', async () => {
+    const { res, body } = await start({ businessId: BIZ, bookingId: 'bk-mel' });
+    expect(res.status).toBe(200);
+    expect(body.encounter.professionalId).toBe('pro-a');   // o da agenda
+    expect(body.encounter.createdBy).toBe(OWNER);          // o ator continua sendo o dono
+  });
+
+  it('Owner + agendamento SEM profissional: RECUSA e não cria nada', async () => {
+    const { res, body } = await start({ businessId: BIZ, bookingId: 'bk-sem-prof' });
+    expect(res.status).toBe(409);
+    expect(body.error).toBe(ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR);
+    const db = await readDB();
+    expect(db.encounters.length).toBe(0);
+    expect(db.audit.filter((a) => a.action === 'encounter.created')).toHaveLength(0);
+    expect(db.bookings.find((b) => b.id === 'bk-sem-prof')!.professionalId).toBe('');
+  });
+
+  it('Professional + agendamento dele: inicia (vínculo real)', async () => {
+    const { res, body } = await start({ businessId: BIZ, bookingId: 'bk-mel' }, profToken);
+    expect(res.status).toBe(200);
+    expect(body.encounter.professionalId).toBe('pro-a');
+  });
+
+  it('Professional + agendamento SEM profissional: resolve para o PRÓPRIO profissional', async () => {
+    const { res, body } = await start({ businessId: BIZ, bookingId: 'bk-sem-prof' }, profToken);
+    expect(res.status).toBe(200);
+    expect(body.created).toBe(true);
+    expect(body.encounter.professionalId).toBe('pro-a');   // escopo real do ator
+    expect(body.encounter.createdBy).toBe(PROF_A);
+  });
+
+  it('Professional INELEGÍVEL para o serviço: recusa (e nada é criado)', async () => {
+    // Cirurgia só é atendida pela pro-b: o escopo da pro-a não assume.
+    const { res, body } = await start({ businessId: BIZ, bookingId: 'bk-cirurgia-sem-prof' }, profToken);
+    expect(res.status).toBe(403);
+    expect(body.error).toBe(PROFESSIONAL_NOT_ELIGIBLE_ERROR);
+    expect((await readDB()).encounters.length).toBe(0);
+    // Quem PODE, inicia — e o registro fica com ela.
+    const ok = await start({ businessId: BIZ, bookingId: 'bk-cirurgia-sem-prof' }, profBToken);
+    expect(ok.res.status).toBe(200);
+    expect(ok.body.encounter.professionalId).toBe('pro-b');
+  });
+
+  it('Professional de OUTRO tenant: recusa (nunca vira responsável)', async () => {
+    const { res } = await start({ businessId: BIZ, bookingId: 'bk-prof-outra-unidade' });
+    expect(res.status).toBe(409);
+    const stranger = await start({ businessId: BIZ, bookingId: 'bk-sem-prof', professionalId: 'pro-outra' });
+    expect(stranger.res.status).toBe(409);
+    expect((await readDB()).encounters.length).toBe(0);
+  });
+
+  it('start RECUSADO não deixa atendimento parcial (nenhuma escrita)', async () => {
+    // Cada recusa abaixo é anterior à criação: o documento não é tocado.
+    for (const body of [
+      { businessId: BIZ, bookingId: 'bk-sem-prof' },                                 // sem profissional
+      { businessId: BIZ, bookingId: 'bk-cirurgia-sem-prof', professionalId: 'pro-outra' }, // fora do tenant
+    ]) {
+      const { res } = await start(body);
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    }
+    const db = await readDB();
+    expect(db.encounters.length).toBe(0);
+    expect(db.audit.filter((a) => a.action === 'encounter.created')).toHaveLength(0);
+  });
+
+  it('nenhum caminho de criação fabrica profissional (nem "primeiro da lista")', async () => {
+    const created = await start({ businessId: BIZ, bookingId: 'bk-mel' });
+    const resumed = await start({ businessId: BIZ, bookingId: 'bk-mel' });
+    const db = await readDB();
+    expect(db.encounters).toHaveLength(1);
+    for (const e of db.encounters) {
+      expect(e.professionalId).toBe('pro-a');
+      expect(db.professionals.some((p) => p.id === e.professionalId && p.businessId === e.businessId)).toBe(true);
+    }
+    expect(created.body.encounterId).toBe(resumed.body.encounterId);
+    // A regra é estrutural: nenhum fallback por lista/e-mail/usuário no domínio.
+    const src = fs.readFileSync('src/lib/encounter-start.ts', 'utf8');
+    expect(src).not.toMatch(/professionals\[0\]/);
+    expect(src).not.toMatch(/\(\s*d\.professionals\s*\|\|\s*\[\]\s*\)\s*\[0\]/);
+    expect(src).not.toMatch(/actor\.email/);
   });
 });
 

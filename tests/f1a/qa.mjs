@@ -16,6 +16,8 @@ const options = { headless: true, args: ['--no-sandbox', '--disable-dev-shm-usag
 if (process.env.QA_EXECUTABLE_PATH) options.executablePath = process.env.QA_EXECUTABLE_PATH;
 const browser = await chromium.launch(options);
 
+/** Status que a própria QA provoca de propósito (bloqueio/recusa canônica). */
+const EXPECTED_STATUSES = new Set([403, 404, 409]);
 const result = { checks: [], console: [], network: [], expected: [] };
 const ok = (label) => { result.checks.push(label); console.log('PASS', label); };
 await fs.mkdir('.cache/f1a', { recursive: true });
@@ -29,8 +31,9 @@ async function login(email, viewport = { width: 1440, height: 1000 }) {
   page.on('response', (r) => {
     if (r.status() >= 400) {
       const entry = { status: r.status(), url: r.url() };
-      // 403/404 de PROVA DE BLOQUEIO são esperados (permissão e cross-tenant).
-      if (r.status() === 403 || r.status() === 404) result.expected.push(entry);
+      // Provas DELIBERADAS de bloqueio/recusa: permissão (403), cross-tenant
+      // (404) e invariante clínica (409 — sem profissional responsável).
+      if (EXPECTED_STATUSES.has(r.status())) result.expected.push(entry);
       else result.network.push(entry);
     }
   });
@@ -89,6 +92,36 @@ try {
   assert.equal(await p.locator('.encounter-workspace__nav').count(), 0);
   assert.equal(await p.locator('.encounter-workspace__section').count(), 1);
   ok('Nenhuma aba decorativa: só a seção real (Atendimento) é renderizada');
+
+  // ── 2a · O NÚCLEO é só o núcleo: nada de F1B/F1C entrou aqui ──
+  const bodyText = await p.locator('main.encounter-workspace').innerText();
+  for (const forbidden of ['Preencher anamnese', 'Arquivos', 'Registrar pagamento', 'Reabrir para editar', 'Agendar retorno']) {
+    assert.ok(!bodyText.includes(forbidden), `módulo fora do escopo no workspace: ${forbidden}`);
+    assert.equal(await p.getByText(forbidden, { exact: false }).count(), 0, `achou "${forbidden}"`);
+  }
+  // E os campos do núcleo estão todos lá, com os rótulos oficiais.
+  for (const label of ['O que o cliente procurou', 'O que foi feito', 'Orientações para o cliente', 'Retorno sugerido', 'Anotação interna', 'Etiquetas']) {
+    assert.ok(bodyText.includes(label), `campo do núcleo ausente: ${label}`);
+  }
+  ok('Workspace = núcleo clínico: sem anamnese/arquivos/pagamento/reabrir, com os 6 campos');
+
+  // Confere a TELA (não só o texto): a seção está visível, com área real, e
+  // os controles do núcleo são exatamente os 6 campos aprovados.
+  const shape = await p.evaluate(() => {
+    const section = document.querySelector('.encounter-workspace__section');
+    const box = section?.getBoundingClientRect();
+    return {
+      visible: !!box && box.width > 0 && box.height > 0,
+      textareas: section?.querySelectorAll('textarea').length || 0,
+      inputs: section?.querySelectorAll('input').length || 0,
+      footer: !!document.querySelector('.encounter-page__footer .encounter-page__save-state')?.textContent?.trim(),
+    };
+  });
+  assert.ok(shape.visible, 'a seção do núcleo ocupa área real na tela');
+  assert.equal(shape.textareas, 4, '4 campos longos (queixa, evolução, orientações, anotação interna)');
+  assert.equal(shape.inputs, 2, '2 campos curtos (retorno sugerido e etiquetas)');
+  assert.ok(shape.footer, 'indicador de persistência visível no rodapé');
+  ok('Tela conferida: 6 controles do núcleo, área real e indicador de salvamento');
 
   // ── 2b · CONTRATO DE UI: área de trabalho, não muro de cards ──
   const ui = await p.evaluate(() => {
@@ -167,6 +200,30 @@ try {
   await p.locator('.encounter-workspace__header').waitFor();
   await p.screenshot({ path: '.cache/f1a/workspace-1440.png', fullPage: false });
   ok('Screenshot desktop 1440');
+
+  // ── 3b · INVARIANTE: Owner + agendamento SEM profissional não inicia ──
+  await openBooking(p, '16:30');
+  await p.getByRole('button', { name: 'Iniciar atendimento' }).click();
+  await p.getByRole('heading', { name: /Não foi possível abrir o atendimento/i }).waitFor();
+  const refusal = await p.locator('div.ws-panel[role=alert]').innerText();
+  assert.match(refusal, /Defina o profissional responsável antes de iniciar o atendimento\./);
+  assert.ok(!/\/atendimento\/[0-9a-f-]{36}/.test(p.url()), 'não navegou: não criou atendimento');
+  const orphan = await p.evaluate(async ({ biz, bookingId }) => {
+    const r = await fetch(`/api/encounters?businessId=${encodeURIComponent(biz)}&bookingId=${encodeURIComponent(bookingId)}`);
+    const d = await r.json();
+    return { status: r.status, total: (d.encounters || []).length };
+  }, { biz: A, bookingId: 'bk-sem-prof' });
+  assert.equal(orphan.status, 200);
+  assert.equal(orphan.total, 0, 'nenhum atendimento órfão foi criado');
+  ok('Owner + agendamento SEM profissional: recusa humana e zero atendimento criado');
+
+  // ── 3c · LEGADO PRESERVADO: o registro completo continua existindo ──
+  await p.goto(`${base}/atendimento/${encounterId}/registro?b=${A}`);
+  await p.locator('.encounter-page').waitFor();
+  const legacyText = await p.locator('.encounter-page').innerText();
+  assert.match(legacyText, /Conduta|Foi ao veterinário|O que foi feito/);
+  assert.match(legacyText, /Finalizar atendimento/);       // finalização NÃO foi apagada do sistema
+  ok('Registro completo (legado) preservado em /atendimento/<id>/registro');
   await p.context().close();
 
   // ── 4 · MOBILE 390 ──
@@ -185,6 +242,22 @@ try {
   await pro.locator(`[data-encounter-id="${encounterId}"]`).waitFor();
   assert.match(await pro.locator('.encounter-workspace__meta').innerText(), /Michelle/);
   ok('Profissional vinculado: lê e retoma o próprio atendimento');
+
+  // Profissional + agendamento SEM profissional: assume o PRÓPRIO vínculo
+  // (nunca o primeiro da lista, nunca o e-mail de quem abriu).
+  const own = await pro.evaluate(async ({ biz, bookingId }) => {
+    const r = await fetch('/api/encounters/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ businessId: biz, bookingId }),
+    });
+    return { status: r.status, data: await r.json() };
+  }, { biz: A, bookingId: 'bk-sem-prof' });
+  assert.equal(own.status, 200);
+  assert.equal(own.data.created, true);
+  assert.equal(own.data.encounter.professionalId, 'pro-michelle');
+  assert.equal(own.data.encounter.context.professional.name, 'Michelle');
+  assert.equal(own.data.encounter.createdBy !== own.data.encounter.professionalId, true);
+  ok('Profissional + agendamento sem dono: resolve para o PRÓPRIO profissional');
   await pro.context().close();
 
   // ── 6 · RECEPÇÃO não ganha acesso clínico ──
@@ -194,7 +267,11 @@ try {
   const recBody = await rec.locator('body').innerText();
   assert.ok(/não inclui a área|Sem permissão/i.test(recBody), recBody.slice(0, 200));
   assert.ok(!recBody.includes('Isabelle'), 'Recepção não vê dado clínico');
-  ok('Recepção: bloqueada no workspace (403 sem vazar dado)');
+  // O registro completo (legado) tem a MESMA guarda: nada muda por ser legado.
+  await rec.goto(`${base}/atendimento/${encounterId}/registro?b=${A}`);
+  await rec.getByRole('heading', { name: /permissão|área/i }).first().waitFor();
+  assert.ok(!(await rec.locator('body').innerText()).includes('Isabelle'), 'Recepção não vê o registro completo');
+  ok('Recepção: bloqueada no workspace E no registro completo (403 sem vazar dado)');
   await rec.context().close();
 
   // ── 7 · CROSS-TENANT (outra unidade) ──
@@ -221,7 +298,7 @@ try {
   assert.equal(unexpectedConsole.length, 0, JSON.stringify(unexpectedConsole));
   assert.equal(result.network.length, 0, JSON.stringify(result.network));
   assert.equal(fiveXx.length, 0, JSON.stringify(fiveXx));
-  ok(`Console 0 erro · network >=400 inesperado 0 · 5xx 0 (esperados: ${result.expected.length} × 403/404 de bloqueio)`);
+  ok(`Console 0 erro · network >=400 inesperado 0 · 5xx 0 (provas deliberadas: ${result.expected.length} × 403/404/409)`);
 } finally {
   await fs.writeFile('.cache/f1a/browser-report.json', JSON.stringify(result, null, 2));
   await browser.close();

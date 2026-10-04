@@ -29,6 +29,7 @@ import { pushAudit } from './audit';
 import { assertCanStartCare } from './appointment-workflow-tx';
 import { PROFESSIONAL_NOT_ELIGIBLE_ERROR, professionalServesService, serviceRequiresProfessional } from './booking';
 import {
+  ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR,
   cleanTags, cleanText, encounterForBooking, encounterForQueue, encounterInScope,
 } from './encounters';
 import { emitAutomationEvent } from './automation/events';
@@ -173,33 +174,49 @@ export function startOrResumeEncounter(d: DB, args: StartOrResumeArgs): StartOrR
     };
   }
 
-  // ── Profissional responsável ──
-  // O escopo manda; sem escopo, o profissional do agendamento (ou o indicado
-  // explicitamente). A sentinela de "PROFISSIONAL sem vínculo" não é pessoa.
+  // ── Profissional responsável (F1A · INVARIANTE CLÍNICA) ──────────────────
+  // O atendimento clínico tem SEMPRE um Professional CONCRETO do tenant. Não
+  // se fabrica profissional: nada de "primeiro da lista", nada de User,
+  // BusinessMember ou e-mail como identidade clínica.
+  //
+  //   A · o profissional da ORIGEM (agendamento, ou entrada da fila) manda —
+  //       é quem a clínica disse que atende;
+  //   B · sem profissional na origem, o profissional do ATOR (escopo real de
+  //       Professional, nunca um palpite);
+  //   C · explicitamente indicado na chamada (vínculo real, validado abaixo);
+  //   D · sem profissional RESOLVÍVEL o atendimento NÃO COMEÇA: o registro não
+  //       nasce órfão e a tela recebe uma mensagem humana para resolver isso.
+  //
+  // Owner/Admin EXECUTA a ação sem virar profissional (não há escopo), mas o
+  // atendimento continua vinculado ao profissional real da agenda.
   const scopeId = professionalScopeOf(args);
   const requestedProfessionalId = str(body.professionalId);
-  const professionalId = scopeId
-    || requestedProfessionalId
-    || bookingProfessionalId
-    || str(queueEntry?.professionalId);
+  const professionalId = bookingProfessionalId
+    || str(queueEntry?.professionalId)
+    || scopeId
+    || requestedProfessionalId;
+  // Quem é profissional registra o que É DELE: origem apontando outro
+  // profissional não é iniciada nem retomada por este ator.
   if (booking && scopeId && bookingProfessionalId && bookingProfessionalId !== scopeId) {
     throw err('Você só registra os seus próprios atendimentos.', 403);
   }
   if (queueEntry && scopeId && queueEntry.professionalId && queueEntry.professionalId !== scopeId) {
     throw err('Você só registra os seus próprios atendimentos.', 403);
   }
-  // Profissional CONCRETO é do tenant (não é e-mail, não é palpite).
-  if (professionalId
-    && !(d.professionals || []).some((p) => p.id === professionalId && p.businessId === businessId)) {
+  // D — sem profissional resolvível NÃO cria atendimento (e nada parcial fica
+  // para trás: a exceção aborta a transação antes de qualquer escrita).
+  if (!professionalId) throw err(ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR, 409);
+  // Profissional CONCRETO e do tenant (id conferido, nem palpite nem e-mail).
+  if (!(d.professionals || []).some((p) => p.id === professionalId && p.businessId === businessId)) {
     throw err('Profissional não encontrado nesta unidade.', 409);
   }
 
   // ── Serviço × profissional (régua existente, revalidada na última porta) ──
-  // Só vale quando HÁ profissional a conferir: quem opera o balcão sem vínculo
-  // não tem "vínculo inelegível" a fabricar.
+  // Com profissional obrigatório, a conferência sempre roda: se há serviço que
+  // exige profissionais específicos, este precisa poder executá-lo.
   const encounterServiceId = str(body.serviceId) || bookingServiceId || str(queueEntry?.serviceId);
   const encounterService = (d.services || []).find((s) => s.id === encounterServiceId && s.businessId === businessId);
-  if (encounterService && serviceRequiresProfessional(encounterService) && professionalId
+  if (encounterService && serviceRequiresProfessional(encounterService)
     && !professionalServesService(encounterService, professionalId, d.professionals || [])) {
     throw err(PROFESSIONAL_NOT_ELIGIBLE_ERROR, 403);
   }

@@ -36,7 +36,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
-import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
+import { encounterLegacyRecordHref, encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
@@ -200,9 +200,18 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
   // pessoa errada quando há contato e cliente com o mesmo nome.
   const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
-  const openEncounter = (target: { id?: string; bookingId?: string }) => router.push(encounterWorkspaceHref({
-    businessId, ...target, returnTo: `${window.location.pathname}${window.location.search}`,
-  }));
+  // Dois destinos, um só domínio:
+  //   • agendamento (`bookingId`)  → resolvedor → workspace canônico F1A;
+  //   • registro JÁ EXISTENTE (`id`) → registro completo (legado), que é onde
+  //     vivem finalização, reabertura, anamnese, anexos e pós-atendimento —
+  //     exatamente o que o histórico abria antes do F1A.
+  const openEncounter = (target: { id?: string; bookingId?: string }) => router.push(
+    target.id && !target.bookingId
+      ? encounterLegacyRecordHref(target.id, businessId, `${window.location.pathname}${window.location.search}`)
+      : encounterWorkspaceHref({
+        businessId, ...target, returnTo: `${window.location.pathname}${window.location.search}`,
+      }),
+  );
 
   async function patch(payload: Record<string, unknown>, okText: string) {
     setSaving(true);

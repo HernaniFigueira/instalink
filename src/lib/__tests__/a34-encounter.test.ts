@@ -410,7 +410,10 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const db0 = await readDB();
     db0.queue.push({
       id: 'q-9', businessId: BIZ, customerName: 'Walk-in', customerPhone: '11944443333',
-      contactId: '', serviceId: '', professionalId: '', bookingId: '', note: '',
+      contactId: '', serviceId: '',
+      // F1A — atendimento clínico tem profissional responsável: a entrada em
+      // atendimento já chega com o dono (a fila atribui quem assume).
+      professionalId: 'pro-1', bookingId: '', note: '',
       status: 'in_service', date: '2026-09-19', createdAt: '2026-09-19T11:00:00.000Z',
       calledAt: '', startedAt: '2026-09-19T11:05:00.000Z', endedAt: '', updatedBy: OWNER, updatedAt: NOW,
     } as any);

@@ -8,7 +8,9 @@
 //     e o tutor como contexto — nunca o contrário;
 //   • estado clínico visível em texto (Não iniciado · Em atendimento ·
 //     Finalizado) — nunca só por cor;
-//   • o corpo é a SEÇÃO REAL do atendimento (o registro clínico que já existe);
+//   • o corpo é o NÚCLEO REAL do atendimento (`EncounterCoreSection`) — o
+//     EncounterSheet legado NÃO é montado aqui (ele carrega anamnese, anexos,
+//     pagamento e pós-atendimento, que são de fases futuras);
 //   • navegação interna preparada para F1B: só o que está DISPONÍVEL é
 //     renderizado (nada de aba morta, placeholder decorativo ou módulo falso).
 //
@@ -18,18 +20,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { PageBackAction, Skeleton, StatusBadge } from '@/components/ui';
-import { EncounterSheet, type EncounterRow, type FollowUpSeed } from './EncounterSheet';
+import { EncounterCoreSection, type EncounterCoreRow } from './EncounterCoreSection';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
-import { ENCOUNTER_CLINICAL_STATE, canReopenEncounter } from '@/lib/encounters';
+import { ENCOUNTER_CLINICAL_STATE } from '@/lib/encounters';
 import { availableEncounterSections, resolveEncounterSection } from '@/lib/encounter-sections';
 import { formatDateBR } from '@/lib/tz';
 
-/** Seed do "Agendar retorno" (mesma chave da tela anterior do registro). */
-const RETURN_BOOKING_KEY = 'godoutor:encounter-return-booking:v1';
-
-export interface EncounterWorkspaceRow extends EncounterRow {
+export interface EncounterWorkspaceRow extends EncounterCoreRow {
+  /**
+   * Nomes resolvidos na LEITURA (a mesma conveniência do modelo antigo).
+   * O cabeçalho prefere `context` e cai aqui só quando o vínculo não resolveu.
+   */
+  petName?: string;
+  serviceName?: string;
+  professionalName?: string;
+  bookingStatus?: string;
+  customerPhone?: string;
   context?: {
     clinicalState: 'not_started' | 'in_progress' | 'finalized';
     patient: { id: string; name: string; speciesLabel: string; breed: string; ageLabel: string } | null;
@@ -55,9 +63,7 @@ function joinParts(parts: Array<string | undefined | null>, sep = ' · '): strin
 
 export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props) {
   const router = useRouter();
-  const { permissions, role, ready: permissionsReady } = usePanelPermissions();
-  // Mesma régua por papel do registro original: quem reabre é quem administra.
-  const canReopen = canReopenEncounter(role);
+  const { permissions, ready: permissionsReady } = usePanelPermissions();
   const [row, setRow] = useState<EncounterWorkspaceRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -100,12 +106,6 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   }, [businessId, encounterId]);
 
   const leave = useCallback(() => router.replace(returnTo), [router, returnTo]);
-  const scheduleReturn = useCallback((seed: FollowUpSeed) => {
-    try {
-      sessionStorage.setItem(RETURN_BOOKING_KEY, JSON.stringify({ ...seed, businessId }));
-    } catch { /* rota continua, sem seed; nada é gravado no domínio */ }
-    router.push(`/agenda?b=${encodeURIComponent(businessId)}&retornoAtendimento=1`);
-  }, [businessId, router]);
 
   if (!permissionsReady || loading) {
     return (
@@ -202,17 +202,16 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         </nav>
       )}
 
-      {/* ── Corpo: a seção REAL (registro clínico) ── */}
+      {/* ── Corpo: a seção REAL (núcleo clínico F1A) ──
+          É o `EncounterCoreSection`, NÃO o `EncounterSheet` legado: o núcleo
+          declara as capacidades que suporta e nada de F1B/F1C entra aqui
+          (anamnese, anexos, pagamento, pós-atendimento, reabertura). O
+          componente legado continua existindo, intacto, onde já funcionava. */}
       {section.id === 'atendimento' && (
-        <EncounterSheet
-          layout="section"
+        <EncounterCoreSection
           businessId={businessId}
-          existing={row as EncounterRow}
-          canReopen={canReopen}
-          onClose={leave}
-          onScheduleReturn={scheduleReturn}
+          encounter={row as EncounterCoreRow}
           onSaved={() => { /* autosave mantém o workspace montado */ }}
-          onChanged={() => { /* APIs e listagens continuam sendo a fonte */ }}
         />
       )}
 

@@ -76,10 +76,7 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
   });
 
   it('V09 não duplica “Salvo agora” na página, compacta ações secundárias e destaca Finalizar', () => {
-    // F1A — three layouts now (page | section | sheet): the "Salvo agora"
-    // label stays exclusive to the side panel, because page AND section footers
-    // already carry the persistence indicator. Same invariant, wider scope.
-    expect(encounter).toContain("layout === 'sheet' && isDraft && autoState === 'saved'");
+    expect(encounter).toContain("layout !== 'page' && isDraft && autoState === 'saved'");
     expect(encounter).toContain('flex flex-wrap items-center gap-2');
     expect(encounter).toContain('Finalizar atendimento');
     expect(css).toContain('env(safe-area-inset-bottom)');

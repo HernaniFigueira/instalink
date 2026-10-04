@@ -96,7 +96,10 @@ const bookings = [
   booking('bk-mel', A),
   // 2 · já com check-in (etapa `arrived`): usado por Profissional/Recepção.
   booking('bk-mel-2', A, { time: '15:00', checkedInAt: now, checkedInBy: 'f1a-owner', checkedInByName: 'Hernani QA F1A', ...utc(today, '15:00', 30) }),
-  // 3 · de OUTRA unidade (prova de isolamento).
+  // 3 · chegou, mas SEM PROFISSIONAL na agenda: prova viva da invariante
+  //     (atendimento clínico não nasce sem profissional responsável).
+  booking('bk-sem-prof', A, { time: '16:30', checkedInAt: now, checkedInBy: 'f1a-owner', checkedInByName: 'Hernani QA F1A', professionalId: '', ...utc(today, '16:30', 30) }),
+  // 4 · de OUTRA unidade (prova de isolamento).
   {
     id: 'bk-outra-b', businessId: B, customerId: '', serviceId: 'svc-outra-b', professionalId: 'pro-outra-b',
     date: today, time: '16:00', customerName: 'Tutor de outra unidade', customerPhone: '11977770002',

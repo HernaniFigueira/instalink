@@ -66,6 +66,52 @@ export function resolveEncounterSection(id: string | null | undefined): Encounte
   return found || availableEncounterSections()[0] || ENCOUNTER_SECTIONS[0];
 }
 
+// ── F1A · CAPACIDADES DO NÚCLEO CLÍNICO ───────────────────────────────────
+// O workspace DECLARA o que suporta e o núcleo (`EncounterCoreSection`)
+// renderiza SÓ o que está aqui. É o oposto de espalhar
+// `if (layout === 'section')` pelo componente legado: a separação é de
+// CAPACIDADE, não de layout.
+//
+// O que é de F1B/F1C fica em `ENCOUNTER_DEFERRED_MODULES`: nomeado e
+// documentado para ninguém "esquecer" — e, principalmente, para ninguém
+// reaproveitar o componente legado inteiro como núcleo do Clinical OS.
+export const ENCOUNTER_CORE_CAPABILITIES = [
+  'complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags',
+] as const;
+
+export type EncounterCoreCapability = typeof ENCOUNTER_CORE_CAPABILITIES[number];
+
+/** Capacidades que o núcleo clínico suporta (F1A). */
+export function encounterCoreCapabilities(): readonly EncounterCoreCapability[] {
+  return ENCOUNTER_CORE_CAPABILITIES;
+}
+
+/** Uma capacidade é do núcleo? (a tela pergunta, nunca presume). */
+export function supportsEncounterCapability(id: string): boolean {
+  return (ENCOUNTER_CORE_CAPABILITIES as readonly string[]).includes(id);
+}
+
+/**
+ * Módulos que EXISTEM no sistema legado e NÃO entram no workspace F1A.
+ * Nada aqui é apagado: o EncounterSheet (legado) continua com eles, onde já
+ * funcionava. Esta lista é a cerca do núcleo — é o que impede o vazamento.
+ */
+export const ENCOUNTER_DEFERRED_MODULES = [
+  'anamnese',       // F1B — fichas/modelos de anamnese
+  'arquivos',       // fase apropriada — anexos do atendimento
+  'pagamento',      // conta/financeiro do atendimento
+  'reabertura',     // reabrir registro finalizado (auditoria)
+  'pos_atendimento',// "como fica o acompanhamento" — tarefa/retorno estruturado
+  'especialidade',  // odontograma, estética e afins
+] as const;
+
+export type EncounterDeferredModule = typeof ENCOUNTER_DEFERRED_MODULES[number];
+
+/** F1A: TODO módulo diferido está fora do núcleo (a cerca é total). */
+export function isEncounterModuleDeferred(id: string): boolean {
+  return (ENCOUNTER_DEFERRED_MODULES as readonly string[]).includes(id);
+}
+
 /**
  * F1A — o workspace NÃO é um card genérico: o cabeçalho precisa do paciente.
  * Este helper diz se há paciente identificado para protagonizar a tela; quando

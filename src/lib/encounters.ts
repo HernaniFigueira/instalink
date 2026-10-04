@@ -124,6 +124,14 @@ export const ENCOUNTER_LIMITS: Record<EncounterTextField, number> = {
 export const ENCOUNTER_TAGS_MAX = 8;
 export const ENCOUNTER_TAG_LEN = 40;
 
+/**
+ * F1A · INVARIANTE CLÍNICA — todo atendimento tem um PROFISSIONAL RESPONSÁVEL
+ * concreto do tenant. Sem ele o atendimento NÃO começa: o registro clínico não
+ * nasce órfão e nenhum profissional é fabricado (nada de "primeiro da lista",
+ * nada de User/BusinessMember/e-mail como identidade clínica).
+ */
+export const ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR = 'Defina o profissional responsável antes de iniciar o atendimento.';
+
 /** Rótulos humanos — usados na tela, na impressão e nos testes. */
 export const ENCOUNTER_LABELS: Record<EncounterTextField, string> = {
   complaint: 'O que o cliente procurou',
