@@ -2845,8 +2845,30 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   color: var(--text-muted, #66736c);
   font-size: 12.5px;
 }
+.encounter-core__conflict {
+  margin: 0 0 4px;
+  padding: 12px;
+  border: 1px solid var(--warning-border, #f0d08a);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--warning-bg, #fff8e8);
+}
+.encounter-core__conflict-copy {
+  margin: 0;
+  color: var(--text, #1c2822);
+  font-size: 13px;
+  font-weight: 600;
+}
+.encounter-core__conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.encounter-core__conflict-hint { margin: 8px 0 0; color: var(--text-muted, #66736c); font-size: 12px; }
+.encounter-core__error-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
 .encounter-core__error {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--danger, #b42318);
   font-size: 12.5px;
 }

@@ -16,11 +16,12 @@
 //
 // Persistência é do SERVIDOR: abrir, sair, dar F5, colar a URL ou voltar pela
 // Agenda caem no MESMO `encounterId` — o workspace apenas LÊ por id.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { PageBackAction, Skeleton, StatusBadge } from '@/components/ui';
 import { EncounterCoreSection, type EncounterCoreRow } from './EncounterCoreSection';
+import type { DismissReason } from './OverlayDismissGuard';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
@@ -105,7 +106,22 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
     return () => { active = false; };
   }, [businessId, encounterId]);
 
-  const leave = useCallback(() => router.replace(returnTo), [router, returnTo]);
+  /**
+   * SAIR PASSA PELO NÚCLEO. O botão Voltar não navega por conta própria: quem
+   * decide é o `EncounterCoreSection`, que só autoriza depois de persistência
+   * confirmada (ou descarte confirmado no diálogo). Texto clínico não sai
+   * da tela sem estar gravado.
+   */
+  const guardedLeave = useRef<((reason: DismissReason, proceed: () => void) => void) | null>(null);
+  const registerLeave = useCallback((leave: (reason: DismissReason, proceed: () => void) => void) => {
+    guardedLeave.current = leave;
+  }, []);
+  const leave = useCallback(() => {
+    const guard = guardedLeave.current;
+    // Sem núcleo montado (erro/404/estado vazio) não há texto a perder.
+    if (guard) guard('close-button', () => router.replace(returnTo));
+    else router.replace(returnTo);
+  }, [router, returnTo]);
 
   if (!permissionsReady || loading) {
     return (
@@ -211,6 +227,7 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         <EncounterCoreSection
           businessId={businessId}
           encounter={row as EncounterCoreRow}
+          registerLeave={registerLeave}
           onSaved={() => { /* autosave mantém o workspace montado */ }}
         />
       )}

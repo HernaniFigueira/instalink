@@ -18,7 +18,9 @@ const browser = await chromium.launch(options);
 
 /** Status que a própria QA provoca de propósito (bloqueio/recusa canônica). */
 const EXPECTED_STATUSES = new Set([403, 404, 409]);
-const result = { checks: [], console: [], network: [], expected: [] };
+const result = { checks: [], console: [], network: [], expected: [], induced: [], aborted: [] };
+/** Falha PROVOCADA de propósito (abort de rede / 500 induzido): rótulo próprio. */
+let inducedMode = null;
 const ok = (label) => { result.checks.push(label); console.log('PASS', label); };
 await fs.mkdir('.cache/f1a', { recursive: true });
 
@@ -33,7 +35,8 @@ async function login(email, viewport = { width: 1440, height: 1000 }) {
       const entry = { status: r.status(), url: r.url() };
       // Provas DELIBERADAS de bloqueio/recusa: permissão (403), cross-tenant
       // (404) e invariante clínica (409 — sem profissional responsável).
-      if (EXPECTED_STATUSES.has(r.status())) result.expected.push(entry);
+      if (inducedMode?.statuses.includes(r.status())) result.induced.push(entry);
+      else if (EXPECTED_STATUSES.has(r.status())) result.expected.push(entry);
       else result.network.push(entry);
     }
   });
@@ -235,6 +238,156 @@ try {
   const legacyFromHistory = await p.locator('.encounter-page').innerText();
   assert.match(legacyFromHistory, /Finalizar atendimento/);   // nada foi apagado
   ok('Histórico (Cliente 360) abre o registro completo — caminho antigo preservado');
+
+  // ── 3d · SAIR SÓ DEPOIS DE GRAVAR: o texto clínico não pode se perder ──
+  // Regra canônica: (A) tenta gravar; (B) gravou → sai; (C) falhou → NÃO sai,
+  // fica no atendimento, mostra erro humano e mantém tudo que foi digitado.
+  const EVOLUTION = 'textarea[placeholder^="Registre o que foi realizado"]';
+  const workspacePath = `/atendimento/${encounterId}`;
+  const PATH_PATCH = '**/api/encounters**';
+  const stamp = () => Date.now().toString(36).slice(-5);
+
+  async function openWorkspace(page) {
+    await page.goto(workspaceUrl);
+    await page.locator('.encounter-workspace__header').waitFor();
+    await page.locator(EVOLUTION).waitFor();
+  }
+  const samePath = () => new URL(p.url()).pathname;
+  /** Entrada pela UI (histórico real de SPA): o Back do navegador é same-document. */
+  async function resumeWorkspace(page) {
+    await openBooking(page, '14:00');
+    await page.getByRole('button', { name: 'Retomar atendimento' }).click();
+    await page.waitForURL(new RegExp(encounterId));
+    await page.locator(EVOLUTION).waitFor();
+  }
+
+  // (1) SUCESSO: grava no ato de sair — antes mesmo do autosave (1s).
+  const t1 = `Evolução gravada na saída ${stamp()}`;
+  await openWorkspace(p);
+  await p.locator(EVOLUTION).fill(t1);
+  await p.locator('.encounter-workspace__back').click();      // sair < 1s do autosave
+  await p.waitForURL(/\/agenda/);
+  await openWorkspace(p);
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t1);
+  ok('SAIR COM SUCESSO: grava no ato de sair (antes do autosave) e o texto volta inteiro');
+
+  // (2) FALHA DE REDE: PATCH abortado → NÃO sai, texto intacto, volta do navegador
+  // também barrada; com a rede de volta, o retry grava e aí sim sai.
+  const t2 = `Texto que não pode sumir ${stamp()}`;
+  await resumeWorkspace(p);                                // histórico SPA (Back real)
+  await p.locator(EVOLUTION).fill(t2);
+  await p.route(PATH_PATCH, async (route) => {
+    if (route.request().method() === 'PATCH') { result.aborted.push(route.request().url()); await route.abort('failed'); return; }
+    await route.continue();
+  });
+  await p.locator('.encounter-workspace__back').click();
+  await p.locator('p.encounter-core__error').waitFor();
+  assert.equal(samePath(), workspacePath, 'falhou o save e a tela SAIU mesmo assim');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t2, 'o texto digitado sumiu');
+  assert.match(await p.locator('p.encounter-core__error').innerText(), /não foi possível|não foi possivel|conectar|servidor/i);
+  // Sem modal automático: a tela segue utilizável; sair sem gravar é escolha EXPLÍCITA.
+  assert.equal(await p.locator('.overlay-confirm[role=alertdialog]').count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Sair sem salvar' }).count(), 1);
+  // Botão voltar do navegador: MESMA guarda, mesma recusa (histórico same-document).
+  await p.evaluate(() => window.history.back());
+  await p.waitForTimeout(700);
+  assert.equal(samePath(), workspacePath, 'o Back do navegador furou a guarda');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t2);
+  // Link do menu lateral: MESMO contrato (o guarda central pergunta ao núcleo).
+  await p.locator('aside a[href^="/clientes"]').first().click();
+  await p.waitForTimeout(600);
+  assert.equal(samePath(), workspacePath, 'o link do menu lateral furou a guarda');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t2);
+  // F5 / fechar a aba com texto pendente: proteção NATIVA (beforeunload) e nada
+  // se perde — o diálogo do navegador é recusado e a tela fica exatamente como está.
+  let nativeGuard = false;
+  p.once('dialog', async (d) => { nativeGuard = d.type() === 'beforeunload'; await d.dismiss(); });
+  await p.reload({ timeout: 5000 }).catch(() => {});       // recusado pelo beforeunload
+  await p.waitForTimeout(400);
+  assert.ok(nativeGuard, 'F5 com texto pendente NÃO avisou (beforeunload ausente)');
+  assert.equal(samePath(), workspacePath, 'o F5 furou a guarda');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t2, 'o F5 levou o texto');
+  await p.unroute(PATH_PATCH);
+  // Rede volta: retry pela MESMA ação de saída.
+  await p.locator('.encounter-workspace__back').click();
+  await p.waitForURL(/\/agenda/);
+  await openWorkspace(p);
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t2);
+  ok('FALHA DE REDE: não sai (Voltar, Back e link do menu), texto preservado, erro na tela; retry grava e sai');
+  ok('F5/fechar com texto pendente: beforeunload nativo avisa, a tela fica e nada se perde');
+
+  // (3) CONFLITO 409 REAL (outra tela gravou primeiro): não sai, não sobrescreve.
+  const t3 = `Texto local em conflito ${stamp()}`;
+  await openWorkspace(p);
+  const bump = await p.evaluate(async ({ biz, id }) => {
+    const read = await fetch(`/api/encounters?businessId=${encodeURIComponent(biz)}&id=${encodeURIComponent(id)}`).then((r) => r.json());
+    const r = await fetch('/api/encounters', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, businessId: biz, expectedVersion: read.encounter.version, evolution: 'Outra tela gravou primeiro.' }),
+    });
+    return { status: r.status };
+  }, { biz: A, id: encounterId });
+  assert.equal(bump.status, 200, 'o “outro usuário” conseguiu gravar (base do conflito)');
+  await p.locator(EVOLUTION).fill(t3);
+  await p.locator('.encounter-workspace__back').click();
+  const conflict = p.locator('.encounter-core__conflict');
+  await conflict.waitFor();
+  assert.equal(samePath(), workspacePath, 'conflito 409 e a tela saiu assim mesmo');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t3, 'o texto local foi perdido no conflito');
+  const conflictText = await conflict.innerText();
+  assert.match(conflictText, /Este atendimento foi alterado em outra tela\. Suas alterações ainda não foram salvas\./);
+  assert.equal(await p.getByRole('button', { name: 'Continuar editando' }).count(), 1);
+  assert.equal(await p.getByRole('button', { name: 'Recarregar versão atual' }).count(), 1);
+  ok('CONFLITO 409 REAL: não sai, não sobrescreve, texto local intacto e 2 saídas explícitas');
+
+  // “Recarregar versão atual” = escolha EXPLÍCITA: adota o servidor e libera a saída.
+  await p.getByRole('button', { name: 'Recarregar versão atual' }).click();
+  await p.waitForFunction((sel) => document.querySelector(sel)?.value?.startsWith('Outra tela gravou primeiro.'), EVOLUTION, { timeout: 8000 });
+  assert.equal(await conflict.count(), 0, 'bloco de conflito não fechou');
+  await p.locator('.encounter-workspace__back').click();
+  await p.waitForURL(/\/agenda/);
+  ok('“Recarregar versão atual”: adota o servidor por escolha explícita e a saída volta a funcionar');
+
+  // (4) SAVE LENTO: sucesso → a saída ESPERA a gravação terminar; falha → fica.
+  const t4 = `Texto com gravação lenta ${stamp()}`;
+  await openWorkspace(p);
+  await p.locator(EVOLUTION).fill(t4);
+  await p.route(PATH_PATCH, async (route) => {
+    if (route.request().method() === 'PATCH') await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  const slowStart = Date.now();
+  await p.locator('.encounter-workspace__back').click();
+  await p.waitForURL(/\/agenda/, null, { timeout: 20000 });
+  assert.ok(Date.now() - slowStart >= 1200, 'a saída não esperou o save devagar');
+  await p.unroute(PATH_PATCH);
+  await openWorkspace(p);
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t4);
+  ok('SAVE LENTO COM SUCESSO: a saída espera a gravação terminar e o texto chega inteiro');
+
+  const t5 = `Texto com gravação lenta que falha ${stamp()}`;
+  await openWorkspace(p);
+  await p.locator(EVOLUTION).fill(t5);
+  inducedMode = { statuses: [500] };
+  await p.route(PATH_PATCH, async (route) => {
+    if (route.request().method() === 'PATCH') {
+      await new Promise((r) => setTimeout(r, 1200));
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"induzido pela QA"}' });
+      return;
+    }
+    await route.continue();
+  });
+  await p.locator('.encounter-workspace__back').click();
+  await p.locator('p.encounter-core__error').waitFor();
+  assert.equal(samePath(), workspacePath, '500 devagar e a tela saiu assim mesmo');
+  assert.equal((await p.locator(EVOLUTION).inputValue()).trim(), t5, 'o texto foi perdido no 500');
+  await p.unroute(PATH_PATCH);
+  inducedMode = null;
+  await p.locator(EVOLUTION).fill('');                    // volta ao que está gravado
+  await p.locator('.encounter-workspace__back').click();
+  await p.waitForURL(/\/agenda/);
+  ok('SAVE LENTO COM FALHA (500 induzido): não sai, texto preservado, erro na tela');
+
   await p.context().close();
 
   // ── 4 · MOBILE 390 ──
@@ -299,17 +452,23 @@ try {
   // "Failed to load resource" no console do Chromium: cada um é casado com a resposta
   // esperada correspondente (mesmo status) antes de sobrar erro de verdade.
   const unexpectedConsole = [];
+  const inducedLeft = [...result.induced];      // 500/409/503 que a própria QA provocou
+  const abortedLeft = [...result.aborted];      // PATCH abortado de propósito (sem status)
   for (const message of result.console) {
     const status = message.match(/status of (\d{3})/)?.[1];
-    const idx = status ? result.expected.findIndex((e) => String(e.status) === status) : -1;
-    if (idx >= 0) result.expected.splice(idx, 1);
+    const byProof = status ? result.expected.findIndex((e) => String(e.status) === status) : -1;
+    const byInduced = status ? inducedLeft.findIndex((e) => String(e.status) === status) : -1;
+    const inducedNetwork = /net::ERR|Failed to fetch|ERR_FAILED/i.test(message);
+    if (byProof >= 0) result.expected.splice(byProof, 1);
+    else if (byInduced >= 0) inducedLeft.splice(byInduced, 1);
+    else if (inducedNetwork && abortedLeft.length > 0) abortedLeft.pop();
     else unexpectedConsole.push(message);
   }
   const fiveXx = [...result.network, ...result.expected].filter((r) => r.status >= 500);
   assert.equal(unexpectedConsole.length, 0, JSON.stringify(unexpectedConsole));
   assert.equal(result.network.length, 0, JSON.stringify(result.network));
   assert.equal(fiveXx.length, 0, JSON.stringify(fiveXx));
-  ok(`Console 0 erro · network >=400 inesperado 0 · 5xx 0 (provas deliberadas: ${result.expected.length} × 403/404/409)`);
+  ok(`Console 0 erro · network >=400 inesperado 0 · 5xx 0 (provas deliberadas: ${result.expected.length} × 403/404/409 + ${result.induced.length + result.aborted.length} falhas induzidas pela QA)`);
 } finally {
   await fs.writeFile('.cache/f1a/browser-report.json', JSON.stringify(result, null, 2));
   await browser.close();

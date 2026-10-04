@@ -23,24 +23,36 @@
 //   anamnese · arquivos/anexos · registrar pagamento · pós-atendimento ·
 //   reabrir para editar · módulos de especialidade.
 //
+// ── REGRA DE SAÍDA (P1 · esta revisão) ────────────────────────────────────
+// Texto clínico NÃO pode ser perdido em silêncio. Sair com conteúdo pendente
+// significa: tentar gravar; sair SÓ se a gravação estiver CONFIRMADA; ficar
+// na tela (com o texto intacto e erro visível) quando ela falhar. Nunca há
+// `proceed()` em `finally` — a navegação é consequência de persistência
+// confirmada ou de descarte explicitamente confirmado por quem está na tela.
+//
 // Persistência: a MESMA do domínio (PATCH /api/encounters com `expectedVersion`),
 // com autosave depois de o dedo parar e trava otimista — o texto de quem digita
 // nunca é sobrescrito pela resposta de um save anterior.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Field, Input, Textarea } from '@/components/ui';
-import { apiSend } from '@/lib/api-client';
+import { Button, Field, Input, Textarea } from '@/components/ui';
+import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, applySaveResult,
   canEditEncounter, encounterContentPayload, encounterDraftKey,
 } from '@/lib/encounters';
 import { supportsEncounterCapability, type EncounterCoreCapability } from '@/lib/encounter-sections';
 import type { Encounter } from '@/lib/types';
-import { persistenceState, useUnsavedChangesGuard } from './OverlayDismissGuard';
+import {
+  persistenceState, useUnsavedChangesGuard,
+  type DismissReason,
+} from './OverlayDismissGuard';
 
 export interface EncounterCoreRow extends Encounter {
   version: number;
 }
+
+interface PendingLeave { reason: DismissReason; proceed: () => void; }
 
 interface Props {
   businessId: string;
@@ -48,6 +60,13 @@ interface Props {
   encounter: EncounterCoreRow;
   /** Sincronização silenciosa depois de um save (o pai NÃO desmonta nada). */
   onSaved?: () => void;
+  /**
+   * Contrato ÚNICO de saída. O núcleo registra aqui a função que decide se a
+   * navegação pode acontecer — é o mesmo caminho para o botão Voltar, para um
+   * link do menu, para o Back do navegador e para qualquer saída programática.
+   * Uma implementação só, usada por todos (nada de cinco guardas paralelas).
+   */
+  registerLeave?: (leave: (reason: DismissReason, proceed: () => void) => void) => void;
 }
 
 /**
@@ -107,16 +126,39 @@ const formOf = (e: EncounterCoreRow): CoreForm => ({
   tags: (e.tags || []).join(', '),
 });
 
-export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) {
+/** Resultado de uma tentativa de gravação — é o que autoriza (ou não) a saída. */
+interface SaveOutcome {
+  ok: boolean;
+  /** 409: outra tela gravou antes. Nunca sobrescreve, nunca descarta sozinho. */
+  conflict: boolean;
+  message: string;
+}
+
+const SAVED: SaveOutcome = { ok: true, conflict: false, message: '' };
+
+export function EncounterCoreSection({ businessId, encounter, onSaved, registerLeave }: Props) {
   const [row, setRow] = useState<EncounterCoreRow>(encounter);
   const [form, setForm] = useState<CoreForm>(() => formOf(encounter));
   const [autoState, setAutoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
+  /** Uma saída foi bloqueada por falha de gravação (o erro aparece na tela). */
+  const [leaveBlocked, setLeaveBlocked] = useState(false);
   // Fonte SÍNCRONA do que está na tela (a mesma regra de ouro do domínio).
   const latest = useRef({ row: encounter, form: formOf(encounter) });
   const lastSaved = useRef(encounterDraftKey({ ...formOf(encounter), followUpMode: '', followUpDate: '', followUpDays: 0 }));
   const inflight = useRef<Promise<boolean> | null>(null);
+  /** Última tentativa de gravação: a saída só acontece quando `ok` é true. */
+  const lastOutcome = useRef<SaveOutcome>(SAVED);
+  /** Uma saída por vez (o duplo clique não dispara dois flush). */
+  const leaving = useRef(false);
+  /** Saída bloqueada por falha de gravação (só sai por escolha explícita). */
+  const [pendingLeave, setPendingLeaveState] = useState<PendingLeave | null>(null);
+  const pendingLeaveRef = useRef<PendingLeave | null>(null);
+  const setPendingLeave = useCallback((value: PendingLeave | null) => {
+    pendingLeaveRef.current = value;
+    setPendingLeaveState(value);
+  }, []);
 
   // O registro mudou (outra retomada, outro F5): a tela acompanha o servidor.
   useEffect(() => {
@@ -125,9 +167,12 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
     setRow(encounter);
     setForm(next);
     lastSaved.current = encounterDraftKey({ ...next, followUpMode: '', followUpDate: '', followUpDays: 0 });
+    lastOutcome.current = SAVED;
     setAutoState('idle');
     setConflict(false);
     setError('');
+    setLeaveBlocked(false);
+    setPendingLeave(null);
   }, [encounter]);
 
   const updateForm = useCallback((next: CoreForm) => {
@@ -141,16 +186,23 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
   const dirty = useMemo(() => keyOf(form) !== lastSaved.current, [form]);
 
   /**
-   * Salva o conteúdo do núcleo. Envia SÓ as capacidades do núcleo: os campos
+   * Grava o conteúdo do núcleo. Envia SÓ as capacidades do núcleo: os campos
    * que o legado persistiu e o F1A não mostra (retorno estruturado, arquivos…)
    * NÃO são tocados — nada é apagado por uma tela que não os exibe.
+   *
+   * Devolve `true` SOMENTE quando há confirmação de persistência (ou quando
+   * não havia nada pendente). Nunca "true por educação": quem decide se pode
+   * sair lê `lastOutcome`.
    */
   const save = useCallback(async (): Promise<boolean> => {
     const current = latest.current.row;
-    if (current.status !== 'draft') return false;
+    if (current.status !== 'draft') {
+      lastOutcome.current = { ok: false, conflict: false, message: 'Registro finalizado: leitura.' };
+      return false;
+    }
     const sentForm = latest.current.form;
     const sentKey = keyOf(sentForm);
-    if (sentKey === lastSaved.current) return true;
+    if (sentKey === lastSaved.current) { lastOutcome.current = SAVED; return true; }
     if (inflight.current) return inflight.current;
 
     setAutoState('saving');
@@ -161,9 +213,15 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
         { scope: 'action', area: 'Atendimento' },
       );
       if (!res.ok) {
+        const outcome: SaveOutcome = {
+          ok: false,
+          conflict: res.status === 409,
+          message: res.message || 'Não foi possível salvar o atendimento.',
+        };
+        lastOutcome.current = outcome;
         setAutoState('error');
-        setConflict(res.status === 409);
-        setError(res.message);
+        setConflict(outcome.conflict);
+        setError(outcome.message);
         return false;
       }
       const serverRow = res.data!.encounter;
@@ -177,8 +235,11 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
       setRow(serverRow);
       if (result.adoptServerForm) { updateForm(formOf(serverRow)); setAutoState('saved'); }
       else setAutoState('idle');
+      lastOutcome.current = SAVED;
       setConflict(false);
       setError('');
+      setLeaveBlocked(false);
+      setPendingLeave(null);
       onSaved?.();
       return true;
     })();
@@ -200,20 +261,117 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
     return () => clearTimeout(t);
   }, [form, row, conflict, save]);
 
-  // Sair da rota com texto não salvo: tenta gravar antes de ir embora.
-  const flushing = useRef(false);
-  useUnsavedChangesGuard(
-    { dirty, saving: autoState === 'saving', error: autoState === 'error' ? error : '', context: 'edit' },
-    {
-      beforeNavigate: (_reason, proceed) => {
-        if (flushing.current) return;
-        flushing.current = true;
-        void (async () => {
-          try { await save(); } finally { flushing.current = false; proceed(); }
-        })();
-      },
-    },
-  );
+  /**
+   * Esvazia o que estiver pendente antes de sair. Insiste algumas vezes
+   * (quem digitou durante o request ainda tem texto novo) e para no primeiro
+   * fracasso: tentar de novo não conserta rede nem conflito.
+   */
+  const flushForLeave = useCallback(async (): Promise<SaveOutcome> => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (keyOf(latest.current.form) === lastSaved.current) return SAVED;   // nada pendente: sair não perde nada
+      const ok = await save();
+      if (!ok) return lastOutcome.current;
+      if (keyOf(latest.current.form) === lastSaved.current) return SAVED;
+    }
+    return keyOf(latest.current.form) === lastSaved.current
+      ? SAVED
+      : { ok: false, conflict: false, message: 'Ainda há alterações para salvar.' };
+  }, [save]);
+
+  /** Volta o formulário ao último estado CONFIRMADO pelo servidor. */
+  const discardEdits = useCallback(() => {
+    const persisted = formOf(latest.current.row);
+    updateForm(persisted);
+    lastSaved.current = keyOf(persisted);
+    lastOutcome.current = SAVED;
+    setAutoState('idle');
+    setConflict(false);
+    setError('');
+    setLeaveBlocked(false);
+    setPendingLeave(null);
+  }, [updateForm]);
+
+  /** Recarrega a versão atual do servidor (escolha explícita de quem edita). */
+  const reloadFromServer = useCallback(async () => {
+    const res = await apiGet<{ encounter?: EncounterCoreRow }>(
+      `/api/encounters?businessId=${encodeURIComponent(businessId)}&id=${encodeURIComponent(latest.current.row.id)}`,
+      { scope: 'area', area: 'Atendimento' },
+    );
+    if (!res.ok || !res.data?.encounter) {
+      setError(res.message || 'Não foi possível recarregar o atendimento.');
+      return;
+    }
+    const server = res.data.encounter;
+    const next = formOf(server);
+    latest.current = { row: server, form: next };
+    lastSaved.current = keyOf(next);
+    lastOutcome.current = SAVED;
+    setRow(server);
+    updateForm(next);
+    setAutoState('idle');
+    setConflict(false);
+    setError('');
+    setLeaveBlocked(false);
+    setPendingLeave(null);
+  }, [businessId, updateForm]);
+
+  const guardState = {
+    dirty,
+    saving: autoState === 'saving',
+    error: autoState === 'error' ? error : '',
+    context: 'edit' as const,
+  };
+  /**
+   * O contrato abaixo (`requestLeave`, registrado mais adiante) é a ÚNICA
+   * resposta de saída do núcleo — inclusive para o Back do navegador, links do
+   * menu e qualquer travessia: o guarda central NÃO decide sozinho, ele
+   * pergunta ao núcleo, que tenta gravar antes de liberar.
+   */
+  const leaveRef = useRef<(reason: DismissReason, proceed: () => void) => void>(() => {});
+  const { dialog, requestClose } = useUnsavedChangesGuard(guardState, {
+    beforeNavigate: (reason, proceed) => { void leaveRef.current(reason, proceed); },
+  });
+
+  /**
+   * A ÚNICA porta de saída do núcleo.
+   *
+   *   • gravou (ou não havia nada pendente) → `proceed()`, uma única vez;
+   *   • falhou → NÃO navega, mantém o texto e mostra o erro;
+   *   • conflito 409 → NÃO navega e NÃO sobrescreve: a tela oferece
+   *     "Continuar editando" e "Recarregar versão atual".
+   *
+   * `proceed()` nunca fica em `finally` — sair é consequência de persistência
+   * confirmada ou de descarte confirmado no diálogo central.
+   */
+  /** Sair SEM salvar: escolha explícita, sempre confirmada no diálogo central. */
+  const leaveWithoutSaving = useCallback(() => {
+    const pending = pendingLeaveRef.current;
+    if (!pending) return;
+    setPendingLeave(null);
+    requestClose(pending.reason, {
+      dirty: true, saving: false, error, context: 'edit',
+    }, pending.proceed, discardEdits);
+  }, [discardEdits, error, requestClose, setPendingLeave]);
+
+  const requestLeave = useCallback(async (reason: DismissReason, proceed: () => void) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    try {
+      const outcome = await flushForLeave();
+      if (outcome.ok) { setPendingLeave(null); proceed(); return; }
+      if (outcome.conflict) return;                          // bloco de conflito já está na tela
+      // Ficou. A tela segue utilizável: o texto continua aqui, o erro aparece
+      // e a saída só acontece por ESCOLHA EXPLÍCITA (botão → diálogo central).
+      setPendingLeave({ reason, proceed });
+      setLeaveBlocked(true);
+    } finally {
+      leaving.current = false;
+    }
+  }, [discardEdits, flushForLeave, requestClose]);
+
+  // Registro do contrato: Voltar, menu, Back e saídas programáticas caem aqui.
+  useEffect(() => { registerLeave?.(requestLeave); }, [registerLeave, requestLeave]);
+  leaveRef.current = requestLeave;   // o guarda central pergunta ao núcleo
 
   const persistence = persistenceState({
     dirty, saving: autoState === 'saving', error: autoState === 'error' ? error : '', hasPersisted: true,
@@ -233,6 +391,28 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
             <Icon n="lock" size={13} /> Registro finalizado: a leitura fica disponível e a edição
             depende da reabertura (F1B/F1C).
           </p>
+        )}
+
+        {/* ── CONFLITO DE VERSÃO: nunca sai sozinho e nunca sobrescreve ──
+            Duas saídas explícitas; nenhuma delas apaga o texto sem escolha. */}
+        {conflict && (
+          <div className="encounter-core__conflict" role="alert">
+            <p className="encounter-core__conflict-copy">
+              Este atendimento foi alterado em outra tela. Suas alterações ainda não foram salvas.
+            </p>
+            <div className="encounter-core__conflict-actions">
+              <Button size="sm" variant="secondary" onClick={() => setConflict(false)}>
+                Continuar editando
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => void reloadFromServer()}>
+                Recarregar versão atual
+              </Button>
+            </div>
+            <p className="encounter-core__conflict-hint">
+              Nada é sobrescrito em silêncio. “Recarregar versão atual” troca o texto desta tela pelo
+              que está gravado.
+            </p>
+          </div>
         )}
 
         {fields.map((f) => (
@@ -257,12 +437,20 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
           </Field>
         ))}
 
-        {autoState === 'error' && (
-          <p className="encounter-core__error" role="alert">
-            {conflict
-              ? 'Este atendimento mudou em outra tela. Recarregue para continuar editando.'
-              : error || 'Não foi possível salvar agora.'}
-          </p>
+        {/* Um ÚNICO bloco de erro (nada de eco): o que falhou e o que
+            acontece com o texto — ele continua aqui, não foi perdido. */}
+        {autoState === 'error' && !conflict && (
+          <div className="encounter-core__error-block">
+            <p className="encounter-core__error" role="alert">
+              {error || 'Não foi possível salvar agora.'}
+              {leaveBlocked ? ' O texto continua nesta tela — nada foi perdido.' : ''}
+            </p>
+            {leaveBlocked && pendingLeave && (
+              <Button size="sm" variant="secondary" onClick={leaveWithoutSaving}>
+                Sair sem salvar
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -271,6 +459,7 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
           className={`encounter-page__save-state encounter-page__save-state--${persistence}`}
           role="status"
           aria-live="polite"
+          data-testid="encounter-core-save-state"
         >
           {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving
             : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error
@@ -278,6 +467,7 @@ export function EncounterCoreSection({ businessId, encounter, onSaved }: Props) 
                 : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
         </span>
       </footer>
+      {dialog}
     </section>
   );
 }
