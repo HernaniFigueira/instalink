@@ -1,4 +1,5 @@
 'use client';
+import { durationLabel } from '@/lib/duration-label';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
@@ -8,7 +9,7 @@ import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, ServiceForm, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
-import { serviceProfessionalMode } from '@/lib/booking';
+import { eligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 
 interface DeleteAsk {
   kind: 'service' | 'professional';
@@ -121,7 +122,7 @@ export default function ServicosPage() {
             <Icon n="tag" size={14} /> Grupos
           </Button>
           <Button variant="primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-            <Icon n="plus" size={14} /> Serviço
+            <Icon n="plus" size={14} /> Novo serviço
           </Button>
         </span>
       ) : undefined}
@@ -146,7 +147,7 @@ export default function ServicosPage() {
       {loaded && <CatalogCrossLinks businessId={businessId} current="/servicos" />}
 
       {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}
-      <p className="text-xs text-[var(--text-muted)] mb-2">Ativo = aparece na lista interna. Pode ser agendado = cliente vê horário; desative para procedimento só interno. // Agendável</p>
+      <p className="text-xs text-[var(--text-muted)] mb-2">Ativo = disponível para uso na clínica. Pode ser agendado = pode receber um horário na agenda.</p>
       {!loaded && <ListSkeleton rows={3} />}
 
       {loaded && (
@@ -203,6 +204,8 @@ export default function ServicosPage() {
               </div>
               <div className="divide-y divide-zinc-100">
                 {services.map((sv) => {
+                  const hasEligible = eligibleProfessionalIds(sv, pros).length > 0;
+                  const canSchedule = sv.active && sv.bookable && hasEligible;
                   const cat = cats.find((c) => c.id === sv.categoryId);
                   const who = serviceProfessionalMode(sv as any) === 'all'
                     ? 'toda a equipe'
@@ -216,20 +219,20 @@ export default function ServicosPage() {
                         <span className="min-w-0">
                           <span className="text-sm font-medium truncate block">{sv.name}</span>
                           {sv.description && <span className="hidden sm:block text-xs text-zinc-500 truncate">{sv.description}</span>}
-                          <span className="sm:hidden text-xs text-zinc-500">{sv.price > 0 ? `R$ ${centsToBR(sv.price)} · ${sv.durationMin} min` : `Sem preço base · ${sv.durationMin} min`}</span>
+                          <span className="sm:hidden text-xs text-zinc-500">{sv.price > 0 ? `R$ ${centsToBR(sv.price)} · ${durationLabel(sv.durationMin)}` : `Sem preço base · ${durationLabel(sv.durationMin)}`}</span>
                         </span>
                       </span>
                       <span className="hidden sm:block text-xs text-zinc-500 truncate">{cat?.name || 'Sem grupo'}</span>
                       <span className="hidden sm:block text-sm">
-                        {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {sv.durationMin} min</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {sv.durationMin} min</span></>}
+                        {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></>}
                       </span>
                       <span className="hidden sm:block text-xs text-zinc-500 truncate">{who}</span>
-                      <span className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                      <span className="flex items-center gap-1.5 flex-wrap">
                         <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-500 border-zinc-200')}>
                           {sv.active ? 'Ativo' : 'Inativo'}
                         </span>
-                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.bookable ? 'bg-zinc-50 text-zinc-600 border-zinc-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
-                          {sv.bookable ? 'Pode ser agendado' : 'Não agendável'}
+                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', canSchedule ? 'bg-zinc-50 text-zinc-600 border-zinc-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                          {!hasEligible ? 'Sem profissional habilitado' : canSchedule ? 'Pode ser agendado' : 'Não agendável'}
                         </span>
                       </span>
                       <span className="flex justify-end items-center gap-1.5 text-xs shrink-0">

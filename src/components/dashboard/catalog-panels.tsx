@@ -88,16 +88,42 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSug, setShowSug] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const suggestionRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showSug) return;
+    // Native scrollbar dragging can focus the enclosing <dialog>. That focus
+    // is not an outside interaction: preserve the popup for the whole gesture.
+    let pointerInside = false;
+    const outside = (event: PointerEvent) => {
+      pointerInside = !!suggestionRoot.current?.contains(event.target as Node);
+      if (!pointerInside) setShowSug(false);
+    };
+    const pointerEnd = () => { pointerInside = false; };
+    const focusOutside = (event: FocusEvent) => {
+      if (!pointerInside && !suggestionRoot.current?.contains(event.target as Node)) setShowSug(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('focusin', focusOutside);
+    document.addEventListener('pointerup', pointerEnd);
+    document.addEventListener('pointercancel', pointerEnd);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('focusin', focusOutside);
+      document.removeEventListener('pointerup', pointerEnd);
+      document.removeEventListener('pointercancel', pointerEnd);
+    };
+  }, [showSug]);
   const initialSnapshot = useRef(JSON.stringify({
     name: service?.name || '', description: service?.description || '',
     price: service ? centsToBR(service.price) : '',
-    durationMin: service ? (service.durationMin || 0) : 0, categoryId: service?.categoryId || '',
+    durationMin: service ? (service.durationMin || 0) : 0, categoryId: service?.categoryId || '', suggestedGroupName: '',
     professionalMode: service ? serviceProfessionalMode(service as any) : 'all',
     proIds: service?.professionalIds || [], active: service?.active !== false,
     bookable: service?.bookable !== false, before: service?.bufferBeforeMin === undefined ? '' : String(service.bufferBeforeMin), after: service?.bufferAfterMin === undefined ? '' : String(service.bufferAfterMin), resourceIds: service?.resourceRequirements?.[0] || [],
   }));
   const dirty = JSON.stringify({ name, description, price, durationMin, categoryId, suggestedGroupName, professionalMode, proIds, active, bookable, before, after, resourceIds }) !== initialSnapshot.current;
-  const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 6) : [];
+  const sugList = name.trim().length >= 2 ? searchVetCatalog(name, 12) : VET_CATALOG;
   const dismissState = {
     dirty, saving: loading, context: 'edit' as const,
     title: service ? 'Descartar alterações do serviço?' : 'Descartar novo serviço?',
@@ -105,21 +131,30 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
   };
   const input = 'w-full rounded-md border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
 
+  function chooseSuggestion(s: typeof VET_CATALOG[number]) {
+    setName(s.name); setDurationText(s.duracaoMin ? String(s.duracaoMin) : ''); setDurSuggested(s.duracaoMin || 0);
+    const match = cats.find(c => c.name.toLowerCase().trim() === s.grupo.toLowerCase().trim());
+    setCategoryId(match?.id || ''); setSuggestedGroupName(match ? '' : s.grupo);
+    setShowSug(false); setSuggestionIndex(-1);
+  }
+
   function togglePro(id: string) {
     setProIds((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
   }
 
   return (
     <Drawer open onClose={() => { if (!loading) onClose(); }} dismissGuard={dismissState} title={service ? 'Editar serviço' : 'Novo serviço'} width="max-w-lg">
-      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (r.ok && r.data?.categoryId) resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable, bufferBeforeMin: before === '' ? null : Number(before), bufferAfterMin: after === '' ? null : Number(after), resourceRequirements: resourceIds.length ? [resourceIds] : [] }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
+      <form onSubmit={async (e) => { e.preventDefault(); setError(''); if (durationMin < 5) { setError('Informe a duração padrão do serviço (mínimo 5 minutos).'); return; } setLoading(true); try { let resolvedCategoryId: string | undefined = categoryId || undefined; if (!resolvedCategoryId && suggestedGroupName) { const r:any = await apiSend('/api/catalog','POST',{ businessId, action:'category.save', kind:'service', name: suggestedGroupName.trim() },{ scope:'action', area:'Serviços' }); if (!r.ok || !r.data?.categoryId) throw new Error(r.message || 'Não foi possível criar o grupo sugerido.'); resolvedCategoryId = r.data.categoryId; } await onSave({ id: service?.id, name, description, image, price: parseMoneyToCents(price), durationMin, professionalMode, professionalIds: professionalMode === 'all' ? [] : proIds, categoryId: resolvedCategoryId, active, bookable, bufferBeforeMin: before === '' ? null : Number(before), bufferAfterMin: after === '' ? null : Number(after), resourceRequirements: resourceIds.length ? [resourceIds] : [] }); } catch (err:any) { setError(err.message || 'Falha ao salvar.'); } finally { setLoading(false); } }}
         className="p-5 space-y-3.5">
-        <div className="relative">
-          <input aria-label="Nome do serviço" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); }} onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} className={input} placeholder="Nome * (ex: Consulta veterinária)" autoFocus />
+        <div className="relative" ref={suggestionRoot} onKeyDown={e => { if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }}>
+          <label className="block text-xs font-semibold mb-1" htmlFor="clinical-service-name">Serviço / procedimento</label>
+          <p className="text-xs text-zinc-500 mb-2">Escolha na biblioteca veterinária ou digite livremente.</p>
+          <input id="clinical-service-name" role="combobox" aria-expanded={showSug && sugList.length > 0} aria-controls="clinical-service-suggestions" aria-activedescendant={showSug && suggestionIndex >= 0 ? `clinical-suggestion-${sugList[suggestionIndex]?.id}` : undefined} onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setShowSug(true); setSuggestionIndex(i => Math.max(0, Math.min(sugList.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))); } else if (e.key === 'Enter' && showSug && suggestionIndex >= 0 && sugList[suggestionIndex]) { e.preventDefault(); chooseSuggestion(sugList[suggestionIndex]); } else if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }} aria-autocomplete="list" autoComplete="off" aria-label="Serviço / procedimento" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); setSuggestionIndex(-1); }} onFocus={()=>setShowSug(true)}  className={input} placeholder="Buscar procedimento ou digitar novo…" autoFocus />
           {showSug && sugList.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
+            <div id="clinical-service-suggestions" role="listbox" aria-label="Biblioteca veterinária" className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
               <p className="px-3 py-1 text-[11px] font-semibold tracking-wide uppercase text-zinc-500 border-b">Sugestões clínicas (biblioteca) — toque para preencher</p>
               {sugList.map(s => (
-                <button key={s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=>{ setName(s.name); setDurationText(s.duracaoMin ? String(s.duracaoMin) : ''); setDurSuggested(s.duracaoMin || 0); const m = cats.find(c=>c.name.toLowerCase().trim()===s.grupo.toLowerCase().trim()); if(m) { setCategoryId(m.id); setSuggestedGroupName(''); } else { setCategoryId(''); setSuggestedGroupName(s.grupo); } setShowSug(false); }} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
+                <button key={s.id} id={`clinical-suggestion-${s.id}`} role="option" aria-selected={suggestionIndex >= 0 && sugList[suggestionIndex]?.id === s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={() => chooseSuggestion(s)} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
                   <span className="text-sm font-medium truncate">{s.name}</span>
                   <span className="text-xs text-zinc-500 shrink-0">{s.grupo} · {durationSuggestionLabel(s.duracaoMin)}</span>
                 </button>
@@ -128,7 +163,7 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
             </div>
           )}
         </div>
-        <textarea aria-label="Descrição do serviço" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Descrição clínica/interna (opcional)" />
+
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="text-xs font-semibold text-zinc-500">PREÇO BASE (R$)</span>
             <input value={price} onChange={(e) => setPrice(e.target.value)} className={input + ' mt-1'} placeholder="Opcional — ex: 120,00" inputMode="decimal" />
@@ -139,25 +174,14 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
             <span className="text-[11px] text-zinc-500">Duração padrão para novos agendamentos — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
-          <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSuggestedGroupName(''); }} className={input + ' mt-1'}>
+          <select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className={input + ' mt-1'}>
             <option value="">Sem grupo (opcional)</option>
+            {suggestedGroupName && <option value="__suggested">{suggestedGroupName} (sugerido)</option>}
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado ao salvar</p>}
-          <span className="text-[11px] text-zinc-500">Grupo interno da clínica (ex: Consultas, Vacinas, Cirurgias). Opcional — sem migração.</span></label>
-        <fieldset className="border border-zinc-200 rounded-md p-3 space-y-2">
-          <legend className="text-xs font-semibold">Capacidade do serviço</legend>
-          <p className="text-xs text-zinc-500">Deixe vazio para usar os buffers da clínica. Não altera agendamentos existentes.</p>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs">Preparação antes (min)<input type="number" min={0} max={240} value={before} onChange={e => setBefore(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
-            <label className="text-xs">Tempo depois (min)<input type="number" min={0} max={240} value={after} onChange={e => setAfter(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
-          </div>
-          <p className="text-xs font-semibold">Recursos necessários (um dos selecionados; quantidade 1)</p>
-          {resources.filter(r => r.active || resourceIds.includes(r.id)).map(r => <label key={r.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={resourceIds.includes(r.id)} onChange={() => setResourceIds(ids => ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id])} />{r.name} · {r.kind === 'room' ? 'Sala' : 'Equipamento'}
-          </label>)}
-          {resources.length === 0 && <p className="text-xs text-zinc-500">Cadastre salas ou equipamentos em Configurações → Agenda.</p>}
-        </fieldset>
+          {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado automaticamente ao salvar</p>}
+          <span className="text-[11px] text-zinc-500">Usado para organizar os serviços da clínica.</span></label>
+
         {/* Perguntas no agendamento removidas do cadastro básico de Serviço — ver GODOUTOR-MASTER-PLAN.md (futuro motor de intake). Questões legadas preservadas no banco/API. */}
         {pros.length > 0 && (
           <div>
@@ -189,9 +213,28 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
           </div>
         )}
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica</label>
-          <label className="flex flex-col gap-0.5 text-sm font-medium"><span className="flex items-center gap-2"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Pode ser agendado</span><span className="text-[11px] font-normal text-zinc-500 ml-6">Ativo = disponível para uso na clínica. Pode ser agendado = pode gerar um compromisso próprio na agenda.</span></label>
+          <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Ativo na clínica<span className="text-[11px] font-normal text-zinc-500">Disponível para uso.</span></label>
+          <label className="flex flex-col gap-0.5 text-sm font-medium"><span className="flex items-center gap-2"><input type="checkbox" checked={bookable} onChange={(e) => setBookable(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> Pode ser agendado</span><span className="text-[11px] font-normal text-zinc-500 ml-6">Aparece como opção para criar agendamentos.</span></label>
         </div>
+        <details className="rounded-md border border-zinc-200 p-3"><summary className="cursor-pointer text-sm font-semibold">Observação interna (opcional)</summary><p className="text-xs text-zinc-500 my-2">Informação interna para a equipe. Não é exibida ao paciente.</p>
+        <textarea aria-label="Observação interna" value={description} onChange={(e) => setDescription(e.target.value)} className={input} rows={2} placeholder="Observação interna (opcional)" />
+        </details>
+        <details className="rounded-md border border-zinc-200 p-3"><summary className="cursor-pointer text-sm font-semibold">Agenda e recursos · avançado</summary>
+          <p className="text-xs text-zinc-500 my-2">Use somente quando o procedimento precisa reservar sala, equipamento ou tempo de preparação/limpeza.</p>
+        <fieldset className="border border-zinc-200 rounded-md p-3 space-y-2">
+          <legend className="text-xs font-semibold">Preparação e recursos</legend>
+          <p className="text-xs text-zinc-500">Deixe vazio para usar os buffers da clínica. Não altera agendamentos existentes.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs">Preparação antes (min)<input type="number" min={0} max={240} value={before} onChange={e => setBefore(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
+            <label className="text-xs">Tempo de liberação depois (min)<input type="number" min={0} max={240} value={after} onChange={e => setAfter(e.target.value)} placeholder="Padrão da clínica" className={input} /></label>
+          </div>
+          <p className="text-xs font-semibold">Recursos necessários (um dos selecionados; quantidade 1)</p>
+          {resources.filter(r => r.active || resourceIds.includes(r.id)).map(r => <label key={r.id} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={resourceIds.includes(r.id)} onChange={() => setResourceIds(ids => ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id])} />{r.name} · {r.kind === 'room' ? 'Sala' : 'Equipamento'}
+          </label>)}
+          {resources.length === 0 && <p className="text-xs text-zinc-500">Cadastre salas ou equipamentos em Configurações → Agenda.</p>}
+        </fieldset>
+        </details>
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
         <Button type="submit" variant="primary" size="lg" className="w-full" disabled={loading}>{loading ? 'Salvando…' : 'Salvar serviço'}</Button>
       </form>
@@ -337,22 +380,24 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
   const [end, setEnd] = useState('13:00');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg('');
+    if (saving) return;
+    setMsg(''); setSaving(true);
     try {
       await onSave({ date, closed, start: closed ? '' : start, end: closed ? '' : end, note });
       setDate(''); setNote(''); setClosed(true);
     } catch (err: any) {
       setMsg(err.message);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
     <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <p className="font-semibold text-sm">Dias especiais</p>
-      <p className="text-xs text-zinc-500 mb-4">Feriados, folgas e horários excepcionais — sem editar nada técnico.</p>
+      <p className="text-xs text-zinc-500 mb-4">Exceção de funcionamento em uma data específica. Informe o período em que a clínica atende ou marque o fechamento do dia inteiro.</p>
       {exceptions.length > 0 && (
         <div className="space-y-2 mb-4">
           {exceptions.map((x) => (
@@ -384,7 +429,7 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
         )}
         <label className="block flex-1 min-w-[140px]"><span className="text-xs font-semibold text-zinc-500">MOTIVO (OPCIONAL)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-        <Button type="submit" variant="primary">Adicionar</Button>
+        <Button type="submit" disabled={saving} variant="primary">{saving ? 'Salvando…' : 'Adicionar'}</Button>
       </form>
       {msg && <p className="mt-2 text-sm font-medium text-red-600">{msg}</p>}
     </div>

@@ -14,23 +14,26 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BookingConfig, Business, ScheduleResource } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
-import { Button, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
+import { Button, buttonCls, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
+import { ShellAppearance } from '@/components/dashboard/ShellAppearance';
 import { isLegacyPagesEnabled } from '@/lib/product';
 
-type ConfigTab = 'negocio' | 'agenda';
+type ConfigTab = 'negocio' | 'agenda' | 'aparencia';
 
 const CONFIG_TAB_ICON: Record<ConfigTab, string> = {
   negocio: 'store',
   agenda: 'calendar',
+  aparencia: 'spark',
 };
 
 const CONFIG_TABS: Array<[ConfigTab, string]> = [
   ['negocio', 'Clínica'],
   ['agenda', 'Agenda'],
+  ['aparencia', 'Aparência'],
 ];
 
 const LEGACY_TAB_REDIRECT: Record<string, string> = {
@@ -61,12 +64,17 @@ function BookingRules({ businessId, initial, onSaved }: {
   const [resourceName, setResourceName] = useState('');
   const [resourceKind, setResourceKind] = useState<'room' | 'equipment'>('room');
   const [editingResource, setEditingResource] = useState<ScheduleResource | null>(null);
+  const [resourceBusy, setResourceBusy] = useState(false);
   async function saveResource(data: Record<string, unknown>) {
+    if (resourceBusy) return;
+    setResourceBusy(true);
+    try {
     const res = await apiSend('/api/schedule-operations', 'POST', { businessId, ...data }, { scope: 'action', area: 'Configurações' });
     if (!res.ok) { setError(res.message || 'Não foi possível salvar o recurso.'); return; }
     const list = await apiGet<{ resources: ScheduleResource[] }>(`/api/schedule-operations?businessId=${businessId}`, { scope: 'action', area: 'Configurações' });
     if (list.ok) setResources(list.data?.resources || []);
     setResourceName(''); setEditingResource(null);
+    } finally { setResourceBusy(false); }
   }
 
   useEffect(() => {
@@ -112,27 +120,29 @@ function BookingRules({ businessId, initial, onSaved }: {
             </div>
           </div>
         )}
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">ANTECEDÊNCIA MÍNIMA (MIN)</span>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">Antecedência mínima (min)</span>
           <input type="number" min={0} max={1440} value={cfg.leadMin} onChange={(e) => setCfg({ ...cfg, leadMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Ex: 30 = só reserva com 30 min de folga. Vale para agenda interna e pública (grade).</span></label>
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">PREPARAÇÃO ANTES (MIN)</span>
+          <span className="text-[11px] text-zinc-500">Quanto tempo antes um atendimento pode ser agendado.</span></label>
+        <details className="sm:col-span-2 border rounded-md p-3"><summary className="cursor-pointer text-sm font-medium">Regras avançadas</summary><div className="grid sm:grid-cols-2 gap-3 mt-3">
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">Preparação antes (min)</span>
           <input type="number" min={0} max={240} value={cfg.bufferBeforeMin ?? 0} onChange={(e) => setCfg({ ...cfg, bufferBeforeMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Reserva capacidade antes do atendimento; não aumenta o cartão.</span></label>
-        <label className="block"><span className="text-xs font-semibold text-zinc-500">TEMPO DEPOIS (MIN)</span>
+          <span className="text-[11px] text-zinc-500">Reserva alguns minutos antes do atendimento para preparação da equipe ou da sala.</span></label>
+        <label className="block"><span className="text-xs font-semibold text-zinc-500">Tempo depois (min)</span>
           <input type="number" min={0} max={240} value={cfg.bufferAfterMin ?? cfg.bufferMin} onChange={(e) => setCfg({ ...cfg, bufferAfterMin: Number(e.target.value) })} className={num} />
-          <span className="text-[11px] text-zinc-500">Para dados antigos, o intervalo legado é aplicado somente depois.</span></label>
-        <div className="sm:col-span-2 border-t border-zinc-200 pt-3 space-y-2">
-          <h4 className="text-sm font-semibold">Recursos · salas e equipamentos</h4>
-          <p className="text-xs text-zinc-500">Um recurso não pode atender dois profissionais ao mesmo tempo. Desative os que têm histórico.</p>
+          <span className="text-[11px] text-zinc-500">Reserva alguns minutos após o atendimento para limpeza, organização ou finalização.</span></label>
+        </div></details>
+        <div id="salas-e-equipamentos" className="sm:col-span-2 border-t border-zinc-200 pt-3 space-y-2">
+          <h4 className="text-sm font-semibold">Salas e equipamentos</h4>
+          <p className="text-xs text-zinc-500">Cadastre recursos compartilhados da clínica, como sala cirúrgica, ultrassom ou equipamento específico. A agenda evita reservas simultâneas do mesmo recurso.</p>
           {resources.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border rounded-md px-3 py-2 text-sm">
             <span>{r.name} · {r.kind === 'room' ? 'Sala' : 'Equipamento'}{!r.active && ' · Inativo'}</span>
-            <span className="flex gap-2"><button type="button" className="underline" onClick={() => { setEditingResource(r); setResourceName(r.name); setResourceKind(r.kind); }}>Editar</button>
-              <button type="button" className="underline" onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
+            <span className="flex gap-2"><button type="button" className={buttonCls('secondary', 'sm')} onClick={() => { setEditingResource(r); setResourceName(r.name); setResourceKind(r.kind); }}>Editar</button>
+              <button type="button" className={buttonCls('secondary', 'sm')} disabled={resourceBusy} onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
           </div>)}
-          <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala 1 ou Ultrassom 01" className="border rounded-md px-2 py-2 text-sm flex-1 min-w-36" />
+          <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala cirúrgica 1 ou Ultrassom 01" className="border rounded-md px-2 py-2 text-sm flex-1 min-w-36" />
             <select aria-label="Tipo do recurso" value={resourceKind} onChange={e => setResourceKind(e.target.value as 'room' | 'equipment')} className="border rounded-md px-2 py-2 text-sm"><option value="room">Sala</option><option value="equipment">Equipamento</option></select>
-            <button type="button" className="border rounded-md px-3 py-2 text-sm font-semibold" onClick={() => void saveResource({ action: 'resource.save', id: editingResource?.id, name: resourceName, kind: resourceKind, active: editingResource?.active ?? true })}>{editingResource ? 'Salvar recurso' : 'Adicionar recurso'}</button>
-            {editingResource && <button type="button" onClick={() => { setEditingResource(null); setResourceName(''); }}>Cancelar</button>}
+            <button type="button" className={buttonCls('secondary', 'sm')} disabled={resourceBusy} onClick={() => void saveResource({ action: 'resource.save', id: editingResource?.id, name: resourceName, kind: resourceKind, active: editingResource?.active ?? true })}>{resourceBusy ? (editingResource ? 'Salvando…' : 'Criando…') : editingResource ? 'Salvar recurso' : 'Adicionar recurso'}</button>
+            {editingResource && <button type="button" className={buttonCls('ghost', 'sm')} onClick={() => { setEditingResource(null); setResourceName(''); }}>Cancelar</button>}
           </div>
         </div>
         {legacyPagesEnabled && (
@@ -364,7 +374,7 @@ export default function ConfigPage() {
           />
         )}
 
-        {/* Aparência movida para Perfil — tema do navegador (preferência do usuário), não tenant */}
+        {tab === 'aparencia' && <ShellAppearance />}
 
 
       </div>

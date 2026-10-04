@@ -1,5 +1,10 @@
 # GoDoutor — Histórico
 
+## 2026-10-03 — Clinical UX Closure, antes de Clinical Encounter F1
+
+Closure UX stacked sobre PR #52 (`0c426be`), branch fixa `arena/01a101fb-instalink`, sem merge. Range autoritativo e persistente, clique direto, block mode, timezone canônico e snap manual 15; serviços clínicos progressivos; aparência em Configurações; remoção de acesso/marketing da UI Cliente 360 preservando storage; ações suaves/sticky e encaixe laranja sem alterar status. Next production local + seed veterinário descartável + logins Owner/Recepção/Profissional + Chromium real; 2989 testes PASS / 4 baseline, 365 focados PASS, build/typecheck/diff-check OK. F1 não iniciado; produção não usada. Evidências e reprodução: [AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md).
+
+
 ## 2026-10-02 — Clinical Convergence · onda 2 (cleanup de resíduo InstaLink)
 
 > Branch de sessão `arena/01a0fede-instalink`, base `main` em `dbf7d680c51a39b289c856fdba1f0216fe3e5834` (merge da PR #50). PR aberta contra `main`; **merge NÃO executado** (aguarda autorização explícita). Produção não usada para QA; Clinical Encounter F1 não iniciado.
@@ -295,3 +300,16 @@ eventos internos `il:*` → `godoutor:*` com produtor+ouvinte juntos, flags
 `__il_*` → `__godoutor_*`). CSS `il-*` classificado (sem big-bang) e regra
 permanente no AGENTS.md: nenhum `il-*` novo. Testes novos 29/29
 (`convergence-final.test.ts`); suítes completas reexecutadas verdes (67/88/25/15/18/28 + personas 11/11 + vitest 2965/4-baseline). Corrige também bug latente do `scripts/master.mjs` (helper `resolveLocalDbFile` ausente desde a onda C2). Bloqueio final pós-correção (commit `afb6d8b`): **projeção operacional** do Dashboard/Overview — `dashboardModules/dashboardContext(business, legacyPagesEnabled)` mascaram products/orders/quote no OFF mesmo em unidade legada com os modes ativos; `/api/overview` deriva módulos/receita/painéis/totais/atividade/resultados/checklist da máscara (payload `modules` via `operationalEnabledFeatureIds`; `revenue` sem fallback de pedido); cliente sem relabel 'Revise dados legados' e atividade gated. Storage, `isFeatureEnabled` global e rota ON intactos. Testes: `legacy-commerce-off-overview.test.ts` 7/7 (fixture OFF+ON na rota real), vitest 2975/4-baseline, smoke-ux reescrito 96/0, smoke 67/0, agendar 25/0, e2e 28/0. Produção: **NÃO**. Merge: **NÃO** — PR #51 segue aberta para revisão humana; Clinical Encounter F1 continua bloqueado até autorização explícita.
+
+
+## 2026-10-03 — PR53, fechamento final pré-F1 ainda aberto
+
+Correções incrementais e reprodução real do fechamento da biblioteca durante scrollbar nativa. Motor de slots respeita15, intenção não é apagada, Semana projeta bloqueios profissionais, Equipe recebe guard/seleção explícita, Recepção perde leads no preset (override preservado), secondary central tem borda temática. Full3010+4baseline; Chromium parcial e 18 capturas. **NÃO ESTÁ PRONTO**: matriz, limites da evidência e pendências em [PRE-F1-FINAL-STATUS.md](PRE-F1-FINAL-STATUS.md). Sem produção, migração, merge ou F1.
+
+### PR53 — fechamento dos últimos gates (2026-10-03)
+
+Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.
+
+### PR53 — último polimento pré-F1
+
+Range simplificado com duração humana, copy de bloqueios/regras/recursos, dias especiais derivados, secondary outline no normal e soft no hover, confirmação limpa, escala Geist e cinco temas ativos mantendo21 presets históricos. Dashboard limitado a4 tarefas com “Ver todas”; revisão encontrou/corrigiu flag de link ausente e projeção de exceção fora da rotina. `PRE-F1-POLISH.md` registra decisão do usuário, revisão separada, backlog e protocolo de homologação. Sem produção, merge ou F1.

@@ -182,3 +182,26 @@ describe('B3 — escrita tenant-scoped e freeze de buffers', () => {
     expect(svc.ok).toBe(false);
   });
 });
+
+
+describe('Pré-F1 administrative duration and cadence', () => {
+  it('honors 210/15 only after staff authentication; public stays at service30/cadence30', async () => {
+    await updateDB(d => {
+      d.bookings = [];
+      Object.assign(d.businesses[0].booking, { bufferMin: 0, bufferBeforeMin: 0 });
+      Object.assign(d.services.find(s => s.id === 's1')!, { durationMin: 30 });
+      d.availability.push({ id: 'rule', businessId, serviceId: '', professionalId: '', weekday: 1, start: '09:00', end: '18:00', slotMin: 30 });
+    });
+    const url = '/api/bookings?businessId=b3&serviceId=s1&date=2026-10-05&staffDurationMin=210&internalSnap=15';
+    const admin = await bookingsGET(req('GET', {}, token, url + '&mode=slots-admin'));
+    expect(admin.status).toBe(200);
+    const internal = (await admin.json()).slots;
+    expect(internal.slice(0,4)).toEqual(['09:00','09:15','09:30','09:45']);
+    expect(internal).toContain('14:30'); expect(internal).not.toContain('14:45');
+    const external = await bookingsGET(req('GET', {}, '', url));
+    expect(external.status).toBe(200);
+    const slots = (await external.json()).slots;
+    expect(slots.slice(0,3)).toEqual(['09:00','09:30','10:00']); expect(slots).toContain('17:30');
+    expect((await bookingsGET(req('GET', {}, '', url+'&mode=slots-admin'))).status).toBe(401);
+  });
+});

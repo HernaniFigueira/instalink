@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
-import { Icon } from '@/components/icons';
 
 export type DismissReason = 'backdrop' | 'escape' | 'close-button' | 'navigation' | 'programmatic';
 export type DismissContext = 'new-booking' | 'new-client' | 'edit' | 'combined' | 'generic';
@@ -26,9 +25,9 @@ export interface PendingRequest {
 const COPY: Record<DismissContext, { title: string; description: string }> = {
   'new-booking': { title: 'Descartar novo agendamento?', description: 'As informações preenchidas ainda não foram salvas.' },
   'new-client': { title: 'Descartar cadastro?', description: 'Os dados preenchidos serão perdidos.' },
-  edit: { title: 'Descartar alterações?', description: 'As alterações não salvas serão perdidas.' },
-  combined: { title: 'Descartar alterações?', description: 'Há informações não salvas no agendamento e no cadastro rápido.' },
-  generic: { title: 'Descartar alterações?', description: 'As alterações não salvas serão perdidas.' },
+  edit: { title: 'Descartar alterações não salvas?', description: 'Você perderá as alterações feitas nesta tela.' },
+  combined: { title: 'Descartar alterações não salvas?', description: 'Há informações não salvas no agendamento e no cadastro rápido.' },
+  generic: { title: 'Descartar alterações não salvas?', description: 'Você perderá as alterações feitas nesta tela.' },
 };
 
 /**
@@ -70,7 +69,6 @@ export function ConfirmDialog({ pending, onContinue, onDiscard }: {
           wrapDialogFocus(event, event.currentTarget, null);
           if (event.key === 'Escape') { event.preventDefault(); onContinue(); }
         }}>
-        <span className="overlay-confirm__icon" aria-hidden="true"><Icon n={saving ? 'clock' : 'alert'} size={18} /></span>
         <div className="overlay-confirm__copy">
           <h2 id="overlay-confirm-title">{title}</h2>
           <p id="overlay-confirm-description">
@@ -146,6 +144,7 @@ export function useUnsavedChangesGuard(
   const beforeNavigateRef = useRef(options.beforeNavigate);
   const bypassLink = useRef(false);
   const bypassPop = useRef(false);
+  const leaving = useRef(false);
   const restoringPop = useRef(false);
   stateRef.current = state;
   beforeNavigateRef.current = options.beforeNavigate;
@@ -159,7 +158,7 @@ export function useUnsavedChangesGuard(
       else confirmation.requestClose(reason, stateRef.current, proceed);
     };
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (!stateRef.current.dirty) return;
+      if (!stateRef.current.dirty || leaving.current) return;
       event.preventDefault();
       event.returnValue = '';
     };
@@ -171,6 +170,7 @@ export function useUnsavedChangesGuard(
       event.preventDefault();
       event.stopPropagation();
       ask('navigation', () => {
+        leaving.current = true;
         bypassLink.current = true;
         anchor.click();
         window.setTimeout(() => { bypassLink.current = false; }, 0);
@@ -179,12 +179,13 @@ export function useUnsavedChangesGuard(
     const navigation = (window as Window & { navigation?: EventTarget & { traverseTo?: (key: string) => unknown; navigate?: (url: string) => unknown } }).navigation;
     const onNavigate = (event: Event) => {
       const navEvent = event as Event & { cancelable: boolean; navigationType?: string; destination?: { url?: string; key?: string; sameDocument?: boolean } };
-      if (!navEvent.cancelable || event.defaultPrevented) return;
+      if (leaving.current || bypassLink.current || !navEvent.cancelable || event.defaultPrevented) return;
       const targetUrl = navEvent.destination?.url;
       if (!targetUrl || targetUrl === window.location.href) return;
       event.preventDefault();
       const destination = navEvent.destination;
       ask('navigation', () => {
+        leaving.current = true;
         if (navEvent.navigationType === 'traverse' && destination?.key && navigation?.traverseTo) navigation.traverseTo(destination.key);
         else navigation?.navigate?.(targetUrl);
       });

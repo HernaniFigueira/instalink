@@ -275,9 +275,6 @@ export default function ClientesPage() {
   const tabItems: TabItem<ListFilter>[] = [
     { id: 'all', label: 'Todos', icon: 'users' },
     { id: 'attended', label: 'Já atendidos', icon: 'calendar' },
-    { id: 'marketing', label: 'Aceitam promoções', icon: 'megaphone' },
-    { id: 'access', label: 'Com acesso', icon: 'lock' },
-    { id: 'noaccess', label: 'Sem acesso', icon: 'user' },
   ];
 
   return (
@@ -358,8 +355,8 @@ export default function ClientesPage() {
                 icon={search ? 'search' : 'users'}
                 title={search || filter !== 'all' ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}
                 hint={search || filter !== 'all'
-                  ? 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na página e conversas criam o perfil automaticamente.'
-                  : 'Assim que alguém agendar, se cadastrar na sua página ou conversar pelo WhatsApp, o perfil aparece aqui sozinho.'}
+                  ? 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na clínica e conversas criam o perfil automaticamente.'
+                  : 'Assim que alguém agendar, for cadastrado na clínica ou conversar pelo WhatsApp, o perfil aparece aqui.'}
                 action={<Button variant="primary" onClick={() => setNewClientOpen(true)}><Icon n="plus" size={15} strokeWidth={2.6} /> Cadastrar cliente</Button>}
               />
             </div>
@@ -389,10 +386,7 @@ export default function ClientesPage() {
                               <span className="text-xs text-[var(--text-muted)] tabular-nums">{p.age} anos</span>
                             )}
                             {minor && <Badge tone="amber">Menor</Badge>}
-                            <Badge tone={p.accountStatus === 'active' ? 'green' : 'zinc'} icon={p.accountStatus === 'active' ? 'lock' : undefined}>
-                              {p.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-                            </Badge>
-                            {p.marketingOptIn && <Badge tone="green" icon="megaphone">Aceita promoções</Badge>}
+
                           </span>
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--text-muted)]">
                             <span className="inline-flex items-center gap-1"><Icon n="phone" size={11} /> {p.phone ? formatPhoneBR(p.phone) : 'sem telefone'}</span>
@@ -411,7 +405,7 @@ export default function ClientesPage() {
                         <Button size="sm" variant="primary" onClick={() => openFullProfile(p.key)}>
                           <Icon n="userCircle" size={14} /> Ver perfil
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setOpenKey(p.key)} title="Prévia rápida sem sair da lista">
+                        <Button size="sm" variant="secondary" onClick={() => setOpenKey(p.key)} title="Prévia rápida sem sair da lista">
                           <Icon n="eye" size={14} /> <span className="hidden md:inline">Prévia</span>
                         </Button>
                         <Button size="sm" variant="secondary" onClick={() => openBooking(p)} title="Novo agendamento para esta pessoa">
@@ -419,7 +413,7 @@ export default function ClientesPage() {
                         </Button>
                         {p.phone && (
                           <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-md px-2.5 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--brand-fg)]"
+                            className={buttonCls('whatsapp', 'xs')}
                             title="Abrir WhatsApp">
                             <Icon n="whatsapp" size={14} />
                           </a>

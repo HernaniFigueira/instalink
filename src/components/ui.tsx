@@ -19,7 +19,7 @@ export type { HoursChipDay };
 // ═══════════════════════════════════════════════════════════════
 // Componentes existentes são a única fonte de apresentação operacional.
 // A cor primária vem do tema ativo; semânticas ficam reservadas a estados.
-export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning';
+export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning' | 'whatsapp';
 /** Aliases temporários mantidos para compatibilidade de chamadas existentes. */
 export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'soft' | 'quiet' | 'cta';
 
@@ -34,7 +34,9 @@ const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
   secondary:
-    'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-hover)]',
+    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-[var(--brand-soft)]',
+  whatsapp:
+    'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
     'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
   destructive:
@@ -172,7 +174,7 @@ export function SectionHeader({ title, hint, action, icon }: { title: string; hi
           </span>
         )}
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>
+          <h3 className="il-type-section text-sm font-semibold text-[var(--text)]">{title}</h3>
           {hint && <p className="text-xs text-[var(--text-muted)] mt-0.5">{hint}</p>}
         </div>
       </div>
@@ -286,12 +288,12 @@ export function Field({ label, hint, children, required, htmlFor, error }: {
   };
   return (
     <FieldContext.Provider value={field}>
-      <label className="block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
-        <span id={field.labelId} className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
+      <label className="il-type-body block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
+        <span id={field.labelId} className="il-type-label block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
           {label} {required && <span aria-hidden="true" className="text-[var(--danger)]">*</span>}
         </span>
         {nativeControl ? cloneElement(child, fieldControlProps(child.props, field)) : children}
-        {hint && <span id={`${id}-hint`} className="block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
+        {hint && <span id={`${id}-hint`} className="il-type-help block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
         {error && <span id={`${id}-error`} role="alert" className="block text-xs text-[var(--danger-fg)] mt-1">{error}</span>}
       </label>
     </FieldContext.Provider>
@@ -443,7 +445,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
           </span>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text)]">{title}</h1>
+          <h1 className="il-type-page text-xl font-semibold tracking-tight text-[var(--text)]">{title}</h1>
           {hint && <p className="text-sm text-[var(--text-muted)] mt-1">{hint}</p>}
         </div>
       </div>
@@ -692,8 +694,10 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /** Nonmodal workspace editors leave navigation reachable; caller must guard exits. */
+  modal?: boolean;
   /** Optional root class for a single, explicitly scoped Drawer surface. */
   dialogClassName?: string;
   /** Dirty/saving contract. Omitted on read-only surfaces, which remain freely dismissible. */
@@ -734,7 +738,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     if (!open || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll(dialog);
-    dialog.showModal();
+    if (modal) dialog.showModal(); else dialog.show();
     // Start at the heading rather than scrolling to a distant form autofocus.
     titleRef.current?.focus({ preventScroll: true });
     return () => {
@@ -742,11 +746,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, modal]);
 
   if (!open) return null;
   return (
-    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal="true"
+    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal={modal || undefined}
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
@@ -754,7 +758,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         // Native modal inertness prevents focus in the page, but some browsers
         // Tab from the final control into browser chrome. Wrap the boundaries
         // explicitly, querying current controls (async/disabled fields included).
-        wrapDialogFocus(event, event.currentTarget, titleRef.current);
+        if (modal) wrapDialogFocus(event, event.currentTarget, titleRef.current);
         // Do not let Escape also close an underlying legacy booking sheet.
         // An inner widget may preventDefault to consume Escape itself.
         if (event.key === 'Escape') {

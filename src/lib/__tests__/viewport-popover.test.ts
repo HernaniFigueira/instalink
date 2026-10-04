@@ -104,11 +104,11 @@ describe('ViewportPopover · alinhamento compartilhado', () => {
     expect(css).toContain('.il-drawer__strip[data-expanded=\'true\'] .il-drawer__panel--recessed { display: none; }');
   });
 
-  it('preserva o acesso genérico à conta do cliente e remove só a nomenclatura de Página', () => {
+  it('mantém storage e endpoints legados sem expor acesso de cliente na UI', () => {
     const form = read('src/components/dashboard/NewClientSheet.tsx');
     const contactsApi = read('src/app/api/contacts/route.ts');
-    expect(form).toContain('Criar acesso do cliente');
-    expect(form).toContain('acessar consultas e pedidos');
+    expect(form).not.toContain('Criar acesso do cliente');
+    expect(form).not.toContain('acessar consultas e pedidos');
     expect(form).not.toContain('Criar acesso à página');
     expect(form).toContain('createAccount: createAccess');
     expect(contactsApi).toContain('body.createAccount === true');

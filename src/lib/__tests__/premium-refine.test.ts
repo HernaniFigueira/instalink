@@ -65,7 +65,7 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // DECRETO FINAL: o CTA principal acompanha o tema da clínica (--accent)
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--surface\)\] text-\[var\(--text\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-transparent text-\[var\(--brand-fg\)\] border/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });
@@ -131,7 +131,7 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
 
   it('checkbox premium e consentimento "Aceita receber promoções?"', () => {
     expect(css).toContain('.il-check {');
-    expect(newClient).toContain('Aceita receber promoções?');
+    expect(newClient).not.toContain('Aceita receber promoções?');
     expect(newClient).toContain('className="il-check');
     expect(newClient).not.toContain('accent-zinc-900');
   });
@@ -178,7 +178,7 @@ describe('missão 5 · 7 — padrão ÚNICO de títulos (chip + título + subtí
 
   it('o padrão vive no PageHeader (chip de ícone + título + subtítulo)', () => {
     expect(ui).toContain('il-page-header__icon');
-    expect(ui).toMatch(/<h1 className="text-xl font-semibold/);
+    expect(ui).toMatch(/<h1 className="il-type-page text-xl font-semibold/);
   });
 
   it('Visão geral usa o chip do padrão (nunca ícone solto)', () => {

@@ -141,15 +141,19 @@ export async function GET(req: NextRequest) {
       ? db.bookings.find((b) => b.id === q.get('gestureBookingId') && b.businessId === businessId && canAccessBooking(staffGuard.ctx, b))
       : undefined;
     if (q.get('gestureBookingId') && (!gestureBooking || gestureBooking.serviceId !== service.id)) return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
+    // Staff-selected duration affects only administrative availability previews.
+    const requestedDuration = Number(q.get('staffDurationMin'));
+    const staffDuration = staffGuard?.ok && Number.isInteger(requestedDuration) && requestedDuration >= 5 && requestedDuration <= 720
+      ? requestedDuration : service.durationMin;
     const base = {
-      ...(staffGuard?.ok && q.get('internalSnap') === '5' ? { startStepMin: 5 } : {}),
+      ...(staffGuard?.ok && ['5', '15'].includes(q.get('internalSnap') || '') ? { startStepMin: Number(q.get('internalSnap')) } : {}),
       rules: db.availability.filter((a) => a.businessId === businessId),
       exceptions: db.exceptions.filter((e) => e.businessId === businessId),
       bookings: db.bookings.filter((b) => b.businessId === businessId && b.id !== gestureBooking?.id),
       services: db.services.filter((s) => s.businessId === businessId),
       professionals: db.professionals.filter((p) => p.businessId === businessId),
       serviceId: service.id,
-      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : service.durationMin,
+      durationMin: gestureBooking ? bookingDurationOf(gestureBooking, service) : staffDuration,
       // A consulta administrativa pode restringir a coluna escolhida; sem
       // filtro a resposta continua sendo a união da equipe.
       professionalId: requestedProfessionalId,
@@ -167,7 +171,7 @@ export async function GET(req: NextRequest) {
     // All computations reuse guard.db; public day maps/single-day slots keep
     // their existing contract and cannot opt into the staff batch/snap.
     if (q.has('dates')) {
-      if (!staffGuard?.ok || !gestureBooking || q.get('internalSnap') !== '5' || q.has('date') || q.has('from') || q.has('to')) {
+      if (!staffGuard?.ok || !gestureBooking || !['5', '15'].includes(q.get('internalSnap') || '') || q.has('date') || q.has('from') || q.has('to')) {
         return NextResponse.json({ error: 'Consulta de gesto indisponível.' }, { status: 400 });
       }
       const dates = (q.get('dates') || '').split(',');

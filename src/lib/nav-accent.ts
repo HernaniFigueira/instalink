@@ -245,3 +245,9 @@ export const NAV_ACCENT_FAMILIES: Array<{ id: NavAccentFamily; label: string }> 
   { id: 'rosé', label: 'Rosé / Vinho' },
   { id: 'onix', label: 'Ônix' },
 ];
+
+/** Active picker only; all historical IDs and tokens above remain resolvable. */
+export const CURATED_NAV_ACCENT_LABELS: Readonly<Record<string, string>> = {
+  'azul-profundo': 'Azul clínico', 'verde-equilibrado': 'Verde saúde',
+  'teal-profundo': 'Teal', vinho: 'Vinho institucional', onix: 'Neutro / Ônix',
+};

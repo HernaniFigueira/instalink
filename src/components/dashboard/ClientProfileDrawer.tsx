@@ -147,11 +147,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     name: person.name || '', phone: person.phone || '', email: person.email || '',
   });
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<{ tone: 'info' | 'success' | 'error' | 'warning'; text: string; password?: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'info' | 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [legacyDraft, setLegacyDraft] = useState(person.note || '');
   const [editingLegacy, setEditingLegacy] = useState(false);
-  const [accessSaving, setAccessSaving] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
@@ -163,7 +162,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       // Ponto 9 — só atendimento concluído autoriza "Cliente atendido".
       attendedCount: countAttended(person.bookings),
       leadsCount: person.leads.length, profile,
-    })), [person, profile]);
+    })).filter(tag => !['acesso', 'marketing'].includes(tag.id)), [person, profile]);
 
   // O cadastro mudou em relação ao que veio do servidor? Serve para não mandar
   // PATCH à toa e para dizer com clareza "nada para salvar".
@@ -249,11 +248,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     if (ok) setEditing(false);
   }
 
-  async function setConsent(value: boolean) {
-    if (!person.contactId) { setNotice({ tone: 'error', text: 'Este contato ainda não tem cadastro no CRM.' }); return; }
-    await patch({ marketingOptIn: value }, value ? 'Consentimento registrado: pode receber promoções.' : 'Consentimento removido: não entra em campanhas.');
-  }
-
   async function addNote() {
     const text = noteDraft.trim();
     if (!text || !person.contactId) return;
@@ -264,28 +258,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   async function saveLegacyNote() {
     const ok = await patch({ note: legacyDraft }, 'Registro anterior atualizado.');
     if (ok) setEditingLegacy(false);
-  }
-
-  async function createAccess() {
-    if (!person.contactId || (!person.phone && !person.email)) {
-      setNotice({ tone: 'error', text: 'Adicione um WhatsApp ou e-mail válido antes de criar o acesso.' });
-      return;
-    }
-    setAccessSaving(true);
-    setNotice(null);
-    const res = await apiSend<any>('/api/contacts', 'POST', {
-      businessId, name: person.name, phone: person.phone, email: person.email, createAccount: true, source: 'manual',
-    }, { scope: 'action', area: 'Clientes' });
-    setAccessSaving(false);
-    if (!res.ok) { setNotice({ tone: 'error', text: res.message || 'Não foi possível criar o acesso.' }); return; }
-    setNotice({
-      tone: 'success',
-      password: res.data?.temporaryPassword,
-      text: res.data?.temporaryPassword
-        ? 'Acesso criado. Mostre ou copie a senha agora — ela não aparece de novo.'
-        : 'Acesso ativo e identidade vinculada. Esta conta já tinha uma credencial.',
-    });
-    onChanged();
   }
 
   async function setLead(id: string, stageId: string) {
@@ -341,7 +313,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         title: b.service,
         subtitle: [b.seriesId ? `Série · ${b.seriesIndex} de ${b.seriesCount}` : '', b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone,
-        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="text-xs font-semibold text-[var(--brand-fg)] hover:underline inline-flex items-center gap-1">Ver na agenda <Icon n="chevR" size={10} /></Link>,
+        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={10} /></Link>,
       });
     }
     for (const c of person.conversations || []) {
@@ -355,8 +327,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: 'blue',
         body: person.phone ? (
           <div className="flex flex-wrap gap-1.5">
-            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className="il-chip">Abrir conversa</Link>
-            <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className="il-chip">WhatsApp</a>
+            <Link href={`/conversas?b=${businessId}&q=${phoneQ}`} className={buttonCls('secondary', 'xs')}>Abrir conversa</Link>
+            <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className={buttonCls('whatsapp', 'xs')}>WhatsApp</a>
           </div>
         ) : undefined,
       });
@@ -381,7 +353,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
             )}
             {canLose && <Button size="xs" variant="ghost" onClick={() => setLead(l.id, lostId!)} disabled={saving}>Marcar perdido</Button>}
-            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
+            {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
           </div>
         ),
       });
@@ -396,8 +368,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         tone: t.status === 'done' ? 'emerald' : t.status === 'cancelled' ? 'zinc' : 'amber',
         body: (
           <div className="flex flex-wrap gap-1.5">
-            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className="il-chip">Ver oportunidade</Link>}
-            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className="il-chip">Ver agenda</Link>}
+            {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
+            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
           </div>
         ),
       });
@@ -528,7 +500,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="ghost" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+          <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
             <Icon n="pencil" size={14} /> Registrar nota
           </Button>
           {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
@@ -538,7 +510,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => {
+          <Button variant="secondary" size="sm" onClick={() => {
             const opening = !editing;
             if (editing) requestCloseEdit(); else setEditing(true);
             // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
@@ -588,12 +560,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
               </div>
             </div>
-            {/* Status de acesso — estado claro, nunca só cor. */}
-            <div className="client360-idcard__access shrink-0 text-right">
-              <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'} icon={person.accountStatus === 'active' ? 'lock' : 'user'}>
-                {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-              </Badge>
-            </div>
+
           </div>
 
           {/* Grade de dados — sempre legível, mesmo com campos vazios. */}
@@ -616,26 +583,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
         )}
 
-        {/* Acesso do cliente */}
-        <SubCard className="mt-3 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
-                <Icon n="lock" size={14} className="text-[var(--text-muted)]" /> Conta do cliente
-              </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {person.accountStatus === 'active'
-                  ? `Acesso ativo${person.accountEmail ? ` · ${person.accountEmail}` : ''}${person.mustChangePassword ? ' · senha temporária ainda em uso' : ''}`
-                  : 'Opcional: com acesso, a pessoa vê os próprios agendamentos e faz remarcação sozinha.'}
-              </p>
-            </div>
-            {person.accountStatus === 'none' && (
-              <Button size="sm" variant="secondary" onClick={createAccess} disabled={accessSaving || !person.contactId}>
-                <Icon n="userCircle" size={14} /> {accessSaving ? 'Criando acesso…' : 'Criar acesso'}
-              </Button>
-            )}
-          </div>
-        </SubCard>
+
 
         {/* ═══ CADASTRO (visão de leitura) ═══
             Ponto 10: endereço, responsável e observação não podem existir só
@@ -648,7 +596,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="ghost" onClick={() => setEditing(true)}>
+              <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
                 <Icon n="pencil" size={12} /> Editar
               </Button>
             </div>
@@ -694,34 +642,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </SubCard>
         )}
 
-        {/* Consentimento de marketing — o que significa, sem jargão. */}
-        <SubCard className="mt-3 p-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--text)]">Autoriza receber promoções</p>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              {person.marketingOptIn
-                ? 'Pode entrar em campanhas de marketing.'
-                : 'Sem esta autorização a pessoa NÃO entra em campanha.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className={cn('text-xs font-semibold', person.marketingOptIn ? 'text-[var(--success-fg)]' : 'text-[var(--text-muted)]')}>
-              {person.marketingOptIn ? 'Aceitou' : 'Não aceitou'}
-            </span>
-            <Switch checked={person.marketingOptIn} onChange={setConsent} label="Autoriza receber promoções" disabled={!person.contactId} />
-          </div>
-        </SubCard>
+
 
         {notice && (
           <div className="mt-3">
-            <Notice tone={notice.tone}>{notice.text}
-              {notice.password && (
-                <span className="mt-2 flex items-center gap-2">
-                  <code className="select-all rounded bg-white border border-[var(--success-border)] px-2 py-1 font-semibold tracking-wider text-[var(--text)]">{notice.password}</code>
-                  <Button size="xs" variant="secondary" onClick={() => navigator.clipboard?.writeText(notice.password || '')}>Copiar senha</Button>
-                </span>
-              )}
-            </Notice>
+            <Notice tone={notice.tone}>{notice.text}</Notice>
           </div>
         )}
 
@@ -947,7 +872,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
-                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver na agenda</Link>
+                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
                 </div>
@@ -957,7 +882,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
-                      <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline" onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
+                      <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
@@ -980,7 +905,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   ) : profile.adminNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
-                  <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('notes')}>Ver observações</button>
+                  <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
                 </div>
                 {canFinance ? (
                   <div className="rounded-lg border border-[var(--border)] p-3">
@@ -991,7 +916,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
                       </div>
                     )}
-                    <button type="button" className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline mt-1" onClick={() => setTab('finance')}>Abrir financeiro</button>
+                    <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-[var(--border)] p-3">
@@ -1020,7 +945,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                         <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
                       </div>
-                      <button type="button" className="il-chip" onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
+                      <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => { const e = encounters.find((x) => x.id === f.encounterId); if (e) openEncounter({ id: e.id }); }}>Abrir atendimento</button>
                     </li>
                   ))}
                 </ul>
@@ -1103,7 +1028,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </p>
                         </div>
                         <StatusBadge tone={d.tone}>{d.panel}</StatusBadge>
-                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className="il-chip">Ver na agenda</Link>
+                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                       </li>
                     );
                   })}
@@ -1142,7 +1067,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
           {tab === 'leads' && (
             person.leads.length === 0
-              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className="il-chip">Abrir oportunidades</Link> : undefined} />
+              ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Abrir oportunidades</Link> : undefined} />
               : (
                 <ul className="divide-y divide-[var(--border-soft)]">
                   {person.leads.map((l) => {
@@ -1164,7 +1089,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           {nextId === 'scheduled' && canFunil && (
                             <Button size="xs" variant="secondary" onClick={() => onNewBooking(person)}>Agendar atendimento</Button>
                           )}
-                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className="il-chip">Ver oportunidade</Link>}
+                          {canFunil && <Link href={`/funil?b=${businessId}#${l.id}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
                         </div>
                       </li>
                     );
@@ -1249,7 +1174,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </div>
                         ) : (
                           <button onClick={() => { setLegacyDraft(person.note || ''); setEditingLegacy(true); }}
-                            className="text-[11px] font-semibold text-[var(--brand-fg)] hover:underline mt-1">Editar registro anterior</button>
+                            className={buttonCls('secondary', 'xs')}>Editar registro anterior</button>
                         )
                       )}
                     </li>
@@ -1291,7 +1216,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   if (variant === 'page') {
     return (
       <div className="client-profile-page min-w-0 pb-6">
-        <header className="client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+        <header className="gd-context-header client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
           <PageBackAction href={backHref} label="Voltar para clientes" />
           <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
@@ -1349,9 +1274,7 @@ function ClientQuickPreview({ person, tags }: {
             {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
           </p>
         </div>
-        <Badge tone={person.accountStatus === 'active' ? 'green' : 'zinc'}>
-          {person.accountStatus === 'active' ? 'Acesso ativo' : 'Sem acesso'}
-        </Badge>
+
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -1429,7 +1352,7 @@ function CopyChip({ value }: { value: string }) {
 
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={buttonCls('secondary', 'sm')}>
+    <a href={href} target="_blank" rel="noreferrer" className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}>
       <Icon n={icon} size={14} /> {label}
     </a>
   );

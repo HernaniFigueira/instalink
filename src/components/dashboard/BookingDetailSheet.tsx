@@ -17,6 +17,7 @@
 //    telefone do agendamento), WhatsApp (só quando há telefone) e o
 //    histórico/timeline real — nada de fileira de links sem contexto.
 // A lógica de ações e transições é exatamente a mesma do P1.
+import { durationLabel } from '@/lib/duration-label';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -24,7 +25,7 @@ import { Icon } from '@/components/icons';
 import { StatusBadge, Button, buttonCls } from '@/components/ui';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
-import { BOOKING_STATUS } from '@/lib/status';
+import { BOOKING_STATUS, FIT_IN_MARK_CLS } from '@/lib/status';
 import { todayISO, nowHM, formatDateBR, humanDay } from '@/lib/tz';
 import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
@@ -256,13 +257,13 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
               <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
-              {booking.bookingKind === 'fit_in' && <StatusBadge tone="amber">Encaixe</StatusBadge>}
+              {booking.bookingKind === 'fit_in' && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
               {(wf.state === 'arrived' || wf.state === 'in_care') && (
                 <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
               )}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {durationLabel(dur)}</p>
           </div>
 
         </header>

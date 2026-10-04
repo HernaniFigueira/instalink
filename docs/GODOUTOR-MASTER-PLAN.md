@@ -26,6 +26,10 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 
 ## 1. Estado atual
 
+**Fechamento final pré-F1, PR #53 (2026-10-03): EM ANDAMENTO / NÃO ESTÁ PRONTO.** Correções adicionais de snap, intenção, bloqueios Dia/Semana, scrollbar nativa, Equipe e Recepção implementadas; 3010 PASS + 4 baseline e Chromium local parcial. A homologação anterior abaixo NÃO encerra os novos gates. [Matriz e pendências](PRE-F1-FINAL-STATUS.md). F1 e merge continuam não autorizados.
+
+**Clinical UX Closure — pré-F1 (2026-10-03): IMPLEMENTADO / HOMOLOGADO LOCALMENTE / REVISÃO PENDENTE.** Stacked sobre PR #52 (`fix/active-clinic-context@0c426be`), na branch fixa de sessão `arena/01a101fb-instalink`. Agenda/range/bloqueio/snap manual 15, serviços clínicos com avançado recolhido, perfil/configurações, Cliente 360 e hierarquia de ações. Next production + DB descartável + Chromium + três logins reais; 2989 PASS / 4 baseline, build/typecheck OK. [Relatório](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md). **Esta closure e a revisão da base precedem Clinical Encounter F1; F1 não iniciado, merge não autorizado/executado.**
+
 **Fase consolidada:**
 Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODUÇÃO` (PR #46; merge confirmado no GitHub em 2026-10-01 UTC). `main` e `origin/main` foram auditados em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`; conferir o Git novamente antes de outra missão.
 
@@ -63,6 +67,8 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 ---
 
 ## 2. Fila de execução
+
+**Precedência atual (2026-10-03):** revisar PR #52 (contexto ativo) → revisar Clinical UX Closure stacked → somente depois, com autorização explícita, Clinical Encounter F1. Nenhuma PR mergeada por esta sessão.
 
 **Fila oficial — única fonte vigente.** Não duplicar esta sequência em outras partes do documento. Quando uma fase terminar: remover da fila ativa, atualizar Estado atual, registrar conclusão resumida no histórico/audit, próxima fase sobe para posição 1.
 
@@ -303,3 +309,11 @@ Ele organiza pessoas, pacientes, agenda, atendimento, prontuário, comunicação
 IA reduz trabalho repetitivo, classifica, organiza, comunica e auxilia decisões; não substitui responsabilidade clínica humana.
 
 Dados clínicos e decisões finais permanecem sob controle humano, permissionado e auditável.
+
+### PR53 — fechamento dos últimos gates (2026-10-03)
+
+Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.
+
+### PR53 — último polimento e decisões antes do F1
+
+Contrato/evidências: `PRE-F1-POLISH.md`. Range com horário já escolhido, duração humana, secondary outline→soft hover, temas curados e dias especiais derivados sem alterar engine/storage. Salas/equipamentos continuam no editor atual; convergir depois para Estrutura sem duplicação. Pendência futura exige ação, não todo agendamento futuro; preservar automações agora. Conversas: agendamento/tarefa contextuais ficam no backlog pós-F1. Anamnese provisória: visita/dados permanentes/evolução/prontuário/especialidades serão definidos no F1, ainda não iniciado. A homologação anterior não substitui os gates pós-commit desta missão.

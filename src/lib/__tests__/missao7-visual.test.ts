@@ -60,8 +60,8 @@ describe('missão 7 · 1 — paleta de aparência (atual: 21 presets por famíli
     }
   });
 
-  it('a escolha continua em Perfil → Preferências (Aparência, não na shell)', () => {
-    const perfil = read('src/app/(dashboard)/perfil/page.tsx');
+  it('a escolha continua em Configurações → Aparência (Aparência, não na shell)', () => {
+    const perfil = read('src/app/(dashboard)/configuracoes/page.tsx');
     const shellComp = read('src/components/dashboard/ShellAppearance.tsx');
     expect(perfil).toContain('ShellAppearance');
     expect(shellComp).toContain('data-testid="shell-appearance"');

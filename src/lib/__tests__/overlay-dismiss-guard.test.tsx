@@ -96,7 +96,7 @@ describe('central overlay requestClose(reason)', () => {
     expect(screen.getByText('Editar cadastro')).toBeTruthy();
     fireEvent.click(screen.getByText('Editar agendamento'));
     fireEvent.click(backdrop());
-    expect(screen.getByText('Descartar alterações?')).toBeTruthy();
+    expect(screen.getByText('Descartar alterações não salvas?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
     expect(screen.getByText('parent closed')).toBeTruthy();
   });

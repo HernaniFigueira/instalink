@@ -22,7 +22,7 @@ const ALL: PermissionId[] = ROLES.find((r) => r.id === 'OWNER')!.permissions.sli
 const FIXTURES: Array<{ role: MemberRole; matrix: PermissionId[] }> = [
   {
     role: 'SECRETARIA',
-    matrix: ['agenda', 'clientes', 'leads', 'whatsapp'],
+    matrix: ['agenda', 'clientes', 'whatsapp'],
   },
   {
     role: 'ATENDENTE',
@@ -46,12 +46,12 @@ function ctxOf(matrix: PermissionId[]): PanelContext {
 }
 
 describe('§26–28 · matrizes de permissão (fixtures OWNER/SECRETARIA/ATENDENTE/PROFISSIONAL)', () => {
-  it('SECRETARIA (Recepção) = agenda/clientes/leads/whatsapp', () => {
+  it('SECRETARIA (Recepção) = agenda/clientes/whatsapp (Oportunidades somente por override)', () => {
     expect(permissionsFor('SECRETARIA')).toMatchObject(
       Object.fromEntries(FIXTURES[0].matrix.map((p) => [p, true])),
     );
     // e SÓ isso (nada além da matriz)
-    for (const p of ['dashboard', 'pedidos', 'catalogo', 'pagina', 'agente', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento'] as PermissionId[]) {
+    for (const p of ['leads', 'dashboard', 'pedidos', 'catalogo', 'pagina', 'agente', 'campanhas', 'equipe', 'config', 'financeiro', 'admin', 'atendimento'] as PermissionId[]) {
       expect(permissionsFor('SECRETARIA')[p], p).toBe(false);
     }
   });
@@ -101,8 +101,9 @@ describe('menu = projeção das permissões efetivas', () => {
 
   it('SECRETARIA: vê as áreas operacionais e NÃO vê config/equipe/financeiro', () => {
     const visible = visiblePanelRoutes(ctxOf(FIXTURES[0].matrix)).map((r) => r.href);
-    expect(visible).toEqual(expect.arrayContaining(['/agenda', '/clientes', '/funil', '/conversas']));
-    // Recepção (preset PR #46): sem Pedidos nem Visão geral por padrão
+    expect(visible).toEqual(expect.arrayContaining(['/agenda', '/clientes', '/tarefas', '/conversas']));
+    expect(visible).not.toContain('/funil');
+    // Recepção pré-F1: sem Oportunidades, Pedidos nem Visão geral por padrão
     expect(visible).not.toContain('/pedidos');
     expect(visible).not.toContain('/dashboard');
     expect(visible).not.toEqual(expect.arrayContaining(['/equipe']));

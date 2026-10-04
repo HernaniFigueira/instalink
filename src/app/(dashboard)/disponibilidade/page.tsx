@@ -100,6 +100,11 @@ export default function DisponibilidadePage() {
     <>
       {header}
 
+      {loaded && <section className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 my-4 text-sm space-y-2" aria-label="Como os horários funcionam">
+        <p><strong>Disponibilidade</strong> é a rotina normal: por exemplo, Michelle atende de segunda a sexta, 09:00–18:00.</p>
+        <p><strong>Bloquear horário</strong> cria uma indisponibilidade temporária: por exemplo, reunião na quarta-feira, 14:00–18:00. Configure na Agenda.</p>
+        <p><strong>Dias especiais</strong> são exceções de funcionamento em uma data específica. O horário informado é o período em que a clínica atende; fora dele, a Agenda mostra indisponibilidade. Fechamento marca o dia inteiro.</p>
+      </section>}
       {loaded && <CatalogCrossLinks businessId={businessId} current="/disponibilidade" />}
 
       {msg && <Notice tone="info" className="mb-4">{msg}</Notice>}

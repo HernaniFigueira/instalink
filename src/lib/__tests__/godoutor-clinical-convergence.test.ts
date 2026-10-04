@@ -49,7 +49,7 @@ describe('Clinical Convergence — GODOUTOR_LEGACY_PAGES OFF: limpeza da experi�
     expect(src).not.toMatch(/showPrice/);
     expect(src).not.toContain('FOTO DO SERVIÇO');
     // badges operacionais permanecem
-    expect(src).toContain('Agendável');
+    expect(src).toContain('Pode ser agendado');
     expect(src).toContain('Não agendável');
     expect(src).toContain('R$ {centsToBR');
   });

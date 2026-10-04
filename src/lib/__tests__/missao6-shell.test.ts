@@ -99,8 +99,8 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
     expect(navAccentById('lixo').id).toBe('azul-profundo'); // fallback seguro
   });
 
-  it('os presets vivem em Perfil → Preferências (Aparência), com preview e persistência local', () => {
-    const perfil = read('src/app/(dashboard)/perfil/page.tsx');
+  it('os presets vivem em Configurações → Aparência (Aparência), com preview e persistência local', () => {
+    const perfil = read('src/app/(dashboard)/configuracoes/page.tsx');
     const shellComp = read('src/components/dashboard/ShellAppearance.tsx');
     expect(perfil).toContain('ShellAppearance');
     expect(shellComp).toContain('data-testid="shell-appearance"');

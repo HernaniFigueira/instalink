@@ -192,14 +192,12 @@ describe('A3.3 — white label no painel autenticado', () => {
 
 describe('A3.3 — cor da EMPRESA não pinta o painel (missão 6: aparência pessoal sim)', () => {
   it('Configurações oferece "Aparência" como preferência PESSOAL — nunca navColor da empresa', () => {
-    // Homologação PR #46: Aparência movida de Configurações para Meu Perfil → Preferências (ShellAppearance, NAV_ACCENTS, localStorage)
-    // Configurações agora tem só Clínica + Agenda; a personalização continua como preferência pessoal, não navColor da empresa.
     const cfg = read('src/app/(dashboard)/configuracoes/page.tsx');
     const perfil = read('src/app/(dashboard)/perfil/page.tsx');
-    expect(cfg).not.toMatch(/\['aparencia', 'Aparência'\]/);
+    expect(cfg).toMatch(/\['aparencia', 'Aparência'\]/);
     expect(cfg).not.toMatch(/NAV_ACCENTS/);
-    expect(perfil).toMatch(/ShellAppearance/);
-    expect(perfil).toMatch(/Preferências/);
+    expect(perfil).not.toMatch(/ShellAppearance/);
+    expect(cfg).toMatch(/ShellAppearance/);
     expect(cfg).not.toMatch(/Identidade do painel/i);
     expect(cfg).not.toMatch(/NAV_PRESETS/);
     expect(cfg).not.toMatch(/navColor/);

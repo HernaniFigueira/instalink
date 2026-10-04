@@ -173,11 +173,11 @@ describe('B2 — interação temporal no servidor', () => {
 });
 
 describe('B2 — gestos puros', () => {
-  it('snap 5 min arredonda para o mais próximo, sem depender de slotMin', async () => {
+  it('snap 15 min arredonda para o mais próximo, sem depender de slotMin', async () => {
     const { snapGestureMinute, dragSlotUrl } = await import('../agenda-drag');
-    expect([13, 17, 18].map((m) => snapGestureMinute(11 * 60 + m))).toEqual([675, 675, 680]);
+    expect([13, 17, 18].map((m) => snapGestureMinute(11 * 60 + m))).toEqual([675, 675, 675]);
     expect(dragSlotUrl(BIZ, 's1', ['2026-09-25'], 'booking-1')).toContain('dates=2026-09-25');
-    expect(dragSlotUrl(BIZ, 's1', ['2026-09-25'], 'booking-1')).toContain('internalSnap=5&gestureBookingId=booking-1');
+    expect(dragSlotUrl(BIZ, 's1', ['2026-09-25'], 'booking-1')).toContain('internalSnap=15&gestureBookingId=booking-1');
   });
 
   it('seleção 10:00–10:40 congela 40 pela criação canônica da equipe; público não escolhe duração', async () => {

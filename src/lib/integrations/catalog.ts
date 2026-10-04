@@ -98,9 +98,9 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     provider: 'qrcode', kind: 'source', label: 'QR Code',
-    hint: 'QR do GoDoutor apontando para a sua página.',
+    hint: 'Origem de contatos identificada por QR Code.',
     canConnect: false,
-    unavailableReason: 'O QR Code já é gerado pelo GoDoutor e leva à sua página: a origem aparece no CRM quando o visitante se cadastra. Não há nada para conectar aqui.',
+    unavailableReason: 'Origem informativa dos cadastros recebidos por QR Code. Não requer uma conexão adicional.',
     direction: 'in', events: LEAD_EVENTS, defaultEvent: 'lead.created',
   },
   {

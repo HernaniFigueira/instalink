@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { NAV_ACCENTS, NAV_ACCENT_FAMILIES, contrastRatio, getNavAccent, setNavAccent, type NavAccentId } from '@/lib/nav-accent';
+import { NAV_ACCENTS, CURATED_NAV_ACCENT_LABELS, contrastRatio, getNavAccent, setNavAccent, type NavAccentId } from '@/lib/nav-accent';
 
 export function ShellAppearance() {
   const [accent, setAccent] = useState<NavAccentId>('azul-clinico');
@@ -11,19 +11,17 @@ export function ShellAppearance() {
   return (
     <section className="bg-white border border-zinc-200 p-4 space-y-3" data-testid="shell-appearance">
       <div>
-        <h3 className="font-semibold text-sm">Aparência do sistema</h3>
+        <h3 className="font-semibold text-sm">Aparência da interface</h3>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Tema da clínica: cor da barra lateral, da topo suave e dos CTAs principais.
-          O texto e as cores de erro/sucesso não mudam. É uma preferência pessoal deste navegador —
-          a identidade da clínica no painel continua sendo o logo e o nome.
+          Escolha a cor da navegação e das ações principais neste navegador.
+          Esta preferência vale somente para você neste navegador e não altera a identidade visual da clínica para outros usuários.
         </p>
       </div>
       <div role="group" aria-label="Cor da navegação" className="space-y-3">
-        {NAV_ACCENT_FAMILIES.map((fam) => (
-          <div key={fam.id} className="space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">{fam.label}</p>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium text-[var(--text-muted)]">Temas profissionais</p>
             <div className="flex flex-wrap gap-2.5">
-              {NAV_ACCENTS.filter((a) => a.family === fam.id).map((a) => (
+              {NAV_ACCENTS.filter((a) => Object.hasOwn(CURATED_NAV_ACCENT_LABELS, a.id)).map((a) => (
                 <button
                   key={a.id}
                   type="button"
@@ -41,12 +39,11 @@ export function ShellAppearance() {
                     className="inline-block h-5 w-5 rounded-full border border-black/10"
                     style={{ background: a.swatch }}
                   />
-                  {a.label}
+                  {CURATED_NAV_ACCENT_LABELS[a.id] || a.label}
                 </button>
               ))}
             </div>
           </div>
-        ))}
       </div>
       <div
         data-testid="nav-accent-preview"
@@ -66,7 +63,7 @@ export function ShellAppearance() {
           <div
             className="h-8 border-b border-zinc-200"
             style={{
-              background: `linear-gradient(90deg, ${navVars['--il-nav']}22, transparent)`,
+              background: `${navVars['--il-nav']}22`,
             }}
           />
           <div className="space-y-2 p-2.5">
@@ -89,7 +86,7 @@ export function ShellAppearance() {
         <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
           Contraste AA {aa.toFixed(1)}:1
         </span>
-        {selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto.
+        {CURATED_NAV_ACCENT_LABELS[selected.id] || selected.label} · a escolha vale só para você neste navegador; as demais pessoas veem o padrão do produto.
       </p>
     </section>
   );

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: 'Da primeira conversa ao próximo atendimento: WhatsApp, agenda, pacientes, financeiro e equipe em um só lugar.',
   openGraph: {
     title: 'GoDoutor — o sistema da sua clínica',
-    description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
+    description: 'Agenda, pacientes, equipe e operação clínica em um só lugar.',
     type: 'website',
     locale: 'pt_BR',
     siteName: 'GoDoutor',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary',
     title: 'GoDoutor — Sua clínica organizada',
-    description: 'Página da clínica, agenda, pacientes e equipe em um só lugar.',
+    description: 'Agenda, pacientes, equipe e operação clínica em um só lugar.',
   },
 };
 

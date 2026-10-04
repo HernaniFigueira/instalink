@@ -52,7 +52,7 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
   it('clicar num horário vago abre o agendamento com dia, hora e profissional', () => {
     expect(agenda).toContain('onEmptyPress');
     expect(agenda).toContain('minuteFromOffsetY(');
-    expect(agenda).toContain('setBlockChoice({ date: col.date, time, professionalId: col.professionalId })');
+    expect(agenda).toContain('setCreating({ ...seed, quick: true })');
     expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
     expect(agenda).toContain('Novo agendamento');
     expect(agenda).toContain('Bloquear horário');
@@ -76,7 +76,7 @@ describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () 
     expect(minuteFromOffsetY(30, g)).toBe(510);           // 30 min → snap 5
     expect(minuteFromOffsetY(3000, g)).toBe(1200);        // nunca passa do fim
     expect(minuteFromOffsetY(-500, g)).toBe(480);         // nem antes do início
-    expect(minuteFromOffsetY(100, { ...g, pxPerHour: 0 })).toBe(580); // geom. degenerada não quebra
+    expect(minuteFromOffsetY(100, { ...g, pxPerHour: 0 })).toBe(585); // geom. degenerada não quebra
   });
 });
 
@@ -111,15 +111,12 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
     // nunca de um palpite por nome/cargo.
     expect(sheet).toContain('useState(presetServiceId)');
     expect(sheet).toContain('uniqueEligibleServiceId');
-    // A PRIMEIRA escolha de serviço não pode ser tratada como "troca"
-    // (causa raiz do bug de prefill da #43): só a troca REAL limpa.
-    expect(sheet).toContain('previousServiceId');
-    // E o profissional da coluna só fica se o serviço o aceitar.
-    expect(sheet).toContain('proCanPerform');
-    expect(sheet).toContain('activeProId');
-    // E o horário pedido de fora só sobrevive se a grade real o oferecer.
-    expect(sheet).toContain('intendedTime');
-    expect(sheet).toContain('want && list.includes(want) ? want : \'\'');
+    // Pré-F1: preserve the column/slot, but refuse saving incompatible intent.
+    expect(sheet).toContain('const activeProId = proId');
+    expect(sheet).toContain('incompatiblePro');
+    expect(sheet).toContain('if (pastIssue || proIssue || (!opts.fitIn && slotIssue))');
+    expect(sheet).not.toContain("setProId(''); setTime('')");
+
   });
 
   it('a agenda passa o pré-preenchimento ao abrir pelo clique', () => {

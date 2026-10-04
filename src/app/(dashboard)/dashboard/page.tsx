@@ -365,6 +365,8 @@ export default function DashboardPage() {
   const moneySemantics = revenueDetail?.semantics || null;
   const attention = data.attention || [];
   const links = data.links || {};
+  // Same OR permission contract as /tarefas and /api/tasks, not a missing overview link flag.
+  const canOpenTasks = panelPerms.agenda || panelPerms.clientes || panelPerms.leads || panelPerms.config;
   const q = `?b=${business.id}`;
   const hasSetupPending = operationalChecklist.some((c) => !c.done);
   // Defesa em camadas: a API já entrega recent.orders [] no OFF, mas a UI
@@ -823,11 +825,11 @@ export default function DashboardPage() {
             )}
             {taskSum && taskSum.open > 0 ? (
               <>
-                {(openTasks || []).map((t) => {
+                {(openTasks || []).slice(0, 4).map((t) => {
                   const lbl = dueLabel(t.dueAt);
                   const tone = lbl === 'atrasada' ? 'var(--danger)' : lbl === 'hoje' ? 'var(--warning)' : 'var(--border-strong)';
                   return (
-                    <ListRow key={t.id} allowed={links.tarefas === true} href={`/tarefas${q}`}
+                    <ListRow key={t.id} allowed={canOpenTasks === true} href={`/tarefas${q}`}
                       className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                       <span className="w-4 h-4 rounded border-2 shrink-0" style={{ borderColor: tone }} aria-hidden="true" />
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text)]">{t.title}</span>
@@ -836,7 +838,7 @@ export default function DashboardPage() {
                   );
                 })}
                 <p className="text-[11px] text-[var(--text-faint)] px-1">
-                  {taskSum.open} aberta{taskSum.open === 1 ? '' : 's'}
+                  {canOpenTasks === true && <Link href={`/tarefas${q}`} className="underline underline-offset-2">Ver todas ({taskSum.open})</Link>}{canOpenTasks !== true && <>{taskSum.open} abertas</>}
                   {taskSum.overdue > 0 && <> · <span className="text-[var(--danger-fg)] font-semibold">{taskSum.overdue} atrasada{taskSum.overdue === 1 ? '' : 's'}</span></>}
                 </p>
               </>
@@ -938,7 +940,7 @@ export default function DashboardPage() {
                 Editar página
               </Link>
             )}
-            {links.tarefas === true && (
+            {canOpenTasks === true && (
               <Link href={`/tarefas${q}`} className="dsh-quick">
                 <span className="dsh-quick__icon"><Icon n="tasks" size={18} /></span>
                 Tarefas

@@ -7,12 +7,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ActionBar, Badge, Button, buttonCls, Field, FormSection, Input, Notice, PageHeader, PageSkeleton, Textarea } from '@/components/ui';
+import { Badge, Button, buttonCls, Field, FormSection, Input, Notice, PageHeader, PageSkeleton, Textarea } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { roleLabel as accessRoleLabel } from '@/lib/role-labels';
-import { ShellAppearance } from '@/components/dashboard/ShellAppearance';
 
 interface MeProfile {
   id: string; name: string; email: string; role: string;
@@ -168,17 +167,14 @@ export default function MeuPerfilPage() {
           </div>
         </FormSection>
 
-        <ActionBar>
+        <div className="flex justify-end pt-3">
           <Button type="submit" variant="primary" disabled={saving}>
             {saving ? 'Salvando…' : 'Salvar alterações'}
           </Button>
-        </ActionBar>
+        </div>
       </form>
 
-      <FormSection title="Preferências" hint="Aparência pessoal deste navegador — não afeta a clínica.">
-        <ShellAppearance />
-        <p className="text-xs text-[var(--text-muted)] mt-2">A escolha de cor e contraste vale apenas para você neste navegador; outras pessoas veem o padrão do produto.</p>
-      </FormSection>
+
 
       <FormSection title="Segurança" hint="A senha continua sendo gerenciada pela autenticação existente da sua conta.">
         <div className="flex flex-wrap items-center justify-between gap-3">
