@@ -17,6 +17,7 @@
 //    telefone do agendamento), WhatsApp (só quando há telefone) e o
 //    histórico/timeline real — nada de fileira de links sem contexto.
 // A lógica de ações e transições é exatamente a mesma do P1.
+import { durationLabel } from '@/lib/duration-label';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -262,7 +263,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
               )}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {dur} min</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {durationLabel(dur)}</p>
           </div>
 
         </header>

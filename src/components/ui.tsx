@@ -34,7 +34,7 @@ const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
   secondary:
-    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-transparent',
+    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-[var(--brand-soft)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
@@ -174,7 +174,7 @@ export function SectionHeader({ title, hint, action, icon }: { title: string; hi
           </span>
         )}
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>
+          <h3 className="il-type-section text-sm font-semibold text-[var(--text)]">{title}</h3>
           {hint && <p className="text-xs text-[var(--text-muted)] mt-0.5">{hint}</p>}
         </div>
       </div>
@@ -288,12 +288,12 @@ export function Field({ label, hint, children, required, htmlFor, error }: {
   };
   return (
     <FieldContext.Provider value={field}>
-      <label className="block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
-        <span id={field.labelId} className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
+      <label className="il-type-body block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
+        <span id={field.labelId} className="il-type-label block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
           {label} {required && <span aria-hidden="true" className="text-[var(--danger)]">*</span>}
         </span>
         {nativeControl ? cloneElement(child, fieldControlProps(child.props, field)) : children}
-        {hint && <span id={`${id}-hint`} className="block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
+        {hint && <span id={`${id}-hint`} className="il-type-help block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
         {error && <span id={`${id}-error`} role="alert" className="block text-xs text-[var(--danger-fg)] mt-1">{error}</span>}
       </label>
     </FieldContext.Provider>
@@ -445,7 +445,7 @@ export function PageHeader({ title, hint, action, icon }: { title: string; hint?
           </span>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--text)]">{title}</h1>
+          <h1 className="il-type-page text-xl font-semibold tracking-tight text-[var(--text)]">{title}</h1>
           {hint && <p className="text-sm text-[var(--text-muted)] mt-1">{hint}</p>}
         </div>
       </div>

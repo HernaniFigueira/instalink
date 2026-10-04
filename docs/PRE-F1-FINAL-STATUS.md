@@ -1,5 +1,7 @@
 # PR53 — fechamento dos últimos gates (2026-10-03)
 
+> Rodada histórica encerrada no HEAD5703735. O novo polimento solicitado depois dessa homologação é regido por [PRE-F1-POLISH.md](PRE-F1-POLISH.md), inclusive a inversão normal/hover de secondary. A liberação anterior não aprova automaticamente as mudanças novas.
+
 Branch `arena/01a101fb-instalink`; base `fix/active-clinic-context`; PR https://github.com/HernaniFigueira/instalink/pull/53.
 HEAD anterior: `b86d59a0c2e92d946d594aa4d74ba33c8c695068`.
 

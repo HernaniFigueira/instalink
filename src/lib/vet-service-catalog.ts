@@ -1,3 +1,4 @@
+import { durationLabel } from './duration-label';
 // Vet Service Catalog — sugestões iniciais pesquisáveis (não cria registros automaticamente)
 // Cada sugestão vira Service real da clínica apenas quando selecionada/confirmada pelo usuário.
 //
@@ -142,5 +143,5 @@ export function findVetSuggestionById(id: string): VetCatalogSuggestion | undefi
  * regra clínica). `0`/ausente = sem duração sugerida (ex.: internação, hospedagem).
  */
 export function durationSuggestionLabel(min?: number): string {
-  return min && min > 0 ? `Duração sugerida · ${min} min` : 'Sem duração sugerida';
+  return min && min > 0 ? `Duração sugerida · ${durationLabel(min)}` : 'Sem duração sugerida';
 }

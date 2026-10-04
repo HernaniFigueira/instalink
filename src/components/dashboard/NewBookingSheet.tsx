@@ -5,6 +5,7 @@ import { FIT_IN_MARK_CLS } from '@/lib/status';
 //   2. seleciona a pessoa → nome/WhatsApp/e-mail preenchidos e vinculados;
 //   3. só oferece "+ Novo cliente" quando a busca não encontra ninguém;
 //   4. serviço → data → horário (grade real da agenda) → observação.
+import { durationLabel } from '@/lib/duration-label';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
@@ -100,6 +101,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [reviewing, setReviewing] = useState(false);
   function changeOccurrences(rows: BookingOccurrence[]) { setOccurrences(rows); setPreview(null); }
   useEffect(() => { setOccurrences([]); setPreview(null); }, [serviceId, date, time, proId, repeat]);
+  const rangeIntent = !!initial?.selectedDurationMin;
+  const [editingTime, setEditingTime] = useState(false);
   const [slots, setSlots] = useState<string[]>([]);
   // A2-B3 (F4): estado honesto do dia (fechado × lotado) para a mensagem.
   const [dayState, setDayState] = useState<{ state?: string; full?: boolean; reason?: string } | null>(null);
@@ -381,7 +384,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   return (
     <Drawer
       open
-      dialogClassName={initial?.selectedDurationMin ? 'gd-booking-range-drawer' : undefined}
+      dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
@@ -516,7 +519,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           <Field label="2. Serviço" required hint="O que será feito neste agendamento">
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
               <option value="">Selecione…</option>
-              {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.durationMin} min</option>)}
+              {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}</option>)}
             </Select>
           </Field>
 
@@ -538,7 +541,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>
 
           {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
-          {date && serviceId && !incompatiblePro && (
+          {date && serviceId && !incompatiblePro && (!rangeIntent || editingTime) && (
             <div>
               <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
               {loadingSlots ? (
@@ -569,11 +572,21 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          {time && <section aria-label="Resumo do intervalo" data-testid="booking-range-summary" className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm font-semibold">Início: {time} · Fim: {minToTime(timeToMin(time) + (staffDuration || service?.durationMin || 30))} · Duração: {staffDuration || service?.durationMin || 30} min</section>}
+          {time && <section aria-label="Resumo do intervalo" data-testid="booking-range-summary" className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-3">
+            <h3 className="text-sm font-semibold">Horário</h3>
+            <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
+              <div><dt className="text-[var(--text-muted)]">Início</dt><dd className="font-medium">{time}</dd></div>
+              <div><dt className="text-[var(--text-muted)]">Fim</dt><dd className="font-medium">{minToTime(timeToMin(time) + (staffDuration || service?.durationMin || 30))}</dd></div>
+              <div className="col-span-2"><dt className="text-[var(--text-muted)]">Duração</dt><dd className="font-medium">{durationLabel(staffDuration || service?.durationMin || 30)}</dd></div>
+            </dl>
+            {rangeIntent && <Button type="button" variant="ghost" size="sm" aria-expanded={editingTime} disabled={saving || reviewing} onClick={() => setEditingTime(v => !v)}>{editingTime ? 'Manter horário selecionado' : 'Alterar horário'}</Button>}
+            {rangeIntent && loadingSlots && <p role="status" className="text-sm text-[var(--text-muted)]">Verificando disponibilidade…</p>}
+            {rangeIntent && slotsError && <Notice tone="error">{slotsError}</Notice>}
+          </section>}
           <details open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)} className="group rounded-md border border-[var(--border)] bg-[var(--surface)]">
             <summary className="flex list-none cursor-pointer items-center justify-between p-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">Opções avançadas<Icon n="chevD" size={16} className="ml-auto transition-transform group-open:rotate-180" /></summary>
             <div className="space-y-3 border-t border-[var(--border)] p-3">
-          <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin || '—'} min; deixe vazio para usar o padrão`}>
+          <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin ? durationLabel(service.durationMin) : '—'}; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
               value={staffDuration} disabled={saving || reviewing || repeat}
               onChange={(e) => setStaffDuration(e.target.value === '' ? '' : Number(e.target.value))} />

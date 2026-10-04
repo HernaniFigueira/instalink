@@ -21,11 +21,11 @@ const p=await login('owner');
 try{
  await scenario('Hernani 09:15–12:45 / 210 min / service30 / UTC / success',async()=>{
   await agenda(p);await drag(p,555,765);await p.getByRole('heading',{name:'Novo agendamento',exact:true}).waitFor();
-  assert.match(await p.getByTestId('booking-range-summary').innerText(),/09:15 · Fim: 12:45 · Duração: 210 min/);assert.equal(await p.getByTestId('agenda-selected-range').count(),1);
+  assert.match(await p.getByTestId('booking-range-summary').innerText(),/Início\s+09:15\s+Fim\s+12:45\s+Duração\s+210 min · 3h30/);assert.equal(await p.getByTestId('agenda-selected-range').count(),1);
   assert.equal(await p.getByLabel('Duração deste atendimento em minutos').isVisible(),false);await shot(p,'01-range-210-closed');
   await p.getByText('Opções avançadas',{exact:true}).click();assert.equal(await p.getByLabel('Duração deste atendimento em minutos').inputValue(),'210');await shot(p,'02-advanced');await p.getByText('Opções avançadas',{exact:true}).click();
   await p.getByRole('searchbox',{name:'Buscar cliente'}).fill('Ana');await p.getByRole('button',{name:/Ana Tutora QA/}).click();await p.getByLabel('Pet (paciente)',{exact:false}).selectOption('qa-pet');await p.getByLabel('2. Serviço',{exact:false}).selectOption('svc-consulta');
-  await p.getByRole('button',{name:'09:15',exact:true}).waitFor();await p.getByRole('button',{name:'Salvar agendamento',exact:true}).click();await p.locator('[data-booking-created="true"]').waitFor();await shot(p,'03-success');
+  await p.getByText('Verificando disponibilidade…',{exact:true}).waitFor({state:'hidden'});assert.equal(await p.getByRole('button',{name:'09:15',exact:true}).count(),0);await p.getByRole('button',{name:'Salvar agendamento',exact:true}).click();await p.locator('[data-booking-created="true"]').waitFor();await shot(p,'03-success');
   const d=await json(p,`/api/bookings?mode=manage&businessId=${b}&from=${date}&to=${date}`),bk=d.bookings.find(x=>x.professionalId==='pro-hernani'&&x.time==='09:15');assert.equal(bk.durationMin,210);assert.equal(Date.parse(bk.endAt)-Date.parse(bk.startAt),210*60000);await close(p);
  });
  await scenario('Hernani block13–17:30 Cirurgia Day+Week and edit',async()=>{

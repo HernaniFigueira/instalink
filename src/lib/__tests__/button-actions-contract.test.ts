@@ -2,10 +2,10 @@ import { describe,it,expect } from 'vitest';
 import { buttonCls } from '@/components/ui';
 import { contrastRatio, NAV_ACCENTS } from '../nav-accent';
 describe('Clinical action hierarchy contract',()=>{
- it('secondary is filled and outlined before hover; hover keeps the border',()=>{
+ it('secondary is outline at rest and soft-filled on hover with the same border',()=>{
   const cls=buttonCls('secondary','sm');
-  expect(cls).toContain('bg-[var(--brand-soft)]');expect(cls).toContain('border-[var(--brand)]');expect(cls).toContain('text-[var(--brand-fg)]');
-  expect(cls).toContain('hover:bg-transparent');expect(cls).not.toContain('border-transparent');expect(cls).not.toContain('hover:border-');
+  expect(cls.split(' ')).toContain('bg-transparent');expect(cls).toContain('border-[var(--brand)]');expect(cls).toContain('text-[var(--brand-fg)]');
+  expect(cls.split(' ')).toContain('hover:bg-[var(--brand-soft)]');expect(cls).not.toContain('border-transparent');expect(cls).not.toContain('hover:border-');
  });
  it('primary remains solid and WhatsApp does not inherit brand',()=>{
   expect(buttonCls('primary')).toContain('bg-[var(--accent)]');

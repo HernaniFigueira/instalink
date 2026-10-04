@@ -380,22 +380,24 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
   const [end, setEnd] = useState('13:00');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg('');
+    if (saving) return;
+    setMsg(''); setSaving(true);
     try {
       await onSave({ date, closed, start: closed ? '' : start, end: closed ? '' : end, note });
       setDate(''); setNote(''); setClosed(true);
     } catch (err: any) {
       setMsg(err.message);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
     <div className="bg-white border border-zinc-200 rounded-lg p-5">
       <p className="font-semibold text-sm">Dias especiais</p>
-      <p className="text-xs text-zinc-500 mb-4">Feriados, folgas e horários excepcionais — sem editar nada técnico.</p>
+      <p className="text-xs text-zinc-500 mb-4">Exceção de funcionamento em uma data específica. Informe o período em que a clínica atende ou marque o fechamento do dia inteiro.</p>
       {exceptions.length > 0 && (
         <div className="space-y-2 mb-4">
           {exceptions.map((x) => (
@@ -427,7 +429,7 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
         )}
         <label className="block flex-1 min-w-[140px]"><span className="text-xs font-semibold text-zinc-500">MOTIVO (OPCIONAL)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: Natal" className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
-        <Button type="submit" variant="primary">Adicionar</Button>
+        <Button type="submit" disabled={saving} variant="primary">{saving ? 'Salvando…' : 'Adicionar'}</Button>
       </form>
       {msg && <p className="mt-2 text-sm font-medium text-red-600">{msg}</p>}
     </div>

@@ -309,3 +309,7 @@ Correções incrementais e reprodução real do fechamento da biblioteca durante
 ### PR53 — fechamento dos últimos gates (2026-10-03)
 
 Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.
+
+### PR53 — último polimento pré-F1
+
+Range simplificado com duração humana, copy de bloqueios/regras/recursos, dias especiais derivados, secondary outline no normal e soft no hover, confirmação limpa, escala Geist e cinco temas ativos mantendo21 presets históricos. Dashboard limitado a4 tarefas com “Ver todas”; revisão encontrou/corrigiu flag de link ausente e projeção de exceção fora da rotina. `PRE-F1-POLISH.md` registra decisão do usuário, revisão separada, backlog e protocolo de homologação. Sem produção, merge ou F1.

@@ -385,7 +385,7 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
     expect(await screen.findByText(/Michelle não realiza este serviço/)).toBeTruthy();
     expect(proSelect()!.value).toBe(MICHELLE);
     expect(slotsApi.calls.some((u) => u.includes(SVC_CARDIO) && u.includes(`professionalId=${MICHELLE}`))).toBe(false);
-    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 11:00');
+    expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('11:00');
     await userEvent.selectOptions(proSelect()!, HERNANI);
     await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
@@ -399,7 +399,7 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
     await clickEmptyCell(HERNANI, '10:00');
     await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
     expect(slotButton('10:00')).toBeNull();
-    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 10:00');
+    expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
     expect(screen.getByText(/Este profissional não está disponível neste intervalo/)).toBeTruthy();
     expect(slotsApi.posts).toBe(0);
   });
@@ -444,7 +444,10 @@ describe('Clinical UX Closure — range and block mode', () => {
     pointerRange(ORLANDO, '09:00', '13:00');
     await waitFor(() => expect(seed()?.initial.selectedDurationMin).toBe(240));
     expect(seed().initial).toMatchObject({ time: '09:00', date: DATE, professionalId: ORLANDO });
-    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Fim: 13:00 · Duração: 240 min');
+    expect(within(screen.getByTestId('booking-range-summary')).getByText('Fim').nextElementSibling?.textContent).toBe('13:00');
+    expect(within(screen.getByTestId('booking-range-summary')).getByText('Duração').nextElementSibling?.textContent).toBe('240 min · 4h');
+    expect(slotButton('09:00')).toBeNull();
+    expect(within(sheet()).getByRole('button', {name: 'Alterar horário'})).toBeTruthy();
     expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
     const duration = within(sheet()).getByLabelText('Duração deste atendimento em minutos') as HTMLInputElement;
     expect(duration.value).toBe('240');
@@ -458,7 +461,7 @@ describe('Clinical UX Closure — range and block mode', () => {
     await renderAgenda();
     fireEvent.click(screen.getByRole('button', { name: 'Bloquear horário' }));
     pointerRange(ORLANDO, '09:00', '13:00');
-    await screen.findByText('Intervalo operacional (não cria paciente nem atendimento).');
+    await screen.findByText('Indisponibilidade temporária');
     expect((screen.getByLabelText('Início') as HTMLInputElement).value).toBe('09:00');
     expect((screen.getByLabelText('Fim') as HTMLInputElement).value).toBe('13:00');
     expect((screen.getByLabelText('Profissional') as HTMLSelectElement).value).toBe(ORLANDO);
@@ -482,7 +485,7 @@ describe('Final pré-F1 intent preservation', () => {
   it('past intent stays visible and explains the interval has passed',async()=>{
     await renderAgenda(`?b=${BUSINESS}&view=day&data=2026-01-01`);await clickEmptyCell(HERNANI,'10:00');
     expect(screen.getByText('Esse intervalo já passou. Escolha um horário futuro.')).toBeTruthy();
-    expect(screen.getByTestId('booking-range-summary').textContent).toContain('Início: 10:00');
+    expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
     expect(screen.queryByText('Escolha serviço, data e horário.')).toBeNull();
   });
 });

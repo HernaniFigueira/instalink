@@ -1,4 +1,5 @@
 'use client';
+import { durationLabel } from '@/lib/duration-label';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -893,7 +894,7 @@ export default function EquipePage() {
                       <p className="text-[11px] font-semibold text-zinc-500 uppercase">Novos serviços (pendentes — serão criados ao salvar)</p>
                       {fPendingServices.map(ps=> (
                         <div key={ps.tempId} className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-sm">
-                          <span className="flex-1 truncate">{ps.name} · {ps.suggestedGroupName || cats.find(c=>c.id===ps.groupId)?.name || 'Sem grupo'} · {ps.durationMin}min {ps.price?`· R$ ${ps.price}`:''}</span>
+                          <span className="flex-1 truncate">{ps.name} · {ps.suggestedGroupName || cats.find(c=>c.id===ps.groupId)?.name || 'Sem grupo'} · {durationLabel(ps.durationMin)} {ps.price?`· R$ ${ps.price}`:''}</span>
                           <button type="button" onClick={()=> setFPendingServices(prev=> prev.filter(x=>x.tempId!==ps.tempId))} className="text-xs font-semibold text-red-600 hover:bg-red-50 px-1.5 py-0.5 rounded">Remover</button>
                         </div>
                       ))}

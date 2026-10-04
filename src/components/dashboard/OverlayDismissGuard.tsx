@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
-import { Icon } from '@/components/icons';
 
 export type DismissReason = 'backdrop' | 'escape' | 'close-button' | 'navigation' | 'programmatic';
 export type DismissContext = 'new-booking' | 'new-client' | 'edit' | 'combined' | 'generic';
@@ -70,7 +69,6 @@ export function ConfirmDialog({ pending, onContinue, onDiscard }: {
           wrapDialogFocus(event, event.currentTarget, null);
           if (event.key === 'Escape') { event.preventDefault(); onContinue(); }
         }}>
-        <span className="overlay-confirm__icon" aria-hidden="true"><Icon n={saving ? 'clock' : 'alert'} size={18} /></span>
         <div className="overlay-confirm__copy">
           <h2 id="overlay-confirm-title">{title}</h2>
           <p id="overlay-confirm-description">

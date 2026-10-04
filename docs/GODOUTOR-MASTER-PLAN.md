@@ -313,3 +313,7 @@ Dados clínicos e decisões finais permanecem sob controle humano, permissionado
 ### PR53 — fechamento dos últimos gates (2026-10-03)
 
 Correções restritas à faixa visível com drawer, navegação dirty, copy ativa e secondary locais. Chromium cobre profissional vazio, vínculo canônico bidirecional, bloqueios de clínica/recurso e Azul/Verde. Matriz e auditoria: `PRE-F1-FINAL-STATUS.md` / `PRE-F1-CLOSING-AUDIT.md`. Liberação exige logs pós-commit e Vercel SUCCESS no SHA final; evidência pré-commit não basta. Produção, F1 e merge: não.
+
+### PR53 — último polimento e decisões antes do F1
+
+Contrato/evidências: `PRE-F1-POLISH.md`. Range com horário já escolhido, duração humana, secondary outline→soft hover, temas curados e dias especiais derivados sem alterar engine/storage. Salas/equipamentos continuam no editor atual; convergir depois para Estrutura sem duplicação. Pendência futura exige ação, não todo agendamento futuro; preservar automações agora. Conversas: agendamento/tarefa contextuais ficam no backlog pós-F1. Anamnese provisória: visita/dados permanentes/evolução/prontuário/especialidades serão definidos no F1, ainda não iniciado. A homologação anterior não substitui os gates pós-commit desta missão.

@@ -1,4 +1,5 @@
 'use client';
+import { durationLabel } from '@/lib/duration-label';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
@@ -216,12 +217,12 @@ export default function ServicosPage() {
                         <span className="min-w-0">
                           <span className="text-sm font-medium truncate block">{sv.name}</span>
                           {sv.description && <span className="hidden sm:block text-xs text-zinc-500 truncate">{sv.description}</span>}
-                          <span className="sm:hidden text-xs text-zinc-500">{sv.price > 0 ? `R$ ${centsToBR(sv.price)} · ${sv.durationMin} min` : `Sem preço base · ${sv.durationMin} min`}</span>
+                          <span className="sm:hidden text-xs text-zinc-500">{sv.price > 0 ? `R$ ${centsToBR(sv.price)} · ${durationLabel(sv.durationMin)}` : `Sem preço base · ${durationLabel(sv.durationMin)}`}</span>
                         </span>
                       </span>
                       <span className="hidden sm:block text-xs text-zinc-500 truncate">{cat?.name || 'Sem grupo'}</span>
                       <span className="hidden sm:block text-sm">
-                        {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {sv.durationMin} min</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {sv.durationMin} min</span></>}
+                        {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></>}
                       </span>
                       <span className="hidden sm:block text-xs text-zinc-500 truncate">{who}</span>
                       <span className="hidden sm:flex items-center gap-1.5 flex-wrap">

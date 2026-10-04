@@ -2612,7 +2612,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 
 /* Shared inline alert dialog used by guarded overlays (no second native modal/backdrop). */
 .overlay-confirm-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
@@ -2639,24 +2639,13 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   text-align: center;
   pointer-events: auto;
 }
-.overlay-confirm__icon {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--warning-border);
-  border-radius: var(--radius-sm);
-  background: var(--warning-bg);
-  color: var(--warning-fg);
-}
 .overlay-confirm__copy { width: 100%; }
-.overlay-confirm__copy h2 { margin: 1px 0 0; color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.35; }
-.overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.overlay-confirm__copy h2 { margin: 1px 0 0; color: var(--text); font-size: 18px; font-weight: 600; line-height: 1.35; }
+.overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
 .overlay-confirm__action { min-height: 42px; padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-.overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: var(--brand-soft); color: var(--brand-fg); }
-.overlay-confirm .il-control--secondary:hover { background: transparent; }
+.overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: transparent; color: var(--brand-fg); }
+.overlay-confirm .il-control--secondary:hover { background: var(--brand-soft); }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
 .overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }
 @media (max-width: 480px) {
@@ -3070,3 +3059,16 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
    links, and useUnsavedChangesGuard pauses them before any draft is lost. */
 dialog.gd-team-editor { z-index: 50; }
 dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }
+
+/* Curated workspace type scale. Geist remains the sole identity font.
+ * Scoped primitives, not blanket overrides of conversations/public renderers. */
+.il-platform { --type-page: 22px; --type-section: 16px; --type-card: 14px; --type-body: 14px; --type-label: 13px; --type-help: 13px; }
+.il-platform .il-type-page { font-size: var(--type-page); font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
+.il-platform .il-type-section { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
+.il-platform .il-type-label { font-size: var(--type-label); font-weight: 500; line-height: 1.45; }
+.il-platform .il-type-help { font-size: var(--type-help); line-height: 1.55; color: var(--text-muted); }
+.il-platform .dsh-card__title { font-size: var(--type-card); line-height: 1.4; }
+.il-platform .ws-sheet__titles h2 { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
+.il-platform .tabular-nums { font-variant-numeric: tabular-nums; }
+.il-platform .il-type-body, .il-platform table { font-size: var(--type-body); line-height: 1.5; }
+.il-platform table th { font-size: var(--type-label); font-weight: 500; text-transform: none; letter-spacing: normal; }
