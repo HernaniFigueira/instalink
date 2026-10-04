@@ -24,3 +24,6 @@ tsconfig.tsbuildinfo
 
 # Generated artifacts from the isolated F1A browser QA harness
 .cache/f1a/
+
+# Generated artifacts from the F1B1 QA harness (disposable DB + QA results)
+.cache/f1b1/

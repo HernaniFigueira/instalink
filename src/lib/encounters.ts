@@ -11,6 +11,7 @@
 //
 // Sem I/O e sem relógio global: o servidor passa `now` e o autor.
 import { PET_SPECIES_LABELS, petAgeLabel } from './pets';
+import { encounterClinicalAccess, type EncounterClinicalAccess } from './encounter-clinical';
 import type { DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
 
 export interface EncounterStatusDef {
@@ -132,13 +133,23 @@ export const ENCOUNTER_TAG_LEN = 40;
  */
 export const ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR = 'Defina o profissional responsável antes de iniciar o atendimento.';
 
-/** Rótulos humanos — usados na tela, na impressão e nos testes. */
+/**
+ * Rótulos humanos — usados na tela, na impressão e nos testes.
+ *
+ * F1B1 · COPY CLÍNICA (decisão de produto, sem tocar storage): os campos
+ * FÍSICOS continuam `complaint`/`evolution`/`guidance`/`followUp`/`internalNote`
+ * — nenhuma migration por nomenclatura. O que mudou foi só o que a tela diz:
+ * "Queixa principal", "Evolução clínica", "Orientações ao tutor", "Retorno" e
+ * "Nota interna" (esta última deixando claro que não sai na via do tutor).
+ * A via impressa e o EncounterSheet legado continuam com o texto antigo onde
+ * ele já era o contrato.
+ */
 export const ENCOUNTER_LABELS: Record<EncounterTextField, string> = {
-  complaint: 'O que o cliente procurou',
-  evolution: 'O que foi feito',
-  guidance: 'Orientações para o cliente',
-  followUp: 'Retorno sugerido',
-  internalNote: 'Anotação interna (não sai na via do cliente)',
+  complaint: 'Queixa principal',
+  evolution: 'Evolução clínica',
+  guidance: 'Orientações ao tutor',
+  followUp: 'Retorno',
+  internalNote: 'Nota interna',
 };
 
 /** Higieniza o texto: espaços normalizados e teto por campo. */
@@ -531,7 +542,14 @@ export function encounterInScope(e: Pick<Encounter, 'professionalId'>, professio
  * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
  * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
  */
-export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
+export function encounterView(
+  e: Encounter,
+  db: DB,
+  /** Ator autenticado (opcional): quando vem, a leitura também diz o que ele
+   *  PODE editar — o `disabled` da tela passa a espelhar o servidor em vez de
+   *  adivinhar. Sem ator, a leitura é somente leitura (`access: null`). */
+  actor?: { id: string; role: string } | null,
+): EncounterWorkspaceView {
   const pro = db.professionals.find((p) => p.id === e.professionalId);
   const svc = db.services.find((s) => s.id === e.serviceId);
   const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId && b.businessId === e.businessId) : undefined;
@@ -579,6 +597,12 @@ export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
       booking: booking ? { id: booking.id, date: booking.date, time: booking.time, status: booking.status } : null,
       queue: queue ? { id: queue.id, date: queue.date } : null,
     },
+    // F1B1 — capacidade de escrita CLÍNICA resolvida no SERVIDOR (vínculo real
+    // do profissional responsável). É o que a tela usa para habilitar/desabilitar
+    // as seções; a imposição continua no PATCH, nunca aqui.
+    access: actor
+      ? encounterClinicalAccess(db, e, actor.id, actor.role)
+      : null,
   } as EncounterWorkspaceView;
 }
 
@@ -601,4 +625,6 @@ export interface EncounterWorkspaceView extends Encounter {
     booking: { id: string; date: string; time: string; status: string } | null;
     queue: { id: string; date: string } | null;
   };
+  /** F1B1 — o que ESTE ator pode editar (resolvido no servidor). */
+  access: EncounterClinicalAccess | null;
 }

@@ -41,9 +41,17 @@ export const ENCOUNTER_SECTIONS: EncounterSectionDef[] = [
     id: 'atendimento', label: 'Atendimento', module: 'core', order: 10, available: true,
     hint: 'Registro clínico do atendimento: o que foi feito, orientações e retorno.',
   },
-  // ── Estrutura planejada (F1B/F1C) — NÃO renderizada enquanto indisponível ──
-  { id: 'anamnese', label: 'Anamnese', module: 'core', order: 20, available: false },
-  { id: 'avaliacao', label: 'Avaliação', module: 'core', order: 30, available: false },
+  // ── F1B1 — SEÇÕES REAIS (UI + persistência + leitura + autosave + testes) ──
+  // Só vira `available: true` quem tem TODAS as cinco coisas na mesma entrega.
+  {
+    id: 'anamnese', label: 'Anamnese', module: 'core', order: 20, available: true,
+    hint: 'Histórico e contexto relatados NESTA visita (não é cadastro permanente do paciente).',
+  },
+  {
+    id: 'avaliacao', label: 'Avaliação', module: 'vet', order: 30, available: true,
+    hint: 'Exame clínico de hoje: medidas e achados do profissional.',
+  },
+  // ── Estrutura planejada (F1B2/F1C) — NÃO renderizada enquanto indisponível ──
   { id: 'problemas', label: 'Problemas', module: 'core', order: 40, available: false },
   { id: 'conduta', label: 'Conduta', module: 'core', order: 50, available: false },
   { id: 'procedimentos', label: 'Procedimentos', module: 'vet', order: 60, available: false },

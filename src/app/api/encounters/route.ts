@@ -26,6 +26,11 @@ import {
 } from '@/lib/encounters';
 // F1A — operação canônica de iniciar/retomar (mesma usada por /encounters/start).
 import { startOrResumeEncounter } from '@/lib/encounter-start';
+// F1B1 — dado clínico do atendimento (anamnese da visita + avaliação vet) e a
+// autoridade de escrita clínica (servidor, nunca o `disabled` do frontend).
+import {
+  applyEncounterClinicalPatch, clinicalWriteError, encounterClinicalAccess,
+} from '@/lib/encounter-clinical';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
@@ -76,15 +81,15 @@ export async function GET(req: NextRequest) {
     if (!encounterInScope(found, guard.ctx.professionalScope)) {
       return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
     }
-    return NextResponse.json({ ok: true, encounter: view(found, db) });
+    return NextResponse.json({ ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
   }
   if (queueId) {
     const found = encounterForQueue(scoped, businessId, queueId);
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
+    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
   }
   if (bookingId) {
     const found = scoped.find((e) => e.bookingId === bookingId) || null;
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
+    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
   }
   if (contactId || customerId || phone) {
     // Telefone é aceito como atalho da tela, mas quem resolve é a BASE: o
@@ -92,7 +97,7 @@ export async function GET(req: NextRequest) {
     const resolvedContactId = contactId
       || (phone ? (db.contacts.find((c) => c.businessId === businessId && c.phone === onlyDigits(phone))?.id || '') : '');
     const list = encountersForCustomer(scoped, businessId, { contactId: resolvedContactId, customerId });
-    return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db)) });
+    return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
   }
   // Lista por período (agenda/relatório): `from`/`to` opcionais em YYYY-MM-DD.
   const from = String(req.nextUrl.searchParams.get('from') || '');
@@ -101,7 +106,7 @@ export async function GET(req: NextRequest) {
     .filter((e) => (!from || e.date >= from) && (!to || e.date <= to))
     .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1))
     .slice(0, 300);
-  return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db)) });
+  return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
 }
 
 /**
@@ -139,7 +144,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({
       ok: true,
-      encounter: view(result.encounter, await readDB()),
+      encounter: view(result.encounter, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }),
       // `reused` é o contrato histórico da tela (abre o que já existe).
       reused: !result.created,
       created: result.created,
@@ -261,9 +266,34 @@ export async function PATCH(req: NextRequest) {
       }
       const conflict = versionConflict(target, body.expectedVersion);
       if (conflict.conflict) throw err(conflict.message, 409);
+      // ── F1B1 · AUTORIDADE DE ESCRITA CLÍNICA (servidor) ──────────────────
+      // Papel administrativo não é identidade clínica: escrever conteúdo
+      // exige que o ator seja o PROFISSIONAL RESPONSÁVEL vinculado (vínculo
+      // real Professional.userId === ator). Recepção/outros papéis não
+      // escrevem; o dado clínico da visita exige também Pet VÁLIDO no tenant.
+      const writesCore = ENCOUNTER_TEXT_FIELDS.some((field) => body[field] !== undefined)
+        || body.tags !== undefined
+        || body.clinical !== undefined;
+      const writesClinical = body.clinical !== undefined;
+      const access = encounterClinicalAccess(d, target, guard.ctx.user.id, String(guard.ctx.role || ''));
+      if (writesCore && !access.canEditCore) {
+        throw err(clinicalWriteError(access, 'core').message, clinicalWriteError(access, 'core').status);
+      }
+      if (writesClinical && !access.canEditClinical) {
+        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
+      }
       const before = { ...target };
       for (const field of ENCOUNTER_TEXT_FIELDS) {
         if (body[field] !== undefined) target[field] = cleanText(body[field], field);
+      }
+      // F1B1 — dado clínico da visita: MESMO Encounter, mesma versão, um
+      // único source of truth. O merge é validado campo a campo (números
+      // finitos com limite técnico, opções fechadas) e o que não veio no
+      // payload permanece exatamente como estava.
+      if (body.clinical !== undefined) {
+        const merged = applyEncounterClinicalPatch(target.clinical, body.clinical);
+        if (!merged.ok) throw err(merged.error, 400);
+        target.clinical = merged.clinical;
       }
       if (body.tags !== undefined) target.tags = cleanTags(body.tags);
       // FASE 2 · P3 — retorno estruturado (validado antes de gravar).
@@ -285,7 +315,7 @@ export async function PATCH(req: NextRequest) {
       if (body.files !== undefined) target.files = cleanEncounterFiles(body.files);
       const changed = ([
         'complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags',
-        'followUpMode', 'followUpDate', 'followUpDays', 'files',
+        'followUpMode', 'followUpDate', 'followUpDays', 'files', 'clinical',
       ] as const)
         .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]));
       if (changed.length === 0) {
@@ -309,7 +339,7 @@ export async function PATCH(req: NextRequest) {
         from: 'in_care', to: 'finalized', at: now,
       });
     }
-    return NextResponse.json({ ok: true, encounter: view(updated, await readDB()) });
+    return NextResponse.json({ ok: true, encounter: view(updated, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] PATCH falhou:', e);

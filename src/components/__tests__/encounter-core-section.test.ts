@@ -74,7 +74,13 @@ describe('F1A · capacidades do núcleo clínico', () => {
     const workspace = read('src/components/dashboard/EncounterWorkspace.tsx');
     expect(workspace).not.toMatch(/from '\.\/EncounterSheet'/);
     expect(workspace).not.toMatch(/<EncounterSheet/);
-    expect(workspace).toMatch(/<EncounterCoreSection/);
+    // F1B1 — o workspace delega o corpo (seções reais + autoridade única) e o
+    // corpo monta o NÚCLEO; o legado continua fora dos dois.
+    expect(workspace).toMatch(/<EncounterWorkspaceBody/);
+    const body = read('src/components/dashboard/EncounterWorkspaceBody.tsx');
+    expect(body).toMatch(/<EncounterCoreSection/);
+    expect(body).not.toMatch(/from '\.\/EncounterSheet'/);
+    expect(body).not.toMatch(/<EncounterSheet/);
     // E o núcleo não é o legado com `if` de layout: não existe esse modo.
     const sheet = read('src/components/dashboard/EncounterSheet.tsx');
     expect(sheet).not.toMatch(/layout\?: 'page' \| 'section'/);

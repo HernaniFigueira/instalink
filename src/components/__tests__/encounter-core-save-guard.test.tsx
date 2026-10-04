@@ -62,7 +62,8 @@ function mount(encounter = row()) {
 }
 
 const TEXTO = 'Conduta realizada e tutora orientada.';
-const evolutionField = () => screen.getByLabelText(/O que foi feito/) as HTMLTextAreaElement;
+// F1B1 §6 — a copy da tela é clínica agora; o CAMPO físico continua `evolution`.
+const evolutionField = () => screen.getByLabelText(/Evolução clínica/) as HTMLTextAreaElement;
 
 async function typeDraft() {
   fireEvent.change(evolutionField(), { target: { value: TEXTO } });

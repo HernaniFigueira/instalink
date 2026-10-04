@@ -65,7 +65,8 @@ export async function POST(req: NextRequest) {
       || result.encounter;
     return NextResponse.json({
       ok: true,
-      encounter: encounterView(persisted, db),
+      // A leitura também diz o que ESTE ator pode editar (F1B1).
+      encounter: encounterView(persisted, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }),
       encounterId: result.encounter.id,
       created: result.created,
       reused: !result.created,

@@ -31,6 +31,9 @@ import { backfillContacts } from './contacts';
 import { normalizeFeatures } from './features';
 import { sanitizeAppearance } from './appearance';
 import { defaultWhatsappIntegration } from './whatsapp';
+// F1B1 — normalizador PURO do dado clínico do atendimento (sem I/O): mantém a
+// migração aditiva num só lugar, exatamente como os normalizadores da automação.
+import { normalizeEncounterClinical } from './encounter-clinical';
 // P4 — normalizadores puros da automação (sem I/O): importá-los aqui mantém a
 // migração num só lugar. `automation/model.ts` não importa este arquivo.
 import { normalizeAutomationRecord, normalizeAutomationRunRecord } from './automation/model';
@@ -144,6 +147,11 @@ export function normalizeDB(raw: unknown): DB {
     if (typeof e.followUpDate !== 'string') e.followUpDate = '';
     if (typeof e.followUpDays !== 'number' || !Number.isFinite(e.followUpDays) || e.followUpDays <= 0) e.followUpDays = 0;
     if (!Array.isArray(e.files)) e.files = [];
+    // F1B1 — dado clínico do atendimento (anamnese da visita + avaliação
+    // veterinária). ADITIVO e idempotente: documento anterior ganha a
+    // estrutura VAZIA; nada é derivado do Pet (dado permanente não vira
+    // segunda opinião no registro clínico) e nada existente é sobrescrito.
+    e.clinical = normalizeEncounterClinical(e.clinical);
   }
   // P3: Normalização defensiva de entregas de webhooks
   for (const d of base.webhookDeliveries as any[]) {
