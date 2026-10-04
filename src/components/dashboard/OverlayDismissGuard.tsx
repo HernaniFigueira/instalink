@@ -25,9 +25,9 @@ export interface PendingRequest {
 const COPY: Record<DismissContext, { title: string; description: string }> = {
   'new-booking': { title: 'Descartar novo agendamento?', description: 'As informações preenchidas ainda não foram salvas.' },
   'new-client': { title: 'Descartar cadastro?', description: 'Os dados preenchidos serão perdidos.' },
-  edit: { title: 'Descartar alterações?', description: 'As alterações não salvas serão perdidas.' },
-  combined: { title: 'Descartar alterações?', description: 'Há informações não salvas no agendamento e no cadastro rápido.' },
-  generic: { title: 'Descartar alterações?', description: 'As alterações não salvas serão perdidas.' },
+  edit: { title: 'Descartar alterações não salvas?', description: 'Você perderá as alterações feitas nesta tela.' },
+  combined: { title: 'Descartar alterações não salvas?', description: 'Há informações não salvas no agendamento e no cadastro rápido.' },
+  generic: { title: 'Descartar alterações não salvas?', description: 'Você perderá as alterações feitas nesta tela.' },
 };
 
 /**

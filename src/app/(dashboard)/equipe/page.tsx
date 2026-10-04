@@ -131,7 +131,7 @@ export default function EquipePage() {
     if (!showAdd) draftBaseline.current = null;
     else if (draftBaseline.current === null) draftBaseline.current = personDraft;
   }, [showAdd, personDraft]);
-  const personGuard = { dirty: !fSuccessProfessionalId && draftBaseline.current !== null && draftBaseline.current !== personDraft, saving: fSaving, error: fError, context: 'edit' as const, title: 'Descartar alterações?' };
+  const personGuard = { dirty: !fSuccessProfessionalId && draftBaseline.current !== null && draftBaseline.current !== personDraft, saving: fSaving, error: fError, context: 'edit' as const, title: 'Descartar alterações não salvas?' };
   const cancelGuard = useOverlayDismissGuard();
   const navigationGuard = useUnsavedChangesGuard({ ...personGuard, dirty: showAdd && personGuard.dirty, saving: showAdd && personGuard.saving });
   const closePerson = () => { setShowAdd(false); resetAddForm(); };
