@@ -194,6 +194,40 @@ describe('F1B1 · seção Avaliação veterinária (unidade × valor)', () => {
     expect(Object.keys(body.clinical)).toEqual(['assessment']);
   });
 
+  it('vírgula e ponto são a MESMA mudança: "9,1" grava UMA vez e o "9.1" do servidor não vira pendência', async () => {
+    // O servidor devolve o número canônico (9.1) — sem chave canônica isso
+    // pareceria uma alteração nova e a seção mandaria um segundo PATCH
+    // idêntico, com o indicador piscando "Salvando…" sem nada ter mudado.
+    const persisted = row({ version: 5 });
+    persisted.clinical = {
+      assessment: { veterinary: { weightKg: 9.1, temperatureC: 38.4 } },
+    } as EncounterAuthorityRow['clinical'];
+    send.mockResolvedValue(okResult(persisted));
+    render(
+      <Harmony>
+        {({ authority, row: r, adoptToken }) => (
+          <EncounterVeterinaryAssessmentSection
+            businessId="b1" row={r} authority={authority} adoptToken={adoptToken}
+            blocked={false} editable readOnlyHint="" petWeightKg={8.4}
+          />
+        )}
+      </Harmony>,
+    );
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Peso (kg)'), { target: { value: '9,1' } });
+      fireEvent.change(screen.getByLabelText('Temperatura (°C)'), { target: { value: '38,4' } });
+    });
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 1150); }); });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    // Um ciclo de autosave INTEIRO depois: nada pendente, nenhum save extra.
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 1300); }); });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0][2] as any).clinical.assessment.veterinary.weightKg).toBe(9.1);
+    // O rascunho adota a forma canônica do servidor (mesmo valor, sem sujeira).
+    expect((screen.getByLabelText('Peso (kg)') as HTMLInputElement).value).toBe('9.1');
+    expect((screen.getByLabelText('Temperatura (°C)') as HTMLInputElement).value).toBe('38.4');
+  });
+
   it('texto que não é número NÃO é gravado: erro associado ao campo e texto preservado', async () => {
     render(
       <Harmony>

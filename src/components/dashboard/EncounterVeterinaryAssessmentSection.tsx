@@ -107,7 +107,7 @@ const rowForm = (row: EncounterAuthorityRow): AssessmentForm => {
 };
 
 const ALL_KEYS: Array<NumberKey | TextKey> = [...NUMBER_KEYS, ...TEXT_KEYS];
-const keyOf = (form: AssessmentForm): string => JSON.stringify(ALL_KEYS.map((key) => form[key]));
+const NUMBER_KEY_SET = new Set<string>(NUMBER_KEYS);
 
 /** Texto digitado → número. `NaN` = inválido (a seção não grava e diz por quê). */
 function parseNumberInput(raw: string): number | null {
@@ -116,6 +116,23 @@ function parseNumberInput(raw: string): number | null {
   const value = Number(text);
   return Number.isFinite(value) ? value : Number.NaN;
 }
+
+/**
+ * Chave canônica do rascunho numérico: "9,1" e "9.1" são a MESMA mudança.
+ * Sem isto, o valor que VOLTA do servidor (9.1) pareceria uma alteração nova
+ * depois de gravar "9,1" — um segundo PATCH do mesmo número e um piscar de
+ * "Salvando…" que não representa nada. Texto inválido continua sendo mudança
+ * distinta: o erro fica visível e nada é gravado.
+ */
+function canonicalNumber(raw: string): string {
+  const parsed = parseNumberInput(raw);
+  if (Number.isNaN(parsed)) return `!${String(raw)}`;
+  return parsed === null ? '' : String(parsed);
+}
+
+const keyOf = (form: AssessmentForm): string => JSON.stringify(
+  ALL_KEYS.map((key) => (NUMBER_KEY_SET.has(key) ? canonicalNumber(form[key]) : form[key])),
+);
 
 /** Campos numéricos com texto que não é número (ex.: "8,5x"). */
 function invalidFields(form: AssessmentForm): NumberKey[] {

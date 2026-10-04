@@ -27,3 +27,6 @@ tsconfig.tsbuildinfo
 
 # Generated artifacts from the F1B1 QA harness (disposable DB + QA results)
 .cache/f1b1/
+
+# Chromium local do harness de browser F1B1 (binário grande — nunca versionado)
+.cache/browser/

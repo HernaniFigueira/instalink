@@ -1,23 +1,27 @@
 // ═══════════════════════════════════════════════════════════════
 // Clinical Encounter F1B1 — QA de BROWSER (Chromium real, local, descartável)
 // ═══════════════════════════════════════════════════════════════
-// ATENÇÃO (honestidade de homologação): o sandbox onde o F1B1 foi
-// implementado NÃO tinha Chromium instalável (download bloqueado por
-// ECONNRESET em cdn.playwright.dev e mirrors do apt inacessíveis), então este
-// arquivo NÃO foi executado naquele ambiente. Ele existe para rodar onde há
-// browser — mesmo contrato do `tests/f1a/qa.mjs`.
+// EXECUTADO. Primeira execução: 2026-10-04, Chromium 153.0.8010.0 real
+// (Playwright 1.63) contra `next start` + banco descartável `.cache/f1b1/qa.json`.
+// Detalhe do ambiente: os CDNs de browser (cdn.playwright.dev, storage.
+// googleapis.com) são bloqueados ECONNRESET neste sandbox; o Chromium foi
+// obtido pelo pacote npm `@sparticuz/chromium` (binário + libs EMBUTIDOS no
+// tarball, baixável do registry.npmjs.org) e apontado por QA_EXECUTABLE_PATH,
+// com LD_LIBRARY_PATH/FONTCONFIG_PATH do próprio pacote. A execução usa
+// browser REAL: DOM, eventos, autosave, beforeunload e navegação de verdade.
 //
 // Rodar:
 //   node scripts/seed-f1b1-qa.mjs
 //   GODOUTOR_DB_FILE=.cache/f1b1/qa.json npm run start -- -p 3111
-//   node tests/f1b1/qa.mjs           (QA_EXECUTABLE_PATH aponta o Chromium)
+//   QA_EXECUTABLE_PATH=<chromium> node tests/f1b1/qa.mjs
 //
 // Cobre o fluxo do briefing: Agenda → iniciar/retomar → Atendimento → trocar
 // para Anamnese (grava antes) → Anamnese → trocar para Avaliação → Avaliação
 // (peso/temperatura/FC/FR/exame) → sair → F5 → retomar → conferir TUDO;
-// falha de rede não troca de seção e preserva o texto; 409 real não
-// sobrescreve; Owner sem vínculo não edita; Recepção não entra; outra unidade
-// dá 404; 1440/1280/1024/390 e console/rede limpos.
+// F5/menu lateral com texto pendente (proteção §13); falha de rede não troca
+// de seção e preserva o texto; 409 real não sobrescreve; Owner sem vínculo não
+// edita; Recepção não entra; outra unidade dá 404; 1440/1280/1024/390 e
+// console/rede limpos (§27/§28/§29/§32).
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { chromium } from '@playwright/test';
@@ -36,16 +40,62 @@ if (process.env.QA_EXECUTABLE_PATH) options.executablePath = process.env.QA_EXEC
 const browser = await chromium.launch(options);
 
 const EXPECTED_STATUSES = new Set([403, 404, 409]);
-const result = { checks: [], console: [], network: [], expected: [], induced: [] };
+const result = { checks: [], console: [], resourceErrors: [], network: [], expected: [], induced: [], patches: 0 };
+/** O navegador loga toda resposta ≥400 como erro de console — inclusive as que
+ *  a própria QA provoca. Elas são contabilizadas à parte e só valem "verdes"
+ *  se casarem com um status esperado/induzido; erro de console de verdade
+ *  (exceção, `pageerror`) continua sendo falha. */
+const RESOURCE_FAILURE = /Failed to load resource: the server responded with a status of (\d{3})/;
 let inducedMode = null;
 const ok = (label) => { result.checks.push(label); console.log('PASS', label); };
 await fs.mkdir('.cache/f1b1', { recursive: true });
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/** Espera ATIVA com condição explícita — nada de `waitForTimeout` como prova. */
+async function waitUntil(fn, label, { timeout = 20000, interval = 120 } = {}) {
+  const deadline = Date.now() + timeout;
+  let last;
+  for (;;) {
+    last = await fn();
+    if (last) return last;
+    if (Date.now() > deadline) throw Error(`timeout esperando: ${label}`);
+    await sleep(interval);
+  }
+}
+
+const FOOTER = '[data-testid="encounter-workspace-save-state"]';
+/** Estado de persistência que o USUÁRIO vê (rótulo) e o estado declarado. */
+async function saveState(page) {
+  const foot = page.locator(FOOTER);
+  const state = await foot.getAttribute('data-persistence-state');
+  return { state, text: (await foot.innerText()).trim() };
+}
+/** Digitar → pendência visível → gravação CONFIRMADA (nunca estado estale). */
+async function waitSaved(page) {
+  await waitUntil(async () => ['dirty', 'saving'].includes((await saveState(page)).state), 'indicador assume a pendência');
+  const shown = await saveState(page);
+  assert.equal(shown.text, 'Salvando…', `pendência deve aparecer como "Salvando…", veio "${shown.text}"`);
+  return waitUntil(async () => {
+    const now = await saveState(page);
+    return now.state === 'saved' && now.text === 'Salvo agora' ? now : false;
+  }, 'gravação confirmada ("Salvo agora")');
+}
 
 async function login(email, viewport = { width: 1440, height: 1000 }) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   page.on('pageerror', (e) => result.console.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error') result.console.push(m.text()); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const text = m.text();
+    const failed = RESOURCE_FAILURE.exec(text);
+    if (failed) { result.resourceErrors.push({ status: Number(failed[1]), url: m.location?.().url || '' }); return; }
+    result.console.push(text);
+  });
+  page.on('request', (r) => {
+    if (r.method() === 'PATCH' && r.url().includes('/api/encounters')) result.patches += 1;
+  });
   page.on('response', (r) => {
     if (r.status() >= 400) {
       const entry = { status: r.status(), url: r.url() };
@@ -73,6 +123,15 @@ async function openBooking(page, time) {
 
 async function section(page, name) {
   await page.locator('.encounter-workspace__nav-item', { hasText: name }).click();
+}
+
+/** Versão ATUAL do servidor (leitura crua) — para provar quem ganhou no 409. */
+async function serverRow(page, id) {
+  return page.evaluate(async ({ businessId, encounterId }) => {
+    const res = await fetch(`/api/encounters?businessId=${encodeURIComponent(businessId)}&id=${encodeURIComponent(encounterId)}`);
+    const data = await res.json().catch(() => ({}));
+    return data.encounter || null;
+  }, { businessId: A, encounterId: id });
 }
 
 try {
@@ -123,10 +182,59 @@ try {
   await page.getByLabel(/Mucosas/).fill('Róseas e úmidas');
   await page.getByLabel(/Condição corporal/).fill('Escore corporal 5/9');
   await page.getByLabel(/Exame físico/).fill('Eritema em orelha direita.');
-  await page.getByTestId('encounter-workspace-save-state').filter({ hasText: /Salvo agora|Salvando/ }).waitFor();
-  ok('avaliação veterinária gravada (unidade no rótulo, valor numérico)');
+  await waitSaved(page);            // pendência vista e depois "Salvo agora" de verdade
+  ok('avaliação veterinária gravada (unidade no rótulo, valor numérico, indicador honesto)');
 
-  // ── 5 · sair → F5 → retomar (mesmo encounterId) ─────────────────────────
+  // §12 · UMA mudança = UMA gravação: o valor canônico que volta do servidor
+  // não pode virar "pendência nova" (isso mandaria um segundo PATCH idêntico).
+  const patchesBefore = result.patches;
+  await page.getByLabel('Frequência respiratória (rpm)').fill('31');
+  await waitSaved(page);
+  await sleep(1500);                // um ciclo de autosave INTEIRO depois do save
+  assert.equal(result.patches - patchesBefore, 1,
+    `uma digitação gerou ${result.patches - patchesBefore} PATCH (esperado 1)`);
+  ok('uma digitação = UMA gravação (o número canônico do servidor não gera save extra)');
+
+  // ── 5 · §13 · F5 com texto PENDENTE: o navegador impede perder sem aviso ─
+  await page.getByLabel(/Exame físico/).fill('Eritema em orelha direita. Achado pendente protegido.');
+  await waitUntil(async () => (await saveState(page)).state === 'dirty', 'texto pendente antes do F5');
+  let dialogs = 0;
+  const onDialog = async (dialog) => {
+    dialogs += 1;
+    assert.equal(dialog.type(), 'beforeunload', `diálogo inesperado: ${dialog.type()}`);
+    await dialog.dismiss().catch(() => {});      // "ficar nesta página"
+  };
+  page.on('dialog', onDialog);
+  await page.reload({ timeout: 4000 }).catch(() => {});   // bloqueado pelo prompt nativo
+  assert.equal(dialogs, 1, 'o F5 com texto pendente precisa pedir confirmação');
+  assert.match(page.url(), /\/atendimento\//, 'recusar o prompt mantém o profissional na tela');
+  assert.equal(await page.getByLabel(/Exame físico/).inputValue(),
+    'Eritema em orelha direita. Achado pendente protegido.');
+  // O autosave CONTINUA rodando enquanto o prompt bloqueia a navegação: o
+  // pendente vira "Salvo agora" mesmo com o F5 recusado.
+  await waitUntil(async () => (await saveState(page)).state === 'saved', 'gravação conclui mesmo com o F5 recusado');
+  page.off('dialog', onDialog);
+  await page.reload();              // agora sim: nada pendente, recarrega limpo
+  await page.locator('.encounter-workspace__patient').waitFor();
+  await section(page, 'Avaliação');
+  assert.equal(await page.getByLabel(/Exame físico/).inputValue(),
+    'Eritema em orelha direita. Achado pendente protegido.', 'o achado pendente ficou GRAVADO');
+  ok('F5 protegido: prompt nativo, texto nunca some e a gravação conclui (§13)');
+
+  // ── 6 · §13 · menu lateral com pendência: GRAVA e só então navega ───────
+  await page.getByLabel(/Exame físico/).fill('Eritema em orelha direita. Achado pendente protegido. Saída pelo menu.');
+  await waitUntil(async () => (await saveState(page)).state === 'dirty', 'pendência antes de sair pelo menu');
+  await page.locator(`a[href="/agenda?b=${A}"]`).first().click({ noWaitAfter: true, timeout: 8000 });
+  await waitUntil(async () => page.url().includes('/agenda'), 'saída pelo menu lateral');
+  await page.goto(`${base}/atendimento/${encounterId}?b=${A}`);
+  await page.locator('.encounter-workspace__patient').waitFor();
+  await section(page, 'Avaliação');
+  assert.equal(await page.getByLabel(/Exame físico/).inputValue(),
+    'Eritema em orelha direita. Achado pendente protegido. Saída pelo menu.',
+    'sair pelo menu gravou ANTES de navegar');
+  ok('menu lateral com pendência: grava antes de navegar e nada se perde (§13)');
+
+  // ── 7 · sair → retomar → F5 → mesmas três seções com TUDO ───────────────
   await page.goto(`${base}/agenda?b=${A}&data=${today}&view=day`);
   await page.goto(`${base}/atendimento/${encounterId}?b=${A}`);
   await page.reload();
@@ -141,40 +249,58 @@ try {
   assert.equal(await page.getByLabel('Peso (kg)').inputValue(), '9.1');
   assert.equal(await page.getByLabel('Temperatura (°C)').inputValue(), '38.4');
   assert.equal(await page.getByLabel('Frequência cardíaca (bpm)').inputValue(), '118');
-  assert.equal(await page.getByLabel('Frequência respiratória (rpm)').inputValue(), '30');
-  assert.equal(await page.getByLabel(/Exame físico/).inputValue(), 'Eritema em orelha direita.');
+  assert.equal(await page.getByLabel('Frequência respiratória (rpm)').inputValue(), '31');
+  assert.equal(await page.getByLabel(/Exame físico/).inputValue(),
+    'Eritema em orelha direita. Achado pendente protegido. Saída pelo menu.');
   ok('F5 → mesmas três seções com TODOS os valores (mesmo encounterId)');
 
-  // ── 6 · falha de rede: não troca de seção e o texto fica ───────────────
+  // ── 8 · falha de rede: não troca de seção e o texto fica ───────────────
   inducedMode = { statuses: [500, 503] };
   await section(page, 'Atendimento');
   await page.route('**/api/encounters', (route) => route.fulfill({ status: 500, body: '{"error":"induzido"}' }));
   await page.getByLabel(/Evolução clínica/).fill('Texto que não pode sumir.');
   await section(page, 'Anamnese');
-  await page.getByLabel(/Queixa principal/).waitFor();          // continua no Atendimento
+  await waitUntil(async () => (await saveState(page)).state === 'error', 'erro de gravação visível');
   assert.equal(await page.getByLabel(/Evolução clínica/).inputValue(), 'Texto que não pode sumir.');
+  assert.equal(await page.getByLabel(/História atual/).count(), 0, 'a seção NÃO trocou com a gravação falhando');
+  ok('falha de gravação: NÃO troca de seção, erro visível e o texto continua na tela');
+
+  // retry: a rede volta, a troca pede o flush de novo e ele conclui
   await page.unroute('**/api/encounters');
   inducedMode = null;
-  ok('falha de gravação: NÃO troca de seção e o texto continua na tela');
-
-  // retry: a rede volta e a troca acontece
   await section(page, 'Anamnese');
   await page.getByLabel(/História atual/).waitFor();
+  const preso = await serverRow(page, encounterId);
+  assert.equal(preso.evolution, 'Texto que não pode sumir.', 'o texto preso foi GRAVADO na retomada');
   ok('retry com a rede de volta grava e libera a troca de seção');
 
-  // ── 7 · 409 real: não sobrescreve ───────────────────────────────────────
+  // ── 9 · 409 real: outra tela grava, o local NÃO sobrescreve ────────────
   await section(page, 'Atendimento');
-  await page.evaluate(async (id) => {
-    await fetch('/api/encounters', {
+  await page.getByLabel(/Queixa principal/).waitFor();
+  const before = await serverRow(page, encounterId);
+  inducedMode = { statuses: [409] };
+  const externo = await page.evaluate(async ({ businessId, id, version }) => {
+    const res = await fetch('/api/encounters', {
       method: 'PATCH', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ businessId: 'f1b1-vet-qa', id, expectedVersion: 0, complaint: 'Da outra tela' }),
+      body: JSON.stringify({ businessId, id, expectedVersion: version, complaint: 'Alterado em OUTRA tela' }),
     });
-  }, encounterId).catch(() => {});
-  await page.getByLabel(/Evolução clínica/).fill('Texto local depois do conflito.');
-  await page.waitForTimeout(1400);
-  ok('escrita de outra tela + autosave local exercitados');
+    return res.status;
+  }, { businessId: A, id: encounterId, version: before.version });
+  assert.equal(externo, 200, 'a escrita externa precisa ter sucesso para o conflito ser REAL');
+  await page.getByLabel(/Evolução clínica/).fill('Texto local que NÃO pode ser sobrescrito.');
+  await waitUntil(async () => (await page.locator('.encounter-core__conflict').count()) > 0, 'aviso de conflito na tela');
+  assert.equal(await page.getByLabel(/Evolução clínica/).inputValue(), 'Texto local que NÃO pode ser sobrescrito.');
+  const depois = await serverRow(page, encounterId);
+  assert.equal(depois.complaint, 'Alterado em OUTRA tela', 'a escrita da outra tela foi preservada');
+  ok('409 real: conflito visível, texto local intacto e nada sobrescrito');
+  // saída explícita escolhida por quem edita (as duas opções são HUMANAS)
+  await page.getByRole('button', { name: 'Recarregar versão atual' }).click();
+  await waitUntil(async () => (await page.getByLabel(/Queixa principal/).inputValue()) === 'Alterado em OUTRA tela', 'adoção da versão do servidor');
+  inducedMode = null;
+  await waitUntil(async () => (await saveState(page)).state === 'saved', 'indicador volta a "Salvo agora" depois do conflito');
+  ok('conflito encerrado por escolha explícita ("Recarregar versão atual")');
 
-  // ── 8 · Owner sem vínculo Professional: lê, não edita ──────────────────
+  // ── 10 · Owner sem vínculo Professional: lê, não edita ─────────────────
   const owner = await login('owner.f1b1@godoutor.local');
   await owner.goto(`${base}/atendimento/${encounterId}?b=${A}`);
   await owner.locator('.encounter-workspace__patient').waitFor();
@@ -182,19 +308,19 @@ try {
   assert.equal(await ownerField.isDisabled(), true);
   ok('Owner sem vínculo: workspace abre em LEITURA (campo desabilitado pela capacidade do servidor)');
 
-  // ── 9 · Recepção: bloqueada ────────────────────────────────────────────
+  // ── 11 · Recepção: bloqueada ───────────────────────────────────────────
   const maria = await login('recepcao.f1b1@godoutor.local');
   await maria.goto(`${base}/atendimento/${encounterId}?b=${A}`);
   await maria.getByText(/Acesso restrito|não tem permissão|Atendimento/i).first().waitFor();
   ok('Recepção: acesso clínico bloqueado na rota direta');
 
-  // ── 10 · outra unidade: 404 ────────────────────────────────────────────
+  // ── 12 · outra unidade: 404 ────────────────────────────────────────────
   const fora = await login('fora.f1b1@godoutor.local');
   await fora.goto(`${base}/atendimento/${encounterId}?b=${B}`);
   await fora.getByText(/não encontrado|não está disponível/i).first().waitFor();
   ok('outra unidade: atendimento não encontrado (sem vazar dado)');
 
-  // ── 11 · viewports ─────────────────────────────────────────────────────
+  // ── 13 · viewports ─────────────────────────────────────────────────────
   for (const [width, height] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
     await page.setViewportSize({ width, height });
     await page.goto(`${base}/atendimento/${encounterId}?b=${A}`);
@@ -208,10 +334,13 @@ try {
 
   assert.equal(result.network.length, 0, `respostas inesperadas: ${JSON.stringify(result.network)}`);
   assert.equal(result.console.length, 0, `console com erro: ${JSON.stringify(result.console)}`);
-  ok('console 0 erro inesperado · rede 0 resposta ≥400 inesperada');
+  const accounted = new Set([...result.expected, ...result.induced].map((entry) => entry.status));
+  const orphan = result.resourceErrors.filter((entry) => !accounted.has(entry.status));
+  assert.equal(orphan.length, 0, `falhas de recurso não contabilizadas: ${JSON.stringify(orphan)}`);
+  ok(`console 0 erro inesperado · rede 0 resposta ≥400 inesperada (${result.resourceErrors.length} falhas de recurso provocadas/documentadas)`);
 } finally {
   console.log('\n── resumo QA F1B1 (browser) ──');
-  console.log(`checks: ${result.checks.length} · console: ${result.console.length} · rede inesperada: ${result.network.length} · esperadas: ${result.expected.length} · induzidas: ${result.induced.length}`);
+  console.log(`checks: ${result.checks.length} · console: ${result.console.length} · falhas de recurso: ${result.resourceErrors.length} · rede inesperada: ${result.network.length} · esperadas: ${result.expected.length} · induzidas: ${result.induced.length} · PATCH: ${result.patches}`);
   await fs.writeFile('.cache/f1b1/qa-result.json', JSON.stringify(result, null, 2)).catch(() => {});
   await browser.close();
   if (result.network.length || result.console.length) process.exitCode = 1;
