@@ -1,6 +1,6 @@
 # Clinical Encounter F1B1 — anamnese da visita, avaliação veterinária e modelo clínico estruturado
 
-**Estado (2026-10-04): IMPLEMENTADO · AUTO-HOMOLOGADO LOCALMENTE (HTTP real) · QA de browser NÃO EXECUTADO (sem Chromium no sandbox — declarado) · PR ABERTA PARA REVISÃO · MERGE NÃO EXECUTADO.**
+**Estado (2026-10-04): IMPLEMENTADO · AUTO-HOMOLOGADO LOCALMENTE (HTTP real) · QA de browser NÃO EXECUTADO (sem Chromium no sandbox — declarado) · PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) ABERTA PARA REVISÃO (`MERGEABLE`, Vercel SUCCESS em `aba4047`) · MERGE NÃO EXECUTADO.**
 
 Base `main` em `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0` (merge da PR #54, F1A, em produção com Vercel SUCCESS). Branch de sessão `arena/01a10740-instalink`. **Produção não foi usada para QA.**
 
