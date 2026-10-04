@@ -222,7 +222,7 @@ export function EncounterCoreSection({
     if (inflight.current) return inflight.current;
 
     setAutoState('saving');
-    authority?.status('saving');
+    authority?.status('saving', '', 'atendimento');
     const run = (async () => {
       // A versão vem da AUTORIDADE (fonte única do workspace) quando ela
       // existe: outra seção pode ter gravado desde o último render e o 409
@@ -245,7 +245,7 @@ export function EncounterCoreSection({
         setError(outcome.message);
         if (authority) {
           if (outcome.conflict) authority.conflict(outcome.message);
-          else authority.status('error', outcome.message);
+          else authority.status('error', outcome.message, 'atendimento');
         }
         return false;
       }

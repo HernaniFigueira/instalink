@@ -90,7 +90,7 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
     if (!editable) return false;
     if (validationError) {
       // Nada de gravar valor inválido: o erro fica visível e o texto continua.
-      authority.status('error', validationError);
+      authority.status('error', validationError, id);
       return false;
     }
     const sentForm = latest.current;
@@ -98,7 +98,7 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
     if (sentKey === lastSaved.current) return true;
     if (inflight.current) return inflight.current;
 
-    authority.status('saving');
+    authority.status('saving', '', id);
     const run = (async () => {
       const res = await apiSend<{ encounter: EncounterAuthorityRow }>(
         '/api/encounters', 'PATCH',
@@ -115,7 +115,7 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
           authority.conflict(res.message || 'Este atendimento foi alterado em outra tela. Suas alterações ainda não foram salvas.');
           return false;
         }
-        authority.status('error', res.message || 'Não foi possível salvar agora.');
+        authority.status('error', res.message || 'Não foi possível salvar agora.', id);
         return false;
       }
       const serverRow = res.data!.encounter;
@@ -126,7 +126,7 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
       // Publica a linha confirmada: TODAS as seções passam a ver a versão nova.
       authority.publish(serverRow);
       if (result.adoptServerForm) publishToLatest(formOf(serverRow));
-      authority.status('saved');
+      authority.status('saved', '', id);
       return true;
     })();
     inflight.current = run;
@@ -135,20 +135,32 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
     } finally {
       inflight.current = null;
     }
-  }, [authority, businessId, editable, encounterId, formOf, keyOf, patchOf, publishToLatest, validationError]);
+  }, [authority, businessId, editable, encounterId, formOf, id, keyOf, patchOf, publishToLatest, validationError]);
 
   // Autosave: mudança real + rascunho + sem conflito, um request por vez.
   useEffect(() => {
-    if (!editable || blocked || validationError) return;
-    if (keyOf(form) === lastSaved.current) return;
+    if (!editable || blocked) return;
+    if (!validationError) {
+      // O rascunho voltou a ser gravável: o erro DESTA seção não pode ficar
+      // latched e reaparecer como "Erro ao salvar" na próxima tecla.
+      authority.clearStatus(id);
+    }
+    if (keyOf(form) === lastSaved.current) return;   // nada pendente
+    if (validationError) {
+      // Pendência que o servidor recusaria: o indicador NÃO pode dizer "Salvo
+      // agora" enquanto existe texto não gravável na tela — quem digitou
+      // precisa saber que ainda não está salvo (e onde corrigir).
+      authority.status('error', validationError, id);
+      return;
+    }
     const timer = setTimeout(() => { void save(); }, ENCOUNTER_AUTOSAVE_MS);
     return () => clearTimeout(timer);
-  }, [blocked, editable, form, keyOf, save, validationError]);
+  }, [authority, blocked, editable, form, id, keyOf, save, validationError]);
 
   const flush = useCallback(async (): Promise<boolean> => {
     // Pendência com erro de validação NÃO navega: o valor precisa ser corrigido.
     if (validationError && dirtyOf(latest.current)) {
-      authority.status('error', validationError);
+      authority.status('error', validationError, id);
       return false;
     }
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -158,7 +170,7 @@ export function useClinicalSection<F>(options: ClinicalSectionOptions<F>): Clini
       if (!dirtyOf(latest.current)) return true;
     }
     return !dirtyOf(latest.current);
-  }, [authority, dirtyOf, save, validationError]);
+  }, [authority, dirtyOf, id, save, validationError]);
 
   const api = useMemo(() => ({
     id,

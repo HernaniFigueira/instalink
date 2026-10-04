@@ -340,6 +340,43 @@ describe('F1B1 · troca de seção grava antes (mesma regra de saída do F1A)', 
     expect(status().textContent).toMatch(/Salvando/);
   });
 
+  it('valor que o servidor recusaria (não numérico) NÃO é anunciado como "Salvo agora"', async () => {
+    render(
+      createElement(
+        () => {
+          const [r, setR] = useState(row());
+          return createElement(EncounterWorkspaceBody, {
+            businessId: 'b1', row: r, onRow: (next: EncounterAuthorityRow) => setR((prev) => ({ ...prev, ...next })),
+            registerLeave: () => {},
+          });
+        },
+        null,
+      ),
+    );
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Avaliação' })); });
+    const peso = screen.getByLabelText('Peso (kg)') as HTMLInputElement;
+    await act(async () => { fireEvent.change(peso, { target: { value: 'abc' } }); });
+    // O texto não tem para onde ser gravado: o indicador do workspace diz a
+    // VERDADE (erro), o campo explica e o texto digitado continua na tela.
+    const status = screen.getByTestId('encounter-workspace-save-state');
+    expect(status.getAttribute('data-persistence-state')).toBe('error');
+    expect(status.textContent).toMatch(/Erro ao salvar/);
+    expect(peso.value).toBe('abc');
+    expect(peso.getAttribute('aria-invalid')).toBe('true');
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 1150); }); });
+    expect(send).not.toHaveBeenCalled();          // nada de gravar lixo
+
+    // CORRIGIU: o erro de validação não pode ficar latched e reaparecer como
+    // "Erro ao salvar" por cima de um valor válido (achado da QA de browser).
+    send.mockResolvedValue(okResult(row({ version: 5 })));
+    await act(async () => { fireEvent.change(peso, { target: { value: '9,1' } }); });
+    expect(status.getAttribute('data-persistence-state')).not.toBe('error');
+    expect(status.textContent).not.toMatch(/Erro ao salvar/);
+    await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 1150); }); });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));   // o valor válido grava
+    expect((send.mock.calls[0][2] as any).clinical.assessment.veterinary.weightKg).toBe(9.1);
+  });
+
   it('Anamnese → Avaliação: grava a anamnese antes e mantém o Perfil do paciente intacto', async () => {
     send.mockResolvedValue(okResult(row({ version: 5 })));
     render(
@@ -423,5 +460,37 @@ describe('F1B1 · troca de seção grava antes (mesma regra de saída do F1A)', 
     await waitFor(() => expect((screen.getByLabelText(/Queixa principal/) as HTMLTextAreaElement).value).toBe('Da outra tela'));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Anamnese' })); });
     await waitFor(() => expect(screen.getByLabelText(/História atual/)).toBeTruthy());
+  });
+});
+
+describe('F1B1 · sair sem salvar (§13)', () => {
+  it('"Sair sem salvar" + Descartar cumpre a saída — sem laço de diálogos', async () => {
+    // A gravação falha: a saída só acontece por escolha explícita e CONFIRMADA.
+    send.mockResolvedValue(failResult(500, 'Não foi possível salvar agora.'));
+    let leave: ((reason: never, proceed: () => void) => void) | null = null;
+    let left = false;
+    render(
+      createElement(
+        () => {
+          const [r, setR] = useState(row());
+          return createElement(EncounterWorkspaceBody, {
+            businessId: 'b1', row: r,
+            onRow: (next: EncounterAuthorityRow) => setR((prev) => ({ ...prev, ...next })),
+            registerLeave: (fn: never) => { leave = fn; },
+          } as never);
+        },
+        null,
+      ),
+    );
+    await act(async () => { fireEvent.change(screen.getByLabelText(/Queixa principal/), { target: { value: 'texto que só sai descartando' } }); });
+    await act(async () => { (leave as unknown as (r: string, p: () => void) => void)('close-button', () => { left = true; }); });
+    // A gravação falhou: a faixa oferece a única saída possível.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sair sem salvar' })).toBeTruthy());
+    expect(left).toBe(false);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' })); });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Descartar' })); });
+    expect(left).toBe(true);                       // a decisão humana foi cumprida
+    expect((screen.getByLabelText(/Queixa principal/) as HTMLTextAreaElement).value).toBe('texto que só sai descartando');
   });
 });

@@ -91,7 +91,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
 
   useEffect(() => { registerLeave(requestLeave); }, [registerLeave, requestLeave]);
 
-  const { dialog, requestClose } = useUnsavedChangesGuard(
+  const { dialog, requestClose, allowNavigation } = useUnsavedChangesGuard(
     {
       dirty: dirtySections.length > 0,
       saving: saveState === 'saving',
@@ -101,13 +101,23 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
     { beforeNavigate: (reason, proceed) => { void requestLeave(reason, proceed); } },
   );
 
+  /**
+   * Sair SEM salvar é escolha explícita e CONFIRMADA (diálogo central). Quando
+   * o humano confirma o descarte, a navegação já está autorizada: o guard não
+   * pode perguntar de novo sobre rascunhos que ele acabou de mandar descartar
+   * (era um laço de diálogos que impedia a saída).
+   */
   const leaveWithoutSaving = useCallback(() => {
     const pending = pendingLeave;
     if (!pending) return;
     setPendingLeave(null);
-    requestClose(pending.reason, { dirty: true, saving: false, error: saveError, context: 'edit' },
-      pending.proceed, undefined);
-  }, [pendingLeave, requestClose, saveError]);
+    requestClose(
+      pending.reason,
+      { dirty: true, saving: false, error: saveError, context: 'edit' },
+      () => { allowNavigation(); pending.proceed(); },
+      undefined,
+    );
+  }, [allowNavigation, pendingLeave, requestClose, saveError]);
 
   /** "Recarregar versão atual": adota o servidor por escolha explícita. */
   const reloadFromServer = useCallback(async () => {

@@ -53,8 +53,14 @@ export interface EncounterAuthority {
   version: () => number;
   /** Adota como verdade a linha que o SERVIDOR confirmou. */
   publish: (row: EncounterAuthorityRow) => void;
-  /** Indicador único de persistência do workspace. */
-  status: (state: EncounterSaveState, error?: string) => void;
+  /**
+   * Indicador único de persistência do workspace. `owner` identifica QUEM
+   * publicou o erro (a seção): assim uma seção só apaga o erro que é dela —
+   * o erro de outra seção (ou do conflito) nunca é apagado por engano.
+   */
+  status: (state: EncounterSaveState, error?: string, owner?: string) => void;
+  /** Limpa o estado de erro SE ele pertencer a `owner` (draft voltou a valer). */
+  clearStatus: (owner: string) => void;
   /** 409 real: o workspace mostra o conflito (nunca sobrescreve sozinho). */
   conflict: (message: string) => void;
   /** Seção se registra para o flush compartilhado (troca de seção/saída). */
@@ -103,6 +109,8 @@ export function useEncounterAuthority(
   const [conflictMessage, setConflictMessage] = useState('');
   const [dirtySections, setDirtySections] = useState<string[]>([]);
   const sectionsRef = useRef<Map<string, EncounterSectionApi>>(new Map());
+  /** Dono do erro visível ('' = o workspace/conflito publicou). */
+  const errorOwnerRef = useRef('');
 
   const publish = useCallback((next: EncounterAuthorityRow) => {
     rowRef.current = next;
@@ -113,7 +121,17 @@ export function useEncounterAuthority(
   const authority = useMemo<EncounterAuthority>(() => ({
     version: () => rowRef.current.version,
     publish,
-    status: (state, error = '') => { setSaveState(state); setSaveError(state === 'error' ? error : ''); },
+    status: (state, error = '', owner = '') => {
+      errorOwnerRef.current = state === 'error' ? owner : '';
+      setSaveState(state);
+      setSaveError(state === 'error' ? error : '');
+    },
+    clearStatus: (owner) => {
+      if (errorOwnerRef.current !== owner) return;   // o erro não é desta seção
+      errorOwnerRef.current = '';
+      setSaveState('saved');
+      setSaveError('');
+    },
     conflict: (message) => { setConflictMessage(message); setSaveState('error'); setSaveError(message); },
     registerSection: (api) => { sectionsRef.current.set(api.id, api); },
     registeredSection: (id) => sectionsRef.current.get(id),

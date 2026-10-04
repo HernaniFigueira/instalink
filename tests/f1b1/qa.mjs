@@ -195,6 +195,34 @@ try {
     `uma digitação gerou ${result.patches - patchesBefore} PATCH (esperado 1)`);
   ok('uma digitação = UMA gravação (o número canônico do servidor não gera save extra)');
 
+  // ── §29 · acessibilidade REAL (aria-current, unidade, erro associado, teclado) ──
+  const activeNav = page.locator('.encounter-workspace__nav-item[aria-current="page"]');
+  assert.equal((await activeNav.innerText()).trim(), 'Avaliação');
+  assert.equal(await page.locator('.encounter-workspace__nav-item:not([aria-current])').count(), 2);
+  ok('§29 · a seção ativa é anunciada por aria-current (não só por cor)');
+
+  const pesoField = page.getByLabel('Peso (kg)');     // nome acessível = rótulo + UNIDADE
+  assert.equal(await pesoField.getAttribute('inputmode'), 'decimal');
+  const beforeInvalid = result.patches;
+  await pesoField.fill('abc');
+  await waitUntil(async () => (await pesoField.getAttribute('aria-invalid')) === 'true', 'campo inválido anunciado');
+  const described = [];
+  for (const id of ((await pesoField.getAttribute('aria-describedby')) || '').split(/\s+/).filter(Boolean)) {
+    described.push(await page.locator(`[id="${id}"]`).innerText());
+  }
+  assert.ok(described.some((text) => /número válido/i.test(text)), `mensagem associada ao campo: ${described.join(' | ')}`);
+  assert.equal(await pesoField.inputValue(), 'abc', 'o texto digitado continua na tela');
+  await waitUntil(async () => (await saveState(page)).state === 'error', 'indicador honesto com valor inválido');
+  await sleep(1300);                                  // um ciclo de autosave inteiro
+  assert.equal(result.patches, beforeInvalid, 'valor inválido NÃO vai para o servidor');
+  await pesoField.focus();
+  await page.keyboard.press('Tab');                   // teclado, sem mouse
+  const focused = await page.evaluate(() => document.activeElement?.id || '');
+  assert.equal(focused, 'av-temperatureC', `Tab deve alcançar o próximo campo, foi para "${focused}"`);
+  await pesoField.fill('9,1');                        // corrigiu: nada pendente, volta a "Salvo agora"
+  await waitUntil(async () => (await saveState(page)).state === 'saved', 'indicador volta a "Salvo agora" ao corrigir');
+  ok('§29 · erro associado ao campo, teclado navega e o indicador nunca mente sobre pendência inválida');
+
   // ── 5 · §13 · F5 com texto PENDENTE: o navegador impede perder sem aviso ─
   await page.getByLabel(/Exame físico/).fill('Eritema em orelha direita. Achado pendente protegido.');
   await waitUntil(async () => (await saveState(page)).state === 'dirty', 'texto pendente antes do F5');
@@ -273,6 +301,29 @@ try {
   const preso = await serverRow(page, encounterId);
   assert.equal(preso.evolution, 'Texto que não pode sumir.', 'o texto preso foi GRAVADO na retomada');
   ok('retry com a rede de volta grava e libera a troca de seção');
+
+  // ── §13 · "Voltar" com gravação falhando: fica, explica e só sai por escolha ──
+  inducedMode = { statuses: [500, 503] };
+  await section(page, 'Atendimento');
+  await page.route('**/api/encounters', (route) => route.fulfill({ status: 500, body: '{"error":"induzido"}' }));
+  await page.getByLabel(/Evolução clínica/).fill('Texto que exige escolha explícita.');
+  await page.getByRole('button', { name: 'Voltar' }).first().click({ timeout: 8000 }).catch(() => {});
+  await waitUntil(async () => (await saveState(page)).state === 'error', 'erro visível depois de tentar sair');
+  assert.match(page.url(), /\/atendimento\//, 'a falha de gravação NÃO navega');
+  assert.equal(await page.getByLabel(/Evolução clínica/).inputValue(), 'Texto que exige escolha explícita.');
+  await page.getByRole('button', { name: 'Sair sem salvar' }).waitFor();
+  ok('§13 · sair com gravação falhando: permanece na tela, explica e oferece "Sair sem salvar"');
+
+  await page.getByRole('button', { name: 'Sair sem salvar' }).click();
+  await page.getByRole('button', { name: 'Descartar' }).click({ timeout: 8000 });
+  await waitUntil(async () => !page.url().includes(`/atendimento/${encounterId}`), 'saída explícita confirmada');
+  await page.unroute('**/api/encounters');
+  inducedMode = null;
+  await page.goto(`${base}/atendimento/${encounterId}?b=${A}`);
+  await page.locator('.encounter-workspace__patient').waitFor();
+  const descartado = await serverRow(page, encounterId);
+  assert.notEqual(descartado.evolution, 'Texto que exige escolha explícita.', 'o descarte NÃO pode ter gravado');
+  ok('§13 · descarte explícito sai de verdade e não grava o texto descartado');
 
   // ── 9 · 409 real: outra tela grava, o local NÃO sobrescreve ────────────
   await section(page, 'Atendimento');
