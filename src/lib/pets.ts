@@ -26,6 +26,21 @@ export function petAge(birthDate: string): number | null {
   return years >= 0 ? years : null;
 }
 
+/**
+ * F1A — idade curta para o cabeçalho clínico: "2 anos", "5 meses".
+ * '' quando não há data de nascimento (o workspace omite o dado em vez de
+ * inventar). Derivada, nunca persistida: idade não é campo de cadastro.
+ */
+export function petAgeLabel(birthDate: string): string {
+  const years = petAge(birthDate);
+  if (years === null) return '';
+  if (years >= 1) return `${years} ${years === 1 ? 'ano' : 'anos'}`;
+  const born = Date.parse(`${String(birthDate).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(born)) return '';
+  const months = Math.max(0, Math.floor((Date.now() - born) / (30.44 * 86400000)));
+  return `${months} ${months === 1 ? 'mês' : 'meses'}`;
+}
+
 /** Rótulo legível: "Thor · Cachorro (Pastor alemão)". */
 export function petLabel(p: Partial<Pick<Pet, 'name' | 'species' | 'breed'>>): string {
   const name = String(p.name || '').trim() || 'Pet';

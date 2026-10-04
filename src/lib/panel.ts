@@ -755,4 +755,7 @@ export const API_GUARDS: Array<{ route: string; file: string; permission: Permis
   { route: '/api/pets', file: 'src/app/api/pets/route.ts', permission: ['clientes', 'atendimento'], area: 'clientes' },
   // FASE 2 · P10 — fundação de follow-up (mesma permissão da porta).
   { route: '/api/followup', file: 'src/app/api/followup/route.ts', permission: 'config', area: 'automations' },
+  // F1A — iniciar/retomar o atendimento clínico (startOrResumeEncounter).
+  // Mesma permissão da área clínica: Recepção não ganha escrita clínica aqui.
+  { route: '/api/encounters/start', file: 'src/app/api/encounters/start/route.ts', permission: 'atendimento', area: 'atendimento' },
 ];

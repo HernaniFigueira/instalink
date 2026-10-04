@@ -26,7 +26,7 @@ import { createSession } from '../auth';
 import { GET as queueGET, POST as queuePOST, PATCH as queuePATCH } from '@/app/api/queue/route';
 import { POST as encountersPOST, GET as encountersGET, PATCH as encountersPATCH } from '@/app/api/encounters/route';
 import { POST as bookingsPOST } from '@/app/api/bookings/route';
-import { encounterFormPrintBlocks, encounterVersion } from '../encounters';
+import { ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR, encounterFormPrintBlocks, encounterVersion } from '../encounters';
 import { fitInPastError, FIT_IN_PAST_ERROR } from '../fit-in';
 import { professionalServesService, serviceRequiresProfessional, PROFESSIONAL_NOT_ELIGIBLE_ERROR } from '../booking';
 import { resolveQueueAssignment } from '../queue';
@@ -293,16 +293,30 @@ describe('A3.4 · FILA — profissional inelegível não inicia (servidor)', () 
     expect((await json(liberado)).encounter.professionalId).toBe(PRO_SILVIO);
   });
 
-  it('quem opera o balcão SEM vínculo não é bloqueado: nada de vínculo a fabricar', async () => {
-    // A dona/secretaria não é profissional nenhum — o serviço restrito não
-    // cria um vínculo do nada, e o registro segue sem profissional (como
-    // sempre foi). O que nunca passa é um profissional CONCRETO inelegível.
+  it('o balcão NÃO fabrica vínculo: sem profissional responsável o registro não nasce', async () => {
+    // A dona/secretaria não é profissional nenhum, e a régua da FILA continua
+    // a mesma: NADA é fabricado (a entrada segue sem dono) e o que nunca passa
+    // é um profissional CONCRETO inelegível. O que a F1A fecha é o registro
+    // clínico: atendimento sem profissional responsável NÃO EXISTE — a
+    // mensagem diz o que resolver e nada é gravado (nada de registro órfão).
     const entry = await entryFor(SVC_ODONTO);
+    expect(entry.professionalId).toBe('');                 // a fila não inventou dono
     const res = await encountersPOST(jsonReq('/api/encounters', {
       businessId: BIZ, queueId: entry.id, customerName: 'Walk-in', serviceId: SVC_ODONTO,
     }, owner));
-    expect(res.status).toBe(200);
-    expect((await json(res)).encounter.professionalId).toBe('');
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toBe(ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR);
+    expect((await readDB()).encounters).toHaveLength(0);
+    // Definido o responsável NA ENTRADA, o mesmo pedido abre — e com ele.
+    const assigned = await queuePATCH(jsonReq('/api/queue', {
+      businessId: BIZ, id: entry.id, professionalId: PRO_SILVIO, status: 'called',
+    }, owner, 'PATCH'));
+    expect(assigned.status).toBe(200);
+    const aberto = await encountersPOST(jsonReq('/api/encounters', {
+      businessId: BIZ, queueId: entry.id, customerName: 'Walk-in', serviceId: SVC_ODONTO,
+    }, owner));
+    expect(aberto.status).toBe(200);
+    expect((await json(aberto)).encounter.professionalId).toBe(PRO_SILVIO);
   });
 });
 

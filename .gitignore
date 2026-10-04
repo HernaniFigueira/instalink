@@ -21,3 +21,6 @@ tsconfig.tsbuildinfo
 .cache/clinical-ux/
 
 .cache/pre-f1-final/
+
+# Generated artifacts from the isolated F1A browser QA harness
+.cache/f1a/

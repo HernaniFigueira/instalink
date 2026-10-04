@@ -77,8 +77,12 @@ describe('FASE 2 · P6 — cadeia pet na agenda/atendimento (regressão estátic
     expect(detail).toContain('Tutor:');
   });
   it('encontro herda o pet do agendamento (vetor do atendimento)', () => {
-    const enc = read('src/app/api/encounters/route.ts');
-    expect(enc).toContain('petId: booking?.petId');
+    // F1A — a criação do atendimento vive na operação canônica
+    // (startOrResumeEncounter); o pet do agendamento continua sendo herdado e
+    // validado no tenant (nunca por nome, nunca por payload do cliente).
+    const enc = read('src/lib/encounter-start.ts');
+    expect(enc).toMatch(/booking\?\.petId/);
+    expect(enc).toMatch(/petId:\s*finalPetId/);
   });
   it('PetsSection só aparece em veterinária e o novo agendamento escolhe pet', () => {
     const petsSection = read('src/components/dashboard/PetsSection.tsx');

@@ -16,9 +16,21 @@ describe('full-page clinical workspace navigation', () => {
   });
 
   it('accepts encounter, booking, and queue origins without adding a visible menu destination', () => {
-    expect(encounterWorkspaceHref({ businessId: 'b', id: 'e-1' })).toContain('id=e-1');
+    // F1A — com ID, a rota é a CANÔNICA do workspace (sobrevive a F5/voltar).
+    expect(encounterWorkspaceHref({ businessId: 'b', id: 'e-1' })).toBe('/atendimento/e-1?b=b');
+    // Sem ID, a origem operacional vai para o resolvedor (start or resume).
     expect(encounterWorkspaceHref({ businessId: 'b', queueId: 'q-1' })).toContain('queueId=q-1');
     expect(encounterWorkspaceHref({ businessId: 'b', bookingId: 'bk-1' })).toContain('bookingId=bk-1');
+    expect(encounterWorkspaceHref({ businessId: 'b', bookingId: 'bk-1' }).startsWith('/atendimento?')).toBe(true);
+  });
+
+  it('F1A · the canonical route by id keeps the unit context and an internal return', () => {
+    const href = encounterWorkspaceHref({ businessId: 'b', id: 'e-1', returnTo: '/agenda?b=b' });
+    expect(href).toBe('/atendimento/e-1?b=b&returnTo=%2Fagenda%3Fb%3Db');
+    // Nenhum dado de paciente na URL (PII nunca viaja em query string).
+    expect(href).not.toContain('customerName');
+    expect(href).not.toContain('phone=');
+    expect(href).not.toContain('petName');
   });
 
   it('rejects external and protocol-relative return destinations', () => {

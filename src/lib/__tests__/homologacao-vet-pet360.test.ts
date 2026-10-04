@@ -44,8 +44,12 @@ describe('P0-3 · veterinária exige pet quando o tutor já tem pets', () => {
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain('b.petName || b.customerName');
     expect(agenda).toContain('Tutor:');
-    const enc = read('src/app/api/encounters/route.ts');
+    // F1A — o modelo de leitura do atendimento (nomes + contexto do workspace)
+    // é compartilhado pelas rotas e agora vive em lib/encounters.ts.
+    const enc = read('src/lib/encounters.ts');
     expect(enc).toContain('petName: pet?.name');
+    // O cabeçalho do workspace mostra PET primeiro e o tutor como contexto.
+    expect(read('src/components/dashboard/EncounterWorkspace.tsx')).toContain('Tutor:');
     const sheet = read('src/components/dashboard/EncounterSheet.tsx');
     expect(sheet).toContain('row.petName || row.customerName');
     expect(sheet).toContain('Tutor:');

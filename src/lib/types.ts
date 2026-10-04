@@ -830,6 +830,16 @@ export interface Encounter {
   finalizedBy: string;
   /** Quem assina o registro (nome do profissional no momento da finalização). */
   signedBy: string;
+  /**
+   * F1A — INÍCIO CLÍNICO (canônico do Clinical Encounter).
+   *
+   * `date`/`time` continuam sendo o DIA/HORA DO AGENDAMENTO (projeção da
+   * agenda); `startedAt` é o instante real em que o atendimento entrou em
+   * atendimento (`startOrResumeEncounter`). Aditivo e opcional: documento
+   * anterior ao F1A não tem o campo e `normalizeDB` o deriva de `createdAt`
+   * (o registro antigo já estava em atendimento — nunca deixa vazio).
+   */
+  startedAt?: string;
   /** P6 · veterinária — pet atendido ('' quando não se aplica). Aditivo. */
   petId?: string;
   // ── FASE 2 · P3 — retorno ESTRUTURADO (aditivo) ──
