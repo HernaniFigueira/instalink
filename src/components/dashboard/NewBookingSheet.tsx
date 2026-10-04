@@ -148,19 +148,23 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // Keep the column context until the user explicitly chooses another professional.
   const incompatiblePro = !!proId && !!service && !professionalServesService(service as any, proId, pros);
   const activeProId = proId;
-  const proIssue = incompatiblePro ? `${pros.find(p => p.id === proId)?.name || 'Este profissional'} não realiza este serviço. Escolha outro profissional habilitado.` : '';
+  const noEligiblePro = !!service && eligibleProfessionalIds(service as any, pros).length === 0;
+  const proIssue = noEligiblePro ? 'Nenhum profissional está habilitado para este serviço.' : incompatiblePro ? `${pros.find(p => p.id === proId)?.name || 'Este profissional'} não realiza este serviço. Escolha outro profissional habilitado.` : '';
   const orderedServices = [...bookable].sort((a, b) => Number(!!proId && professionalServesService(b as any, proId, pros)) - Number(!!proId && professionalServesService(a as any, proId, pros)));
   const slotKey = `${serviceId}|${date}|${proId}|${staffDuration}`;
   const [checkedSlotKey, setCheckedSlotKey] = useState('');
   const pastIssue = date && time && (date < today || (date === today && time < nowHM(new Date(), timezone || undefined)))
     ? 'Esse intervalo já passou. Escolha um horário futuro.' : '';
-  const slotIssue = pastIssue || (!incompatiblePro && time && checkedSlotKey === slotKey && !loadingSlots && !slotsError && !slots.includes(time)
+  const slotIssue = !proIssue && (pastIssue || (!incompatiblePro && time && checkedSlotKey === slotKey && !loadingSlots && !slotsError && !slots.includes(time)
     ? dayState?.reason === 'no_windows' ? 'O horário não está dentro da disponibilidade deste profissional.'
-      : 'Este profissional não está disponível neste intervalo. Confira a disponibilidade, os atendimentos e os bloqueios.' : '');
+      : 'Este profissional não está disponível neste intervalo. Confira a disponibilidade, os atendimentos e os bloqueios.' : ''));
+  const intervalPending = !!serviceId && !!date && (loadingSlots || checkedSlotKey !== slotKey);
+  // Request errors belong to the attempted interval, not to a later selection.
+  useEffect(() => { setError(''); }, [slotKey, time]);
 
   useEffect(() => {
     const mySeq = ++slotSeq.current;
-    if (!serviceId || !date || incompatiblePro) { setSlots([]); setSlotsError(''); setDayState(null); setLoadingSlots(false); return; }
+    if (!serviceId || !date || incompatiblePro || noEligiblePro) { setSlots([]); setSlotsError(''); setDayState(null); setLoadingSlots(false); return; }
     setLoadingSlots(true);
     setSlotsError('');
     const professionalQuery = activeProId ? `&professionalId=${encodeURIComponent(activeProId)}` : '';
@@ -184,7 +188,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         if (mySeq !== slotSeq.current) return;
         setLoadingSlots(false);
       });
-  }, [businessId, serviceId, date, activeProId, staffDuration, incompatiblePro, slotKey]);
+  }, [businessId, serviceId, date, activeProId, staffDuration, incompatiblePro, noEligiblePro, slotKey]);
 
   // Busca no CRM (nome OU WhatsApp) com debounce.
   useEffect(() => {
@@ -321,7 +325,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (saving || reviewing) return;
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
-    if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { setError(pastIssue || proIssue || slotIssue); return; }
+    if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { return; }
     if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { setError(slotsError || 'Aguarde a conferência do intervalo.'); return; }
     if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
     if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
@@ -519,7 +523,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           <Field label="2. Serviço" required hint="O que será feito neste agendamento">
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
               <option value="">Selecione…</option>
-              {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}</option>)}
+              {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}{eligibleProfessionalIds(s as any, pros).length === 0 ? ' — Sem profissional habilitado' : ''}</option>)}
             </Select>
           </Field>
 
@@ -541,7 +545,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>
 
           {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
-          {date && serviceId && !incompatiblePro && (!rangeIntent || editingTime) && (
+          {date && serviceId && !proIssue && (!rangeIntent || editingTime) && (
             <div>
               <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
               {loadingSlots ? (
@@ -550,7 +554,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 </p>
               ) : slotsError ? (
                 <Notice tone="error">{slotsError}</Notice>
-              ) : slots.length === 0 ? (
+              ) : slots.length === 0 ? (slotIssue ? null : (
                 <Notice tone="warning">
                   {dayState?.full
                     ? 'Todos os horários deste dia estão ocupados. Escolha outro dia.'
@@ -558,7 +562,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                       ? 'Fechado neste dia. Escolha outro dia.'
                       : 'Nenhum horário disponível.'}
                 </Notice>
-              ) : (
+              )) : (
                 <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
                   {slots.map((t) => (
                     <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
@@ -581,7 +585,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </dl>
             {rangeIntent && <Button type="button" variant="ghost" size="sm" aria-expanded={editingTime} disabled={saving || reviewing} onClick={() => setEditingTime(v => !v)}>{editingTime ? 'Manter horário selecionado' : 'Alterar horário'}</Button>}
             {rangeIntent && loadingSlots && <p role="status" className="text-sm text-[var(--text-muted)]">Verificando disponibilidade…</p>}
-            {rangeIntent && slotsError && <Notice tone="error">{slotsError}</Notice>}
+            {rangeIntent && !editingTime && slotsError && <Notice tone="error">{slotsError}</Notice>}
           </section>}
           <details open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)} className="group rounded-md border border-[var(--border)] bg-[var(--surface)]">
             <summary className="flex list-none cursor-pointer items-center justify-between p-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">Opções avançadas<Icon n="chevD" size={16} className="ml-auto transition-transform group-open:rotate-180" /></summary>
@@ -668,9 +672,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
             <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
           </section>}
-          {error && <Notice tone="error">{error}</Notice>}
+          {error && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
           <Button type="button" variant="primary" size="lg" onClick={() => save()}
-            disabled={saving || reviewing || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
+            disabled={saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
             className="w-full">
             {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}
           </Button>

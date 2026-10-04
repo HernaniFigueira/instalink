@@ -9,7 +9,7 @@ import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { DeleteSheet, ServiceForm, CatalogCrossLinks } from '@/components/dashboard/catalog-panels';
-import { serviceProfessionalMode } from '@/lib/booking';
+import { eligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
 
 interface DeleteAsk {
   kind: 'service' | 'professional';
@@ -204,6 +204,8 @@ export default function ServicosPage() {
               </div>
               <div className="divide-y divide-zinc-100">
                 {services.map((sv) => {
+                  const hasEligible = eligibleProfessionalIds(sv, pros).length > 0;
+                  const canSchedule = sv.active && sv.bookable && hasEligible;
                   const cat = cats.find((c) => c.id === sv.categoryId);
                   const who = serviceProfessionalMode(sv as any) === 'all'
                     ? 'toda a equipe'
@@ -225,12 +227,12 @@ export default function ServicosPage() {
                         {sv.price > 0 ? <><span className="font-medium">R$ {centsToBR(sv.price)}</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></> : <><span className="text-zinc-500">Sem preço base</span><span className="text-zinc-500"> · {durationLabel(sv.durationMin)}</span></>}
                       </span>
                       <span className="hidden sm:block text-xs text-zinc-500 truncate">{who}</span>
-                      <span className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                      <span className="flex items-center gap-1.5 flex-wrap">
                         <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-500 border-zinc-200')}>
                           {sv.active ? 'Ativo' : 'Inativo'}
                         </span>
-                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', sv.bookable ? 'bg-zinc-50 text-zinc-600 border-zinc-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
-                          {sv.bookable ? 'Pode ser agendado' : 'Não agendável'}
+                        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', canSchedule ? 'bg-zinc-50 text-zinc-600 border-zinc-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                          {!hasEligible ? 'Sem profissional habilitado' : canSchedule ? 'Pode ser agendado' : 'Não agendável'}
                         </span>
                       </span>
                       <span className="flex justify-end items-center gap-1.5 text-xs shrink-0">

@@ -400,8 +400,16 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
     await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
     expect(slotButton('10:00')).toBeNull();
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
-    expect(screen.getByText(/Este profissional não está disponível neste intervalo/)).toBeTruthy();
+    const message = /Este profissional não está disponível neste intervalo/;
+    expect(screen.getAllByText(message)).toHaveLength(1);
+    const save = within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(screen.getAllByText(message)).toHaveLength(1);
     expect(slotsApi.posts).toBe(0);
+    fireEvent.click(slotButton('14:00')!);
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(screen.queryByText(message)).toBeNull();
   });
 });
 
@@ -487,5 +495,36 @@ describe('Final pré-F1 intent preservation', () => {
     expect(screen.getByText('Esse intervalo já passou. Escolha um horário futuro.')).toBeTruthy();
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
     expect(screen.queryByText('Escolha serviço, data e horário.')).toBeNull();
+  });
+});
+
+describe('P2 — canonical eligibility and preventive validation', () => {
+  it('selected empty service explains eligibility once, not closed day, and recovers with eligible service', async () => {
+    const service = FIXTURE.state.services.find(s => s.id === SVC_CARDIO)!;
+    Object.assign(service, { professionalMode: 'selected', professionalIds: [] });
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00');
+    fireEvent.change(serviceSelect(), { target: { value: SVC_CARDIO } });
+    await waitFor(() => expect(screen.getAllByText('Nenhum profissional está habilitado para este serviço.')).toHaveLength(1));
+    expect(screen.queryByText(/Fechado neste dia/)).toBeNull();
+    const save = within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(serviceSelect().selectedOptions[0].textContent).toContain('Sem profissional habilitado');
+    fireEvent.change(serviceSelect(), { target: { value: SVC_ESTETICA } });
+    fireEvent.change(proSelect()!, { target: { value: MICHELLE } });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(screen.queryByText('Nenhum profissional está habilitado para este serviço.')).toBeNull();
+  });
+});
+
+describe('P2 — unavailable whole day', () => {
+  it('empty slot result has only one interval warning and cannot submit', async () => {
+    slotsApi.slots = [];
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00');
+    await waitFor(() => expect(screen.getAllByText(/Este profissional não está disponível neste intervalo/)).toHaveLength(1));
+    expect(screen.queryByText('Nenhum horário disponível.')).toBeNull();
+    expect((within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(slotsApi.posts).toBe(0);
   });
 });
