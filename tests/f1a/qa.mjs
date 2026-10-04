@@ -224,6 +224,17 @@ try {
   assert.match(legacyText, /Conduta|Foi ao veterinário|O que foi feito/);
   assert.match(legacyText, /Finalizar atendimento/);       // finalização NÃO foi apagada do sistema
   ok('Registro completo (legado) preservado em /atendimento/<id>/registro');
+
+  // O caminho que JÁ EXISTIA: histórico do Cliente 360 → registro completo.
+  const ddmmyyyy = (() => { const [y, m, d] = today.split('-'); return `${d}/${m}/${y}`; })();
+  await p.goto(`${base}/clientes/contact%3Act-isabelle?b=${A}`);
+  await p.getByRole('tab', { name: /Atendimento/ }).click();
+  await p.locator('button').filter({ hasText: ddmmyyyy }).first().click();
+  await p.waitForURL(/\/atendimento\/[0-9a-f-]{36}\/registro/);
+  await p.locator('.encounter-page').waitFor();       // a tela carregou de verdade
+  const legacyFromHistory = await p.locator('.encounter-page').innerText();
+  assert.match(legacyFromHistory, /Finalizar atendimento/);   // nada foi apagado
+  ok('Histórico (Cliente 360) abre o registro completo — caminho antigo preservado');
   await p.context().close();
 
   // ── 4 · MOBILE 390 ──
