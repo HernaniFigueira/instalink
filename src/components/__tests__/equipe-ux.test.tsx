@@ -226,7 +226,7 @@ describe('Equipe UX — serviço sugerido (render)', () => {
     fireEvent.change(dur, { target: { value: '50' } });
     fireEvent.click(d.getByText('Criar e vincular'));
     expect(dialog().textContent).toContain('Consulta cardiológica');
-    expect(dialog().textContent).toContain('50min');
+    expect(dialog().textContent).toContain('50 min');
     fireEvent.click(d.getByText('Salvar alterações'));
     await waitFor(() => expect(apiSend).toHaveBeenCalled());
     const payload = vi.mocked(apiSend).mock.calls[0][2] as any;
