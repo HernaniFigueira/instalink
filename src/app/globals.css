@@ -2738,6 +2738,127 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .encounter-page__header, .encounter-page__footer { scroll-behavior: auto; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   F1A · WORKSPACE CLÍNICO DO ATENDIMENTO (/atendimento/[encounterId])
+   ═══════════════════════════════════════════════════════════════
+   Área de trabalho, não card de dashboard: cabeçalho contextual persistente
+   (paciente em destaque, tutor como contexto) + UMA seção real. Sem gradiente,
+   sem glow, sem card-wall — superfície neutra e tokens do workspace.
+   ═══════════════════════════════════════════════════════════════ */
+.encounter-workspace {
+  --encounter-page-gutter: clamp(16px, 3vw, 40px);
+  min-height: calc(100dvh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  color: var(--text, #1c2822);
+  margin: -1px auto 0;
+}
+.encounter-workspace__header {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px var(--encounter-page-gutter);
+  border-bottom: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-workspace__back { flex: none; align-self: flex-start; }
+.encounter-workspace__heading {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.encounter-workspace__identity { min-width: 0; }
+.encounter-workspace__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-faint, #8b9a92);
+}
+.encounter-workspace__patient {
+  margin: 2px 0 0;
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  color: var(--text, #1c2822);
+}
+.encounter-workspace__subtitle { margin: 3px 0 0; font-size: 13px; font-weight: 600; color: var(--text, #1c2822); }
+.encounter-workspace__tutor { margin: 2px 0 0; font-size: 12.5px; color: var(--text-muted, #66736c); }
+.encounter-workspace__meta { margin: 5px 0 0; font-size: 12px; color: var(--text-muted, #66736c); }
+/* Navegação interna: só aparece quando existe MAIS DE UMA seção real
+   (F1A tem uma). Nada de aba desabilitada nem módulo decorativo. */
+.encounter-workspace__nav {
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--encounter-page-gutter);
+  border-bottom: 1px solid var(--border-soft, #eef2ef);
+  background: var(--surface, #fff);
+}
+/* Decreto vigente (missão 4 · 2): ABA NÃO TEM SUBLINHADO. A seção ativa é
+   marcada por SUPERFÍCIE (pill), nunca por borda inferior. */
+.encounter-workspace__nav-item {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 8px 12px;
+  margin: 6px 2px;
+  border-radius: var(--radius-sm, 8px);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted, #66736c);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.encounter-workspace__nav-item:hover { background: var(--surface-hover, #f4f6f5); color: var(--text, #1c2822); }
+.encounter-workspace__nav-item[data-active='true'] {
+  background: var(--accent-soft, #eef2ff);
+  color: var(--accent-fg, #1e3a8a);
+}
+.encounter-workspace__nav-item:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+.encounter-workspace__section { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.encounter-workspace__content {
+  width: min(100%, 1280px);
+  flex: 1;
+  margin: 0 auto;
+  padding: 24px var(--encounter-page-gutter) 32px;
+}
+.encounter-workspace__hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 24px;
+  width: min(100% - (2 * var(--encounter-page-gutter)), 1280px);
+  color: var(--text-muted, #66736c);
+  font-size: 12px;
+}
+.encounter-workspace__notice { width: min(100% - 32px, 1160px); margin: 28px auto; padding: 20px; }
+@media (max-width: 767px) {
+  .encounter-workspace { min-height: calc(100dvh - 56px); margin-inline: -16px; }
+  .encounter-workspace__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
+  .encounter-workspace__back { min-height: 40px; }
+  .encounter-workspace__heading { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .encounter-workspace__patient { font-size: 20px; }
+  .encounter-workspace__subtitle { font-size: 12.5px; }
+  .encounter-workspace__meta { font-size: 11.5px; }
+  .encounter-workspace__nav { padding: 0 16px; overflow-x: auto; }
+  .encounter-workspace__content { padding: 18px 16px 24px; }
+  .encounter-workspace__hint { width: min(100% - 32px, 1280px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encounter-workspace__header { scroll-behavior: auto; }
+  .encounter-workspace__nav-item { transition: none; }
+}
 .client-profile-page .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
 
 /* ═══════════════════════════════════════════════════════════════

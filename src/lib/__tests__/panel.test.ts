@@ -14,6 +14,7 @@ import {
 import { inPanelPath } from '../client-auth';
 import { permissionsFor } from '../permissions';
 import { requiresActiveBusiness } from '../business-context';
+import { encounterWorkspaceHref } from '../encounter-workspace';
 import type { PanelContext } from '../panel';
 import type { PermissionId } from '../types';
 
@@ -721,7 +722,13 @@ describe('uma porta por conceito', () => {
       const own = path.join(root, `src/app/(dashboard)${route.href}`);
       const re = new RegExp('href=\\{[`\'"]' + route.href.replace(/\//g, '\\/'));
       const linked = files.some((f) => !f.startsWith(own) && re.test(readFileSync(f, 'utf8')))
-        || (route.href === '/atendimento' && read('src/lib/encounter-workspace.ts').includes('return `/atendimento?'));
+        // F1A — /atendimento é alcançado pelo construtor canônico (o workspace
+        // por ID é rota FILHA: /atendimento/[encounterId]). A prova é
+        // FUNCIONAL: o módulo produz o link, não um comentário.
+        || (route.href === '/atendimento' && (
+          encounterWorkspaceHref({ businessId: 'b', bookingId: 'bk' }).startsWith('/atendimento?')
+          || encounterWorkspaceHref({ businessId: 'b', id: 'e' }).startsWith('/atendimento/')
+        ));
       expect(linked, `${route.href} não tem nenhum atalho contextual`).toBe(true);
     }
   });

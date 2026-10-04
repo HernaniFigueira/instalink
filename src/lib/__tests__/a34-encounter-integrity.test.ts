@@ -92,6 +92,10 @@ const SHEET = stripComments(read('src/components/dashboard/EncounterSheet.tsx'))
 const QUEUE = stripComments(read('src/components/dashboard/QueuePanel.tsx'));
 const AGENDA = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
 const ATENDIMENTO = stripComments(read('src/app/(dashboard)/atendimento/page.tsx'));
+// F1A — a TELA COMPLETA do atendimento passou a ser o WORKSPACE canônico
+// (`/atendimento/[encounterId]`); o /atendimento virou o resolvedor de entrada.
+// As asserções de comportamento da tela acompanham o componente real.
+const WORKSPACE = stripComments(read('src/components/dashboard/EncounterWorkspace.tsx'));
 
 let token = '';
 beforeEach(async () => {
@@ -251,7 +255,7 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
     // o agendamento é o NewBookingSheet, com confirmação humana.
     expect(SHEET).toMatch(/onScheduleReturn\(\{/);
     expect(SHEET).toMatch(/Agendar retorno abre o agendamento já preenchido — nada é marcado sem você confirmar/);
-    expect(ATENDIMENTO).toContain('sessionStorage.setItem(RETURN_BOOKING_KEY');
+    expect(WORKSPACE).toContain('sessionStorage.setItem(RETURN_BOOKING_KEY');
     expect(AGENDA).toContain("params.get('retornoAtendimento') !== '1'");
     expect(AGENDA).toMatch(/initial=\{\{\s*name: creating\.name/);
     expect((await readDB()).bookings).toHaveLength(0);
@@ -322,7 +326,7 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
   it('"Agendar retorno" leva o telefone até o formulário sem nova busca do cliente', () => {
     expect(SHEET).toMatch(/customerPhone: row\.customerPhone \|\| ''/);
     expect(SHEET).toMatch(/customerPhone: string;/);
-    expect(ATENDIMENTO).toMatch(/sessionStorage\.setItem\(RETURN_BOOKING_KEY, JSON\.stringify\(\{ \.\.\.seed, businessId \}\)\)/);
+    expect(WORKSPACE).toMatch(/sessionStorage\.setItem\(RETURN_BOOKING_KEY, JSON\.stringify\(\{ \.\.\.seed, businessId \}\)\)/);
     // A volta da rota restaura contato, nome, telefone, serviço e profissional.
     expect(AGENDA).toMatch(/contactId: seed\.contactId \|\| '', name: seed\.customerName \|\| '', phone: seed\.customerPhone \|\| ''/);
     expect(AGENDA).toMatch(/serviceId: seed\.serviceId \|\| ''/);
@@ -355,9 +359,9 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
 
   it('quem reabre é quem administra — e a fila usa a régua real do papel', () => {
     expect(AGENDA).toMatch(/const canReopen = canReopenEncounter\(role\);/);
-    expect(ATENDIMENTO).toMatch(/const canReopen = canReopenEncounter\(role\);/);
-    expect(ATENDIMENTO).toMatch(/canReopen=\{canReopen\}/);
+    expect(WORKSPACE).toMatch(/const canReopen = canReopenEncounter\(role\);/);
+    expect(WORKSPACE).toMatch(/canReopen=\{canReopen\}/);
     // A tela completa mantém a mesma régua por papel do registro original.
-    expect(ATENDIMENTO).not.toContain('canReopen={true}');
+    expect(WORKSPACE).not.toContain('canReopen={true}');
   });
 });

@@ -298,8 +298,10 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   </Button>
                 )}
                 {can('open_care') && (
+                  // F1A — o atendimento JÁ ESTÁ EM ANDAMENTO: o botão diz o que
+                  // vai acontecer (retomar o mesmo registro, nunca criar outro).
                   <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
-                    <Icon n="fileText" size={13} /> Abrir atendimento
+                    <Icon n="fileText" size={13} /> Retomar atendimento
                   </Button>
                 )}
                 {can('view_care') && (

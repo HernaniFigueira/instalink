@@ -121,7 +121,11 @@ describe('A3.4 fix · fila → atendimento (sem agendamento)', () => {
     expect(SHEET).toMatch(/queueId\?: string/);
     expect(SHEET).toMatch(/queueId: queueId \|\| ''/);
     expect(AGENDA).toMatch(/onEncounter=\{\(row\) => router\.push\(encounterWorkspaceHref\(\{ businessId, queueId: row\.id/);
-    expect(ATENDIMENTO).toMatch(/queueId=\{queueId \|\| undefined\}/);
+    // F1A — /atendimento passou a ser o RESOLVEDOR DE ENTRADA: ele leva a
+    // origem (bookingId/queueId) ao start-or-resume canônico e assume a rota
+    // por encounterId. O vínculo com a fila continua 1:1 no servidor.
+    expect(ATENDIMENTO).toMatch(/\/api\/encounters\/start/);
+    expect(ATENDIMENTO).toMatch(/businessId, bookingId, queueId,/);
     expect(ATENDIMENTO).toMatch(/permissions\.atendimento !== true/);
     expect(AGENDA).toMatch(/canEncounter=\{!denied && canEncounter\}/);
     expect(AGENDA).toMatch(/permissions\.atendimento === true/);

@@ -10,7 +10,8 @@
 //     impressa na via entregue.
 //
 // Sem I/O e sem relógio global: o servidor passa `now` e o autor.
-import type { Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
+import { PET_SPECIES_LABELS, petAgeLabel } from './pets';
+import type { DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
 
 export interface EncounterStatusDef {
   id: EncounterStatus;
@@ -29,6 +30,84 @@ export const ENCOUNTER_STATUS: Record<EncounterStatus, EncounterStatusDef> = {
     hint: 'Registro fechado no fim do atendimento. Alterações ficam registradas na auditoria.',
   },
 };
+
+// ── F1A · ESTADO CLÍNICO CANÔNICO (convergência, não nova máquina) ──────────
+// O Clinical Encounter F1 pede os estados `draft | in_progress | finalized |
+// cancelled`. O domínio JÁ EXISTE e já é usado em produção, com o contrato
+// `draft | finalized` — onde `draft` SEMPRE significou "em atendimento" (é o
+// que a camada de workflow deriva como `in_care`). Renomear o valor persistido
+// seria uma migração de dados só por nomenclatura (e o repo proíbe big-bang).
+//
+// A convergência é feita por DERIVAÇÃO explícita, num lugar único:
+//
+//   F1 canônico   | persistido / derivado                     | UX
+//   --------------|-------------------------------------------|--------------
+//   draft         | NENHUM registro (não iniciado)            | Não iniciado
+//   in_progress   | Encounter.status === 'draft'              | Em atendimento
+//   finalized     | Encounter.status === 'finalized'          | Finalizado
+//   cancelled     | booking cancelado/falta SEM atendimento    | (F1A não persiste)
+//
+// Consequência prática e intencional: **não existe Encounter "não iniciado"
+// persistido**. O atendimento começa quando o registro nasce (startOrResume) —
+// é o que garante o invariante "um Booking não cria dois atendimentos ativos"
+// sem depender de ordem de array nem de primeiro item de lista.
+export type EncounterClinicalState = 'not_started' | 'in_progress' | 'finalized';
+
+export const ENCOUNTER_CLINICAL_STATE: Record<EncounterClinicalState, {
+  id: EncounterClinicalState;
+  label: string;
+  /** Rótulo curto do cabeçalho do workspace (MAIÚSCULO é decisão de CSS). */
+  short: string;
+  tone: 'zinc' | 'blue' | 'emerald';
+  hint: string;
+}> = {
+  not_started: {
+    id: 'not_started', label: 'Não iniciado', short: 'Não iniciado', tone: 'zinc',
+    hint: 'Este agendamento ainda não tem atendimento clínico aberto.',
+  },
+  in_progress: {
+    id: 'in_progress', label: 'Em atendimento', short: 'Em atendimento', tone: 'blue',
+    hint: 'Atendimento em andamento: o registro clínico está aberto e editável.',
+  },
+  finalized: {
+    id: 'finalized', label: 'Finalizado', short: 'Finalizado', tone: 'emerald',
+    hint: 'Registro fechado no fim do atendimento. Alterações exigem reabertura auditada.',
+  },
+};
+
+/**
+ * Estado clínico canônico de um atendimento. `null` = não iniciado (não existe
+ * registro). NUNCA deriva de posição em array: o chamador passa o registro que
+ * já resolveu por vínculo (booking/fila) dentro do tenant.
+ */
+export function encounterClinicalState(e: Pick<Encounter, 'status'> | null | undefined): EncounterClinicalState {
+  if (!e) return 'not_started';
+  return e.status === 'finalized' ? 'finalized' : 'in_progress';
+}
+
+/** Registro aberto para edição clínica (= canônico `in_progress`). */
+export function encounterIsInProgress(e: Pick<Encounter, 'status'> | null | undefined): boolean {
+  return encounterClinicalState(e) === 'in_progress';
+}
+
+/**
+ * F1A — PACIENTE do atendimento. Na vertical veterinária o paciente é o PET;
+ * `patientId` canônico do F1 é ESTE campo. Fica num helper único para que os
+ * módulos futuros (odontologia, estética) falem de "paciente" sem criar um
+ * segundo vínculo paralelo no documento.
+ */
+export function encounterPatientId(e: Pick<Encounter, 'petId'> | null | undefined): string {
+  return String(e?.petId || '');
+}
+
+/**
+ * F1A — RESPONSÁVEL/TUTOR canônico. O cadastro do CRM (`contactId`) é a
+ * identidade usada pelo histórico 360; `customerId` é a conta do cliente
+ * (quando existe). Nunca é derivado de nome nem de e-mail.
+ */
+export function encounterResponsibleId(e: Pick<Encounter, 'contactId' | 'customerId'> | null | undefined): string {
+  return String(e?.contactId || e?.customerId || '');
+}
 
 /** Campos de texto do registro (na ordem em que aparecem na tela). */
 export const ENCOUNTER_TEXT_FIELDS = ['complaint', 'evolution', 'guidance', 'followUp', 'internalNote'] as const;
@@ -428,4 +507,90 @@ export function encounterForQueue(rows: Encounter[], businessId: string, queueId
 export function encounterInScope(e: Pick<Encounter, 'professionalId'>, professionalScope: string): boolean {
   if (!professionalScope) return true;
   return e.professionalId === professionalScope;
+}
+
+// ── F1A · MODELO DE LEITURA DO ATENDIMENTO (workspace clínico) ──────────────
+// Resolvido no SERVIDOR (e reutilizado por /api/encounters e /api/encounters/
+// start) para que a tela não precise de 3 GETs nem monte contexto no cliente.
+// Todo vínculo é filtrado pelo mesmo `businessId` do guard: nada de cross-tenant
+// e nada de "primeiro item da lista".
+/**
+ * Visão de leitura: a entidade + o que a tela precisa para não fazer 3 GETs.
+ *
+ * O `customerPhone` NÃO é persistido no registro (não é snapshot do cadastro:
+ * telefone muda, e o documento do atendimento não deve carregar dado velho).
+ * Ele é RESOLVIDO na leitura, na ordem segura: contato do CRM → agendamento de
+ * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
+ * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
+ */
+export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
+  const pro = db.professionals.find((p) => p.id === e.professionalId);
+  const svc = db.services.find((s) => s.id === e.serviceId);
+  const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId && b.businessId === e.businessId) : undefined;
+  const queue = e.queueId ? (db.queue || []).find((q) => q.id === e.queueId && q.businessId === e.businessId) : undefined;
+  const contact = e.contactId
+    ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
+    : undefined;
+  const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
+  return {
+    ...e,
+    professionalName: pro?.name || '',
+    serviceName: svc?.name || '',
+    bookingStatus: booking?.status || '',
+    customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
+    // P0-3 — no atendimento o PACIENTE é o pet; o tutor fica como contexto.
+    petName: pet?.name || booking?.petName || '',
+    /**
+     * F1A — CONTEXTO DO WORKSPACE CLÍNICO.
+     *
+     * Tudo o que o cabeçalho precisa, resolvido no SERVIDOR e sempre filtrado
+     * pelo mesmo `businessId` do guard: paciente (pet), tutor/responsável,
+     * serviço, profissional e agendamento de origem. Nenhum dado vem do
+     * cliente e nenhum vínculo cross-tenant atravessa esta leitura.
+     */
+    context: {
+      // Estado clínico CANÔNICO do F1 (derivado do status persistido).
+      clinicalState: encounterClinicalState(e),
+      patient: pet ? {
+        id: pet.id,
+        name: pet.name,
+        species: pet.species || '',
+        speciesLabel: PET_SPECIES_LABELS[pet.species || ''] || pet.species || '',
+        breed: pet.breed || '',
+        sex: pet.sex || '',
+        birthDate: pet.birthDate || '',
+        ageLabel: petAgeLabel(pet.birthDate || ''),
+        weightKg: Number(pet.weightKg) || 0,
+        // Sem pet cadastrado, o nome do agendamento ainda identifica o paciente.
+      } : (booking?.petName ? { id: '', name: booking.petName, species: '', speciesLabel: '', breed: '', sex: '', birthDate: '', ageLabel: '', weightKg: 0 } : null),
+      responsible: contact
+        ? { id: contact.id, name: contact.name || '', phone: contact.phone || '' }
+        : { id: '', name: e.customerName || booking?.customerName || queue?.customerName || '', phone: booking?.customerPhone || queue?.customerPhone || '' },
+      service: svc ? { id: svc.id, name: svc.name || '', durationMin: Number(svc.durationMin) || 0 } : null,
+      professional: pro ? { id: pro.id, name: pro.name || '', role: pro.role || '' } : null,
+      booking: booking ? { id: booking.id, date: booking.date, time: booking.time, status: booking.status } : null,
+      queue: queue ? { id: queue.id, date: queue.date } : null,
+    },
+  } as EncounterWorkspaceView;
+}
+
+/** Visão de leitura entregue pelas rotas (entidade + nomes + contexto F1A). */
+export interface EncounterWorkspaceView extends Encounter {
+  professionalName: string;
+  serviceName: string;
+  bookingStatus: string;
+  customerPhone: string;
+  petName: string;
+  context: {
+    clinicalState: EncounterClinicalState;
+    patient: {
+      id: string; name: string; species: string; speciesLabel: string; breed: string;
+      sex: string; birthDate: string; ageLabel: string; weightKg: number;
+    } | null;
+    responsible: { id: string; name: string; phone: string };
+    service: { id: string; name: string; durationMin: number } | null;
+    professional: { id: string; name: string; role: string } | null;
+    booking: { id: string; date: string; time: string; status: string } | null;
+    queue: { id: string; date: string } | null;
+  };
 }

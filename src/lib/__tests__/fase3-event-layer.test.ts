@@ -60,9 +60,14 @@ describe('Event Layer · emissões nos serviços oficiais', () => {
   });
 
   it('encounter.started no POST e encounter.completed no finalize', () => {
+    // F1A — a CRIAÇÃO (start or resume) é a operação canônica em
+    // lib/encounter-start.ts (usada por /api/encounters e /api/encounters/start);
+    // a finalização continua na rota. Um emit por caminho, nos dois lados.
+    const start = read('src/lib/encounter-start.ts');
+    expect(start).toContain("event: 'encounter.started'");
     const t = read('src/app/api/encounters/route.ts');
-    expect(t).toContain("event: 'encounter.started'");
     expect(t).toContain("event: 'encounter.completed'");
+    expect(t).not.toContain("event: 'encounter.started'"); // sem emit duplicado
   });
 
   it('conversation.handoff só em takeover para humano', () => {

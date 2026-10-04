@@ -465,7 +465,10 @@ describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', (
     expect(SHEET.match(/min-h-11 w-auto/g)?.length).toBeGreaterThanOrEqual(2);
     expect(SHEET).toContain('className="w-full sm:w-auto"'); // Finalizar/Reabrir
     expect(SHEET).toMatch(/mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs/);
-    expect(SHEET).toContain("layout !== 'page' && isDraft && autoState === 'saved'");
+    // F1A — three layouts now (page | section | sheet): the "Salvo agora"
+    // label stays exclusive to the side panel, because page AND section footers
+    // already carry the persistence indicator. Same invariant, wider scope.
+    expect(SHEET).toContain("layout === 'sheet' && isDraft && autoState === 'saved'");
   });
 
   it('nenhuma largura fixa acima da viewport nos três arquivos', () => {

@@ -133,6 +133,10 @@ export function normalizeDB(raw: unknown): DB {
     // Documento criado antes do vínculo com a fila: sem id de entrada, mas
     // SEMPRE string (o resto do código compara direto, nunca `undefined`).
     if (typeof e.queueId !== 'string') e.queueId = '';
+    // F1A — início clínico: registro anterior ao campo já estava EM ATENDIMENTO
+    // (nasceu com o POST que inicia o atendimento), então `createdAt` é o
+    // instante mais próximo e honesto — nunca deixa o campo vazio.
+    if (typeof e.startedAt !== 'string' || !e.startedAt) e.startedAt = String(e.createdAt || '');
     // FASE 2 · P3 — retorno estruturado + arquivos (aditivos e idempotentes).
     if (!['none', 'date', 'interval', 'custom'].includes(e.followUpMode)) {
       e.followUpMode = typeof e.followUp === 'string' && e.followUp.trim() ? 'custom' : 'none';

@@ -12,36 +12,29 @@
 // para o mesmo booking devolve o registro existente (idempotência de UI), nunca
 // um documento duplicado.
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
-import { NO_PROFESSIONAL_SCOPE } from '@/lib/access-core';
-import { PROFESSIONAL_NOT_ELIGIBLE_ERROR, professionalServesService, serviceRequiresProfessional } from '@/lib/booking';
 import { pushAudit } from '@/lib/audit';
 import { emitAutomationEvent } from '@/lib/automation/events';
 import {
   ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
-  encounterForBooking, encounterForQueue, encounterInScope, encountersForCustomer,
+  encounterClinicalState, encounterForQueue, encounterInScope, encountersForCustomer,
+  encounterView as view, type EncounterClinicalState,
   hasExpectedVersion, versionConflict,
   // FASE 2 · P3 — retorno estruturado + arquivos (aditivos).
   cleanEncounterFiles, isFollowUpMode, validateFollowUp,
 } from '@/lib/encounters';
+// F1A — operação canônica de iniciar/retomar (mesma usada por /encounters/start).
+import { startOrResumeEncounter } from '@/lib/encounter-start';
 import { applyBookingStatusTx } from '@/lib/booking-status';
-import { assertCanStartCare, assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
+import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
-import { effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
+import { effectiveTimezone } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
-import { findContact } from '@/lib/contacts';
 import type { DB, Encounter } from '@/lib/types';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
-}
-
-/** Hora local (HH:MM) do fuso da unidade a partir de um ISO — para a chegada. */
-function hmOf(iso: string, tz: string): string {
-  const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? nowHM(d, tz) : '';
 }
 
 /** Revisão atual do registro (documento legado sem o campo vale 1). */
@@ -53,35 +46,6 @@ function encounterVersionOf(row: { version?: number }): number {
 /** Quem pode reabrir um registro finalizado: quem manda na unidade. */
 function canReopen(role: string): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MASTER';
-}
-
-/**
- * Visão de leitura: a entidade + o que a tela precisa para não fazer 3 GETs.
- *
- * O `customerPhone` NÃO é persistido no registro (não é snapshot do cadastro:
- * telefone muda, e o documento do atendimento não deve carregar dado velho).
- * Ele é RESOLVIDO na leitura, na ordem segura: contato do CRM → agendamento de
- * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
- * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
- */
-function view(e: Encounter, db: DB) {
-  const pro = db.professionals.find((p) => p.id === e.professionalId);
-  const svc = db.services.find((s) => s.id === e.serviceId);
-  const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId && b.businessId === e.businessId) : undefined;
-  const queue = e.queueId ? (db.queue || []).find((q) => q.id === e.queueId && q.businessId === e.businessId) : undefined;
-  const contact = e.contactId
-    ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
-    : undefined;
-  const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
-  return {
-    ...e,
-    professionalName: pro?.name || '',
-    serviceName: svc?.name || '',
-    bookingStatus: booking?.status || '',
-    customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
-    // P0-3 — no atendimento o PACIENTE é o pet; o tutor fica como contexto.
-    petName: pet?.name || booking?.petName || '',
-  };
 }
 
 export async function GET(req: NextRequest) {
@@ -101,8 +65,17 @@ export async function GET(req: NextRequest) {
   // Leitura POR ID: é o que a tela usa para "recarregar" depois de um conflito
   // de versão. Nunca cria nada — e por isso não pode virar POST por acidente.
   if (id) {
-    const found = scoped.find((e) => e.id === id);
+    // F1A — LEITURA POR ID (rota direta do workspace): primeiro o TENANT,
+    // depois o ESCOPO. A ordem importa: um registro de outro profissional da
+    // MESMA unidade é 403 ("não é seu"), e não 404 ("não existe") — é a mesma
+    // régua do PATCH/DELETE e evita a mentira de "não encontrado" para quem
+    // simplesmente não tem vínculo com aquele atendimento. Nenhum dado vaza:
+    // a resposta de erro nunca carrega o registro.
+    const found = (db.encounters || []).find((e) => e.id === id && e.businessId === businessId);
     if (!found) return NextResponse.json({ error: 'Registro de atendimento não encontrado.' }, { status: 404 });
+    if (!encounterInScope(found, guard.ctx.professionalScope)) {
+      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
+    }
     return NextResponse.json({ ok: true, encounter: view(found, db) });
   }
   if (queueId) {
@@ -131,153 +104,47 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db)) });
 }
 
+/**
+ * POST — ABRIR O ATENDIMENTO (iniciar ou retomar).
+ *
+ * F1A: o corpo desta rota agora delega à operação canônica
+ * `startOrResumeEncounter` (lib/encounter-start.ts), a MESMA usada por
+ * /api/encounters/start. Não existe mais um caminho "de criação" paralelo:
+ * retomar, iniciar e reaproveitar finalizado passam pela mesma função, dentro
+ * da mesma transação, com as mesmas invariantes.
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const businessId = String(body.businessId || '');
     const guard = await requireBusiness(req, businessId, 'atendimento');
     if (!guard.ok) return guard.res;
-    const db = guard.db;
-    const business = guard.ctx.business;
-    const tz = effectiveTimezone(business.businessTimezone);
     const now = new Date().toISOString();
-
-    const bookingId = String(body.bookingId || '');
-    const booking = bookingId
-      ? db.bookings.find((b) => b.id === bookingId && b.businessId === businessId)
-      : undefined;
-    if (bookingId && !booking) {
-      return NextResponse.json({ error: 'Agendamento não encontrado nesta unidade.' }, { status: 404 });
-    }
-    // Registro sem agendamento: quem chegou direto no balcão. A entrada da
-    // fila é a referência (horário e profissional vêm dela) — e NADA de
-    // fabricar um Booking falso: a agenda continua dizendo a verdade.
-    const queueId = String(body.queueId || '');
-    const queueEntry = queueId
-      ? (db.queue || []).find((q) => q.id === queueId && q.businessId === businessId)
-      : undefined;
-    if (queueId && !queueEntry) {
-      return NextResponse.json({ error: 'Entrada da fila não encontrada nesta unidade.' }, { status: 404 });
-    }
-    // 1:1 — um agendamento tem UM registro, e uma ENTRADA DA FILA também.
-    // Se já existe, devolvemos o existente (a tela abre o que está lá em vez de
-    // criar documento paralelo). Vale para os dois vínculos.
-    const existing = encounterForBooking(db.encounters || [], businessId, bookingId)
-      || encounterForQueue(db.encounters || [], businessId, queueId);
-    if (existing) {
-      if (!encounterInScope(existing, guard.ctx.professionalScope)) {
-        return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
-      }
-      return NextResponse.json({ ok: true, encounter: view(existing, db), reused: true });
-    }
-
-    // O profissional do registro é quem atendeu: o escopo manda; sem escopo,
-    // o profissional do agendamento (ou o indicado explicitamente).
-    // O papel de PROFISSIONAL sem vínculo vem como sentinela — não é pessoa.
-    const scopeId = guard.ctx.professionalScope === NO_PROFESSIONAL_SCOPE ? '' : (guard.ctx.professionalScope || '');
-    const professionalId = scopeId
-      || String(body.professionalId || booking?.professionalId || queueEntry?.professionalId || '');
-    if (booking && scopeId && booking.professionalId && booking.professionalId !== scopeId) {
-      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
-    }
-    // A fila segue a MESMA régua do agendamento: entrada de outro profissional
-    // não é registrada por quem não é ele.
-    if (queueEntry && scopeId && queueEntry.professionalId && queueEntry.professionalId !== scopeId) {
-      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
-    }
-    // ── A3.4 (teste humano) — SERVIÇO × PROFISSIONAL, revalidado AQUI ──
-    // A tela já esconde o que não é elegível e a fila já recusa assumir: o
-    // registro é a última porta e não confia em nenhuma das duas. Serviço com
-    // `professionalIds` só é registrado por quem está na lista.
-    //
-    // A régua só vale quando HÁ profissional a conferir: quem opera o balcão
-    // sem vínculo (dono/secretaria) não tem "vínculo inelegível" a fabricar —
-    // o registro segue sem profissional, como sempre foi. O que nunca passa é
-    // um profissional concreto que não atende o serviço.
-    const encounterServiceId = String(body.serviceId || booking?.serviceId || queueEntry?.serviceId || '');
-    const encounterService = (db.services || []).find((s) => s.id === encounterServiceId && s.businessId === businessId);
-    if (encounterService && serviceRequiresProfessional(encounterService) && professionalId
-      && !professionalServesService(encounterService, professionalId, db.professionals || [])) {
-      return NextResponse.json({ error: PROFESSIONAL_NOT_ELIGIBLE_ERROR }, { status: 403 });
-    }
-
-    const row: Encounter = {
-      id: randomUUID(),
+    const result = await updateDB((d: DB) => startOrResumeEncounter(d, {
       businessId,
-      bookingId: booking?.id || '',
-      queueId: queueEntry?.id || '',
-      serviceId: encounterServiceId,
-      professionalId,
-      customerId: String(body.customerId || booking?.customerId || ''),
-      // Vínculo com o CRM: sem contato explícito, resolvemos pelo telefone do
-      // agendamento (mesma chave de identidade do resto do sistema) — é o que
-      // faz o registro aparecer no histórico 360 do cliente. Nunca por nome.
-      contactId: String(body.contactId || queueEntry?.contactId || '') || (findContact(
-        db, businessId,
-        String(body.customerId || booking?.customerId || ''),
-        booking?.customerPhone || queueEntry?.customerPhone || String(body.customerPhone || ''),
-        booking?.customerName || queueEntry?.customerName || String(body.customerName || ''),
-      )?.id || ''),
-      customerName: String(body.customerName || booking?.customerName || queueEntry?.customerName || '').slice(0, 80),
-      date: String(body.date || booking?.date || queueEntry?.date || todayISO(new Date(), tz)),
-      // Sem agendamento, o "horário" é a CHEGADA/INÍCIO da fila — o registro
-      // diz quando o atendimento aconteceu, não um horário de agenda inventado.
-      time: String(body.time || booking?.time
-        || (queueEntry ? (queueEntry.startedAt ? hmOf(queueEntry.startedAt, tz) : hmOf(queueEntry.createdAt, tz)) : '')),
-      complaint: cleanText(body.complaint, 'complaint'),
-      evolution: cleanText(body.evolution, 'evolution'),
-      guidance: cleanText(body.guidance, 'guidance'),
-      followUp: cleanText(body.followUp, 'followUp'),
-      internalNote: cleanText(body.internalNote, 'internalNote'),
-      tags: cleanTags(body.tags),
-      status: 'draft',
-      version: 1,
-      createdAt: now, updatedAt: now,
-      createdBy: guard.ctx.user.id, updatedBy: guard.ctx.user.id,
-      finalizedAt: '', finalizedBy: '', signedBy: '',
-      // FASE 2 · P6 — pet do agendamento herdado (ou informado e validado na unidade).
-      petId: booking?.petId
-        || (body.petId && db.pets.some((p) => p.id === String(body.petId) && p.businessId === businessId)
-          ? String(body.petId) : ''),
-    };
-
-    await updateDB((d: DB) => {
-      // Revalidação dentro da transação: nada de dois registros para o mesmo
-      // agendamento (nem para a mesma entrada da fila) por corrida de clique.
-      if (row.bookingId && encounterForBooking(d.encounters, businessId, row.bookingId)) {
-        throw err('Este agendamento já tem registro de atendimento.', 409);
-      }
-      if (row.queueId && encounterForQueue(d.encounters, businessId, row.queueId)) {
-        throw err('Esta entrada da fila já tem registro de atendimento.', 409);
-      }
-      // Workflow: só se inicia o atendimento de quem JÁ CHEGOU (arrived →
-      // in_care). A guarda roda dentro da transação, com o estado real.
-      if (row.bookingId) {
-        const bk = d.bookings.find((b) => b.id === row.bookingId && b.businessId === businessId);
-        if (bk) {
-          assertCanStartCare(d, businessId, bk);
-        }
-      }
-      d.encounters.push(row);
-      pushAudit(d, {
-        action: 'encounter.created', businessId, actor: guard.ctx.user,
-        meta: { encounterId: row.id, bookingId: row.bookingId, queueId: row.queueId, professionalId: row.professionalId, workflow: 'arrived>in_care' },
-      }, now);
-      emitAutomationEvent(d, {
-        event: 'encounter.started',
-        businessId,
-        at: now,
-        bookingId: row.bookingId || undefined,
-        customerId: row.customerId || undefined,
-        data: { encounterId: row.id, professionalId: row.professionalId, serviceId: row.serviceId },
+      bookingId: String(body.bookingId || ''),
+      queueId: String(body.queueId || ''),
+      actor: guard.ctx.user,
+      now,
+      tz: effectiveTimezone(guard.ctx.business.businessTimezone),
+      professionalScope: guard.ctx.professionalScope || '',
+      body,
+    }));
+    if (result.created) {
+      void publishWorkflowEvent({
+        businessId, type: 'encounter.started', entityType: 'encounter', entityId: result.encounter.id,
+        actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: result.encounter.bookingId || undefined,
+        from: result.encounter.bookingId ? 'arrived' : undefined, to: 'in_care', at: now,
       });
+    }
+    return NextResponse.json({
+      ok: true,
+      encounter: view(result.encounter, await readDB()),
+      // `reused` é o contrato histórico da tela (abre o que já existe).
+      reused: !result.created,
+      created: result.created,
+      outcome: result.outcome,
     });
-    void publishWorkflowEvent({
-      businessId, type: 'encounter.started', entityType: 'encounter', entityId: row.id,
-      actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: row.bookingId || undefined,
-      from: row.bookingId ? 'arrived' : undefined, to: 'in_care', at: now,
-    });
-    return NextResponse.json({ ok: true, encounter: view(row, await readDB()) });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] POST falhou:', e);
