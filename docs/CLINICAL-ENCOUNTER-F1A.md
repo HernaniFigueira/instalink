@@ -1,6 +1,6 @@
 # Clinical Encounter F1A — domínio, iniciar/retomar e workspace clínico
 
-**Estado (2026-10-04): IMPLEMENTADO · TESTADO · HOMOLOGADO LOCALMENTE (Chromium real) · PR EM REVISÃO · MERGE NÃO EXECUTADO.**
+**Estado (2026-10-04): IMPLEMENTADO · TESTADO · HOMOLOGADO LOCALMENTE (Chromium real) · PR [#54](https://github.com/HernaniFigueira/instalink/pull/54) EM REVISÃO · MERGE NÃO EXECUTADO.**
 Branch: `arena/01a104e4-instalink` (nova a partir de `main` em `2e225c15`, SHA homologado). Base `main` intacta e igual ao SHA de partida — nada foi mergeado, nada foi para produção.
 
 F1A fecha **um** ciclo: **Booking → Iniciar atendimento → Encounter em andamento → sair → voltar → Retomar atendimento → mesmo `encounterId`**, com domínio único, persistência real e workspace clínico. F1B/F1C (prontuário completo, prescrição, exames, estoque, financeiro, IA, odontograma, construtor de formulários) **não** estão nesta entrega.
