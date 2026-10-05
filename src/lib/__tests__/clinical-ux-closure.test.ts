@@ -37,7 +37,7 @@ describe('PR53 final polish — Agenda, ShellAppearance, ClientProfileDrawer', (
   it('ShellAppearance honestly describes a personal browser preference', () => {
     const source = readFileSync('src/components/dashboard/ShellAppearance.tsx', 'utf8');
     expect(source).toContain('Aparência da interface');
-    expect(source).toContain('Escolha a cor da navegação e das ações principais neste navegador.');
+    expect(source).toContain('Escolha a cor de acento das ações principais neste navegador.');
     expect(source).toContain('Esta preferência vale somente para você neste navegador e não altera a identidade visual da clínica para outros usuários.');
     expect(source).not.toContain('Tema da clínica:');
     expect(source).toContain('setNavAccent(a.id)');

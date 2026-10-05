@@ -13,10 +13,16 @@ describe('Agenda cell → NewBookingSheet prefill', () => {
       .toEqual({ date: '2026-10-03', time: '10:30', professionalId: '' });
   });
 
-  it('wires cell click through the seed into NewBookingSheet initial date and time', () => {
+  it('wires cell click through the seed into the quick create and, dele, ao NewBookingSheet', () => {
+    // DS 1.0 · §5 — o clique no slot deixou de abrir o sheet direto: passa a
+    // abrir o quick create ANCORADO (Popover canônico) com data/hora/
+    // profissional da coluna. O fluxo completo continua recebendo a MESMA
+    // intenção por "Mais opções" (`initial`), e é ele quem grava.
     const agenda = fs.readFileSync(path.join(root, 'src/app/(dashboard)/agenda/page.tsx'), 'utf8');
     const sheet = fs.readFileSync(path.join(root, 'src/components/dashboard/NewBookingSheet.tsx'), 'utf8');
-    expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
+    expect(agenda).toContain('setQuickCreate({ x: point.x, y: point.y, date: col.date, time, professionalId: col.professionalId })');
+    expect(agenda).toContain('<QuickBookingPopover');
+    expect(agenda).toMatch(/onMore=\{\(seed\) => \{[\s\S]*?setCreating\(\{/);
     expect(agenda).toMatch(/initial=\{\{[\s\S]*?date: creating\.date[\s\S]*?time: creating\.time/);
     expect(sheet).toContain('const [date, setDate] = useState(initial?.date || \'\')');
     expect(sheet).toContain('const [time, setTime] = useState(initial?.time || \'\')');

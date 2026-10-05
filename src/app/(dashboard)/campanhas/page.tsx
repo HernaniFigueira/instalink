@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Icon } from '@/components/icons';
-import { Button, Notice, PageHeader, PageSkeleton } from '@/components/ui';
+import { Button, Dialog, Notice, PageHeader, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_SEGMENTS } from '@/lib/types';
 import type { CampaignSegment } from '@/lib/types';
@@ -239,15 +239,24 @@ export default function CampanhasPage() {
         ))}
       </section>
 
-      {creating && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => setCreating(false)} />
-          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-xl max-h-[92vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white/95 backdrop-blur px-5 py-4 flex items-center justify-between border-b border-zinc-100">
-              <p className="font-semibold text-lg">Nova campanha</p>
-              <button onClick={() => setCreating(false)} className="font-semibold text-zinc-400 p-2 inline-flex" aria-label="Fechar"><Icon n="x" size={16} /></button>
-            </div>
-            <div className="px-5 py-4 space-y-3.5">
+      {/* DS 1.0 · §4/§43 — "Nova campanha" era um bottom-sheet artesanal com
+          ✕ próprio; passa a ser o Dialog canônico (mesma guarda de descarte,
+          foco contido e CloseButton neutro). */}
+      <Dialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        title="Nova campanha"
+        width="560px"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCreating(false)} disabled={busy === 'save'}>Cancelar</Button>
+            <Button onClick={() => void call('POST', form)} disabled={busy === 'save' || !form.name || !form.message}>
+              {busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}
+            </Button>
+          </>
+        }
+      >
+            <div className="space-y-3.5">
               <label className="block"><span className="text-xs font-semibold text-zinc-500">NOME *</span>
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Lembretes de retorno" /></label>
               <div>
@@ -278,14 +287,8 @@ export default function CampanhasPage() {
                   integração oficial existir. Nada é enviado por canais falsos.
                 </p>
               )}
-              <button onClick={() => call('POST', form)} disabled={busy === 'save' || !form.name || !form.message}
-                className="w-full font-semibold bg-[var(--brand)] text-white py-3 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
-                {busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Dialog>
     </>
   );
 }

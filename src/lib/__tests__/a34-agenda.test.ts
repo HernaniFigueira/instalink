@@ -5,7 +5,10 @@
 //   • o horário é lido em CHIPS por dia (não mais numa frase corrida), e os
 //     chips saem SEMPRE da tabela de horários real (lib/schedule.ts), nunca de
 //     um resumo paralelo inventado na tela;
-//   • navegação de data = [◀][▶] (o botão "Hoje" saiu na correção cirúrgica);
+//   • navegação de data = TOOLBAR CANÔNICA `Hoje · ‹ data ›` do DS 1.0 (§5):
+//     "Hoje" volta como AÇÃO de uma linha (não como estado da grade), as setas
+//     andam um passo do modo atual e a data é o DatePicker canônico — o
+//     `<input type="date">` nativo deixou de ser dependência da tela;
 //   • clicar num horário vago da grade abre o agendamento JÁ naquele dia/hora/
 //     profissional — e o horário sugerido só vale se a grade real confirmar;
 //   • o motor continua sendo o do servidor: nenhuma disponibilidade é
@@ -32,28 +35,50 @@ const WEEK = (weekday: number, ...pairs: Array<[string, string]>): Availability[
 describe('A3.4 · Bloco 3 — Agenda: navegação [◀][▶] e clique cria', () => {
   const agenda = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
 
-  it('as setas formam um grupo fixo, nesta ordem — sem botão “Hoje”', () => {
-    const group = agenda.slice(agenda.indexOf('inline-flex rounded-md border border-[var(--border-strong)]'), agenda.indexOf('Escolher outra data'));
-    expect(group).toBeTruthy();
-    const prev = group.indexOf('chevL');
-    const next = group.indexOf('chevR');
+  it('a toolbar é `Hoje · ‹ data ›` nesta ordem, com DatePicker canônico', () => {
+    // DS 1.0 · §5 — supersede a correção cirúrgica (que havia removido o
+    // "Hoje"): agora ele é AÇÃO explícita de uma linha, ancorada em `today`
+    // do FUSO DO NEGÓCIO, e o rótulo do período continua sendo a leitura.
+    // `stripComments` remove as linhas de comentário: ancora no CÓDIGO.
+    const todayBtn = agenda.indexOf('onClick={() => setFocus(today)}');
+    expect(todayBtn).toBeGreaterThan(-1);
+    const bar = agenda.slice(todayBtn, agenda.indexOf('Novo agendamento', todayBtn));
+    const prev = bar.indexOf('chevL');
+    const picker = bar.indexOf('<DatePicker');
+    const next = bar.indexOf('chevR');
     expect(prev).toBeGreaterThan(-1);
-    expect(next).toBeGreaterThan(prev);
-    // contrato da correção cirúrgica: o “Hoje” saiu do grupo
-    expect(group).not.toContain('Hoje');
+    expect(picker).toBeGreaterThan(prev);
+    expect(next).toBeGreaterThan(picker);
+    // A data abre o popover do componente canônico (Popover + Calendar), não
+    // o seletor nativo do navegador.
+    expect(bar).toContain('formatValue={() => focusLabel}');
+    expect(agenda).not.toContain('type="date"');
   });
 
-  it('o botão “Hoje” não existe mais em lugar nenhum da tela', () => {
-    expect(agenda).not.toContain('setFocus(today)');
-    expect(agenda).not.toContain('aria-pressed={isToday}');
-    expect(agenda).not.toContain("'Você já está em hoje'");
+  it('“Hoje” é ação de uma linha — não é estado persistido nem muda o modo', () => {
+    // A ação existe (setFocus(today)) e é marcada por aria-pressed; o rótulo
+    // diz que já está em hoje em vez de desabilitar o controle (desabilitar
+    // esconderia o alvo de quem só quer reconfirmar o dia).
+    expect(agenda).toContain('onClick={() => setFocus(today)}');
+    expect(agenda).toContain('aria-pressed={focus === today}');
+    expect(agenda).toContain("'Você já está em hoje'");
+    // Nunca desabilitado e NUNCA mexendo no modo de visualização: "Hoje" é
+    // navegação temporal, não troca de Dia/Semana/Lista.
+    expect(agenda).not.toContain('disabled={focus === today}');
+    const btn = agenda.slice(agenda.indexOf('<Button\n              variant="secondary"\n              size="sm"\n              onClick={() => setFocus(today)}'), agenda.indexOf('</Button>', agenda.indexOf('onClick={() => setFocus(today)}')));
+    expect(btn).not.toContain('setView');
+    expect(btn).not.toContain('endDrag');
   });
 
-  it('clicar num horário vago abre o agendamento com dia, hora e profissional', () => {
+  it('clicar num horário vago abre o quick create com dia, hora e profissional', () => {
     expect(agenda).toContain('onEmptyPress');
     expect(agenda).toContain('minuteFromOffsetY(');
-    expect(agenda).toContain('setCreating({ ...seed, quick: true })');
-    expect(agenda).toContain('setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true })');
+    // DS 1.0 · §5 — clique/arraste abrem o POPOVER canônico ancorado no ponto,
+    // passando dia/hora/profissional da coluna; o fluxo completo (sheet)
+    // continua existindo em "Mais opções" e no CTA.
+    expect(agenda).toContain('setQuickCreate({ x: point.x, y: point.y, date: col.date, time, professionalId: col.professionalId })');
+    expect(agenda).toContain('<QuickBookingPopover');
+    expect(agenda).toContain('onMore={');
     expect(agenda).toContain('Novo agendamento');
     expect(agenda).toContain('Bloquear horário');
     // O clique que sobra de um arraste nunca cria agendamento.

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { apiSend } from '@/lib/api-client';
-import { Button, Textarea } from '@/components/ui';
+import { ActionSection, Button, Dialog, Field, Notice, PageActionBar, StatusBadge, Textarea } from '@/components/ui';
 import type { EncounterFinalizationRevision, EncounterAddendum } from '@/lib/types';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 
@@ -33,11 +33,6 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
   const [addendum, setAddendum] = useState('');
   const [reason, setReason] = useState('');
   const operation = useRef('');
-  const reviewTitle = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    if (reviewOpen) reviewTitle.current?.focus();
-  }, [reviewOpen]);
 
   async function finalize() {
     setError(''); setMessage(''); setBusy(true);
@@ -90,64 +85,104 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
   ].sort((a, b) => a.at.localeCompare(b.at));
   return (
     <section className="ws-panel mt-4" aria-labelledby="encounter-finalization-title" data-testid="encounter-finalization">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="encounter-finalization-title" className="text-base font-semibold">Fechamento clínico</h2>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {row.status === 'finalized' ? 'FINALIZADO · READ-ONLY' : 'Revise o atendimento antes de criar a fronteira clínica.'}
-          </p>
-        </div>
+      {/* DS 1.0 · §4/§43 — texto à esquerda, ação à direita, com respiro: o
+          fechamento clínico usa o MESMO ActionSection das outras superfícies.
+          A autoridade continua vindo do servidor (`canFinalize`): a única
+          PRIMARY daqui é "Revisar e finalizar". */}
+      <ActionSection
+        title="Fechamento clínico"
+        hint={row.status === 'finalized' ? 'FINALIZADO · somente leitura' : 'Revise o atendimento antes de criar a fronteira clínica.'}
+      >
         {row.status === 'draft' && (
           <Button type="button" onClick={() => { setError(''); setReviewOpen(true); }} disabled={!canFinalize}>
             Revisar e finalizar
           </Button>
         )}
-      </div>
+        {row.status !== 'draft' && (
+          <StatusBadge tone="emerald">Finalizado</StatusBadge>
+        )}
+      </ActionSection>
 
       {row.status === 'finalized' && (
-        <div className="mt-3 space-y-3 text-sm">
-          <p><strong>Finalização atual:</strong> revisão {finalRevision?.revisionNumber || '—'} · {fmt(row.finalizedAt)} · {row.signedBy || 'Profissional responsável'}</p>
-          {canAddendum && <div className="rounded-md border border-[var(--border)] p-3">
-            <h3 className="font-medium">Adicionar nota complementar</h3>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">Esta nota será adicionada ao prontuário sem alterar o conteúdo originalmente finalizado.</p>
-            <label className="mt-3 block text-sm" htmlFor="encounter-addendum">Nota complementar</label>
-            <Textarea id="encounter-addendum" value={addendum} onChange={(e) => setAddendum(e.target.value)} disabled={busy} className="mt-1" />
-            <Button type="button" className="mt-2" onClick={() => { void saveAddendum(); }} disabled={busy || !addendum.trim()}>Adicionar nota complementar</Button>
-          </div>}
+        <div className="mt-3 space-y-4 text-sm">
+          <p className="text-[var(--gd-text-muted)]">
+            <strong className="text-[var(--gd-text)]">Finalização atual:</strong> revisão {finalRevision?.revisionNumber || '—'} · {fmt(row.finalizedAt)} · {row.signedBy || 'Profissional responsável'}
+          </p>
+          {canAddendum && (
+            <ActionSection
+              title="Adicionar nota complementar"
+              hint="Entra no prontuário sem alterar o conteúdo originalmente finalizado."
+            >
+              <div className="w-full space-y-2">
+                <Field label="Nota complementar" htmlFor="encounter-addendum">
+                  <Textarea id="encounter-addendum" value={addendum} onChange={(e) => setAddendum(e.target.value)} disabled={busy} />
+                </Field>
+                <Button type="button" size="sm" onClick={() => { void saveAddendum(); }} disabled={busy || !addendum.trim()}>Adicionar nota</Button>
+              </div>
+            </ActionSection>
+          )}
           <div>
-            <h3 className="font-medium">Histórico</h3>
+            <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Histórico</h3>
             <ol className="mt-2 space-y-2" aria-label="Histórico de finalizações e notas">
-              {timeline.map((event) => <li key={event.id} className={`border-l-2 pl-3 ${event.kind === 'reopen' ? 'border-amber-500' : event.kind === 'addendum' ? 'border-blue-500' : 'border-[var(--border)]'}`}><strong>{event.label}</strong> · {fmt(event.at)}<br />{event.detail}</li>)}
+              {timeline.map((event) => (
+                <li key={event.id} className={`border-l-2 pl-3 ${event.kind === 'reopen' ? 'border-[var(--gd-warning)]' : event.kind === 'addendum' ? 'border-[var(--gd-info)]' : 'border-[var(--gd-border)]'}`}>
+                  <strong>{event.label}</strong> · <span className="tabular-nums">{fmt(event.at)}</span>
+                  <br />{event.detail}
+                </li>
+              ))}
             </ol>
           </div>
-          {canReopen && <>
-            <label className="block" htmlFor="encounter-reopen-reason">Motivo da reabertura</label>
-            <Textarea id="encounter-reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} placeholder="Explique por que o registro precisa voltar ao estado editável." />
-            <Button type="button" variant="secondary" onClick={() => { void reopen(); }} disabled={busy || reason.trim().length < 3}>Reabrir atendimento</Button>
-          </>}
+          {canReopen && (
+            <PageActionBar hint="A reabertura fica registrada no histórico com o motivo.">
+              <div className="mr-auto w-full max-w-[520px]">
+                <Field label="Motivo da reabertura" htmlFor="encounter-reopen-reason">
+                  <Textarea id="encounter-reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} placeholder="Explique por que o registro precisa voltar ao estado editável." />
+                </Field>
+              </div>
+              <Button type="button" variant="secondary" onClick={() => { void reopen(); }} disabled={busy || reason.trim().length < 3}>Reabrir atendimento</Button>
+            </PageActionBar>
+          )}
         </div>
       )}
 
-      {message && <p className="mt-3 text-sm text-emerald-700" role="status">{message}</p>}
-      {error && <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>}
+      {message && <Notice tone="success" className="mt-3">{message}</Notice>}
+      {error && <Notice tone="error" className="mt-3">{error}</Notice>}
 
-      {reviewOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[var(--overlay)] p-4" role="dialog" aria-modal="true" aria-labelledby="review-dialog-title">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-[var(--surface)] p-5 shadow-xl">
-            <h2 ref={reviewTitle} tabIndex={-1} id="review-dialog-title" className="text-lg font-semibold">Revisar e finalizar</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Paciente: {row.context?.patient?.name || row.petName || row.customerName} · Profissional: {row.professionalName || 'responsável'} · Agendado para: {fmt(scheduledAt)}</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                ['Queixa principal', row.complaint], ['Evolução clínica', row.evolution], ['Anamnese', row.clinical?.anamnesis?.history],
-                ['Avaliação', row.clinical?.assessment?.veterinary?.physicalExam], ['Problemas', row.clinical?.problems?.map((item) => item.label).join(', ')],
-                ['Conduta', row.clinical?.plan?.conduct], ['Procedimentos', row.clinical?.procedures?.map((item) => item.name).join(', ')], ['Orientações', row.guidance],
-              ].map(([label, value]) => <div key={label} className="rounded-md border border-[var(--border)] p-3"><h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</h3><p className="mt-1 whitespace-pre-wrap text-sm">{value || 'Não preenchido'}</p></div>)}
+      {/* §43 — a confirmação é o Dialog CANÔNICO (Escape, foco contido, scroll
+          lock e guarda de descarte do sistema). Nada de modal artesanal. */}
+      <Dialog
+        open={reviewOpen}
+        onClose={() => { if (!busy) setReviewOpen(false); }}
+        title="Revisar e finalizar"
+        subtitle={`Paciente: ${row.context?.patient?.name || row.petName || row.customerName} · Profissional: ${row.professionalName || 'responsável'} · Agendado para: ${fmt(scheduledAt)}`}
+        width="672px"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setReviewOpen(false)} disabled={busy}>Voltar</Button>
+            {/* Ação destrutiva/final: Danger SOLID só aqui — a fronteira clínica
+                exige confirmação explícita. */}
+            <Button type="button" variant="destructive" onClick={() => { void finalize(); }} disabled={busy || !canFinalize}>
+              {busy ? 'Finalizando…' : 'Finalizar atendimento'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            ['Queixa principal', row.complaint], ['Evolução clínica', row.evolution], ['Anamnese', row.clinical?.anamnesis?.history],
+            ['Avaliação', row.clinical?.assessment?.veterinary?.physicalExam], ['Problemas', row.clinical?.problems?.map((item) => item.label).join(', ')],
+            ['Conduta', row.clinical?.plan?.conduct], ['Procedimentos', row.clinical?.procedures?.map((item) => item.name).join(', ')], ['Orientações', row.guidance],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">{label}</h3>
+              <p className="mt-1 whitespace-pre-wrap text-[var(--gd-font-size-body)] text-[var(--gd-text)]">{value || 'Não preenchido'}</p>
             </div>
-            <p className="mt-4 text-sm">Ao finalizar, esta versão será registrada em snapshot e o conteúdo ficará somente para leitura.</p>
-            <div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setReviewOpen(false)} disabled={busy}>Voltar</Button><Button type="button" onClick={() => { void finalize(); }} disabled={busy || !canFinalize}>{busy ? 'Finalizando…' : 'Finalizar atendimento'}</Button></div>
-          </div>
+          ))}
         </div>
-      )}
+        <Notice tone="warning" className="mt-4">
+          Ao finalizar, esta versão será registrada em snapshot e o conteúdo ficará somente para leitura.
+        </Notice>
+      </Dialog>
     </section>
   );
 }

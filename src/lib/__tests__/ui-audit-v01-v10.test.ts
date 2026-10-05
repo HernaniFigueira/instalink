@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatDateBR, formatDateTimeBR } from '../tz';
 import { NAV_ACCENTS, contrastRatio } from '../nav-accent';
+import { color } from './helpers/ds-tokens';
 import { isLegacyPagesEnabled } from '../product';
 
 const root = process.cwd();
@@ -55,9 +56,12 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
 
   it('V06 usa foreground temático nos chevrons fechados, com contraste para Branco, Azul, Sálvia e Ônix', () => {
     expect(css).toMatch(/\.workspace-link__chevron\s*\{[^}]*color:\s*var\(--il-nav-fg\)/);
+    // DS 1.0 §13: a ESTRUTURA (chevron incluso) é neutra e fixa; o contraste
+    // se mede no par real da navegação e no par ATIVO de cada preset.
+    expect(contrastRatio(color('--il-nav-fg'), color('--il-nav')), 'estrutura').toBeGreaterThanOrEqual(4.5);
     for (const id of ['branco', 'azul-profundo', 'verde-salvia', 'onix']) {
       const theme = NAV_ACCENTS.find((entry) => entry.id === id)!;
-      expect(contrastRatio(theme.vars['--il-nav-fg'], theme.vars['--il-nav']), id).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(theme.vars['--il-nav-active-fg'], theme.vars['--il-nav-active']), id).toBeGreaterThanOrEqual(4.5);
     }
     expect(css).toContain(".workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }");
   });

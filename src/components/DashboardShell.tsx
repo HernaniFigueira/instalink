@@ -89,11 +89,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => {
     // Renome com migração (bloco 5 da correção): chave canônica
     // 'godoutor-side-v2'; a antiga 'il-side-v2' só é lida como fallback.
+    // DS 1.0 · §13 — o RAIL RECOLHIDO é o padrão do shell (56–64px): a
+    // preferência persistida continua mandando; sem preferência, começa
+    // recolhida. O pin "Expandir navegação" empurra o conteúdo e é lembrado.
     try {
       const v = localStorage.getItem('godoutor-side-v2');
       if (v !== null) return v === 'mini';
-      return localStorage.getItem('il-side-v2') === 'mini';
-    } catch { return false; }
+      const legacy = localStorage.getItem('il-side-v2');
+      return legacy !== null ? legacy === 'mini' : true;
+    } catch { return true; }
   });
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
   const [navAccent, setNavAccent] = useState<NavAccentId>(DEFAULT_ACCENT_ID);
@@ -432,18 +436,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     >
       <a href="#workspace-content" className="workspace-skip">Ir para o conteúdo</a>
 
-      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
-          o shell não tem lista própria de destinos. Sidebar primeiro: ela
-          ocupa top:0→bottom:0 e a topbar vive na coluna da direita. */}
-      {!conversationFocus && <WorkspaceNavigation nav={nav}
-        activePath={activePath} unit={business}
-        units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
-        collapsed={collapsed} onCollapse={toggle}
-        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
-        onHelp={() => setHelpOpen(true)}
-      />}
-
-      <div className="workspace-main-col">
+      {/* DS 1.0 · §12 — a TOP BAR é filha DIRETA do shell: ocupa 100% da
+          largura, começa em x=0 e fica ACIMA da navegação (a sidebar começa
+          abaixo dela). Geometria no CSS, por token — nada calculado à mão. */}
       {!conversationFocus && <WorkspaceTopbar
         page={activeRoute?.label || 'Painel'}
         query={q}
@@ -467,6 +462,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         canOpenConversations={nav.allowed.some((i) => i.href === '/conversas') && activePath !== '/conversas' && activePath !== '/organizacao'}
         vet={business.clinicType === 'veterinaria'}
       />}
+
+      {/* `nav={nav}`: a navegação continua vindo do catálogo (lib/panel.ts) —
+          o shell não tem lista própria de destinos. */}
+      {/* A navegação vem DEPOIS da topbar (linha de baixo do shell). */}
+      {!conversationFocus && <WorkspaceNavigation nav={nav}
+        activePath={activePath} unit={business}
+        units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
+        collapsed={collapsed} onCollapse={toggle}
+        mobileOpen={mobileNav} onMobileOpen={setMobileNav}
+        onHelp={() => setHelpOpen(true)}
+      />}
+
+      <div className="workspace-main-col">
 
       {!conversationFocus && <HelpCenter
         open={helpOpen}

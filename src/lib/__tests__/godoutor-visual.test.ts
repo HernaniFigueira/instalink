@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import React from 'react';
 import { Icon } from '../../components/icons';
+import { color, rawToken, hexContrast as contrastHex } from './helpers/ds-tokens';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -64,20 +65,22 @@ describe('1 · métricas do topo SEM duplicação (missão 7)', () => {
   });
 });
 
-describe('2 · sidebar colorida com ícone ativo em superfície branca', () => {
-  it('fundo da sidebar é cor sólida forte (não mais branco)', () => {
+describe('2 · DS 1.0 §13 — sidebar BRANCA com item ativo em acento suave', () => {
+  it('fundo da sidebar é BRANCO fixo (estrutura não segue o tema)', () => {
     const rule = ruleOf('.il-platform .workspace-sidebar {');
     expect(rule).toContain('background: var(--il-nav)');
-    expect(css).toMatch(/--il-nav:\s*#[0-9a-f]{6}/);
-    expect(css).not.toMatch(/--il-nav:\s*#ffffff/);
+    // O token resolve para branco na FONTE ÚNICA, e nenhum preset o reescreve.
+    expect(color('--il-nav')).toBe('#ffffff');
+    expect(rawToken('--il-nav')).toBe('var(--gd-nav-bg)');
   });
 
-  it('item ativo = variação VISÍVEL da cor (bg próprio + fg legível)', () => {
-    expect(css).toMatch(/--il-nav-active:\s*#[0-9a-f]{6}/);
-    expect(css).toMatch(/--il-nav-active-fg:\s*#[0-9a-f]{6}/i);
-    const navHex = css.match(/--il-nav:\s*(#[0-9a-f]{6})/)![1];
-    const activeHex = css.match(/--il-nav-active:\s*(#[0-9a-f]{6})/)![1];
-    expect(activeHex).not.toBe(navHex);
+  it('item ativo = acento SUAVE + texto do acento (variação visível, AA)', () => {
+    expect(rawToken('--il-nav-active')).toBe('var(--gd-nav-active-bg)');
+    expect(rawToken('--il-nav-active-fg')).toBe('var(--gd-nav-active-fg)');
+    const active = color('--il-nav-active');
+    const nav = color('--il-nav');
+    expect(active).not.toBe(nav);
+    expect(contrastHex(color('--il-nav-active-fg'), active)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('o ícone ativo não repete um chip preenchido (estado comunicado pelo item)', () => {
@@ -163,10 +166,11 @@ describe('5 · botões migrados pela BASE (tokens), sem hex por tela', () => {
     // as preferências válidas salvas continuam prevalecendo.
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--brand:\s*#2563eb/); // fallback do accent Deep Blue
-    expect(css).toMatch(/--brand-strong:\s*#1d4ed8/);
-    // e a sidebar PADRÃO fala a família índigo aprovada
-    expect(css).toMatch(/--il-nav:\s*#071a33/); // default = azul-profundo
+    expect(css).toMatch(/--brand:\s*var\(--accent\)/); // fallback do accent Deep Blue
+    expect(css).toMatch(/--brand-strong:\s*var\(--accent-hover\)/);
+    // DS 1.0 §13 — a estrutura da navegação é BRANCA (o acento vem do preset).
+    expect(color('--il-nav')).toBe('#ffffff');
+    expect(color('--accent')).toBe('#2563eb');
   });
 });
 
@@ -201,9 +205,19 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(tip).toContain('z-index: 90');
   });
 
-  it('5 · botão “Hoje” removido da navegação da Agenda', () => {
-    expect(agenda).not.toMatch(/<button[^>]*>\s*Hoje\s*<\/button>/);
-    expect(agenda).not.toContain("'Você já está em hoje'");
+  it('5 · “Hoje” voltou como AÇÃO da toolbar canônica — nunca como botão de grade', () => {
+    // DS 1.0 · §5 — a correção cirúrgica (que removeu o "Hoje") foi
+    // SUPERSEDIDA pelo contrato da toolbar `Hoje · ‹ data ›`: ele é ação
+    // explícita, ancorada no "hoje" do FUSO DO NEGÓCIO, e não um estado que
+    // esconde a grade.
+    expect(agenda).toContain('onClick={() => setFocus(today)}');
+    expect(agenda).toContain("'Você já está em hoje'");
+    // Só existe UM "Hoje" e ele vive na toolbar (não em card/métrica):
+    expect(agenda.match(/>\s*Hoje\s*</g)?.length).toBe(1);
+    // A dependência do seletor nativo de data acabou: nenhum `<input
+    // type="date">` no código (comentários que o citam não contam).
+    const agendaCode = agenda.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    expect(agendaCode).not.toMatch(/type="date"/);
   });
 
   it('6 · modo “Mês” removido da UI (lógica profunda preservada)', () => {

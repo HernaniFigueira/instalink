@@ -739,17 +739,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </div>
             </fieldset>
 
-            {/* A conta de login é OUTRA coisa: trocar o cadastro daqui não muda
-                a identidade global da conta, e isso fica dito, não subentendido. */}
-            {person.accountStatus === 'active' && (
-              <Notice tone="info" className="mt-3">
-                <strong>Conta de acesso separada.</strong> Este cliente entra na área do cliente com
-                {person.accountEmail ? ` ${person.accountEmail}` : 'o e-mail da conta'}
-                {person.accountPhone ? ` / ${formatPhoneBR(person.accountPhone)}` : ''}.
-                Alterar o cadastro desta ficha não muda o login — para trocar a identidade da conta,
-                faça isso em Equipe/Acesso.
-              </Notice>
-            )}
+            {/* DS 1.0 · §42 — a copy explicativa "Conta de acesso separada … faça
+                isso em Equipe/Acesso" saiu da EDIÇÃO DO CADASTRO: ela ocupava o
+                formulário para explicar um limite que não é do cadastro, e o
+                caminho para o acesso está onde o acesso se administra.
+                A SEPARAÇÃO cadastro ≠ conta de acesso continua intacta (nenhum
+                campo daqui toca `account*`), só parou de ser um aviso fixo. */}
 
             <fieldset className="space-y-3 mt-4">
               <legend className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-2">Endereço</legend>

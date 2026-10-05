@@ -10,6 +10,7 @@ import path from 'node:path';
 import {
   NAV_ACCENTS, contrastRatio, findAccent, relativeLuminance,
 } from '../nav-accent';
+import { color, rawToken } from './helpers/ds-tokens';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -29,12 +30,19 @@ describe('contrato de cor · A — TEXTO sempre near-black (o tema não muda tex
     expect(h1).not.toContain('accent'); // o acento vive só no icon-container
   });
 
-  it('trava 2: em presets claros, texto do nav é near-black (nunca cor de marca)', () => {
+  it('trava 2: a ESTRUTURA da navegação é branca e o texto nela é near-black (nunca cor de marca)', () => {
+    // DS 1.0 §13 — o tema não pinta mais a estrutura: a sidebar é branca fixa
+    // e o texto é neutro near-black em tutti os presets (o acento vive só no
+    // item ativo e no CTA).
+    expect(relativeLuminance(color('--gd-nav-bg'))).toBeGreaterThan(0.9);
+    expect(relativeLuminance(color('--il-nav-fg')), '--il-nav-fg').toBeLessThan(0.1);
+    // Texto secundário e ícones: contraste MEDIDO sobre a sidebar branca.
+    for (const tok of ['--il-nav-muted', '--il-nav-icon']) {
+      expect(contrastRatio(color(tok), color('--il-nav')), tok).toBeGreaterThanOrEqual(4.5);
+    }
     for (const a of NAV_ACCENTS) {
-      const navIsLight = relativeLuminance(a.vars['--il-nav']) >= 0.35;
-      if (navIsLight) {
-        expect(relativeLuminance(a.vars['--il-nav-fg']), a.id).toBeLessThan(0.1);
-      }
+      expect(Object.keys(a.vars), a.id).not.toContain('--il-nav');
+      expect(Object.keys(a.vars), a.id).not.toContain('--il-nav-fg');
     }
   });
 });
@@ -81,15 +89,17 @@ describe('contrato de cor · C — SEMÂNTICAS independentes (nunca tingidas)', 
 describe('homologação PR #43 — foreground de ícones e superfícies suaves', () => {
   it('usa --accent-fg como foreground legível em soft/surface, sem reutilizar o contraste de CTA sólido', () => {
     const bridgeIndex = css.indexOf('.workspace-shell {\n  --brand: var(--accent);');
-    const shell = css.slice(bridgeIndex, bridgeIndex + 360);
+    const shell = css.slice(bridgeIndex, bridgeIndex + 700);
     expect(shell).toContain('--brand-fg: var(--accent-fg)');
     expect(css).toContain('.dsh-quick__icon');
     expect(css).toContain('background: var(--surface-2); color: var(--accent-fg)');
     for (const id of ['azul-profundo', 'verde-salvia', 'neutro', 'vinho']) {
       const a = findAccent(id);
       expect(a, id).toBeTruthy();
-      expect(contrastRatio(a!.vars['--accent-fg'], a!.vars['--accent-soft']), id).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(a!.vars['--accent-fg'], '#ffffff'), `${id} on white surface`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(a!.vars['--accent-fg'], a!.vars['--accent-soft']), `${id} fg × soft`).toBeGreaterThanOrEqual(4.5);
+      // `--accent-fg` é texto: precisa passar em SUPERFÍCIE BRANCA (surface do
+      // item/ícone suave), que é onde ele é usado.
+      expect(contrastRatio(a!.vars['--accent-fg'], '#ffffff'), `${id} fg × white`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -117,10 +127,14 @@ describe('homologação PR #43 — foreground de ícones e superfícies suaves',
 
 describe('contrato de cor · D — FUNDO do workspace neutro universal', () => {
   it('trava 7: fundo sólido neutro; não depende do tema', () => {
-    expect(css).toMatch(/--bg-top:\s*#f4f6f8/);
-    expect(css).toMatch(/--bg-bottom:\s*#f8f9fb/);
+    // DS 1.0 §10 — fundo NEUTRO SÓLIDO: o par de gradiente (--bg-top/--bg-bottom)
+    // foi removido; o valor vem da fonte única (`--gd-bg-app`).
+    expect(css).not.toContain('--bg-top:');
+    expect(css).not.toContain('--bg-bottom:');
+    expect(color('--gd-bg-app')).toBe('#f4f6f8');
+    expect(rawToken('--bg-gradient')).toBe('none');
     // UMA fonte de verdade: --workspace-bg herda o neutro sólido.
-    expect(css).toMatch(/--workspace-bg:\s*var\(--bg\)/);
+    expect(rawToken('--workspace-bg')).toBe('var(--gd-bg-app)');
     const shell = css.slice(css.indexOf('.il-platform.workspace-shell {'), css.indexOf('.il-platform.workspace-shell {') + 300);
     expect(shell).toContain('background: var(--workspace-bg)');
     expect(shell).not.toContain('--il-nav'); // neutro: nunca tingido
@@ -135,7 +149,7 @@ describe('paletas travadas (6 de 21) + separação de categorias', () => {
     for (const id of ['branco', 'azul-clinico', 'verde-salvia', 'ambar', 'vinho', 'onix']) {
       const a = findAccent(id);
       expect(a, id).toBeTruthy();
-      expect(contrastRatio(a!.vars['--il-nav-fg'], a!.vars['--il-nav']), id).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(a!.vars['--il-nav-active-fg'], a!.vars['--il-nav-active']), id).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(a!.vars['--accent-contrast'], a!.vars['--accent']), id).toBeGreaterThanOrEqual(4.5);
     }
     // Ônix é preto de verdade (missão 7 preservada)

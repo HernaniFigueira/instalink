@@ -14,9 +14,9 @@
 // MISSÃO SIDEBAR FINAL (Meta-like):
 //   • SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO) — a
 //     hierarquia vem do alinhamento, do recuo e do espaçamento entre blocos;
-//   • acordeão: SEMPRE exatamente UM grupo aberto quando expandida. Rotas
-//     planas abrem "Clínica" por padrão; deep-link abre o grupo dono; clicar
-//     noutro grupo troca; clicar no aberto NÃO fecha;
+//   • SEM acordeão (DS 1.0 §18): grupo NÃO empurra os filhos dentro da
+//     coluna. Hover/focus/clique de grupo abre o PANEL LATERAL (§15) — um só
+//     mecanismo para rail recolhido E sidebar expandida;
 //   • item ativo/grupo aberto = fundo azul MUITO claro + texto azul (nunca
 //     botão azul sólido, nunca texto branco);
 //   • recolhida (~68px): SÓ ícones centralizados com tooltip (renderizado no
@@ -131,27 +131,20 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   });
 
   const activeArea = areaOfRoute(activePath, areas);
-  // Um grupo SÓ tem acordeão se tiver LINHA para mostrar. Destinos com
-  // `sidebar: false` (Meu perfil, Execuções, Recursos) vivem de atalho
-  // contextual e não criam grupo vazio.
-  const isGroup = (area: WorkspaceArea) => visible(area.items).length > 0 && !sections.some(
-    (s) => s.groups.some((g) => g.flat && g.area.id === area.id),
-  );
-  const activeGroup = activeArea && isGroup(activeArea) ? activeArea.id : null;
+  // Grupo DONO da rota ativa (marca `is-active`): só grupos que desenham linha
+  // própria. Destinos com `sidebar: false` (Meu perfil, Execuções, Recursos)
+  // vivem de atalho contextual e não criam grupo vazio.
+  const activeGroup = activeArea && sections.some(
+    (s) => s.groups.some((g) => !g.flat && g.area.id === activeArea.id),
+  ) ? activeArea.id : null;
 
-  // ACCORDEÃO TRADICIONAL (refino final): no máximo UM grupo aberto e
-  // ZERO abertos é estado VÁLIDO (nada de "sempre precisa existir um").
-  // Início: só o grupo da rota atual (se a rota estiver dentro de um grupo).
-  const [opened, setOpened] = useState<string | null>(activeGroup ?? null);
   const [unitOpen, setUnitOpen] = useState(false);
 
   useEffect(() => {
-    // Navegação para rota dentro de um grupo → abre AQUELE grupo (comportamento
-    // necessário de navegação). Fora de grupo: não mexe em nada — nunca força
-    // outro grupo a permanecer aberto.
-    if (activeGroup) setOpened(activeGroup);
+    // Trocar de rota/unidade fecha o painel de grupo (nada de painel órfão
+    // apontando para outra tela) e o drawer móvel.
     setMobile(false);
-  }, [activePath, unit.id, activeGroup]);
+  }, [activePath, unit.id]);
 
   // Ao crescer para desktop o drawer móvel não pode ficar aberto por cima.
   useEffect(() => {
@@ -170,9 +163,10 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   // sem esticar largura de scroll de container nenhum.
   const asideRef = useRef<HTMLElement | null>(null);
   const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
-  // §7 — hover-peek de GRUPOS no rail recolhido (temporário; nunca mexe no
-  // estado `collapsed` persistido).
-  const peekCtl = useSidebarPeek(collapsed);
+  // DS 1.0 · §15/§18 — painel lateral de grupo. Vale no rail E na sidebar
+  // expandida (o acordeão que empurrava os filhos foi removido); NUNCA mexe no
+  // estado `collapsed` persistido — o único controle persistente é o pin.
+  const peekCtl = useSidebarPeek();
   useEffect(() => {
     if (!collapsed) { setTip(null); return; }
     const root = asideRef.current;
@@ -234,62 +228,40 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </Link>
   );
 
+  /** Id do painel de grupo (um por tela: só existe um aberto por vez). */
+  const NAV_PANEL_ID = 'ws-nav-panel';
+
   const groupButton = (area: WorkspaceArea, mini = collapsed) => {
     const items = visible(area.items);
     if (!items.length) return null;
-    const open = opened === area.id;
+    const open = peekCtl.peekId === area.id;
     return (
-      <div key={area.id} className={`workspace-group${open && !mini ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}>
+      <div
+        key={area.id}
+        className={`workspace-group${open ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}
+      >
         <button
           type="button"
           className="workspace-link workspace-link--group"
           aria-label={area.label}
-          aria-expanded={mini ? peekCtl.peekId === area.id : open}
-          aria-controls={mini ? undefined : `submenu-${area.id}`}
-          {...(mini ? {
-            'data-peek-group': area.id,
-            onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => {
-              const el = e.currentTarget;
-              peekCtl.onGroupEnter(area.id, el.getBoundingClientRect().top);
-            },
-            onMouseLeave: () => peekCtl.onGroupLeave(),
-            onFocus: (e: React.FocusEvent<HTMLButtonElement>) => {
-              peekCtl.onGroupEnter(area.id, e.currentTarget.getBoundingClientRect().top);
-            },
-            onBlur: () => peekCtl.onGroupLeave(),
-          } : {})}
-          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-            // RECOLHIDA: o clique SÓ abre/fecha o flyout temporário — a sidebar
-            // NUNCA expande por clique de grupo (contrato do refino final; o
-            // controle persistente é o botão Recolher/Expandir).
-            if (mini) {
-              peekCtl.togglePeek(area.id, e.currentTarget.getBoundingClientRect().top);
-              return;
-            }
-            // Accordeão tradicional: clicar abre; clicar no aberto FECHA
-            // (zero grupos abertos é permitido); abrir outro fecha o anterior.
-            setOpened(open ? null : area.id);
+          aria-haspopup="true"
+          aria-expanded={open}
+          aria-controls={open ? NAV_PANEL_ID : undefined}
+          data-peek-group={area.id}
+          onMouseEnter={() => peekCtl.onGroupEnter(area.id)}
+          onMouseLeave={() => peekCtl.onGroupLeave()}
+          onFocus={() => peekCtl.onGroupEnter(area.id)}
+          onBlur={() => peekCtl.onGroupLeave()}
+          onClick={() => {
+            // Clique = abre/trava (ou fecha se já travado). NUNCA expande a
+            // sidebar: o único controle persistente é o pin do rodapé.
+            peekCtl.togglePeek(area.id);
           }}
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
           <span className="workspace-label">{area.label}</span>
-          {!mini && (
-            <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
-          )}
+          <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
         </button>
-        {/* Acordeão: expande PARA BAIXO (altura+opacidade+translateY), com
-            recuo limpo — nunca uma segunda coluna. No modo recolhido o
-            submenu NÃO é renderizado: o clique no ícone do grupo expande a
-            sidebar e abre o grupo. */}
-        {!mini && (
-          <div id={`submenu-${area.id}`} className="workspace-submenu">
-            <div className="workspace-submenu__clip">
-              <div className="workspace-submenu__guide">
-                {items.map((item) => link(item, true, false))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
@@ -420,21 +392,48 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </>
   );
 
+  /**
+   * DRAWER MÓVEL — o painel lateral (hover) não existe em toque: no celular o
+   * grupo mostra os filhos DIRETO, sob um rótulo discreto do grupo. Sem
+   * disclosure, sem acordeão, sem "toque para abrir".
+   */
+  const mobileMenu = () => (
+    <>
+      {sections.map((section) => {
+        const rows = section.groups.flatMap(({ area, flat }) => {
+          const items = visible(area.items);
+          if (!items.length) return [];
+          if (flat) return items.map((item) => link(item, false, false));
+          return [
+            <p key={`t-${area.id}`} className="workspace-nav-drawer__title">{area.label}</p>,
+            ...items.map((item) => link(item, true, false)),
+          ];
+        });
+        if (!rows.length) return null;
+        return (
+          <div className="workspace-section" key={section.id}>
+            {rows}
+          </div>
+        );
+      })}
+    </>
+  );
+
   const footer = (withCollapse: boolean, mini = collapsed) => (
     <div className="workspace-foot">
       {setup && !mini && (
         <div className="ws-setup-mini">
-          <p className="text-[12px] font-semibold text-white leading-tight">
+          <p className="text-[12px] font-semibold text-[var(--text)] leading-tight">
             Sua clínica está {setup.pct}% pronta
           </p>
           <p className="text-[11px] text-[var(--il-nav-muted)] mt-1 leading-snug">
             Complete a configuração para receber agendamentos.
           </p>
-          <div className="h-1.5 rounded-full bg-white/20 overflow-hidden mt-2" aria-hidden="true">
+          <div className="h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden mt-2" aria-hidden="true">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${setup.pct}%` }} />
           </div>
           <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
-            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-white/25 bg-white px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-white/90">
+            className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-[var(--surface-hover)]">
             Continuar configuração
           </Link>
         </div>
@@ -484,19 +483,24 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px`, left: `${tip.left}px` }}>{tip.text}</div>,
           document.body,
         )}
-        {/* §7 — hover-peek de GRUPOS (rail recolhido): painel temporário com os
-            itens do grupo. Abre em ~200ms (ease-out) e recolhe 250–300ms após o
-            mouseleave. O estado `collapsed` NUNCA muda aqui. */}
-        {collapsed && peekCtl.peekId && typeof document !== 'undefined' && (() => {
+        {/* DS 1.0 · §15/§18 — PAINEL DE GRUPO: abre à direita da navegação
+            (rail OU sidebar expandida), SEMPRE abaixo da top bar, com altura
+            útil e sem empurrar o conteúdo. Abre em ~180ms (ease-out) e recolhe
+            250–300ms após o mouseleave; fecha no Escape e na troca de rota.
+            O estado `collapsed` NUNCA muda por causa dele. */}
+        {peekCtl.peekId && typeof document !== 'undefined' && (() => {
           const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
           const items = area ? visible(area.items) : [];
           if (!area || !items.length) return null;
           return createPortal(
             <div
-              className="ws-peek"
+              id={NAV_PANEL_ID}
+              className={`ws-peek${collapsed ? '' : ' ws-peek--wide'}`}
               role="menu"
               aria-label={area.label}
-              style={{ top: `${peekCtl.peekTop}px` }}
+              /* DS 1.0 · §15 — o painel do grupo começa SEMPRE abaixo da top
+                 bar (posição no CSS por token), com altura útil, e NÃO empurra
+                 o conteúdo: nenhum `top` medido no DOM entra aqui. */
               onMouseEnter={peekCtl.onPeekEnter}
               onMouseLeave={peekCtl.onPeekLeave}
             >
@@ -507,6 +511,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
                     key={item.href}
                     href={hrefFor(item)}
                     role="menuitem"
+                    aria-current={activePath === item.href ? 'page' : undefined}
                     className="ws-peek__item"
                     onClick={() => { peekCtl.closePeek(); setMobile(false); }}
                   >
@@ -532,7 +537,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         dialogClassName="workspace-nav-drawer"
       >
         {header(false)}
-        <nav aria-label="Menu móvel" className="p-3">{menu(false)}</nav>
+        <nav aria-label="Menu móvel" className="p-3">{mobileMenu()}</nav>
         {footer(false, false)}
       </Drawer>
     </>
