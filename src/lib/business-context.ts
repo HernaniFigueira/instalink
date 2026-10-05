@@ -53,6 +53,28 @@ export function businessIdInList(id: string, list: Array<{ id: string }>): boole
 }
 
 /**
+ * A URL pede uma unidade que NÃO é a resolvida para esta conta?
+ *
+ * P2 — contexto de tenant honesto: um `?b=` que a conta não alcança não é
+ * contexto, é LIXO. Ele precisa ser descartado ANTES de qualquer tela de área
+ * montar: as telas leem o `?b=` da URL e, se montassem com o id alheio,
+ * pediriam dados de outro tenant; o servidor responde 403 (correto) e a área
+ * exibiria "Seu perfil não possui acesso" — mensagem ERRADA, porque o papel
+ * TEM acesso à área; o problema é só o id pedido.
+ *
+ * Regra pura: sem `?b=` nada a descartar (`false`); com `?b=`, ele é canônico
+ * apenas quando é exatamente a unidade resolvida pela conta.
+ */
+export function businessContextNeedsCanonicalization(
+  requested: string | null | undefined,
+  resolved: string,
+): boolean {
+  const req = String(requested || '').trim();
+  if (!req) return false;
+  return req !== String(resolved || '').trim();
+}
+
+/**
  * Resolve a unidade ativa SEM depender da ordem retornada pelo banco.
  *
  * Prioridade:

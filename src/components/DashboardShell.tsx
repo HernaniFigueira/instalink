@@ -14,7 +14,10 @@ import {
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
-import { readLastBusinessId, rememberLastBusinessId, requiresActiveBusiness, resolveActiveBusinessId } from '@/lib/business-context';
+import {
+  businessContextNeedsCanonicalization, readLastBusinessId, rememberLastBusinessId,
+  requiresActiveBusiness, resolveActiveBusinessId,
+} from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
@@ -320,6 +323,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
           <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
+        </div>
+        <div className="flex-1 min-w-0"><div className="px-6 lg:px-8 py-6"><PageSkeleton /></div></div>
+      </div>
+    );
+  }
+
+  // P2 — CONTEXTO DE TENANT HONESTO (a URL canônica vem antes do miolo).
+  //
+  // Um `?b=` que a conta NÃO alcança não é contexto, é lixo: o efeito acima já
+  // resolve a unidade legítima e reescreve a URL (`router.replace`), mas as
+  // TELAS de área leem o `?b=` da URL por conta própria. Se elas montassem
+  // antes da canonicalização, pediriam dados de OUTRO tenant; o servidor
+  // responderia 403 (isolamento correto) e a área exibiria "Seu perfil não
+  // possui acesso" — mensagem ERRADA, porque o papel tem acesso à área: só o
+  // id pedido não pertence à conta.
+  //
+  // Por isso o miolo não monta enquanto a URL não estiver canônica: o shell
+  // mostra o esqueleto (mesmo estado de carregamento de sempre) e a área
+  // carrega JÁ com a unidade legítima. Isto NÃO afrouxa autorização — a
+  // negação real por permissão (`panelAccess`, 403 das APIs, `?b=` alheio
+  // chamado direto na API) continua exatamente onde estava.
+  if (requiresActiveBusiness(pathname) && businessContextNeedsCanonicalization(params.get('b'), activeBusinessId)) {
+    return (
+      <div className="min-h-screen lg:flex" aria-label="Carregando painel">
+        <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
+          <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
+          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
         </div>
         <div className="flex-1 min-w-0"><div className="px-6 lg:px-8 py-6"><PageSkeleton /></div></div>
       </div>
