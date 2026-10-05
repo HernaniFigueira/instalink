@@ -186,16 +186,19 @@ describe('F1A · contrato canônico do Encounter (puro)', () => {
 
   it('a estrutura de seções existe, mas só o que é REAL é renderizado', () => {
     expect(ENCOUNTER_SECTIONS.length).toBeGreaterThan(1); // estrutura preparada p/ F1B
-    // F1B1 — as seções reais são três, mas SÓ na vertical que liga o módulo
-    // (veterinária). Seção entra aqui quando tem UI + persistência + leitura +
-    // autosave + permissões + testes NA MESMA entrega; o resto segue fora.
+    // F1B1 — as seções reais eram três; o F1B2 acrescentou problemas, conduta e
+    // procedimentos, sempre SÓ na vertical que liga o módulo (veterinária).
+    // Seção entra aqui quando tem UI + persistência + leitura + autosave +
+    // permissões + testes NA MESMA entrega; o resto segue fora.
     const live = availableEncounterSections('veterinaria');
-    expect(live.map((s) => s.id)).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    expect(live.map((s) => s.id)).toEqual([
+      'atendimento', 'anamnese', 'avaliacao', 'problemas', 'conduta', 'procedimentos',
+    ]);
     // Isolamento por vertical: sem clínica veterinária, só o CORE.
     expect(availableEncounterSections('odontologica').map((s) => s.id)).toEqual(['atendimento']);
     expect(availableEncounterSections(undefined).map((s) => s.id)).toEqual(['atendimento']);
     // O que continua PLANEJADO não é órfão: pedir uma indisponível cai na real.
-    expect(resolveEncounterSection('problemas', 'veterinaria').id).toBe('atendimento');
+    expect(resolveEncounterSection('anexos', 'veterinaria').id).toBe('atendimento');
     expect(resolveEncounterSection(null, 'veterinaria').id).toBe('atendimento');
     expect(resolveEncounterSection('atendimento').id).toBe('atendimento');
     expect(resolveEncounterSection('avaliacao', 'odontologica').id).toBe('atendimento');

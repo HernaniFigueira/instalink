@@ -99,10 +99,29 @@ export const ENCOUNTER_SECTIONS: EncounterSectionDef[] = [
     id: 'avaliacao', label: 'Avaliação', module: 'vet', order: 30, available: true,
     hint: 'Exame clínico de hoje: medidas e achados do profissional.',
   },
-  // ── Estrutura planejada (F1B2/F1C) — NÃO renderizada enquanto indisponível ──
-  { id: 'problemas', label: 'Problemas', module: 'core', order: 40, available: false },
-  { id: 'conduta', label: 'Conduta', module: 'core', order: 50, available: false },
-  { id: 'procedimentos', label: 'Procedimentos', module: 'vet', order: 60, available: false },
+  // ── F1B2 — SEÇÕES REAIS (UI + persistência + leitura + autosave + testes) ──
+  // DECISÃO DE MÓDULO (documentada): conceitualmente Problemas e Conduta são
+  // raciocínio clínico UNIVERSAL (core) e Procedimentos é fato clínico. Nesta
+  // entrega, porém, as três pertencem ao módulo VET — exatamente como a
+  // anamnese da B1 — porque a abstração de paciente das outras verticais
+  // (humano/odonto/estética) ainda NÃO está fechada no Clinical Encounter, e
+  // ativá-las como `core` ligaria o pacote B2 em TODAS as verticais por
+  // omissão (vazamento). Preferência declarada: segurança a abstração
+  // prematura. Quando a abstração de paciente humano for fechada, estas seções
+  // são PARAMETRIZADAS por módulo (nunca duplicadas).
+  {
+    id: 'problemas', label: 'Problemas', module: 'vet', order: 40, available: true,
+    hint: 'Problemas, hipóteses e diagnósticos deste atendimento — texto do profissional, sem classificação automática.',
+  },
+  {
+    id: 'conduta', label: 'Conduta', module: 'vet', order: 50, available: true,
+    hint: 'O que foi decidido fazer a partir da avaliação (não é a evolução do que aconteceu).',
+  },
+  {
+    id: 'procedimentos', label: 'Procedimentos', module: 'vet', order: 60, available: true,
+    hint: 'O que foi realizado clinicamente neste atendimento (não é o serviço do agendamento).',
+  },
+  // ── Estrutura planejada (F1C e além) — NÃO renderizada enquanto indisponível ──
   { id: 'anexos', label: 'Anexos', module: 'core', order: 70, available: false },
 ];
 
@@ -114,6 +133,10 @@ export const ENCOUNTER_SECTIONS: EncounterSectionDef[] = [
 export const CLINICAL_BRANCH_MODULES: Record<string, EncounterModuleId> = {
   anamnesis: 'vet',
   assessment: 'vet',
+  // F1B2 — mesmos módulos das seções acima (uma autoridade só para UI e gate).
+  problems: 'vet',
+  plan: 'vet',
+  procedures: 'vet',
 };
 
 /** Ramos de `clinical` que ESTA vertical aceita escrever. */

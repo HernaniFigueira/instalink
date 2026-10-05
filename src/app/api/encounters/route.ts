@@ -32,6 +32,7 @@ import { startOrResumeEncounter } from '@/lib/encounter-start';
 // autoridade de escrita clínica (servidor, nunca o `disabled` do frontend).
 import {
   applyEncounterClinicalPatch, clinicalWriteError, encounterClinicalAccess,
+  CLINICAL_BRANCH_CAPABILITIES,
 } from '@/lib/encounter-clinical';
 // Isolamento por vertical: os ramos de `clinical` que ESTA unidade aceita
 // (autoridade única em `encounter-sections`, nunca `if (clinicType === ...)`).
@@ -307,11 +308,16 @@ export async function PATCH(req: NextRequest) {
       if (outsideVertical) {
         throw err('Esta seção clínica não está disponível nesta unidade.', 400);
       }
-      if (clinicalBranches.includes('anamnesis') && !access.canEditVisitAnamnesis) {
-        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
-      }
-      if (clinicalBranches.includes('assessment') && !access.canEditVeterinaryAssessment) {
-        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
+      // Capacidade POR RAMO (tabela única em `encounter-clinical`, não um `if`
+      // por seção): anamnese/avaliação (B1) e problemas/conduta/procedimentos
+      // (B2) passam pelo mesmo laço — ramo novo já nasce coberto.
+      const deniedBranch = clinicalBranches.find((branch) => {
+        const capability = CLINICAL_BRANCH_CAPABILITIES[branch];
+        return capability ? !access[capability] : false;
+      });
+      if (deniedBranch) {
+        const deniedClinical = clinicalWriteError(access, 'clinical');
+        throw err(deniedClinical.message, deniedClinical.status);
       }
       const before = { ...target };
       // Cada campo aplicado abaixo é membro de `ENCOUNTER_CONTENT_FIELDS`

@@ -2848,6 +2848,69 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 @media (max-width: 767px) {
   .encounter-clinical__grid { grid-template-columns: 1fr; gap: 12px; }
 }
+/* ── F1B2 · listas clínicas compactas (Problemas · Conduta · Procedimentos) ──
+   Lista clínica, não parede de cards: uma linha por item (tipo + descrição +
+   remover), observação logo abaixo e confirmação de remoção NA PRÓPRIA linha
+   (sem diálogo nativo — o teclado não pode perder o foco do item). */
+.encounter-clinical__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.encounter-clinical__list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e3e9e5);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface, #ffffff);
+}
+.encounter-clinical__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.encounter-clinical__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted, #66736c);
+}
+.encounter-clinical__context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed var(--border, #e3e9e5);
+  border-radius: var(--radius-sm, 8px);
+}
+.encounter-clinical__context-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.encounter-clinical__context-list dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted, #66736c);
+}
+.encounter-clinical__context-list dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+@media (max-width: 767px) {
+  .encounter-clinical__row { grid-template-columns: 1fr; }
+}
 .encounter-workspace__content {
   width: min(100%, 1280px);
   flex: 1;

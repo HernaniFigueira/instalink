@@ -152,9 +152,12 @@ beforeEach(async () => {
 describe('F1B1 · estrutura de seções e copy clínica', () => {
   it('as três seções do recorte estão REAIS; o resto continua declarado e indisponível', () => {
     // A vertical é a autoridade: VET liga as três; sem vertical, só o CORE.
-    expect(availableEncounterSections('veterinaria').map((s) => s.id)).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    // F1B2 (contrato atualizado, declarado): problemas/conduta/procedimentos
+    // viraram REAIS na vertical veterinária — a afirmação continua estrita.
+    expect(availableEncounterSections('veterinaria').map((s) => s.id).slice(0, 3))
+      .toEqual(['atendimento', 'anamnese', 'avaliacao']);
     expect(availableEncounterSections(undefined).map((s) => s.id)).toEqual(['atendimento']);
-    for (const id of ['problemas', 'conduta', 'procedimentos', 'anexos']) {
+    for (const id of ['anexos']) {
       expect(ENCOUNTER_SECTIONS.find((s) => s.id === id)?.available).toBe(false);
     }
   });
@@ -428,7 +431,11 @@ describe('F1B1 · isolamento por vertical (clinicType é a ÚNICA autoridade)', 
     expect(encounterModulesForClinic(undefined)).toEqual(['core']);
     expect(encounterModulesForClinic('pizzaria')).toEqual(['core']);
 
-    expect(ids('veterinaria')).toEqual(['atendimento', 'anamnese', 'avaliacao']);
+    // F1B2: o pacote veterinário cresceu (problemas/conduta/procedimentos);
+    // as demais verticais continuam SÓ com o Atendimento — nenhum vazamento.
+    expect(ids('veterinaria')).toEqual([
+      'atendimento', 'anamnese', 'avaliacao', 'problemas', 'conduta', 'procedimentos',
+    ]);
     expect(ids('odontologica')).toEqual(['atendimento']);
     expect(ids('medica')).toEqual(['atendimento']);
     expect(ids('estetica')).toEqual(['atendimento']);
@@ -439,7 +446,9 @@ describe('F1B1 · isolamento por vertical (clinicType é a ÚNICA autoridade)', 
     expect(isEncounterSectionEnabled('anamnese', 'odontologica')).toBe(false);
     expect(isEncounterSectionEnabled('atendimento', undefined)).toBe(true);
     // Ramos de `clinical` aceitos por vertical (é o que a rota impõe).
-    expect(clinicalBranchesForClinic('veterinaria')).toEqual(['anamnesis', 'assessment']);
+    expect(clinicalBranchesForClinic('veterinaria')).toEqual([
+      'anamnesis', 'assessment', 'problems', 'plan', 'procedures',
+    ]);
     expect(clinicalBranchesForClinic('odontologica')).toEqual([]);
     expect(clinicalBranchesForClinic('geral')).toEqual([]);
   });

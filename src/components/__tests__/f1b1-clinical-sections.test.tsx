@@ -557,7 +557,11 @@ describe('F1B1 · navegação por vertical (o módulo vet NÃO vaza)', () => {
 
   it('VETERINÁRIA: as três seções continuam lá (regressão do recorte)', () => {
     renderWorkspace(row());                                 // fixture vet
-    expect(document.querySelectorAll('.encounter-workspace__nav-item')).toHaveLength(3);
+    // F1B2 (contrato atualizado, declarado): o pacote veterinário passou a ter
+    // seis seções reais — as três da B1 continuam na frente e na mesma ordem.
+    const nav = [...document.querySelectorAll('.encounter-workspace__nav-item')]
+      .map((item) => item.textContent);
+    expect(nav).toEqual(['Atendimento', 'Anamnese', 'Avaliação', 'Problemas', 'Conduta', 'Procedimentos']);
     expect(screen.getByRole('button', { name: 'Anamnese' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Avaliação' })).toBeTruthy();
   });
