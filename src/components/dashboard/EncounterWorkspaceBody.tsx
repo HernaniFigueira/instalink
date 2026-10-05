@@ -22,6 +22,10 @@ import { Button } from '@/components/ui';
 import { EncounterCoreSection } from './EncounterCoreSection';
 import { EncounterVisitAnamnesisSection } from './EncounterVisitAnamnesisSection';
 import { EncounterVeterinaryAssessmentSection } from './EncounterVeterinaryAssessmentSection';
+// F1B2 — raciocínio clínico, conduta e procedimentos no MESMO Encounter.
+import { EncounterClinicalProblemsSection } from './EncounterClinicalProblemsSection';
+import { EncounterCarePlanSection } from './EncounterCarePlanSection';
+import { EncounterClinicalProceduresSection } from './EncounterClinicalProceduresSection';
 import { EncounterConflictNotice, EncounterSaveFooter } from './EncounterSectionChrome';
 import {
   fetchEncounterRow, useEncounterAuthority,
@@ -140,18 +144,22 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
   }, [businessId, clearConflict, current.id, publish]);
 
   const access = current.access;
-  // Capacidades SEPARADAS (não uma flag ambígua): o núcleo é universal; a
-  // anamnese da visita e a avaliação veterinária são do módulo VET + Pet válido.
+  // Capacidades SEPARADAS (não uma flag ambígua): o núcleo é universal; as
+  // seções clínicas da visita (anamnese, avaliação, problemas, conduta e
+  // procedimentos) são do módulo ligado na vertical + paciente válido.
   const canEditCore = access ? access.canEditCore : false;
   const canEditVisitAnamnesis = access ? access.canEditVisitAnamnesis : false;
   const canEditVeterinaryAssessment = access ? access.canEditVeterinaryAssessment : false;
+  const canEditClinicalProblems = access ? access.canEditClinicalProblems : false;
+  const canEditCarePlan = access ? access.canEditCarePlan : false;
+  const canEditClinicalProcedures = access ? access.canEditClinicalProcedures : false;
   const readOnlyHint = useMemo(() => {
     const reason = access?.reason;
     if (reason === 'finalized') {
       return 'Registro finalizado: a leitura continua disponível e a edição depende da reabertura (F1C).';
     }
     if (reason === 'pet_required') {
-      return 'Vincule o Pet a este atendimento para registrar anamnese e avaliação.';
+      return 'Vincule o Pet a este atendimento para registrar anamnese, avaliação, problemas, conduta e procedimentos.';
     }
     if (reason === 'pet_invalid') {
       return 'O Pet deste atendimento não pôde ser validado nesta unidade — a escrita clínica está bloqueada.';
@@ -229,6 +237,42 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
           editable={canEditVeterinaryAssessment}
           readOnlyHint={readOnlyHint}
           petWeightKg={current.context?.patient?.weightKg || 0}
+        />
+      )}
+
+      {sectionId === 'problemas' && (
+        <EncounterClinicalProblemsSection
+          businessId={businessId}
+          row={current}
+          authority={authority}
+          adoptToken={adoptToken}
+          blocked={Boolean(conflictMessage)}
+          editable={canEditClinicalProblems}
+          readOnlyHint={readOnlyHint}
+        />
+      )}
+
+      {sectionId === 'conduta' && (
+        <EncounterCarePlanSection
+          businessId={businessId}
+          row={current}
+          authority={authority}
+          adoptToken={adoptToken}
+          blocked={Boolean(conflictMessage)}
+          editable={canEditCarePlan}
+          readOnlyHint={readOnlyHint}
+        />
+      )}
+
+      {sectionId === 'procedimentos' && (
+        <EncounterClinicalProceduresSection
+          businessId={businessId}
+          row={current}
+          authority={authority}
+          adoptToken={adoptToken}
+          blocked={Boolean(conflictMessage)}
+          editable={canEditClinicalProcedures}
+          readOnlyHint={readOnlyHint}
         />
       )}
 

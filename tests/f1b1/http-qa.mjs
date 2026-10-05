@@ -242,12 +242,15 @@ try {
   });
   assert.equal(absurd.status, 400);
   result.expected.push({ status: 400, who: 'payload', route: '/api/encounters' });
+  // F1B2 (ajuste de fixture, declarado): `problems` deixou de ser "seção
+  // futura" — virou real. O caso continua provando a MESMA coisa (ramo não
+  // aceito na vertical → 400) usando uma chave que continua fora do contrato.
   const unknownSection = await michelle.request('PATCH', '/api/encounters', {
     businessId: BIZ, id: encounterId, expectedVersion: fresh.version,
-    clinical: { problems: [{ text: 'otite' }] },
+    clinical: { attachments: [{ text: 'foto' }] },
   });
   assert.equal(unknownSection.status, 400);
-  ok('validação: número como texto, valor absurdo e seção futura são recusados (400)');
+  ok('validação: número como texto, valor absurdo e seção fora do contrato são recusados (400)');
 
   // ── 10 · seções REAIS expostas pelo contrato do workspace ───────────────
   const workspace = await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);

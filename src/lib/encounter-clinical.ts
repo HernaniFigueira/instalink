@@ -35,12 +35,61 @@ export interface VeterinaryAssessment {
   physicalExam: string;
 }
 
+/**
+ * F1B2 — RACIOCÍNIO CLÍNICO REGISTRADO (não é decisão automática).
+ *
+ * `problem`   → o que está sendo tratado/observado (Problema);
+ * `hypothesis`→ suspeita ainda não confirmada (Hipótese);
+ * `diagnosis` → conclusão do profissional (Diagnóstico).
+ *
+ * Texto livre estruturado: NENHUM vocabulário médico fechado (CID/CIAP/SNOMED)
+ * e NENHUMA classificação por IA nesta fase. Quem classifica é o profissional.
+ */
+export const CLINICAL_PROBLEM_KINDS = ['problem', 'hypothesis', 'diagnosis'] as const;
+export type ClinicalProblemKind = typeof CLINICAL_PROBLEM_KINDS[number];
+
+export const CLINICAL_PROBLEM_KIND_LABELS: Record<ClinicalProblemKind, string> = {
+  problem: 'Problema',
+  hypothesis: 'Hipótese',
+  diagnosis: 'Diagnóstico',
+};
+
+/** Item da lista de problemas/hipóteses/diagnósticos. `id` é estável e próprio. */
+export interface ClinicalProblemItem {
+  id: string;
+  kind: ClinicalProblemKind;
+  label: string;
+  notes: string;
+}
+
+/** F1B2 — Conduta: o que o profissional DECIDIU fazer a partir da avaliação. */
+export interface ClinicalCarePlan {
+  conduct: string;
+}
+
+/**
+ * F1B2 — Procedimento REALIZADO neste Encounter. É o fato clínico, não o
+ * serviço do agendamento: não carrega preço, cobrança, estoque nem comissão,
+ * e não exige item de catálogo (procedimento custom é o caso normal).
+ */
+export interface ClinicalProcedureItem {
+  id: string;
+  name: string;
+  notes: string;
+}
+
 export interface EncounterClinicalData {
   anamnesis: EncounterVisitAnamnesis;
   assessment: {
     veterinary: VeterinaryAssessment;
     [key: string]: unknown;
   };
+  /** F1B2 — problemas/hipóteses/diagnósticos desta visita (lista ordenada). */
+  problems: ClinicalProblemItem[];
+  /** F1B2 — plano/conduta clínica decidida. */
+  plan: ClinicalCarePlan;
+  /** F1B2 — procedimentos realizados nesta visita. */
+  procedures: ClinicalProcedureItem[];
   [key: string]: unknown;
 }
 
@@ -73,7 +122,40 @@ export const EMPTY_VETERINARY_ASSESSMENT: VeterinaryAssessment = {
 export const EMPTY_ENCOUNTER_CLINICAL: EncounterClinicalData = {
   anamnesis: EMPTY_ENCOUNTER_ANAMNESIS,
   assessment: { veterinary: EMPTY_VETERINARY_ASSESSMENT },
+  problems: [],
+  plan: { conduct: '' },
+  procedures: [],
 };
+
+/**
+ * F1B2 — LIMITES TÉCNICOS (segurança de entrada, não regra clínica).
+ * Textos são truncados no servidor; quantidade acima do teto é recusada (400)
+ * em vez de truncada em silêncio — perder item clínico sem avisar é pior.
+ */
+export const CLINICAL_LIST_LIMITS = {
+  problems: { maxItems: 30, label: 200, notes: 1000 },
+  procedures: { maxItems: 40, name: 200, notes: 1000 },
+} as const;
+
+export const CLINICAL_PLAN_LIMITS = { conduct: 4000 } as const;
+
+/** Teto do identificador estável de item (o índice do array NUNCA é identidade). */
+export const CLINICAL_ITEM_ID_MAX = 64;
+/** Identificador estável: começa alfanumérico, aceita `-`/`_`. */
+export const CLINICAL_ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+/**
+ * F1B2 — identidade ESTÁVEL de item de lista (problema/procedimento).
+ *
+ * O índice do array NUNCA é identidade: reordenar, editar ou remover um item
+ * não pode trocar a identidade dos outros (é o que permite auditoria e edição
+ * seguras). Gerado no cliente ao criar o item e preservado pelo servidor.
+ */
+export function newClinicalItemId(prefix: 'prb' | 'proc'): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  const time = Date.now().toString(36);
+  return `${prefix}-${time}-${random}`.slice(0, CLINICAL_ITEM_ID_MAX);
+}
 
 export const ENCOUNTER_ANAMNESIS_TEXT_LIMITS = {
   history: 4000,
@@ -127,6 +209,16 @@ export interface EncounterClinicalAccess {
    * anamnese — profissional responsável + Pet válido + módulo VET ligado.
    */
   canEditVeterinaryAssessment: boolean;
+  /**
+   * F1B2 — Problemas/hipóteses/diagnósticos: profissional responsável +
+   * paciente válido + módulo ligado na vertical. Capacidade com nome próprio
+   * (nunca uma flag genérica "pode editar clínico").
+   */
+  canEditClinicalProblems: boolean;
+  /** F1B2 — Conduta/plano clínico: mesma régua dos problemas. */
+  canEditCarePlan: boolean;
+  /** F1B2 — Procedimentos realizados: mesma régua (fato clínico do paciente). */
+  canEditClinicalProcedures: boolean;
   /**
    * Módulos que a VERTICAL desta unidade liga (autoridade única:
    * `encounterModulesForClinic(Business.clinicType)`). A tela resolve a
@@ -201,6 +293,122 @@ function normalizeVeterinaryAssessment(value: unknown): VeterinaryAssessment {
   return out;
 }
 
+// ── F1B2 · PROBLEMAS / CONDUTA / PROCEDIMENTOS ───────────────────────────
+// Duas funções por lista, com papéis diferentes:
+//   normalize*List → TOTAL, usada na leitura (documento legado/corrompido vira
+//                    lista válida; item inválido é descartado, nunca inventado);
+//   parse*List     → ESTRITA, usada na escrita (payload inválido = 400 com
+//                    mensagem humana, nada de aceitar em silêncio).
+const PROBLEM_ITEM_FIELDS = new Set(['id', 'kind', 'label', 'notes']);
+const PROCEDURE_ITEM_FIELDS = new Set(['id', 'name', 'notes']);
+
+function normalizeProblemList(value: unknown): ClinicalProblemItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: ClinicalProblemItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const item = recordOf(raw);
+    if (!item) continue;
+    const id = typeof item.id === 'string' ? item.id.slice(0, CLINICAL_ITEM_ID_MAX) : '';
+    if (!id || !CLINICAL_ITEM_ID_PATTERN.test(id) || seen.has(id)) continue;
+    const kind = (CLINICAL_PROBLEM_KINDS as readonly string[]).includes(String(item.kind))
+      ? (item.kind as ClinicalProblemKind)
+      : null;
+    const label = cleanText(item.label, CLINICAL_LIST_LIMITS.problems.label);
+    if (!kind || !label.trim()) continue;
+    seen.add(id);
+    out.push({ id, kind, label, notes: cleanText(item.notes, CLINICAL_LIST_LIMITS.problems.notes) });
+    if (out.length >= CLINICAL_LIST_LIMITS.problems.maxItems) break;
+  }
+  return out;
+}
+
+function normalizeProcedureList(value: unknown): ClinicalProcedureItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: ClinicalProcedureItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const item = recordOf(raw);
+    if (!item) continue;
+    const id = typeof item.id === 'string' ? item.id.slice(0, CLINICAL_ITEM_ID_MAX) : '';
+    if (!id || !CLINICAL_ITEM_ID_PATTERN.test(id) || seen.has(id)) continue;
+    const name = cleanText(item.name, CLINICAL_LIST_LIMITS.procedures.name);
+    if (!name.trim()) continue;
+    seen.add(id);
+    out.push({ id, name, notes: cleanText(item.notes, CLINICAL_LIST_LIMITS.procedures.notes) });
+    if (out.length >= CLINICAL_LIST_LIMITS.procedures.maxItems) break;
+  }
+  return out;
+}
+
+type ListParseResult<T> = { ok: true; items: T[] } | { ok: false; error: string };
+
+/** Escrita: valida a lista inteira (identidade, tipo, textos, duplicidade, teto). */
+export function parseClinicalProblems(value: unknown): ListParseResult<ClinicalProblemItem> {
+  if (!Array.isArray(value)) return { ok: false, error: 'A lista de problemas enviada é inválida.' };
+  const { maxItems, label: labelMax, notes: notesMax } = CLINICAL_LIST_LIMITS.problems;
+  if (value.length > maxItems) return { ok: false, error: `Registre até ${maxItems} problemas por atendimento.` };
+  const items: ClinicalProblemItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const item = recordOf(raw);
+    if (!item) return { ok: false, error: 'Cada problema precisa de tipo e descrição.' };
+    const keys = Object.keys(item);
+    if (!keys.length || keys.some((key) => !PROBLEM_ITEM_FIELDS.has(key))) {
+      return { ok: false, error: 'Há campos não reconhecidos na lista de problemas.' };
+    }
+    const id = typeof item.id === 'string' ? item.id : '';
+    if (!CLINICAL_ITEM_ID_PATTERN.test(id)) return { ok: false, error: 'Identificador de problema inválido.' };
+    if (seen.has(id)) return { ok: false, error: 'Há itens duplicados na lista de problemas.' };
+    if (!(CLINICAL_PROBLEM_KINDS as readonly string[]).includes(String(item.kind))) {
+      return { ok: false, error: 'Selecione um tipo válido: problema, hipótese ou diagnóstico.' };
+    }
+    if (typeof item.label !== 'string') return { ok: false, error: 'Informe a descrição do problema.' };
+    const label = cleanText(item.label, labelMax);
+    if (!label.trim()) return { ok: false, error: 'Informe a descrição do problema.' };
+    if (item.notes !== undefined && typeof item.notes !== 'string') {
+      return { ok: false, error: 'A observação do problema precisa ser um texto.' };
+    }
+    seen.add(id);
+    items.push({
+      id,
+      kind: item.kind as ClinicalProblemKind,
+      label,
+      notes: cleanText(item.notes, notesMax),
+    });
+  }
+  return { ok: true, items };
+}
+
+/** Escrita: procedimentos realizados (sem vínculo obrigatório com catálogo). */
+export function parseClinicalProcedures(value: unknown): ListParseResult<ClinicalProcedureItem> {
+  if (!Array.isArray(value)) return { ok: false, error: 'A lista de procedimentos enviada é inválida.' };
+  const { maxItems, name: nameMax, notes: notesMax } = CLINICAL_LIST_LIMITS.procedures;
+  if (value.length > maxItems) return { ok: false, error: `Registre até ${maxItems} procedimentos por atendimento.` };
+  const items: ClinicalProcedureItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const item = recordOf(raw);
+    if (!item) return { ok: false, error: 'Cada procedimento precisa de identificação e nome.' };
+    const keys = Object.keys(item);
+    if (!keys.length || keys.some((key) => !PROCEDURE_ITEM_FIELDS.has(key))) {
+      return { ok: false, error: 'Há campos não reconhecidos na lista de procedimentos.' };
+    }
+    const id = typeof item.id === 'string' ? item.id : '';
+    if (!CLINICAL_ITEM_ID_PATTERN.test(id)) return { ok: false, error: 'Identificador de procedimento inválido.' };
+    if (seen.has(id)) return { ok: false, error: 'Há itens duplicados na lista de procedimentos.' };
+    if (typeof item.name !== 'string') return { ok: false, error: 'Informe o nome do procedimento.' };
+    const name = cleanText(item.name, nameMax);
+    if (!name.trim()) return { ok: false, error: 'Informe o nome do procedimento.' };
+    if (item.notes !== undefined && typeof item.notes !== 'string') {
+      return { ok: false, error: 'A observação do procedimento precisa ser um texto.' };
+    }
+    seen.add(id);
+    items.push({ id, name, notes: cleanText(item.notes, notesMax) });
+  }
+  return { ok: true, items };
+}
+
 /** Additive legacy normalization: absent visit data becomes blank, never Pet data. */
 export function normalizeEncounterClinical(value: unknown): EncounterClinicalData {
   const raw = recordOf(value) || {};
@@ -212,12 +420,26 @@ export function normalizeEncounterClinical(value: unknown): EncounterClinicalDat
       ...rawAssessment,
       veterinary: normalizeVeterinaryAssessment(rawAssessment.veterinary),
     },
+    // F1B2 — aditivo e idempotente: documento anterior ao F1B2 ganha as listas
+    // VAZIAS e a conduta em branco. Nada é derivado de texto antigo (evolução
+    // não vira diagnóstico) e nada é inventado.
+    problems: normalizeProblemList(raw.problems),
+    plan: {
+      conduct: cleanText(recordOf(raw.plan)?.conduct, CLINICAL_PLAN_LIMITS.conduct),
+    },
+    procedures: normalizeProcedureList(raw.procedures),
   } as EncounterClinicalData;
 }
 
 export type ClinicalPatchResult =
   | { ok: true; clinical: EncounterClinicalData; changedFields: string[] }
   | { ok: false; error: string; field?: string };
+
+/**
+ * Ramos de `clinical` aceitos no payload (chave desconhecida = 400: nada de
+ * ligar superfície futura em silêncio).
+ */
+export const CLINICAL_PATCH_BRANCHES = ['anamnesis', 'assessment', 'problems', 'plan', 'procedures'] as const;
 
 /**
  * Validates a partial clinical payload and merges it into the same Encounter.
@@ -232,7 +454,7 @@ export function applyEncounterClinicalPatch(
   const patch = recordOf(patchValue);
   if (!patch) return { ok: false, error: 'Os dados clínicos enviados são inválidos.' };
   const patchKeys = Object.keys(patch);
-  if (!patchKeys.length || patchKeys.some((key) => key !== 'anamnesis' && key !== 'assessment')) {
+  if (!patchKeys.length || patchKeys.some((key) => !(CLINICAL_PATCH_BRANCHES as readonly string[]).includes(key))) {
     return { ok: false, error: 'A seção clínica enviada não é compatível.' };
   }
 
@@ -240,6 +462,9 @@ export function applyEncounterClinicalPatch(
     ...current,
     anamnesis: { ...current.anamnesis },
     assessment: { ...current.assessment, veterinary: { ...current.assessment.veterinary } },
+    problems: current.problems.map((item) => ({ ...item })),
+    plan: { ...current.plan },
+    procedures: current.procedures.map((item) => ({ ...item })),
   };
   const changedFields: string[] = [];
 
@@ -303,6 +528,50 @@ export function applyEncounterClinicalPatch(
     }
   }
 
+  // ── F1B2 · PROBLEMAS / HIPÓTESES / DIAGNÓSTICOS ─────────────────────────
+  // A lista é substituída como um todo (a UI manda a lista atual); a identidade
+  // de cada item é o `id` estável, NUNCA a posição no array — reordenar ou
+  // editar não troca a identidade de nada.
+  if (patch.problems !== undefined) {
+    const parsed = parseClinicalProblems(patch.problems);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    if (JSON.stringify(next.problems) !== JSON.stringify(parsed.items)) {
+      next.problems = parsed.items;
+      changedFields.push('clinical.problems');
+    }
+  }
+
+  // ── F1B2 · CONDUTA (o que o profissional decidiu fazer) ─────────────────
+  // Campo próprio: NÃO é `evolution` (o que aconteceu) e NÃO duplica
+  // `guidance`/`followUp` (orientações ao tutor e retorno continuam no núcleo).
+  if (patch.plan !== undefined) {
+    const planPatch = recordOf(patch.plan);
+    if (!planPatch || Object.keys(planPatch).some((key) => key !== 'conduct')) {
+      return { ok: false, error: 'Os campos de conduta são inválidos.' };
+    }
+    if (planPatch.conduct !== undefined) {
+      if (typeof planPatch.conduct !== 'string') {
+        return { ok: false, error: 'O plano/conduta precisa ser um texto.' };
+      }
+      const conduct = cleanText(planPatch.conduct, CLINICAL_PLAN_LIMITS.conduct);
+      if (conduct !== next.plan.conduct) {
+        next.plan = { ...next.plan, conduct };
+        changedFields.push('clinical.plan.conduct');
+      }
+    }
+  }
+
+  // ── F1B2 · PROCEDIMENTOS REALIZADOS ─────────────────────────────────────
+  // Só o fato clínico: sem preço, cobrança, estoque, comissão ou pedido.
+  if (patch.procedures !== undefined) {
+    const parsed = parseClinicalProcedures(patch.procedures);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    if (JSON.stringify(next.procedures) !== JSON.stringify(parsed.items)) {
+      next.procedures = parsed.items;
+      changedFields.push('clinical.procedures');
+    }
+  }
+
   return { ok: true, clinical: next, changedFields };
 }
 
@@ -326,7 +595,9 @@ export function encounterClinicalAccess(
   const modules = encounterModulesForClinic(normalizeClinicType(business?.clinicType));
   const vetEnabled = modules.includes('vet');
   const denied = (reason: ClinicalWriteReason): EncounterClinicalAccess => ({
-    canEditCore: false, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false, modules, reason,
+    canEditCore: false, canEditVisitAnamnesis: false, canEditVeterinaryAssessment: false,
+    canEditClinicalProblems: false, canEditCarePlan: false, canEditClinicalProcedures: false,
+    modules, reason,
   });
 
   if (encounter.status !== 'draft') return denied('finalized');
@@ -360,11 +631,38 @@ export function encounterClinicalAccess(
     canEditCore: true,
     canEditVisitAnamnesis: clinicalOk,
     canEditVeterinaryAssessment: clinicalOk,
+    // F1B2 — raciocínio clínico, conduta e procedimentos são dado clínico do
+    // PACIENTE desta visita: mesma régua da anamnese/avaliação (módulo ligado
+    // na vertical + paciente válido + profissional responsável).
+    canEditClinicalProblems: clinicalOk,
+    canEditCarePlan: clinicalOk,
+    canEditClinicalProcedures: clinicalOk,
     modules,
     // A razão diz a VERDADE: módulo desligado na vertical ≠ falta de Pet.
     reason: clinicalOk ? 'editable' : vetEnabled ? 'pet_required' : 'module_unavailable',
   };
 }
+
+/**
+ * F1B2 — ramo de `clinical` → capacidade que o autoriza. A rota usa esta
+ * tabela (um laço só) em vez de espalhar `if (branch === ...)` por ramo: ramo
+ * novo entra aqui e já nasce coberto pelo gate de autoria.
+ */
+export const CLINICAL_BRANCH_CAPABILITIES: Record<string, ClinicalCapabilityKey> = {
+  anamnesis: 'canEditVisitAnamnesis',
+  assessment: 'canEditVeterinaryAssessment',
+  problems: 'canEditClinicalProblems',
+  plan: 'canEditCarePlan',
+  procedures: 'canEditClinicalProcedures',
+};
+
+/** Chaves de capacidade clínica (o que a tabela acima pode referenciar). */
+export type ClinicalCapabilityKey =
+  | 'canEditVisitAnamnesis'
+  | 'canEditVeterinaryAssessment'
+  | 'canEditClinicalProblems'
+  | 'canEditCarePlan'
+  | 'canEditClinicalProcedures';
 
 export function clinicalWriteError(access: EncounterClinicalAccess, section: 'core' | 'clinical' = 'core'): {
   status: number;

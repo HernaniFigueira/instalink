@@ -30,3 +30,6 @@ tsconfig.tsbuildinfo
 
 # Chromium local do harness de browser F1B1 (binário grande — nunca versionado)
 .cache/browser/
+
+# Logs de gate do F1B2 (build/vitest/QA — descartáveis)
+.cache/f1b2/

@@ -151,8 +151,13 @@ try {
   ok(`workspace canônico com o Pet protagonista (${encounterId.slice(0, 8)}…)`);
 
   const nav = page.locator('.encounter-workspace__nav-item');
-  assert.deepEqual(await nav.allInnerTexts(), ['Atendimento', 'Anamnese', 'Avaliação']);
-  ok('navegação clínica com as três seções reais (sem aba morta)');
+  // F1B2 (contrato atualizado, declarado): o pacote veterinário passou a ter
+  // seis seções reais. As três do F1B1 continuam na frente, na mesma ordem, e a
+  // afirmação segue EXATA (nenhuma aba morta entrou no meio).
+  assert.deepEqual(await nav.allInnerTexts(), [
+    'Atendimento', 'Anamnese', 'Avaliação', 'Problemas', 'Conduta', 'Procedimentos',
+  ]);
+  ok('navegação clínica com as seis seções reais (as três do F1B1 na frente, sem aba morta)');
 
   // ── 2 · Atendimento → troca imediata para Anamnese (grava antes) ────────
   await page.getByLabel(/Queixa principal/).fill('Coceira nas orelhas (queixa principal).');
@@ -201,7 +206,8 @@ try {
   // ── §29 · acessibilidade REAL (aria-current, unidade, erro associado, teclado) ──
   const activeNav = page.locator('.encounter-workspace__nav-item[aria-current="page"]');
   assert.equal((await activeNav.innerText()).trim(), 'Avaliação');
-  assert.equal(await page.locator('.encounter-workspace__nav-item:not([aria-current])').count(), 2);
+  // F1B2: seis seções reais → exatamente UMA marcada como ativa (as outras 5 não).
+  assert.equal(await page.locator('.encounter-workspace__nav-item:not([aria-current])').count(), 5);
   ok('§29 · a seção ativa é anunciada por aria-current (não só por cor)');
 
   const pesoField = page.getByLabel('Peso (kg)');     // nome acessível = rótulo + UNIDADE
@@ -439,7 +445,8 @@ try {
     await page.locator('.encounter-workspace__patient').waitFor();
     await page.getByLabel(/Queixa principal/).waitFor();
     if (expectNav) {
-      assert.equal(await page.locator('.encounter-workspace__nav-item').count(), 3, `ADV ${label}: navegação vet ausente`);
+      // F1B2 (contrato atualizado, declarado): o pacote veterinário tem 6 seções.
+      assert.equal(await page.locator('.encounter-workspace__nav-item').count(), 6, `ADV ${label}: navegação vet ausente`);
       // A Avaliação só existe quando ABERTA (não é aba morta): clicar e ver.
       await section(page, 'Avaliação');
       await page.getByLabel('Peso (kg)').waitFor();
@@ -447,6 +454,10 @@ try {
       assert.equal(await page.locator('.encounter-workspace__nav-item').count(), 0, `ADV ${label}: aba de especialidade vazou`);
       assert.equal(await page.getByLabel(/História atual/).count(), 0, `ADV ${label}: anamnese vet vazou`);
       assert.equal(await page.getByLabel('Peso (kg)').count(), 0, `ADV ${label}: avaliação vet vazou`);
+      // F1B2: problemas/conduta/procedimentos também são do módulo vet.
+      assert.equal(await page.locator('[data-section="problemas"]').count(), 0, `ADV ${label}: problemas vazou`);
+      assert.equal(await page.locator('[data-section="conduta"]').count(), 0, `ADV ${label}: conduta vazou`);
+      assert.equal(await page.locator('[data-section="procedimentos"]').count(), 0, `ADV ${label}: procedimentos vazou`);
     }
     assert.equal(expectWeight ? await page.getByLabel('Peso (kg)').count() : 0, expectWeight ? 1 : 0);
   };
