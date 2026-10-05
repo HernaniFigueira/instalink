@@ -227,10 +227,11 @@ await browser.close();
 
 const consoleErrors = result.console.filter(Boolean);
 const unexpectedNetwork = result.network.filter((n) => n.unexpected);
-await fs.writeFile('.cache/clinical-access/browser-qa.json', JSON.stringify({ ...result, consoleErrors, unexpectedNetwork }, null, 2));
 assert.equal(consoleErrors.length, 0, `console com erro inesperado: ${JSON.stringify(consoleErrors)}`);
 assert.equal(unexpectedNetwork.length, 0, `resposta ≥400 inesperada: ${JSON.stringify(unexpectedNetwork)}`);
 ok(`Console 0 erro inesperado e rede 0 resposta inesperada (${result.network.length} recusas 403/404 esperadas)`);
+// A evidência sai DEPOIS da última checagem: o arquivo registra o resultado completo.
+await fs.writeFile('.cache/clinical-access/browser-qa.json', JSON.stringify({ ...result, consoleErrors, unexpectedNetwork }, null, 2));
 
 console.log(`\nCLINICAL ACCESS BROWSER QA · ${result.checks.length} PASS / 0 FAIL`);
 console.log('Evidência: .cache/clinical-access/browser-qa.json');
