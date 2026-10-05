@@ -1,6 +1,6 @@
 # GoDoutor — Master Plan, Roadmap e Handoff
 
-> Snapshot: 2026-10-02
+> Snapshot: 2026-10-05
 > Repositório: HernaniFigueira/instalink
 > Produto: GoDoutor / Clinical OS
 > Vertical inicial: clínica veterinária
@@ -34,7 +34,7 @@ Não recomeçar o produto do zero. Não criar novo repositório por impulso. Nã
 
 **Fechamento final pré-F1, PR #53 (2026-10-03): MERGED / CONCLUÍDO (merge commit `2e225c15b06f7b0f16d5a164c59f3d639b320416`).** Correções adicionais de snap, intenção, bloqueios Dia/Semana, scrollbar nativa, Equipe e Recepção implementadas; 3010 PASS + 4 baseline e Chromium local parcial. [Matriz e pendências](PRE-F1-FINAL-STATUS.md). Clinical Encounter F1 teve início após a conclusão desta etapa; o estado atual está registrado abaixo.
 
-**Clinical UX Closure — pré-F1 (2026-10-03): IMPLEMENTADO / HOMOLOGADO LOCALMENTE / REVISÃO PENDENTE.** Stacked sobre PR #52 (`fix/active-clinic-context@0c426be`), na branch fixa de sessão `arena/01a101fb-instalink`. Agenda/range/bloqueio/snap manual 15, serviços clínicos com avançado recolhido, perfil/configurações, Cliente 360 e hierarquia de ações. Next production + DB descartável + Chromium + três logins reais; 2989 PASS / 4 baseline, build/typecheck OK. [Relatório](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md). **Esta closure e a revisão da base precedem Clinical Encounter F1; F1 não iniciado, merge não autorizado/executado.**
+**Clinical UX Closure — pré-F1 (2026-10-03): MERGED / CONCLUÍDA pela PR #53 (merge commit `2e225c15b06f7b0f16d5a164c59f3d639b320416`).** Stacked sobre PR #52 (`fix/active-clinic-context@0c426be`), na branch fixa de sessão `arena/01a101fb-instalink`. Agenda/range/bloqueio/snap manual 15, serviços clínicos com avançado recolhido, perfil/configurações, Cliente 360 e hierarquia de ações. Next production + DB descartável + Chromium + três logins reais; 2989 PASS / 4 baseline, build/typecheck OK. [Relatório](AUTO-HOMOLOGACAO-CLINICAL-UX-CLOSURE.md). **Esta closure e a revisão da base precederam o Clinical Encounter F1; etapa encerrada.**
 
 **Fase consolidada:**
 Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODUÇÃO` (PR #46; merge confirmado no GitHub em 2026-10-01 UTC). `main` e `origin/main` foram auditados em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`; conferir o Git novamente antes de outra missão.
@@ -43,7 +43,7 @@ Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODU�
 
 **Agenda Temporal 2.0 — `MERGED EM MAIN` (PR #49, merge em 2026-10-02 22:01 UTC).** As etapas A/ADR, B1, B2, B2.1 e B3 permanecem na grade Day/Week/List. B3 entregou `ScheduleBlock` distinto de Booking/AvailabilityException, snapshots before/after e freeze legado, salas/equipamentos e alternativas de quantidade 1. A homologação registrada foi local, com tenant descartável Owner/Maria/Orlando, Chromium 390/1024/1366, 200/500 cartões, request budget e conflitos 409; **produção não foi usada para QA**. Evidências: `docs/AUTO-HOMOLOGACAO-AGENDA-TEMPORAL-B3.md` e `docs/AGENDA-TEMPORAL-2-FINAL.md`.
 
-**P0 Infra — Single-read authenticated guard (fila ativa, antes de Clinical Encounter F1).** Implementação no branch `arena/01a0feb4-instalink`: autenticação, suporte, tenant, membership, escopo profissional e permissões compartilham snapshot local por operação, sem cache global. Typecheck, build e testes focados passaram; a suíte completa mantém as quatro falhas baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`). Smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. A validação por Chromium/UI está pendente porque não foi possível baixar/instalar browser neste sandbox; produção não foi usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`. PR #50 foi **merged** em produção (merge commit `dbf7d68`, 2026-10-02) — P0 single-read encerrado.
+**P0 Infra — Single-read authenticated guard (etapa encerrada).** Implementação no branch `arena/01a0feb4-instalink`: autenticação, suporte, tenant, membership, escopo profissional e permissões compartilham snapshot local por operação, sem cache global. Typecheck, build e testes focados passaram; a suíte completa mantém as quatro falhas baseline conhecidas (3× `a34-instagram`, 1× `automation-audit-p4`). Smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. A validação por Chromium/UI está pendente porque não foi possível baixar/instalar browser neste sandbox; produção não foi usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`. PR #50 foi **merged** em produção (merge commit `dbf7d68`, 2026-10-02) — P0 single-read encerrado.
 
 **Clinical Convergence — onda 2 (2026-10-02): MERGED pela PR #51 (merge commit `337f39fe5a894bb40171931f5b9c5df3686e442b`).** A varredura global convertida em PR própria (branch `arena/01a0fede-instalink`): sessão canônica `godoutor_session` com dual-read de drenagem, env `GODOUTOR_DB_FILE` com alias e preservação do arquivo legado, `instalink_doc` confinado a `LEGACY_DOC_TABLE` com plano P1, preset inicial/navigator/catálogo de temas filtrados por `GODOUTOR_LEGACY_PAGES` (nada apagado — ramo de compatibilidade), branding de eventos/atores/exports/widget/R2 e seed tri-clínico. Matrix A/B/C/D e evidências (2939+4-baseline, suítes 67/88/25/15/18/28, personas 4/4; visual NÃO executado — sem Chromium no sandbox): `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` §Varredura global onda 2 e `docs/AUTO-HOMOLOGACAO-CLINICAL-CONVERGENCE.md`. A PR #51 foi concluída; Clinical Encounter F1 prosseguiu após essa etapa.
 
@@ -248,7 +248,7 @@ Fases concluídas viraram resumo curto. Detalhes de implementação movidos para
 - **Workflow + Permissões (#46)** — `MERGED / PRODUÇÃO / CONCLUÍDO`. Etapa canônica derivada, transições auditadas, matriz de papéis no servidor, escopo de dados do Profissional, capacidades de exportar/importar, Pendência de falta reaproveitando `tasks`.
 - **Clinical Convergence / Architecture Closure (#46)** — `MERGED / PRODUÇÃO / CONCLUÍDA`. Unificação Equipe×Profissionais, Serviços clínico sem vitrine, Configurações cadastro centralizado, DTO seguro, porta única Equipe, Disponibilidade clínica, Estrutura hub, Agenda classificada, P0.1–P0.3, papéis como presets (Recepção), horário próprio preservado, serviço sugerido com duração editável.
 - **Agenda Temporal 2.0 (#49)** — `MERGED EM MAIN` em 2026-10-02 UTC; QA registrado exclusivamente em ambiente local descartável.
-- **P0 Infra — single-read authenticated guard** — em implementação/revisão nesta branch; QA automatizado e HTTP local documentados em `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`; Chromium pendente por bloqueio de download; aguarda PR/revisão antes de Clinical Encounter F1.
+- **P0 Infra — single-read authenticated guard (#50)** — `MERGED / PRODUÇÃO / CONCLUÍDO` (`dbf7d68`). QA automatizado e HTTP local permanecem documentados em `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`; a limitação de Chromium registrada ali pertence à homologação original e não representa pendência atual.
 
 **Detalhes:** ver `docs/GODOUTOR-HISTORY.md` (B2/B3 completos com Alterado/Testes) e `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (matriz 57 itens + decisões B1–B6, B3-01–B3-10).
 
@@ -305,7 +305,7 @@ Ao iniciar nova sessão:
 1. leia `AGENTS.md`
 2. leia este arquivo (Master Plan — Estado atual / Fila)
 3. leia os documentos técnicos apontados no topo
-4. valide o estado atual do Git antes de agir (`git log --oneline -5`, `git status`, PR #46)
+4. valide o estado atual do Git e das PRs antes de agir (`git log --oneline -5`, `git status`, PRs abertas/mergeadas relevantes)
 5. não trate decisões históricas do InstaLink como direção atual
 6. não faça merge sem autorização explícita
 7. não altere domínio apenas para melhorar uma tela
