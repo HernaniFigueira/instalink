@@ -2,7 +2,7 @@
 
 > **STATUS: implementado e auto-verificado no working tree da branch de sessão
 > `arena/01a10c9e-instalink` (base `main` @ `714e3277`, merge da PR #60).
-> PR aberta; MERGE NÃO autorizado nesta sessão.** QA de browser automatizado
+> PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) aberta contra `main`; MERGE NÃO autorizado nesta sessão.** QA de browser automatizado
 > NÃO executado neste sandbox (`BLOCKED_BROWSER_ENV`); a evidência de runtime é
 > o smoke HTTP local em base descartável (`scripts/smoke-clinical-access.mjs`,
 > 32/32) e a suíte automatizada com as rotas reais. Produção não foi usada.
