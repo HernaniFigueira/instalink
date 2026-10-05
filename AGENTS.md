@@ -29,9 +29,18 @@ Antes de propor ou implementar mudanças relevantes, leia:
 - Não faça merge de PR sem autorização explícita do responsável pelo projeto.
 - Não declare homologação visual se não houve renderização/validação real.
 - Quando a missão permitir execução local, não limitar validação a typecheck + testes + leitura estática. Antes de concluir uma feature relevante, executar auto-homologação funcional local sempre que tecnicamente possível: subir aplicação local, criar/reutilizar tenant descartável, criar contas/personas de teste, fazer login real, navegar pelos fluxos alterados, testar happy path + erros previsíveis, observar console/network quando necessário, usar browser/render real quando disponível, nunca declarar homologação visual sem renderização real, nunca usar produção ou dados reais para testes destrutivos. Para missões envolvendo permissões: testar com múltiplos papéis reais. Para missões envolvendo UX: validar desktop/tablet prioritários. Não substituir testes automatizados; complementar.
+- **REGRA OPERACIONAL DE BRANCH/PR:**
+  - Uma fase ativa deve usar uma única branch e uma única PR.
+  - Correções, revisão, QA, homologação e patches da mesma fase continuam na mesma branch/PR até aprovação e merge.
+  - Não abrir nova PR apenas porque foi encontrado bug durante revisão da mesma fase.
+  - Nova branch/PR somente após merge da fase anterior ou quando o trabalho for comprovadamente independente.
+  - Após merge da PR de uma sessão Arena, trabalho novo começa em nova sessão a partir da main atualizada.
+  - Nunca fazer merge sem autorização explícita do responsável pelo projeto.
 - Ao concluir uma fase relevante, atualize GODOUTOR-MASTER-PLAN.md para manter CONCLUÍDO / EM ANDAMENTO / PRÓXIMO / DEFERIDO coerentes e mova detalhes para GODOUTOR-HISTORY.md.
 
-## Estado atual (2026-10-02)
+## Estado atual (2026-10-05)
+
+**Clinical Encounter F1 — `CONCLUÍDO / MERGED / HOMOLOGADO` (2026-10-05).** F1A (PR #54, merge `e2e2b63`), F1B1 (PR #55, merge `1c5c6890160f64ae3c1789ce3a3ba6122765c987`), F1B2 (PR #56, merge `a6b1b84197b83fba2127761c91065d33777474a1`) e F1C (PR #58, merge `8e29d52e187e50755e13e4ea02e3475c91f91b84`, HEAD de `main`) estão em produção. Browser QA real da F1C aprovado — fluxo comprovado **Revisão 1 → Nota complementar → Reabertura → Revisão 2**, com persistência após reload/F5 e abertura pelo mesmo Encounter. **Próxima fase oficial: Cobertura / Modalidade do Atendimento.** Detalhes: `docs/GODOUTOR-MASTER-PLAN.md` §1–§2, `docs/CLINICAL-ENCOUNTER-F1C.md` e `docs/GODOUTOR-HISTORY.md`.
 
 **Workflow + Permissões — `CONCLUÍDO EM CÓDIGO / HOMOLOGADO / MERGED / PRODUÇÃO`** (PR #46 mergeado; `main`/`origin/main` auditados em `6064bb29333ee0cd4de69cc6e554eb4a3289f793`). Etapa canônica derivada (`scheduled|arrived|in_care|finalized|cancelled|no_show`, sem campo persistido), escopo de dados do Profissional por relação real (`src/lib/data-scope.ts`), capacidades `clientes_exportar`/`clientes_importar`. Testes registrados na homologação: 2801 PASS / 4 baseline conhecidas. Matriz, rotas e histórico da homologação: `docs/AUTO-HOMOLOGACAO-WORKFLOW-PERMISSOES.md`.
 
@@ -41,7 +50,7 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 **P0 Infra — Single-read authenticated guard — `MERGED` via PR #50 (merge `dbf7d68`, 2026-10-02 UTC).** Typecheck/build e testes automatizados passaram, com as quatro falhas baseline esperadas na suíte completa; smoke HTTP local em banco descartável e logins reais Owner/Maria/Orlando passou. Chromium/UI desta entrega ficou pendente porque o sandbox não conseguiu instalar o browser. Produção não usada. Relatório: `docs/AUTO-HOMOLOGACAO-P0-SINGLE-READ-GUARD.md`.
 
-**Clinical Convergence onda 2 (cleanup de resíduo InstaLink) — `IMPLEMENTADO / AUTO-HOMOLOGADO LOCALMENTE / PR EM REVISÃO; MERGE NÃO EXECUTADO`** (branch de sessão `arena/01a0fede-instalink` sobre `dbf7d68`). Produto ativo 100% clínico: onboarding/API/navegação/temas/seed/copy falam só de clínica; varejo permanece apenas como compatibilidade atrás de `GODOUTOR_LEGACY_PAGES`. IDs técnicos legados mantidos com justificativa e plano (tabela `instalink_doc` → P1; `il_session` com dual-read concluído; headers `X-Instalink-*` e ids do embed congelados por contrato externo). Gates: 2930 testes PASS / 4 baseline intocadas; harness HTTP completo (smoke 67/0, smoke-ux 84/0, agendar 25/0, p3 15 fluxos, p4 18/18, e2e-legacy 28/0); sem Chromium no sandbox — homologação visual NÃO executada (declarado). Matriz: `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (onda 2); relatório: `docs/AUTO-HOMOLOGACAO-CLINICAL-CONVERGENCE.md`. Clinical Encounter F1 não iniciado e continua bloqueado até revisão/merge desta PR e autorização explícita.
+**Clinical Convergence onda 2 (cleanup de resíduo InstaLink) — `MERGED / CONCLUÍDA` pela PR #51 (merge `337f39fe5a894bb40171931f5b9c5df3686e442b`, 2026-10-03).** Produto ativo 100% clínico: onboarding/API/navegação/temas/seed/copy falam só de clínica; varejo permanece apenas como compatibilidade atrás de `GODOUTOR_LEGACY_PAGES`. Pendências drenáveis remanescentes: fallback `il_session`/`il_cust_session`/`il_support` (cookies = protocolo), alias `INSTALINK_DB_FILE`, renome P1 da tabela `instalink_doc`, namespace CSS `il-*` (batch cosmético opcional). Matriz: `docs/GODOUTOR-CLINICAL-CONVERGENCE-AUDIT.md` (onda 2); relatório: `docs/AUTO-HOMOLOGACAO-CLINICAL-CONVERGENCE.md`.
 
 - **P0.1 (Slots & Elegibilidade):** todos os chamadores de `slotEligibleProfessionalIds` passam a equipe completa do tenant; o helper decide elegibilidade (`undefined` legado solo / `[]` / `[ids]`).
 - **P0.2 (Privilege Escalation):** `person.save` valida server-side e atomicamente as permissões efetivas do alvo contra as do ator (403 sem mutação parcial).
@@ -56,17 +65,15 @@ Antes de propor ou implementar mudanças relevantes, leia:
 
 **Fila oficial — autoridade no Master Plan §2:**
 
-1. **Clinical Convergence onda 2 + CORREÇÃO FINAL — revisar PR #51** (`arena/01a0fede-instalink` → `main@dbf7d68`); merge só com autorização explícita. A correção final fecha o produto ativo 100% clínico (onboarding OFF sem pergunta comercial nem `modes`; Products/Orders fora do catálogo/telas no OFF; branding package/.env; renome com migração dos identificadores `il-*` ativos). Pendências drenáveis remanescentes: fallback `il_session`/`il_cust_session`/`il_support` (cookies = protocolo), alias `INSTALINK_DB_FILE`, renome P1 da tabela `instalink_doc`, namespace CSS `il-*` (batch cosmético opcional). (P0: PR #50 MERGEADA em `dbf7d68`.)
-2. Clinical Encounter F1 — deferido até revisão/merge da PR de convergência e autorização explícita.
-3. Cobertura / Modalidade do Atendimento
-4. Prescrição + Exames + Document Engine
-5. Estoque/Farmácia
-6. Cirurgia + Internação
-7. Conta do Atendimento + Financeiro avançado
-8. Fiscal / integrações
-9. Agentes + Jev + LLM + OAAS sobre os domínios estabilizados
+1. **Cobertura / Modalidade do Atendimento** — Particular vs Convênio/Plano (próximo passo oficial).
+2. **Prescrição + Exames + Document Engine** — SNCR/Anvisa e requisitos de assinatura eletrônica são pré-requisito antes de implementar (requisito registrado na PR #57).
+3. **Estoque / Farmácia**
+4. **Cirurgia + Internação**
+5. **Conta do Atendimento + Financeiro avançado**
+6. **Fiscal / integrações**
+7. **Agentes + Jev + LLM + OAAS** sobre os domínios estabilizados
 
-Workflow + Permissões já está em produção. Agenda Temporal 2.0 foi mergeada via PR #49 e o P0 single-read guard via PR #50 (merge `dbf7d68`) em 2026-10-02; QA registrado é local, sem produção. A PR da Clinical Convergence onda 2 aguarda revisão; Clinical Encounter F1 permanece bloqueado até a revisão/merge dela e autorização explícita; não antecipar.
+Detalhes, escopo e pré-requisitos de cada item continuam no `docs/GODOUTOR-MASTER-PLAN.md` §2 (única fonte da fila). Workflow + Permissões (PR #46), Agenda Temporal 2.0 (PR #49), P0 single-read (PR #50), Clinical Convergence onda 2 (PR #51) e Clinical Encounter F1 (PRs #54–#58) já estão mergeados/produção; o QA registrado é local, sem produção. Não antecipar fases sem autorização explícita.
 
 **Registrado, sem implementar (não bloqueia a fila):** Cadastro/Onboarding — contrato de identidade (Master Plan §2.6): conta/login = PESSOA; primeiro usuário nasce Proprietário; clínica é entidade separada da conta; onboarding futuro aceita clínica/titular PF (CPF) ou PJ (CNPJ); e-mail de login ≠ e-mail institucional da clínica (podem ser iguais); não misturar Owner com Business/Clínica; Organização/Clínica/Unidade/Equipe são entidades/vínculos distintos.
 

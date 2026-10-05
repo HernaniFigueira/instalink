@@ -91,7 +91,7 @@ responsible active Professional can add append-only notes. API and UI regression
 cover the positive responsible-Professional path and negative administrative,
 reception, other-Professional, and cross-tenant paths.
 
-## Post-review correction 2026-10-07 — canonical response history
+## Post-review correction 2026-10-05 — canonical response history
 
 Storage was correct: finalize/addendum/reopen persisted revisions, addenda and
 reopen audit entries. The browser defect was the response shape: history was
