@@ -126,6 +126,47 @@ export const ENCOUNTER_LIMITS: Record<EncounterTextField, number> = {
 export const ENCOUNTER_TAGS_MAX = 8;
 export const ENCOUNTER_TAG_LEN = 40;
 
+/** Retorno ESTRUTURADO (FASE 2 · P3) — trio gravado em conjunto no registro. */
+export const ENCOUNTER_STRUCTURED_FOLLOW_UP_FIELDS = ['followUpMode', 'followUpDate', 'followUpDays'] as const;
+
+/**
+ * F1B1 · P1 — CAMPOS DE CONTEÚDO do registro em andamento (AUTORIDADE ÚNICA).
+ *
+ * Tudo o que é CONTEÚDO do atendimento — texto clínico, etiquetas, retorno
+ * estruturado, arquivos e o dado clínico da visita — está listado AQUI e em
+ * mais nenhum lugar. O PATCH faz UMA pergunta com esta lista ("esta chamada
+ * escreve conteúdo?") e, se sim, exige o PROFISSIONAL RESPONSÁVEL antes de
+ * aplicar qualquer um destes campos. Papel administrativo (Owner/Admin sem
+ * vínculo) lê e opera, mas não escreve conteúdo: `disabled` na tela não é
+ * segurança, e um PATCH direto não pode achar um caminho lateral.
+ *
+ * Regra de manutenção: campo novo de conteúdo ENTRA nesta lista. O servidor
+ * só grava o que está aqui — o teste de cobertura desta entrega trava isso.
+ */
+export const ENCOUNTER_CONTENT_FIELDS = [
+  ...ENCOUNTER_TEXT_FIELDS,
+  'tags',
+  ...ENCOUNTER_STRUCTURED_FOLLOW_UP_FIELDS,
+  'files',
+  'clinical',
+] as const;
+export type EncounterContentField = typeof ENCOUNTER_CONTENT_FIELDS[number];
+
+/**
+ * "Este PATCH modifica CONTEÚDO do Encounter?" — a única pergunta de autoria
+ * de conteúdo do servidor (F1B1 · P1).
+ *
+ * Metadados de transporte (`id`, `businessId`, `expectedVersion`) NÃO são
+ * conteúdo. Transições de estado (`action:'finalize'|'reopen'`) também não
+ * entram aqui: têm contrato próprio/legado e continuam com as suas regras —
+ * esta função é sobre EDIÇÃO DE CONTEÚDO, e só sobre isso.
+ */
+export function writesEncounterContent(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const payload = body as Record<string, unknown>;
+  return ENCOUNTER_CONTENT_FIELDS.some((field) => payload[field] !== undefined);
+}
+
 /**
  * F1A · INVARIANTE CLÍNICA — todo atendimento tem um PROFISSIONAL RESPONSÁVEL
  * concreto do tenant. Sem ele o atendimento NÃO começa: o registro clínico não

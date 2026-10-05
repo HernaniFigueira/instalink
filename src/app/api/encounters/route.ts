@@ -23,6 +23,8 @@ import {
   hasExpectedVersion, versionConflict,
   // FASE 2 · P3 — retorno estruturado + arquivos (aditivos).
   cleanEncounterFiles, isFollowUpMode, validateFollowUp,
+  // F1B1 · P1 — autoridade única de "este PATCH escreve conteúdo?".
+  writesEncounterContent,
 } from '@/lib/encounters';
 // F1A — operação canônica de iniciar/retomar (mesma usada por /encounters/start).
 import { startOrResumeEncounter } from '@/lib/encounter-start';
@@ -269,22 +271,27 @@ export async function PATCH(req: NextRequest) {
       }
       const conflict = versionConflict(target, body.expectedVersion);
       if (conflict.conflict) throw err(conflict.message, 409);
-      // ── F1B1 · AUTORIDADE DE ESCRITA CLÍNICA (servidor) ──────────────────
-      // Papel administrativo não é identidade clínica: escrever conteúdo
-      // exige que o ator seja o PROFISSIONAL RESPONSÁVEL vinculado (vínculo
-      // real Professional.userId === ator). Recepção/outros papéis não
-      // escrevem; o dado clínico da visita exige também Pet VÁLIDO no tenant.
-      const writesCore = ENCOUNTER_TEXT_FIELDS.some((field) => body[field] !== undefined)
-        || body.tags !== undefined;
-      const clinicalPresent = body.clinical !== undefined;
-      const clinicalObject = clinicalPresent && body.clinical && typeof body.clinical === 'object'
+      // ── F1B1 · AUTORIDADE DE ESCRITA DE CONTEÚDO (servidor) ───────────────
+      // Papel administrativo não é identidade clínica: escrever CONTEÚDO do
+      // atendimento exige que o ator seja o PROFISSIONAL RESPONSÁVEL vinculado
+      // (vínculo real Professional.userId === ator). A pergunta é UMA só e usa
+      // a lista única `ENCOUNTER_CONTENT_FIELDS` (lib/encounters): texto
+      // clínico, etiquetas, retorno ESTRUTURADO (followUpMode/Date/Days),
+      // arquivos e `clinical`. Sem isso, `followUpMode`/`files` eram gravados
+      // por Owner/Admin sem vínculo (bypass P1) — o `disabled` da tela não é
+      // segurança e o PATCH direto não pode ter caminho lateral.
+      // Recepção/outros papéis não escrevem; o dado clínico da visita exige
+      // ainda o gate do próprio módulo (vertical + capacidades + Pet válido).
+      const writesEncounter = writesEncounterContent(body);
+      const clinicalObject = body.clinical !== undefined && body.clinical && typeof body.clinical === 'object'
         && !Array.isArray(body.clinical)
         ? body.clinical as Record<string, unknown>
         : null;
       const clinicalBranches = clinicalObject ? Object.keys(clinicalObject) : [];
       const access = encounterClinicalAccess(d, target, guard.ctx.user.id, String(guard.ctx.role || ''));
-      if ((writesCore || clinicalPresent) && !access.canEditCore) {
-        throw err(clinicalWriteError(access, 'core').message, clinicalWriteError(access, 'core').status);
+      if (writesEncounter && !access.canEditCore) {
+        const denied = clinicalWriteError(access, 'core');
+        throw err(denied.message, denied.status);
       }
       // ── ISOLAMENTO POR VERTICAL (defesa em profundidade) ────────────────
       // A UI esconder a seção não é o gate: o SERVIDOR recusa escrita de um
@@ -307,17 +314,23 @@ export async function PATCH(req: NextRequest) {
         throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
       }
       const before = { ...target };
+      // Cada campo aplicado abaixo é membro de `ENCOUNTER_CONTENT_FIELDS`
+      // (autoridade única). Nada de conteúdo é gravado fora do gate acima.
       for (const field of ENCOUNTER_TEXT_FIELDS) {
         if (body[field] !== undefined) target[field] = cleanText(body[field], field);
       }
       // F1B1 — dado clínico da visita: MESMO Encounter, mesma versão, um
       // único source of truth. O merge é validado campo a campo (números
       // finitos com limite técnico, opções fechadas) e o que não veio no
-      // payload permanece exatamente como estava.
+      // payload permanece exatamente como estava. `changedFields` traz os
+      // caminhos GRANULARES que mudaram de fato (ex.: `clinical.anamnesis.
+      // appetite`) e é exatamente o que vai para a auditoria.
+      let clinicalChangedFields: string[] = [];
       if (body.clinical !== undefined) {
         const merged = applyEncounterClinicalPatch(target.clinical, body.clinical);
         if (!merged.ok) throw err(merged.error, 400);
         target.clinical = merged.clinical;
+        clinicalChangedFields = merged.changedFields;
       }
       if (body.tags !== undefined) target.tags = cleanTags(body.tags);
       // FASE 2 · P3 — retorno estruturado (validado antes de gravar).
@@ -337,11 +350,23 @@ export async function PATCH(req: NextRequest) {
       }
       // FASE 2 · P3 — arquivos: só referências (o binário fica no Storage).
       if (body.files !== undefined) target.files = cleanEncounterFiles(body.files);
-      const changed = ([
+      // ── AUDITORIA GRANULAR (P2) ───────────────────────────────────────────
+      // Campos do núcleo entram pelo nome físico; o dado clínico entra pelos
+      // caminhos GRANULARES calculados no merge (clinical.anamnesis.appetite,
+      // clinical.assessment.veterinary.temperatureC) — nunca o rótulo coarse
+      // "clinical", porque a granularidade SEMPRE existe aqui: a camada de
+      // persistência materializa/normaliza `clinical` em toda leitura
+      // (normalizeDB → normalizeEncounterClinical), então o merge compara duas
+      // estruturas já normalizadas e lista exatamente o que mudou de fato.
+      const changed: string[] = ([
         'complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags',
-        'followUpMode', 'followUpDate', 'followUpDays', 'files', 'clinical',
+        'followUpMode', 'followUpDate', 'followUpDays', 'files',
       ] as const)
-        .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]));
+        .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]))
+        .slice();
+      for (const field of clinicalChangedFields) {
+        if (!changed.includes(field)) changed.push(field);   // sem duplicata
+      }
       if (changed.length === 0) {
         // Nada mudou: não inventa versão nova nem suja a auditoria (o autosave
         // da tela bate aqui com frequência e precisa ser barato e honesto).

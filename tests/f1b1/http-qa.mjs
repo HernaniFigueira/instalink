@@ -293,7 +293,81 @@ try {
     ok(`vertical ${label}: só CORE · leitura/escrita vet recusadas (400) · nada gravado`);
   }
 
-  // ── 11 · a rota do registro COMPLETO (legado) continua viva ─────────────
+  // ── 10c · P1 — BYPASS DE ESCRITA DE CONTEÚDO (followUp/files) ───────────
+  // Regra canônica: TODA mutação de conteúdo exige o profissional responsável.
+  // Antes do patch, followUpMode/followUpDate/followUpDays/files ficavam FORA
+  // do gate: um Owner sem vínculo Professional gravava por PATCH direto.
+  // Prova adversarial real: 403 + registro byte-for-byte intacto + versão
+  // intacta + nenhuma auditoria nova.
+  const dbAuditFor = async () => {
+    const raw = await fs.readFile(process.env.GODOUTOR_DB_FILE || '.cache/f1b1/qa.json', 'utf8');
+    const doc = JSON.parse(raw);
+    return (doc.audit || []).filter((a) => a.action === 'encounter.updated' && a.meta?.encounterId === encounterId);
+  };
+  const BYPASS = [
+    ['followUpMode', { followUpMode: 'interval', followUpDays: 30 }],
+    ['followUpDate', { followUpMode: 'date', followUpDate: '2026-12-01' }],
+    ['followUpDays', { followUpMode: 'interval', followUpDays: 45 }],
+    ['files', { files: [{ id: 'f-qa-1', name: 'otoscopia.jpg', url: 'https://cdn.qa/otoscopia.jpg', size: 1024, createdAt: today, by: 'Owner' }] }],
+  ];
+  for (const [who, session] of [['Owner sem vínculo Professional', owner], ['Recepção', maria]]) {
+    const before = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    const antesJson = JSON.stringify(before);
+    const auditAntes = (await dbAuditFor()).length;
+    // Campo isolado: o gate precisa olhar o campo, não o trio completo.
+    const SOLO = { followUpMode: 'interval', followUpDate: '2026-12-01', followUpDays: 30, files: BYPASS[3][1].files };
+    for (const [label, payload] of BYPASS) {
+      const attempt = await session.request('PATCH', '/api/encounters', {
+        businessId: BIZ, id: encounterId, expectedVersion: before.version, ...payload,
+      });
+      assert.equal(attempt.status, 403, `${who} → ${label}: ${attempt.status}`);
+      result.expected.push({ status: 403, who, route: '/api/encounters', field: label });
+      const solo = await session.request('PATCH', '/api/encounters', {
+        businessId: BIZ, id: encounterId, expectedVersion: before.version, [label]: SOLO[label],
+      });
+      assert.equal(solo.status, 403, `${who} → ${label} isolado: ${solo.status}`);
+    }
+    const depois = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    assert.equal(JSON.stringify(depois), antesJson, `${who}: o registro mudou depois de tentativa recusada`);
+    assert.equal(depois.version, before.version, `${who}: a versão subiu em tentativa recusada`);
+    assert.equal((await dbAuditFor()).length, auditAntes, `${who}: auditoria criada em tentativa recusada`);
+    ok(`${who}: followUpMode/Date/Days e files recusados (403) · dado, versão e auditoria intactos`);
+  }
+
+  // ── 10d · P2 — caminho legítimo + AUDITORIA GRANULAR ────────────────────
+  {
+    const before = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    const legit = await michelle.request('PATCH', '/api/encounters', {
+      businessId: BIZ, id: encounterId, expectedVersion: before.version,
+      followUpMode: 'interval', followUpDays: 30,
+      files: [{ id: 'f-qa-1', name: 'otoscopia.jpg', url: 'https://cdn.qa/otoscopia.jpg', size: 1024, createdAt: today, by: 'Michelle' }],
+      evolution: 'Evolução da consulta (auditoria granular).',
+    });
+    assert.equal(legit.status, 200, `profissional responsável deveria gravar: ${legit.status}`);
+    assert.equal(legit.data.encounter.followUpMode, 'interval');
+    assert.equal(legit.data.encounter.followUpDays, 30);
+    assert.equal(legit.data.encounter.files.length, 1);
+    assert.equal(legit.data.encounter.version, before.version + 1);
+
+    const clinicalWrite = await michelle.request('PATCH', '/api/encounters', {
+      businessId: BIZ, id: encounterId, expectedVersion: legit.data.encounter.version,
+      clinical: { anamnesis: { appetite: 'changed' }, assessment: { veterinary: { temperatureC: 38.6 } } },
+    });
+    assert.equal(clinicalWrite.status, 200);
+    const audit = await dbAuditFor();
+    const coreFields = audit[audit.length - 2].meta.fields;
+    const clinicalFields = audit[audit.length - 1].meta.fields;
+    assert.deepEqual(coreFields, ['evolution', 'followUpMode', 'followUpDays', 'files'], `core audit: ${coreFields}`);
+    assert.deepEqual(clinicalFields, [
+      'clinical.anamnesis.appetite', 'clinical.assessment.veterinary.temperatureC',
+    ], `clinical audit: ${clinicalFields}`);
+    for (const entry of audit) {
+      assert.ok(!entry.meta.fields.includes('clinical'), 'auditoria coarse "clinical" com granularidade disponível');
+      assert.equal(new Set(entry.meta.fields).size, entry.meta.fields.length, 'campo duplicado na auditoria');
+    }
+    ok('profissional responsável grava retorno/arquivos/evolução · auditoria granular (sem rótulo coarse, sem duplicata)');
+  }
+
   const legacyPage = await michelle.request('GET', `/atendimento/${encounterId}/registro?b=${BIZ}`);
   assert.ok([200, 307, 308].includes(legacyPage.status), `legado: ${legacyPage.status}`);
   ok('registro completo (legado) continua acessível na rota própria');
