@@ -219,6 +219,10 @@ arquivo identificado (nada “escondido” como exceção).
   drawer, hover card — **23/23**) e `tests/design-system/surfaces-qa.mjs`
   (fechamento clínico, Oportunidades, Disponibilidade — **40/40**) — screenshots em
   `docs/qa-design-system/`, viewports 1440/1366/1024/390.
+- `tests/design-system/audit-2-probe.mjs` — segunda passagem de auditoria nas telas que
+  ainda não tinham QA (Canais & Integrações e Campanhas): página carrega sem erro de
+  runtime, **zero** camada artesanal, os 5 `Dialog` migrados abrem com **foco contido**,
+  fecham com Escape e o `CloseButton` não é vermelho (**18/18**).
 - Nenhuma camada artesanal sobrevive no produto: o QA mede `artesanalOverlays() === 0`
   em cada tela exercitada, e o inventário de `<select>` cru é conferido por `grep`.
 - Testes de contrato do DS: `src/lib/__tests__/ds-agenda-quick-create.test.tsx`
