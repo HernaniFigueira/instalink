@@ -39,6 +39,7 @@ import {
 // (autoridade única em `encounter-sections`, nunca `if (clinicType === ...)`).
 import { CLINICAL_BRANCH_MODULES, clinicalBranchesForClinic, normalizeClinicType } from '@/lib/encounter-sections';
 import { applyBookingStatusTx } from '@/lib/booking-status';
+import { canReadClinicalRecords } from '@/lib/data-scope';
 import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { effectiveTimezone } from '@/lib/tz';
@@ -106,8 +107,17 @@ export async function GET(req: NextRequest) {
   const contactId = String(req.nextUrl.searchParams.get('contactId') || '');
   const customerId = String(req.nextUrl.searchParams.get('customerId') || '');
   const phone = String(req.nextUrl.searchParams.get('phone') || '');
+  // CLINICAL ACCESS: o PACIENTE (pet) também é chave do histórico longitudinal.
+  const petId = String(req.nextUrl.searchParams.get('petId') || '');
 
+  // ESCOPO OPERACIONAL: agenda/relatório e as buscas por origem (booking/fila)
+  // continuam exclusivos do profissional vinculado.
   const scoped = (db.encounters || []).filter((e) => e.businessId === businessId && encounterInScope(e, guard.ctx.professionalScope));
+  // ACESSO CLÍNICO: o Professional vinculado lê o histórico longitudinal da
+  // UNIDADE (outros profissionais inclusive) para continuidade assistencial.
+  // Sem vínculo clínico (papel de atendimento não vinculado) fecha por padrão.
+  const clinicalRead = canReadClinicalRecords(guard.ctx);
+  const tenantEncounters = (db.encounters || []).filter((e) => e.businessId === businessId);
 
   // Leitura POR ID: é o que a tela usa para "recarregar" depois de um conflito
   // de versão. Nunca cria nada — e por isso não pode virar POST por acidente.
@@ -120,8 +130,10 @@ export async function GET(req: NextRequest) {
     // a resposta de erro nunca carrega o registro.
     const found = (db.encounters || []).find((e) => e.id === id && e.businessId === businessId);
     if (!found) return NextResponse.json({ error: 'Registro de atendimento não encontrado.' }, { status: 404 });
-    if (!encounterInScope(found, guard.ctx.professionalScope)) {
-      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
+    // O ID não concede escrita: a leitura é clínica (unidade), mas editar
+    // continua exigindo o profissional responsável — decidido no PATCH.
+    if (!clinicalRead) {
+      return NextResponse.json({ error: 'Seu acesso não tem vínculo clínico nesta unidade.' }, { status: 403 });
     }
     return NextResponse.json(withEncounterHistory(db, found.id, { ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }));
   }
@@ -133,12 +145,18 @@ export async function GET(req: NextRequest) {
     const found = scoped.find((e) => e.bookingId === bookingId) || null;
     return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
   }
-  if (contactId || customerId || phone) {
+  if (contactId || customerId || phone || petId) {
+    // HISTÓRICO LONGITUDINAL DO PACIENTE: todos os registros do paciente no
+    // tenant, de qualquer profissional — é o que sustenta "por que este
+    // paciente chegou até mim". Fora do acesso clínico, nada é enumerado.
+    if (!clinicalRead) {
+      return NextResponse.json({ error: 'Seu acesso não tem vínculo clínico nesta unidade.' }, { status: 403 });
+    }
     // Telefone é aceito como atalho da tela, mas quem resolve é a BASE: o
     // telefone vira o contato do CRM e o casamento segue por identidade.
     const resolvedContactId = contactId
       || (phone ? (db.contacts.find((c) => c.businessId === businessId && c.phone === onlyDigits(phone))?.id || '') : '');
-    const list = encountersForCustomer(scoped, businessId, { contactId: resolvedContactId, customerId });
+    const list = encountersForCustomer(tenantEncounters, businessId, { contactId: resolvedContactId, customerId, petId });
     return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
   }
   // Lista por período (agenda/relatório): `from`/`to` opcionais em YYYY-MM-DD.
@@ -209,9 +227,9 @@ export async function PATCH(req: NextRequest) {
     const id = String(body.id || '');
     const current = (db.encounters || []).find((e) => e.id === id && e.businessId === businessId);
     if (!current) return NextResponse.json({ error: 'Registro de atendimento não encontrado.' }, { status: 404 });
-    if (!encounterInScope(current, guard.ctx.professionalScope)) {
-      return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
-    }
+    // A ESCRITA não é decidida pelo escopo de LEITURA: quem pode escrever é o
+    // profissional responsável vinculado (F1 — encounterClinicalAccess /
+    // isResponsibleProfessional / canReopen), aplicado mais abaixo.
     const role = String(guard.ctx.role || '');
     const reopen = canReopen(role);
     const action = String(body.action || '');
@@ -226,9 +244,8 @@ export async function PATCH(req: NextRequest) {
     const updated = await updateDB((d: DB) => {
       const target = d.encounters.find((e) => e.id === id && e.businessId === businessId);
       if (!target) throw err('Registro de atendimento não encontrado.', 404);
-      if (!encounterInScope(target, guard.ctx.professionalScope)) {
-        throw err('Você só registra os seus próprios atendimentos.', 403);
-      }
+      // Tenant primeiro: um registro de outra unidade continua 404. Autoria
+      // clínica é validada pelo contrato F1 logo abaixo (403 para terceiros).
 
       // ── Transições de estado (máquina explícita) ──
       // Na ordem: primeiro o que DESTRAVA o usuário (reabrir), depois a trava
@@ -495,6 +512,8 @@ export async function DELETE(req: NextRequest) {
       const idx = d.encounters.findIndex((e) => e.id === id && e.businessId === businessId);
       if (idx < 0) throw err('Registro de atendimento não encontrado.', 404);
       const target = d.encounters[idx];
+      // Apagar rascunho segue o ESCOPO OPERACIONAL: o registro é o trabalho de
+      // quem atendeu (o profissional vinculado não apaga o rascunho alheio).
       if (!encounterInScope(target, guard.ctx.professionalScope)) {
         throw err('Você só registra os seus próprios atendimentos.', 403);
       }

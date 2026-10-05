@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { sanitizePet, validatePet, petsOfTutor } from '@/lib/pets';
-import { canAccessContact, canAccessPet, isProfessionalScoped, scopePets } from '@/lib/data-scope';
+import { isLinkedContact, isLinkedPet, isProfessionalScoped, scopeReadablePets } from '@/lib/data-scope';
 import type { Pet } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -21,8 +21,11 @@ export async function GET(req: NextRequest) {
   if (!guard.ok) return guard.res;
   const db = guard.db;
   const business = db.businesses.find((b) => b.id === businessId);
-  // ESCOPO DE DADOS: só os pets com vínculo real (agendamento/atendimento).
-  const all = scopePets(db, guard.ctx, db.pets.filter((p) => p.businessId === businessId && (!tutorId || p.tutorId === tutorId)));
+  // CLINICAL ACCESS: o PACIENTE é o protagonista clínico — o Professional
+  // vinculado localiza todos os pets da unidade (mesmo sem nunca ter
+  // atendido), para abrir a ficha e o histórico longitudinal. A ESCRITA
+  // continua presa ao vínculo real (`isLinkedPet`), sem bypass.
+  const all = scopeReadablePets(db, guard.ctx, db.pets.filter((p) => p.businessId === businessId && (!tutorId || p.tutorId === tutorId)));
   return NextResponse.json({
     vet: business?.clinicType === 'veterinaria',
     clinicType: business?.clinicType || 'geral',
@@ -53,10 +56,10 @@ export async function POST(req: NextRequest) {
       const saved = await updateDB((db) => {
         const now = new Date().toISOString();
         const tutor = db.contacts.find((c) => c.id === tutorId && c.businessId === businessId);
-        if (!tutor || !canAccessContact(db, guard.ctx, tutor)) throw Object.assign(new Error('Tutor não encontrado nesta unidade.'), { status: 404 });
+        if (!tutor || !isLinkedContact(db, guard.ctx, tutor)) throw Object.assign(new Error('Tutor não encontrado nesta unidade.'), { status: 404 });
         const id = String((body.pet && body.pet.id) || '');
         const existing = id ? db.pets.find((p) => p.id === id && p.businessId === businessId) : undefined;
-        if (scoped && (!existing || !canAccessPet(db, guard.ctx, existing))) {
+        if (scoped && (!existing || !isLinkedPet(db, guard.ctx, existing))) {
           throw Object.assign(new Error('Pet não encontrado.'), { status: 404 });
         }
         if (existing) {

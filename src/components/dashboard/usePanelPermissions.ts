@@ -22,6 +22,7 @@ interface MePayload {
   businesses?: Array<{
     id: string;
     role?: string;
+    professionalId?: string;
     permissions?: Partial<Record<PermissionId, boolean>>;
   }>;
 }
@@ -41,6 +42,13 @@ export interface PanelPermissions {
    * negaria.
    */
   role: string;
+  /**
+   * Professional vinculado NA UNIDADE ATIVA ('' quando não há vínculo).
+   * CLINICAL ACCESS: o acesso clínico é da unidade, mas a OPERAÇÃO (agenda,
+   * iniciar atendimento) continua do profissional — a tela precisa saber de
+   * quem é o agendamento antes de oferecer a ação que o servidor negaria.
+   */
+  professionalId: string;
   /** false enquanto /api/auth/me não chega. */
   ready: boolean;
 }
@@ -56,7 +64,7 @@ export function usePanelPermissions(): PanelPermissions {
   // UI cai no padrão conservador do consumidor (não derruba o render).
   const params = useSearchParams();
   const requested = params?.get('b') || '';
-  const [state, setState] = useState<PanelPermissions>({ permissions: {}, role: '', ready: false });
+  const [state, setState] = useState<PanelPermissions>({ permissions: {}, role: '', ready: false, professionalId: '' });
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +73,10 @@ export function usePanelPermissions(): PanelPermissions {
       const list = Array.isArray(d?.businesses) ? d!.businesses! : [];
       const id = resolveActiveBusinessId(requested, list);
       const biz = list.find((b) => b.id === id);
-      setState({ permissions: biz?.permissions || {}, role: biz?.role || '', ready: true });
+      setState({
+        permissions: biz?.permissions || {}, role: biz?.role || '', ready: true,
+        professionalId: biz?.professionalId || '',
+      });
     });
     return () => { cancelled = true; };
   }, [requested]);

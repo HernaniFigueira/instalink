@@ -57,9 +57,12 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
           `/api/encounters?businessId=${encodeURIComponent(businessId)}&contactId=${encodeURIComponent(pet.tutorId)}`,
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
+        // CLINICAL ACCESS: a aba Agenda do Pet 360 mostra os agendamentos DO
+        // PACIENTE na unidade (contexto clínico), nunca a agenda de outro
+        // profissional. A leitura é `mode=patient`, escopada pelo pet.
         apiGet<{ bookings?: Booking[] }>(
-          `/api/bookings?businessId=${encodeURIComponent(businessId)}&mode=manage&from=2000-01-01&to=2100-01-01&limit=500`,
-          { scope: 'area', area: 'Agenda' },
+          `/api/bookings?businessId=${encodeURIComponent(businessId)}&mode=patient&petId=${encodeURIComponent(pet.id)}`,
+          { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
         apiGet<{ templates?: AnamneseTemplate[]; responses?: AnamneseResponse[] }>(
           `/api/anamnese?businessId=${encodeURIComponent(businessId)}&responsesFor=${encodeURIComponent(pet.tutorId)}`,
@@ -71,7 +74,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
       // Só dados DESTSE pet (petId); tutor sem petId no registro fica de fora
       // dos atendimentos clínicos específicos — mas bookings com petId filtram.
       setEncounters((enc.ok ? (enc.data?.encounters || []) : []).filter((e) => e.petId === pet.id));
-      setBookings((bk.ok ? (bk.data?.bookings || []) : []).filter((b) => b.petId === pet.id));
+      setBookings(bk.ok ? (bk.data?.bookings || []) : []);
       setTemplates(an.ok ? (an.data?.templates || []) : []);
       setResponses((an.ok ? (an.data?.responses || []) : []).filter((r) => !r.petId || r.petId === pet.id));
       setLoaded(true);

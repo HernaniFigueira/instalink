@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
 import { appointmentWorkflowState } from '@/lib/appointment-workflow';
-import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
+import { canAccessTask, canReadPerson, isProfessionalScoped, patientAccess, scopeReadableContacts } from '@/lib/data-scope';
 import { contactNotes } from '@/lib/contacts';
 import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
@@ -39,12 +39,22 @@ export async function GET(req: NextRequest) {
   const limit = 30;
   const guard = await requireBusiness(req, businessId, 'clientes');
   if (!guard.ok) return guard.res;
-  // ESCOPO DE DADOS: quem atende recebe SÓ as pessoas com vínculo real e, de
-  // cada uma, só os agendamentos DELE. Pedidos/gasto, oportunidades e
-  // conversas são dado comercial da unidade — ficam fora do recorte clínico.
-  const db = isProfessionalScoped(guard.ctx)
-    ? { ...scopedDbView(guard.db, businessId, guard.ctx), leads: [], conversations: [], messages: [] }
-    : guard.db;
+  // CLINICAL ACCESS — read model clínico para o Professional vinculado:
+  //   • PESSOAS: todos os pacientes clínicos da unidade (a lista abre o
+  //     Paciente 360 e o histórico longitudinal, inclusive de outro
+  //     profissional);
+  //   • HISTÓRICO COMERCIAL fora: pedidos/gasto, oportunidades e conversas
+  //     NÃO vêm no payload do profissional (não são privilégio clínico);
+  //   • AGENDAMENTOS: os do paciente na unidade (contexto de continuidade) —
+  //     a agenda do profissional continua somente dele;
+  //   • TAREFAS: só as que ele pode ver (vínculo operacional), nunca a fila
+  //     administrativa da clínica.
+  const clinical = isProfessionalScoped(guard.ctx);
+  if (clinical && patientAccess(guard.ctx).level === 'none') {
+    // Papel de atendimento SEM vínculo: fecha por padrão (nenhum paciente).
+    return NextResponse.json({ people: [], total: 0, page, pages: 1 });
+  }
+  const db = guard.db;
 
   interface P {
     key: string;
@@ -88,12 +98,14 @@ export async function GET(req: NextRequest) {
     lastSeen: string;
   }
 
-  const contacts = db.contacts.filter((x) => x.businessId === businessId);
-  const orders = db.orders.filter((x) => x.businessId === businessId);
+  const contacts = scopeReadableContacts(db, guard.ctx, db.contacts.filter((x) => x.businessId === businessId));
+  const orders = clinical ? [] : db.orders.filter((x) => x.businessId === businessId);
   const bookings = db.bookings.filter((x) => x.businessId === businessId);
-  const leads = db.leads.filter((x) => x.businessId === businessId);
-  const conversations = db.conversations.filter((x) => x.businessId === businessId);
-  const tasks = (db.tasks || []).filter((x) => x.businessId === businessId);
+  const leads = clinical ? [] : db.leads.filter((x) => x.businessId === businessId);
+  const conversations = clinical ? [] : db.conversations.filter((x) => x.businessId === businessId);
+  const encountersOfTenant = (db.encounters || []).filter((e) => e.businessId === businessId);
+  const tasks = (db.tasks || []).filter((x) => x.businessId === businessId
+    && (!clinical || canAccessTask(db, guard.ctx, x)));
 
   // Monta todos os aliases ANTES de criar o Map. Assim, quando um contato
   // legado passa de `phone` para `customerId`, o componente já conhece os dois
@@ -230,6 +242,16 @@ export async function GET(req: NextRequest) {
     const at = `${b.date}T${b.time}:00`;
     if (!p.lastSeen || at > p.lastSeen) p.lastSeen = at;
   }
+  // Pegada CLÍNICA também conta como "visto por último" para quem lê o
+  // prontuário (o registro de atendimento é o evento clínico do paciente).
+  if (clinical) {
+    for (const e of encountersOfTenant) {
+      const p = get(e.customerId || '', '', '', e.contactId || '');
+      if (!p) continue;
+      const at = `${e.date || ''}T${e.time || '00:00'}:00`;
+      if (at > (p.lastSeen || '')) p.lastSeen = at;
+    }
+  }
   const pipeline = getBusinessPipeline(db, businessId);
   for (const l of leads) {
     const p = get(l.customerId, l.phone, l.name);
@@ -275,6 +297,28 @@ export async function GET(req: NextRequest) {
   }
 
   let people = [...map.values()];
+  // PROJEÇÃO CLÍNICA: o acesso clínico não entrega o CRM do tutor. Observações
+  // administrativas, origem comercial, consentimento de marketing e dados de
+  // conta/login saem do payload de quem atende; contato, nome, telefone,
+  // carteirinha clínica e histórico de agendamentos permanecem.
+  if (clinical) {
+    people = people.filter((p) => canReadPerson(db, businessId, guard.ctx, { contactId: p.contactId, customerId: p.customerId, phone: p.phone }));
+    for (const p of people) {
+      p.note = '';
+      p.notes = [];
+      p.source = '';
+      p.marketingOptIn = false;
+      p.orders = 0;
+      p.spent = 0;
+      p.lastOrderAt = '';
+      p.leads = [];
+      p.conversations = [];
+      // Conta/login e credenciais são administração da plataforma, não clínica.
+      p.accountEmail = '';
+      p.accountPhone = '';
+      p.mustChangePassword = false;
+    }
+  }
   // Etiquetas DERIVADAS depois de todos os eventos conhecidos: uma pessoa pode
   // ser "cliente atendido" E "lead no funil" ao mesmo tempo.
   people.forEach((p) => {

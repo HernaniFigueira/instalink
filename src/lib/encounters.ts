@@ -240,14 +240,19 @@ export function encounterForBooking(encounters: Encounter[], businessId: string,
  * antes (a rota faz isso com o `phoneKey` da base).
  */
 export function encountersForCustomer(
-  encounters: Encounter[], businessId: string, keys: { contactId?: string; customerId?: string },
+  encounters: Encounter[], businessId: string, keys: { contactId?: string; customerId?: string; petId?: string },
 ): Encounter[] {
   const contactId = keys.contactId || '';
   const customerId = keys.customerId || '';
-  if (!contactId && !customerId) return [];
+  // CLINICAL ACCESS: o PET é o paciente do histórico longitudinal. O filtro por
+  // petId permite abrir a ficha do paciente (Pet 360) sem depender do tutor.
+  const petId = keys.petId || '';
+  if (!contactId && !customerId && !petId) return [];
   return encounters
     .filter((e) => e.businessId === businessId && (
-      (!!contactId && e.contactId === contactId) || (!!customerId && e.customerId === customerId)
+      (!!contactId && e.contactId === contactId)
+      || (!!customerId && e.customerId === customerId)
+      || (!!petId && e.petId === petId)
     ))
     .sort((a, b) => (a.date + a.time === b.date + b.time ? (a.createdAt < b.createdAt ? 1 : -1) : (a.date + a.time < b.date + b.time ? 1 : -1)));
 }
@@ -562,8 +567,15 @@ export function encounterForQueue(rows: Encounter[], businessId: string, queueId
 }
 
 /**
- * Escopo do profissional (mesma regra da agenda): um login vinculado a um
- * profissional só lê/escreve o PRÓPRIO registro. '' = sem restrição.
+ * ESCOPO OPERACIONAL do profissional (mesma regra da agenda): um login
+ * vinculado a um profissional só lista o PRÓPRIO registro na agenda/relatório
+ * e só inicia/apaga o próprio atendimento. '' = sem restrição.
+ *
+ * ATENÇÃO (Clinical Access): NÃO é a régua de LEITURA clínica. Abrir o
+ * registro de outro profissional do MESMO tenant é permitido para
+ * continuidade assistencial (leitura somente, decidida por
+ * `canReadClinicalRecords` em data-scope); a ESCRITA continua exclusiva do
+ * profissional responsável (contrato F1, `encounterClinicalAccess`).
  */
 export function encounterInScope(e: Pick<Encounter, 'professionalId'>, professionalScope: string): boolean {
   if (!professionalScope) return true;

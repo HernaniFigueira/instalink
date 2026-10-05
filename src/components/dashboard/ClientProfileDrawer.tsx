@@ -38,6 +38,7 @@ import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { encounterHref, encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { useOverlayDismissGuard, useUnsavedChangesGuard } from './OverlayDismissGuard';
@@ -130,10 +131,22 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
-  const { permissions } = usePanelPermissions();
+  const { permissions, professionalId } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
   const canFinance = permissions.financeiro === true;
+  // CLINICAL ACCESS: acesso clínico não concede Conversas nem Oportunidades —
+  // as abas só existem com a permissão do módulo (nada de aba vazia de CRM
+  // para quem atende). A visão clínica também não carrega observações
+  // administrativas (o servidor não as envia neste recorte).
+  const clinicalView = useWorkspace().agendaScope === 'own';
+  const canWhats = permissions.whatsapp === true;
+  // CLINICAL ACCESS: o acesso clínico é da UNIDADE, mas iniciar/abrir o
+  // atendimento é do profissional RESPONSÁVEL pelo agendamento — o servidor
+  // recusa assumir o atendimento alheio (403). A ação só aparece para o
+  // agendamento do próprio profissional.
+  const canStartBooking = (b: { professionalId?: string } | null): boolean =>
+    !!b && (!clinicalView || (!!professionalId && b.professionalId === professionalId));
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
@@ -405,13 +418,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'overview', label: 'Visão geral', icon: 'grid' },
     { id: 'bookings', label: 'Agenda', icon: 'calendar', count: person.bookings.length },
     { id: 'encounters', label: 'Atendimento', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
-    { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
+    ...(canWhats ? [{ id: 'conversations' as const, label: 'Conversas', icon: 'chat', count: (person.conversations || []).length }] : []),
     { id: 'files', label: 'Arquivos', icon: 'upload', count: encounters.reduce((n, e) => n + ((e.files || []).length), 0) },
     ...(canFinance ? [{ id: 'finance' as const, label: 'Financeiro', icon: 'wallet', count: financeEntries.length }] : []),
     { id: 'timeline', label: 'Histórico', icon: 'history', count: timeline.length },
-    { id: 'leads', label: 'Oportunidades', icon: 'spark', count: person.leads.length },
+    ...(canFunil ? [{ id: 'leads' as const, label: 'Oportunidades', icon: 'spark', count: person.leads.length }] : []),
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
-    { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
+    ...(clinicalView ? [] : [{ id: 'notes' as const, label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length }]),
   ];
 
   useEffect(() => {
@@ -505,36 +518,40 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       backHref={variant === 'page' ? (pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`) : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? (
         <>
-          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
-            <Icon n="pencil" size={14} /> Registrar nota
-          </Button>
+          {!clinicalView && (
+            <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+              <Icon n="pencil" size={14} /> Registrar nota
+            </Button>
+          )}
           {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
               registro; antes disso a chegada é registrada na Agenda. */}
-          {canEncounter && nextBooking && (nextBooking.workflowState === 'arrived' || nextBooking.workflowState === 'in_care') && (
+          {canEncounter && canStartBooking(nextBooking) && (nextBooking!.workflowState === 'arrived' || nextBooking!.workflowState === 'in_care') && (
             <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
               <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => {
-            const opening = !editing;
-            if (editing) requestCloseEdit(); else setEditing(true);
-            // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
-            // campo + highlight sutil (1–2s). Fechar não mexe no foco.
-            if (opening) focusFieldSoon('client-edit-name');
-          }}>
-            <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
-          </Button>
+          {!clinicalView && (
+            <Button variant="secondary" size="sm" onClick={() => {
+              const opening = !editing;
+              if (editing) requestCloseEdit(); else setEditing(true);
+              // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+              // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+              if (opening) focusFieldSoon('client-edit-name');
+            }}>
+              <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
+            </Button>
+          )}
           <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
         </>
       ) : (
         <>
-          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
@@ -605,9 +622,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
-                <Icon n="pencil" size={12} /> Editar
-              </Button>
+              {!clinicalView && (
+                <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
+                  <Icon n="pencil" size={12} /> Editar
+                </Button>
+              )}
             </div>
             <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
               {addressLine && (
@@ -907,7 +926,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-[var(--border)] p-3">
+                {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-3">
                   <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
                   {lastNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
@@ -915,7 +934,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
                   <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
-                </div>
+                </div>}
                 {canFinance ? (
                   <div className="rounded-lg border border-[var(--border)] p-3">
                     <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
