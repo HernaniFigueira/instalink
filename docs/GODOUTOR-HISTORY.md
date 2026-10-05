@@ -2,11 +2,15 @@
 
 ## 2026-10-05 — Clinical Encounter F1C (finalização e imutabilidade)
 
+> **STATUS FINAL: MERGED pela PR [#58](https://github.com/HernaniFigueira/instalink/pull/58) (merge `8e29d52e187e50755e13e4ea02e3475c91f91b84`, HEAD de `main`) em 2026-10-05 — Browser QA real APROVADO (Revisão 1 → Nota complementar → Reabertura → Revisão 2, com persistência após reload/F5 e abertura pelo mesmo Encounter). Com isso o Clinical Encounter F1 está concluído em `main`.**
+
 F1C introduz revisões/snapshots profundos de cada finalização (`encounterFinalizationRevisions`), fingerprint SHA-256 e notas complementares append-only (`encounterAddenda`) no mesmo DB documental, sem DDL e sem segunda entidade de atendimento. A autoria clínica da finalização e da nota é o Professional responsável vinculado ao usuário; a transição administrativa de reabertura preserva a regra existente, exige motivo e registra a revisão anterior. Finalizado bloqueia conteúdo e DELETE no servidor; finalize/reopen não aceitam mutação piggyback. A rota canônica devolve o histórico do mesmo Encounter e o workspace oferece Revisar e finalizar, estado READ-ONLY, nota complementar e histórico.
 
 Auditoria prévia registrada em `docs/CLINICAL-ENCOUNTER-F1C.md`: EventLog anterior não carregava conteúdo before/after nem snapshot, logo não reconstruía o documento finalizado com segurança. A revisão pós-implementação corrigiu a versão pós-flush (`authority.version()`), a publicação canônica das transições, a timeline cronológica e a navegação do Pet 360 para a rota canônica.
 
 ## 2026-10-05 — Clinical Encounter F1B2 (problemas/hipóteses/diagnósticos + conduta + procedimentos)
+
+> **STATUS FINAL: MERGED pela PR [#56](https://github.com/HernaniFigueira/instalink/pull/56) (merge `a6b1b84197b83fba2127761c91065d33777474a1`) em 2026-10-05 — o registro abaixo descreve o estado da sessão na época.**
 
 > Empilhado sobre o **F1B1 congelado em `11021c2521aabd456f6531ca3b714fe7b5b1e1e9`** (PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) OPEN, `MERGEABLE`, Vercel SUCCESS, **merge NÃO executado**, HEAD não alterado, nenhum commit novo na branch dela). **O F1B2 está implementado e auto-homologado no working tree da branch de sessão `arena/01a10740-instalink`, SEM COMMIT e SEM PR própria:** a sessão é fixa nessa branch — commit/push nela moveria o HEAD congelado da #55, o que está proibido. Decisão pendente do responsável: (a) merge da #55 → F1B2 em branch nova a partir do `main` resultante, ou (b) autorização explícita para commit na branch da sessão. Produção não usada; QA só em base descartável.
 
@@ -26,6 +30,8 @@ Auditoria prévia registrada em `docs/CLINICAL-ENCOUNTER-F1C.md`: EventLog anter
 - **Gates:** `git diff --check` limpo · `npm run typecheck` 0 · `npm run build` ✓ (135/135) · `npx vitest run` **3191 PASS / 4 FAIL (3195)** com as **4 falhas baseline intocadas** (3× `a34-instagram`, 1× `automation-audit-p4`) · sem `skip`/`only`/`todo`.
 
 ## 2026-10-04 — Clinical Encounter F1B1 (anamnese da visita + avaliação veterinária + autoridade única)
+
+> **STATUS FINAL: MERGED pela PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) (merge `1c5c6890160f64ae3c1789ce3a3ba6122765c987`) em 2026-10-05 — o registro abaixo descreve o estado da sessão na época.**
 
 > Branch de sessão `arena/01a10740-instalink`, nova a partir de `main` em `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0` (merge da PR #54/F1A, Vercel SUCCESS). PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) aberta (`MERGEABLE`; Vercel SUCCESS no HEAD do PR). **Patches aplicados na revisão (2026-10-04, mesma PR/sessão): isolamento por vertical + autorização server-side de escrita de conteúdo (P1) + auditoria granular (P2) — QA de browser 29/29, HTTP 21/21, suíte 3146 PASS / 4 FAIL baseline. Merge NÃO executado.** Produção não usada para QA. Recorte autorizado: **F1B1** — nada de F1B2/F1C, prescrição, exames, anexos, procedimentos, financeiro, estoque, IA ou construtor de formulários.
 
@@ -47,6 +53,8 @@ Auditoria prévia registrada em `docs/CLINICAL-ENCOUNTER-F1C.md`: EventLog anter
 
 ## 2026-10-04 — Clinical Encounter F1A (domínio, iniciar/retomar e workspace clínico)
 
+> **STATUS FINAL: MERGED pela PR [#54](https://github.com/HernaniFigueira/instalink/pull/54) (merge `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0`); a fase seguiu em F1B1 (#55), F1B2 (#56) e F1C (#58), todas mergeadas — o registro abaixo descreve o estado da sessão na época.**
+
 > Branch `arena/01a104e4-instalink`, nova a partir de `main` em `2e225c15b06f7b0f16d5a164c59f3d639b320416` (SHA homologado; `main` verificada igual ao SHA de partida). PR [#54](https://github.com/HernaniFigueira/instalink/pull/54) aberta contra `main` (`MERGEABLE`); **merge NÃO executado**. Produção não usada para QA. Recorte autorizado: **F1A** — nada de F1B/F1C, prontuário completo, prescrição, exames, estoque, financeiro, IA, odontograma ou construtor de formulários.
 
 - **Auditoria first (§1):** `encounters` é a entidade adequada (já multi-tenant, com vínculos a Booking, Pet, Tutor/Contact, Professional e Service, e fonte do histórico 360). Decisão: **reusar e evoluir** — sem segunda entidade, sem rename de tabela, sem migração big-bang e **sem DDL** (`Encounter.startedAt` é opcional e derivado de `createdAt` para registros anteriores, em `normalizeDB`).
@@ -64,6 +72,8 @@ Auditoria prévia registrada em `docs/CLINICAL-ENCOUNTER-F1C.md`: EventLog anter
 
 ## 2026-10-04 — Clinical Encounter F1A · review patch (dois achados arquiteturais)
 
+> **STATUS FINAL: mesma PR #54, posteriormente MERGED (merge `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0`); F1B1/F1B2/F1C foram concluídos depois (#55/#56/#58).**
+
 > Mesma branch `arena/01a104e4-instalink` e mesma PR [#54](https://github.com/HernaniFigueira/instalink/pull/54); HEAD anterior `a50cadf`. **Merge NÃO executado.** Produção não usada. **F1B/F1C não iniciados.**
 
 A revisão independente apontou dois pontos a fechar antes de aceitar o F1A. Ambos foram corrigidos e reprovados.
@@ -76,6 +86,8 @@ A revisão independente apontou dois pontos a fechar antes de aceitar o F1A. Amb
 - **QA Chromium (23/23):** além do ciclo já provado (Agenda → chegada → Iniciar → rota canônica → F5 → Retomar → mesmo id → repetido `created:false` → concorrência → 1440 → 390 → Profissional → Recepção 403 → outra unidade 404), entrou: **workspace sem "Preencher anamnese"/"Arquivos"/"Registrar pagamento"/"Reabrir para editar"/"Agendar retorno"** e com os 6 campos do núcleo; **tela conferida** (4 textareas + 2 inputs, área real, indicador de salvamento); **Owner + agendamento sem profissional → recusa humana e zero atendimento criado**; **registro completo (legado) vivo em `/atendimento/<id>/registro`** (inclusive pelo caminho antigo: histórico do Cliente 360 → registro completo); **Recepção bloqueada também na rota legada**. Console 0 erro · 0 rede ≥400 inesperada · 0 5xx.
 
 ## 2026-10-04 — Clinical Encounter F1A · final safety patch (P1: sair exige gravação confirmada)
+
+> **STATUS FINAL: mesma PR #54, posteriormente MERGED (merge `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0`); F1B1/F1B2/F1C foram concluídos depois (#55/#56/#58).**
 
 A revisão independente achou **um P1 de perda de registro clínico**: o `beforeNavigate` do núcleo do workspace chamava `proceed()` em `finally`, então falha de rede, 500 ou 409 navegavam assim mesmo e o texto clínico sumia em silêncio. Corrigido no produto:
 
@@ -375,6 +387,8 @@ Registrado sem implementação: **Cadastro/Onboarding — contrato de identidade
 **Validação:** (executado nesta missão — ver relatório) `typecheck` / `build` / `vitest` / `diff-check` + homologação visual 1440/1366/1024 (ou pendente se sem browser).
 
 ## Adendum — Correção final da PR #51 (2026-10-03, mesma branch)
+
+> **STATUS FINAL: PR #51 MERGED (merge `337f39fe5a894bb40171931f5b9c5df3686e442b`); o bloqueio do F1 citado nesta entrada foi resolvido e o Clinical Encounter F1 foi concluído em 2026-10-05.**
 
 Bloco de fechamento do produto ativo 100% clínico: onboarding OFF sem
 pergunta comercial nem `modes` (base canônica server-side), Products/Orders
