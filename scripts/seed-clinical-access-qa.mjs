@@ -41,9 +41,12 @@ const users = [
   ['u-fora', 'Dono da BioClin QA', 'fora.ca@godoutor.test'],
 ].map(([id, name, email]) => ({ id, name, email, passwordHash: pass(), createdAt: now, role: 'owner', lastLoginAt: '' }));
 
+// `modes` liga os MÓDULOS do painel (a Agenda exige `bookings`): a fixture
+// reproduz uma clínica REAL configurada — sem isso o QA de browser provaria
+// apenas a tela de "módulo não ativo", não o recorte de dados.
 const businesses = [
-  { id: A, ownerId: 'u-owner', name: 'Clínica Andrioni QA', slug: 'ca-andrioni-qa', clinicType: 'veterinaria', modes: [], businessTimezone: TZ, booking: { bufferMin: 0 }, createdAt: now, updatedAt: now, published: false },
-  { id: B, ownerId: 'u-fora', name: 'BioClin QA', slug: 'ca-bioclin-qa', clinicType: 'veterinaria', modes: [], businessTimezone: TZ, booking: { bufferMin: 0 }, createdAt: now, updatedAt: now, published: false },
+  { id: A, ownerId: 'u-owner', name: 'Clínica Andrioni QA', slug: 'ca-andrioni-qa', clinicType: 'veterinaria', modes: ['services', 'bookings'], businessTimezone: TZ, booking: { bufferMin: 0 }, createdAt: now, updatedAt: now, published: false },
+  { id: B, ownerId: 'u-fora', name: 'BioClin QA', slug: 'ca-bioclin-qa', clinicType: 'veterinaria', modes: ['services', 'bookings'], businessTimezone: TZ, booking: { bufferMin: 0 }, createdAt: now, updatedAt: now, published: false },
 ];
 
 const member = (id, businessId, userId, role, permissions) => ({

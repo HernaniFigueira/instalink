@@ -123,11 +123,11 @@ export async function GET(req: NextRequest) {
   // de versão. Nunca cria nada — e por isso não pode virar POST por acidente.
   if (id) {
     // F1A — LEITURA POR ID (rota direta do workspace): primeiro o TENANT,
-    // depois o ESCOPO. A ordem importa: um registro de outro profissional da
-    // MESMA unidade é 403 ("não é seu"), e não 404 ("não existe") — é a mesma
-    // régua do PATCH/DELETE e evita a mentira de "não encontrado" para quem
-    // simplesmente não tem vínculo com aquele atendimento. Nenhum dado vaza:
-    // a resposta de erro nunca carrega o registro.
+    // depois o ACESSO CLÍNICO. CLINICAL ACCESS: o registro de OUTRO
+    // profissional da MESMA unidade é LEGÍVEL (continuidade assistencial) —
+    // quem não tem vínculo clínico recebe 403, e outro tenant recebe 404
+    // (nunca "não encontrado" para quem só não tem vínculo). Nenhum dado
+    // vaza: a resposta de erro nunca carrega o registro.
     const found = (db.encounters || []).find((e) => e.id === id && e.businessId === businessId);
     if (!found) return NextResponse.json({ error: 'Registro de atendimento não encontrado.' }, { status: 404 });
     // O ID não concede escrita: a leitura é clínica (unidade), mas editar

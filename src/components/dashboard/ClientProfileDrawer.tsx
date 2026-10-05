@@ -139,7 +139,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // as abas só existem com a permissão do módulo (nada de aba vazia de CRM
   // para quem atende). A visão clínica também não carrega observações
   // administrativas (o servidor não as envia neste recorte).
-  const clinicalView = useWorkspace().agendaScope === 'own';
+  // `'none'` = papel de atendimento SEM vínculo Professional: para ele não
+  // existe CRM nenhum (nenhum paciente é legível), então a única visão
+  // coerente é a clínica — a MESMA regra do título da lista em /clientes.
+  const agendaScope = useWorkspace().agendaScope;
+  const clinicalView = agendaScope === 'own' || agendaScope === 'none';
   const canWhats = permissions.whatsapp === true;
   // CLINICAL ACCESS: o acesso clínico é da UNIDADE, mas iniciar/abrir o
   // atendimento é do profissional RESPONSÁVEL pelo agendamento — o servidor

@@ -1,11 +1,12 @@
 # Clinical Access — continuidade assistencial e histórico longitudinal
 
-> **STATUS: implementado e auto-verificado no working tree da branch de sessão
+> **STATUS: implementado e auto-verificado na branch de sessão
 > `arena/01a10c9e-instalink` (base `main` @ `714e3277`, merge da PR #60).
-> PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) aberta contra `main`; MERGE NÃO autorizado nesta sessão.** QA de browser automatizado
-> NÃO executado neste sandbox (`BLOCKED_BROWSER_ENV`); a evidência de runtime é
-> o smoke HTTP local em base descartável (`scripts/smoke-clinical-access.mjs`,
-> 32/32) e a suíte automatizada com as rotas reais. Produção não foi usada.
+> PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) aberta contra `main`; MERGE NÃO autorizado nesta sessão.**
+> Evidência de runtime: **smoke HTTP 32/32** contra o build de PRODUÇÃO local
+> (`next start`) + banco descartável (`scripts/smoke-clinical-access.mjs`) e
+> **QA de browser 17/17 em Chromium real** (`tests/clinical-access/qa.mjs`).
+> Produção (dados reais) não foi usada em momento nenhum.
 
 ## 1. Decisão de domínio
 
@@ -123,13 +124,28 @@ implementado; nada aqui torna o prontuário assinado por máquina.
   `workflow-permissoes`, `f1a-encounter-start-resume`, `fase2-patient360`,
   `homologacao-vet-pet360`.
 - Smoke HTTP local (`scripts/seed-clinical-access-qa.mjs` +
-  `scripts/smoke-clinical-access.mjs`) — **32 PASS / 0 FAIL** contra servidor
-  local real com DB descartável (logins reais dos 5 perfis).
+  `scripts/smoke-clinical-access.mjs`) — **32 PASS / 0 FAIL** contra o build de
+  produção local (`next start`, porta 3020) com DB descartável e login real dos
+  5 perfis (A–M do §23).
+- **QA de browser EXECUTADO** (`tests/clinical-access/qa.mjs`) — **17 PASS /
+  0 FAIL em Chromium real** (Playwright 1.63 + Chromium 153 do pacote npm
+  `@sparticuz/chromium`, porque os CDNs de browser são bloqueados no sandbox),
+  contra o MESMO build de produção e a MESMA fixture descartável:
+  Michele abre `/clientes` como **"Pacientes"** (sem cadastro administrativo),
+  acha a paciente do colega, vê o **histórico longitudinal com autor**, abre o
+  Encounter alheio **READ-ONLY** (campos bloqueados + motivo) e mantém o
+  PRÓPRIO editável; **agenda com uma única coluna — a dela**; "Conversas" fora da
+  navegação e da área; Orlando lê o registro da Michele **READ-ONLY** e mantém a
+  agenda própria; Recepção segue no administrativo e é **negada na área
+  clínica**; Owner lê a unidade **sem autoria clínica**; 390px sem rolagem
+  horizontal; **console 0 erro inesperado** e rede 0 resposta inesperada.
+  Evidência: `.cache/clinical-access/browser-qa.json` (não versionado).
+  Reprodução: `node scripts/seed-clinical-access-qa.mjs` →
+  `GODOUTOR_DB_FILE=.cache/clinical-access/qa.json npx next start -p 3020 -H 0.0.0.0`
+  → `LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts QA_BASE_URL=http://127.0.0.1:3020
+  QA_EXECUTABLE_PATH=/tmp/chromium node tests/clinical-access/qa.mjs`.
 - Gates desta fase: `git diff --check`, `npm run typecheck`, `npm run build`,
-  `npx vitest run` (4 falhas baseline conhecidas, sem regressão nova).
-- **Browser QA: BLOCKED_BROWSER_ENV** — o sandbox não instala Chromium
-  (`npx playwright install chromium` → download failure; cache
-  `~/.cache/ms-playwright` vazio). Nenhum QA visual foi inventado.
+  `npx vitest run` (baseline preexistente, sem regressão nova).
 
 ## 8. Fora do escopo (não implementado)
 
