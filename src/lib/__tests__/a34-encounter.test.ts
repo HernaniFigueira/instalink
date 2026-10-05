@@ -579,6 +579,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const revision1 = first.encounterFinalizationRevisions.find((revision) => revision.encounterId === e.id)!;
     expect(revision1.revisionNumber).toBe(1);
     expect(revision1.snapshot.evolution).toBe('estado inicial');
+    const revision1SnapshotBytes = JSON.stringify(revision1.snapshot);
     expect(revision1.fingerprint).toMatch(/^[a-f0-9]{64}$/);
     const retry = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-op-1', expectedVersion: 2 }, profToken);
     expect(retry.status).toBe(200);
@@ -607,7 +608,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     expect(secondBody.encounter.reopenEvents).toHaveLength(1);
     const finalDB = await readDB();
     expect(finalDB.encounterFinalizationRevisions.filter((revision) => revision.encounterId === e.id).map((revision) => revision.revisionNumber)).toEqual([1, 2]);
-    expect(finalDB.encounterFinalizationRevisions.find((revision) => revision.id === revision1.id)?.snapshot.evolution).toBe('estado inicial');
+    expect(JSON.stringify(finalDB.encounterFinalizationRevisions.find((revision) => revision.id === revision1.id)?.snapshot)).toBe(revision1SnapshotBytes);
     expect(finalDB.audit.filter((entry) => entry.meta?.encounterId === e.id).map((entry) => entry.action)).toContain('encounter.reopened');
   });
 
