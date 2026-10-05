@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById } from '../nav-accent';
+import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById, contrastRatio } from '../nav-accent';
+import { rawToken } from './helpers/ds-tokens';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -37,24 +38,34 @@ describe('shell · topbar neutra', () => {
 });
 
 describe('missão 6 · 2 — radius controlado (menos bolha)', () => {
-  it('tokens globais reduzidos nos dois blocos (:root e .il-platform)', () => {
-    // valores menores que os antigos (xs6/sm9/md11/lg14/xl18/2xl24)
-    for (const [tok, max] of [['--radius-xs', 5], ['--radius-sm', 7], ['--radius-md', 8], ['--radius-lg', 10], ['--radius-xl', 12], ['--radius-2xl', 16]] as const) {
-      const values = [...css.matchAll(new RegExp(`${tok}: (\\d+)px`, 'g'))].map((m) => Number(m[1]));
-      expect(values.length).toBeGreaterThanOrEqual(2);
-      for (const v of values) expect(v, tok).toBeLessThanOrEqual(max);
+  it('escala de radius compacta vive na FONTE ÚNICA (DS 1.0)', () => {
+    // valores menores que os antigos (xs6/sm9/md11/lg14/xl18/2xl24) e
+    // declarados UMA vez (`--gd-radius-*`); aqui só o alias chega.
+    for (const [tok, max] of [['--gd-radius-xs', 5], ['--gd-radius-sm', 7], ['--gd-radius-md', 8], ['--gd-radius-lg', 10], ['--gd-radius-xl', 12], ['--gd-radius-2xl', 16]] as const) {
+      const v = Number(rawToken(tok).replace('px', ''));
+      expect(v, tok).toBeLessThanOrEqual(max);
+      expect(rawToken(tok.replace('--gd-', '--')), tok).toBe(`var(${tok})`);
     }
     // pill preservado para busca/chips/encaixes especiais
-    expect(css).toContain('--radius-pill: 999px');
+    expect(rawToken('--radius-pill')).toBe('var(--gd-radius-pill)');
+    expect(rawToken('--gd-radius-pill')).toBe('999px');
   });
 });
 
-describe('missão 6 · 3 — submenu expansível em bloco premium', () => {
-  it('o conteúdo do grupo aberto abre dentro de uma superfície encaixada', () => {
-    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?background: var\(--il-nav-hover\)/);
-    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?border: 1px solid var\(--il-nav-border\)/);
-    expect(css).toMatch(/\.workspace-submenu__guide \{[\s\S]*?border-radius: var\(--radius-md\)/);
-    // subitem com radius próprio dentro do bloco
+describe('missão 6 · 3 → DS 1.0 §15/§18 — grupo abre PAINEL LATERAL (sem acordeão)', () => {
+  it('o grupo NÃO empurra filhos: abre o painel com borda/raio/superfície do DS', () => {
+    // o acordeão que empurrava o resto da lista saiu do CSS e do componente
+    expect(css).not.toContain('.workspace-submenu');
+    expect(nav).not.toContain('workspace-submenu');
+    expect(nav).not.toContain('setOpened');
+    const peek = css.slice(css.indexOf('.ws-peek {'), css.indexOf('@keyframes ws-peek-in'));
+    expect(peek).toMatch(/border: 1px solid var\(--gd-nav-border\)/);
+    expect(peek).toMatch(/border-radius: var\(--radius-md\)/);
+    expect(peek).toMatch(/background: var\(--gd-nav-panel-bg\)/);
+    // painel começa ABAIXO da top bar e tem altura útil (não vaza a tela)
+    expect(peek).toMatch(/top: var\(--gd-topbar-h\)/);
+    expect(peek).toMatch(/max-height: calc\(100dvh - var\(--gd-topbar-h\)/);
+    // subitem (recuo) preservado para o drawer móvel
     expect(css).toContain('.workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }');
   });
 });
@@ -86,14 +97,14 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
     expect(NAV_ACCENTS.length).toBeGreaterThanOrEqual(8); // missão final: 21 presets por famílias
     expect(NAV_ACCENT_DEFAULT).toBe('azul-profundo'); // default aprovado, preferences override
     for (const a of NAV_ACCENTS) {
-      const bg = a.vars['--il-nav'];
-      const fg = a.vars['--il-nav-fg'];
+      // DS 1.0 §13 — o preset pinta o ACENTO (não a estrutura). O par que
+      // ele realmente usa (fg do acento sobre soft do acento) é AA real.
+      const bg = a.vars['--il-nav-active'];
+      const fg = a.vars['--il-nav-active-fg'];
       expect(bg, a.id).toMatch(/^#[0-9a-f]{6}$/);
-      // CONTRATO DE COR (missão final, categoria A/B): o texto do nav é
-      // legível em QUALQUER preset — claro sobre escuro, near-black sobre
-      // claro. O contraste real decide, nunca "no olho".
       const contrast = lum(fg) > 0.5 ? lum(fg) - lum(bg) : lum(bg) - lum(fg);
       expect(contrast, a.id).toBeGreaterThan(0.45);
+      expect(contrastRatio(fg, bg), a.id).toBeGreaterThanOrEqual(4.5);
     }
     expect(navAccentById('teal').id).toBe('teal');
     expect(navAccentById('lixo').id).toBe('azul-profundo'); // fallback seguro
@@ -105,7 +116,7 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
     expect(perfil).toContain('ShellAppearance');
     expect(shellComp).toContain('data-testid="shell-appearance"');
     expect(shellComp).toContain('nav-accent-preview');
-    expect(shellComp).toContain('aria-label="Cor da navegação"');
+    expect(shellComp).toContain('aria-label="Cor de acento"');
     expect(shellComp).toContain("setNavAccent(a.id)");
     // preferência pessoal (localStorage) — sem banco/API (decisão documentada)
     expect(read('src/lib/nav-accent.ts')).toContain('localStorage');

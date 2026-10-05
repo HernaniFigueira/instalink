@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
+// DS 1.0 — a fonte única de tokens entra PRIMEIRO: `globals.css` (compatibilidade)
+// apenas aponta os nomes históricos para `--gd-*`.
+import '@/styles/godoutor-design-system.css';
 import './globals.css';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
 

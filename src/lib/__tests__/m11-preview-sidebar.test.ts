@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { NAV_ACCENTS, contrastRatio, findAccent } from '../nav-accent';
+import { color } from './helpers/ds-tokens';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -41,10 +42,12 @@ describe('bug 2 — sidebar sem sombra projetada na divisa', () => {
 });
 
 describe('sidebar · ícones inativos legíveis (força ~70%, nunca lavados)', () => {
-  it('token --il-nav-icon derivado do fg do tema (mix ~0.66–0.72)', () => {
+  it('token --il-nav-icon é NEUTRO fixo (DS 1.0 §13)', () => {
     expect(css).toContain('--il-nav-icon:');
+    expect(color('--il-nav-icon')).toBe('#5b636e');
+    // nenhum preset reescreve a estrutura da navegação
     for (const a of NAV_ACCENTS) {
-      expect(a.vars['--il-nav-icon'], a.id).toBeTruthy();
+      expect(Object.keys(a.vars), a.id).not.toContain('--il-nav-icon');
     }
   });
 
@@ -54,17 +57,15 @@ describe('sidebar · ícones inativos legíveis (força ~70%, nunca lavados)', (
     expect(icon).not.toMatch(/opacity:\s*0\./);
   });
 
-  it('ícones inativos com presença real (não lavados) nos temas validados', () => {
-    for (const a of NAV_ACCENTS) {
-      const iconFg = a.vars['--il-nav-icon'];
-      const navBg = a.vars['--il-nav'];
-      // piso de legibilidade do glifo (nunca lavado/transparente)
-      expect(contrastRatio(iconFg, navBg), `${a.id}: ${iconFg} × ${navBg}`).toBeGreaterThanOrEqual(3.2);
-      // e nunca mais forte que o fg cheio do nav (mantém hierarquia)
-      expect(contrastRatio(iconFg, navBg), a.id).toBeLessThanOrEqual(
-        Math.max(contrastRatio(a.vars['--il-nav-fg'], navBg), 3.2) + 0.01,
-      );
-    }
+  it('ícones inativos com presença real (não lavados) na navegação branca', () => {
+    const iconFg = color('--il-nav-icon');
+    const navBg = color('--il-nav');
+    // piso de legibilidade do glifo (nunca lavado/transparente)
+    expect(contrastRatio(iconFg, navBg), `${iconFg} × ${navBg}`).toBeGreaterThanOrEqual(3.2);
+    // e nunca mais forte que o fg cheio do nav (mantém hierarquia)
+    expect(contrastRatio(iconFg, navBg)).toBeLessThanOrEqual(
+      Math.max(contrastRatio(color('--il-nav-fg'), navBg), 3.2) + 0.01,
+    );
   });
 });
 
@@ -91,16 +92,16 @@ describe('sidebar · grupo ABERTO aceso, distinto da rota ativa', () => {
   });
 });
 
-describe('acordeão tradicional (estado do componente)', () => {
-  it('toggle: clicar no aberto FECHA; ZERO abertos é permitido', () => {
-    expect(nav).toContain('setOpened(open ? null : area.id)');
-    expect(nav).not.toContain('nunca existe estado');
+describe('DS 1.0 §15/§18 — grupo abre painel lateral (acordeão extinto)', () => {
+  it('clique alterna o painel (trava/destrava) — nunca mexe na navegação', () => {
+    expect(nav).toContain('peekCtl.togglePeek(area.id)');
+    expect(nav).not.toContain('setOpened');
+    expect(nav).not.toContain('workspace-submenu');
   });
 
-  it('init sem grupo forçado (só a rota atual); navegação abre o dono', () => {
-    expect(nav).toContain('useState<string | null>(activeGroup ?? null)');
-    expect(nav).toContain('if (activeGroup) setOpened(activeGroup)');
-    // proibido forçar um "defaultGroup" sempre aberto
+  it('sem grupo forçado aberto; a rota apenas marca o grupo dono', () => {
+    expect(nav).not.toContain('opened');
+    expect(nav).toContain('activeGroup');
     expect(nav).not.toContain('defaultGroup');
   });
 });
@@ -127,10 +128,13 @@ describe('tema padrão = Deep Blue (fallback sem preferência)', () => {
     expect(mod.navAccentById('qualquer-coisa-inexistente').id).toBe('azul-profundo');
   });
 
-  it('defaults CSS são os do Deep Blue, sem alterar tokens estruturais', () => {
-    expect(css).toContain('--il-nav: #071a33');
-    expect(css).toContain('--accent: #2563eb');
-    expect(css).toContain('--il-nav-active-fg: #93c5fd');
+  it('defaults do DS: estrutura branca fixa + acento azul do preset padrão', () => {
+    expect(css).toContain('--il-nav: var(--gd-nav-bg)');
+    expect(color('--il-nav')).toBe('#ffffff');
+    expect(css).toContain('--accent: var(--gd-accent)');
+    expect(color('--accent')).toBe('#2563eb');
+    // §13: o preset ativo pinta só o item ativo — tokens de estrutura fixos.
+    expect(css).toContain('--il-nav-active: var(--gd-nav-active-bg)');
   });
 
   it('preferência salva continua sendo respeitada (não sobrescreve)', () => {

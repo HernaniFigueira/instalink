@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
-import { Button, Notice, PageSkeleton } from '@/components/ui';
+import { Button, buttonCls, Checkbox, Dialog, Field, Input, Notice, PageSkeleton, Select } from '@/components/ui';
 
 interface SafeIntegration {
   id: string;
@@ -262,13 +262,14 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
                     )}
                   </div>
                   {provider.canConnect && (
-                    <button
+                    <Button
+                      size="sm"
                       onClick={() => { setCreateFor(provider); setCreateName(provider.label); setCreateEvent(provider.defaultEvent || ''); }}
                       disabled={busy === provider.provider}
-                      className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-1.5 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50 shrink-0"
+                      className="shrink-0"
                     >
                       Conectar
-                    </button>
+                    </Button>
                   )}
                 </div>
 
@@ -361,54 +362,59 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
       </>
       )}
 
-      {createFor && (
-        <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
-          <div className="bg-white rounded-lg w-full max-w-md p-5 space-y-3">
-            <h2 className="text-sm font-semibold">Conectar {createFor.label}</h2>
-            <p className="text-xs text-zinc-500">{createFor.setupHint || createFor.hint}</p>
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Nome</span>
-              <input value={createName} onChange={(e) => setCreateName(e.target.value)} maxLength={60}
-                className="w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm" />
-            </label>
-            {createFor.events.length > 1 && (
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Evento padrão (payload cru)</span>
-                <select value={createEvent} onChange={(e) => setCreateEvent(e.target.value)}
-                  className="w-full mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm">
-                  <option value="">Exigir envelope canônico (`event`)</option>
-                  {createFor.events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-                </select>
-              </label>
-            )}
-            <label className="flex items-center gap-2 text-xs text-zinc-600">
-              <input type="checkbox" checked={requireSignature} onChange={(e) => setRequireSignature(e.target.checked)} />
-              Exigir assinatura HMAC (X-Instalink-Signature) além do token
-            </label>
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setCreateFor(null)} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md">Cancelar</button>
-              <button onClick={() => create(createFor)} disabled={busy === createFor.provider}
-                className="text-xs font-semibold bg-[var(--brand)] text-white px-3 py-2 rounded-md shadow-brand hover:bg-[var(--brand-strong)] disabled:opacity-50">
-                {busy === createFor.provider ? 'Criando…' : 'Criar integração'}
-              </button>
-            </div>
-          </div>
+      {/* DS 1.0 · §4/§43 — conectar um provedor usa o Dialog canônico com o
+          MESMO Field/Select/Checkbox do sistema (antes: modal artesanal com
+          controle cru e botões próprios). */}
+      <Dialog
+        open={!!createFor}
+        onClose={() => setCreateFor(null)}
+        title={createFor ? `Conectar ${createFor.label}` : 'Conectar integração'}
+        subtitle={createFor ? (createFor.setupHint || createFor.hint) : undefined}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCreateFor(null)}>Cancelar</Button>
+            <Button onClick={() => { if (createFor) void create(createFor); }} disabled={!!createFor && busy === createFor.provider}>
+              {createFor && busy === createFor.provider ? 'Criando…' : 'Criar integração'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Nome">
+            <Input value={createName} onChange={(e) => setCreateName(e.target.value)} maxLength={60} />
+          </Field>
+          {createFor && createFor.events.length > 1 && (
+            <Field label="Evento padrão (payload cru)">
+              <Select value={createEvent} onChange={(e) => setCreateEvent(e.target.value)} aria-label="Evento padrão">
+                <option value="">Exigir envelope canônico (event)</option>
+                {createFor.events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
+              </Select>
+            </Field>
+          )}
+          <Checkbox
+            checked={requireSignature}
+            onChange={setRequireSignature}
+            label="Exigir assinatura HMAC (X-Instalink-Signature) além do token"
+          />
         </div>
-      )}
+      </Dialog>
 
-      {revealed && (
-        <div className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true">
-          <div className="bg-white rounded-lg w-full max-w-lg p-5 space-y-3">
-            <h2 className="text-sm font-semibold">{revealed.title}</h2>
-            <p className="text-xs font-medium bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2">
-              Copie agora: o token não será mostrado novamente.
-            </p>
+      <Dialog
+        open={!!revealed}
+        onClose={() => setRevealed(null)}
+        title={revealed?.title || 'Credenciais da integração'}
+        width="640px"
+        footer={<Button onClick={() => setRevealed(null)}>Entendi</Button>}
+      >
+        {revealed && (
+          <div className="space-y-3">
+            <Notice tone="warning">Copie agora: o token não será mostrado novamente.</Notice>
             {revealed.endpoint && (
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Endpoint</span>
                 <span className="mt-1 flex items-center gap-2">
                   <input readOnly value={revealed.endpoint} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-xs font-mono" />
-                  <button onClick={() => copy(revealed.endpoint, 'Endpoint')} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md">Copiar</button>
+                  <button onClick={() => copy(revealed.endpoint, 'Endpoint')} className={buttonCls('secondary', 'sm')}>Copiar</button>
                 </span>
               </label>
             )}
@@ -416,7 +422,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
               <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Token</span>
               <span className="mt-1 flex items-center gap-2">
                 <input readOnly value={revealed.token} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-xs font-mono" />
-                <button onClick={() => copy(revealed.token, 'Token')} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md">Copiar</button>
+                <button onClick={() => copy(revealed.token, 'Token')} className={buttonCls('secondary', 'sm')}>Copiar</button>
               </span>
             </label>
             {revealed.signingSecret && (
@@ -424,7 +430,7 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
                 <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Segredo de assinatura</span>
                 <span className="mt-1 flex items-center gap-2">
                   <input readOnly value={revealed.signingSecret} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-xs font-mono" />
-                  <button onClick={() => copy(revealed.signingSecret, 'Segredo')} className="text-xs font-semibold bg-white border border-zinc-200 px-3 py-2 rounded-md">Copiar</button>
+                  <button onClick={() => copy(revealed.signingSecret, 'Segredo')} className={buttonCls('secondary', 'sm')}>Copiar</button>
                 </span>
               </label>
             )}
@@ -435,12 +441,9 @@ export function CanaisIntegracoesView({ only }: { only?: 'channel' | 'source' | 
   -H 'Content-Type: application/json' \\
   -d '{"event":"lead.created","externalId":"evt-1","contact":{"name":"Maria","phone":"11999998888"},"data":{"interest":"Corte"}}'`}</pre>
             </details>
-            <div className="flex justify-end pt-1">
-              <Button variant="primary" onClick={() => setRevealed(null)}>Entendi</Button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   );
 }

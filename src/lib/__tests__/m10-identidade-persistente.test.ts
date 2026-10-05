@@ -133,7 +133,8 @@ describe('contraste ESTRUTURAL (temas claros/escuros) — fg sempre pelo bg real
 
 describe('fundo do workspace · UMA fonte de verdade', () => {
   it('token --workspace-bg único; shell aplica; Agenda sem bg externo', () => {
-    expect(css).toContain('--workspace-bg: var(--bg)');
+    // DS 1.0: o valor vem da fonte única; aqui é só alias.
+    expect(css).toContain('--workspace-bg: var(--gd-bg-app)');
     expect(css).toContain('background: var(--workspace-bg)');
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).not.toContain("bg-[var(--bg)]"); // segunda fonte removida
@@ -146,10 +147,13 @@ describe('flyout · radius · topbar (contrato final)', () => {
     expect(peek).toMatch(/box-shadow:\s*none/);
   });
 
-  it('encaixe da junção: acabamento no canto INFERIOR (não no de cima)', () => {
+  it('DS 1.0 §12 — sem canto decorativo: a topbar é full-width ACIMA e a divisa é a borda da sidebar', () => {
     const col = css.slice(css.indexOf('.workspace-main-col {'), css.indexOf('.workspace-content {'));
-    expect(col).toContain('border-bottom-left-radius');
+    expect(col).not.toContain('border-bottom-left-radius');
     expect(col).not.toContain('border-top-left-radius');
+    // topbar 100% na primeira linha do shell; navegação abaixo dela
+    expect(css).toContain('.workspace-shell > .ws-topbar { flex: 0 0 100%; width: 100%; order: -1; }');
+    expect(css).toMatch(/\.il-platform \.workspace-sidebar \{[\s\S]*?top: var\(--gd-topbar-h\)/);
   });
 
   it('topbar: "+" e sino no MESMO contrato (repouso limpo; card só em hover)', () => {

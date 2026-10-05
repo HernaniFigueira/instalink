@@ -1,53 +1,56 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// SIDEBAR RECOLHIDA · HOVER-PEEK DE GRUPOS (§7)
+// NAVEGAÇÃO · PAINEL LATERAL DE GRUPO (§15–§18 do DS 1.0)
 // ═══════════════════════════════════════════════════════════════
-// Quando a sidebar está RECOLHIDA:
-//   • ROTA direta no hover = só tooltip (nada muda);
-//   • GRUPO expansível (Clínica/Automação/Gestão/Configurações) no hover =
-//     peek TEMPORÁRIO com os itens do grupo, ao lado do rail.
+// Um GRUPO da navegação (Clínica/Automação/Gestão/Configurações) NÃO abre um
+// acordeão dentro da coluna (acabou o reflow que empurrava os filhos e o resto
+// da lista). Ele abre um PAINEL LATERAL à direita:
+//
+//   • posição: sempre abaixo da top bar, ancorado na borda da navegação —
+//     quem calcula isso é o CSS por token (`--gd-topbar-h`, `--gd-rail-w`,
+//     `--gd-sidebar-w`); este hook não mede DOM;
+//   • vale nos DOIS modos: rail recolhido E sidebar expandida (pin). O painel
+//     nunca altera o estado persistido da navegação;
+//   • abre por hover E por foco (teclado), com o MESMO contrato de tempo;
+//   • fecha no Escape, na troca de rota, no clique em item e ao perder
+//     hover/foco por `PEEK_CLOSE_MS` (tempo de trânsito do mouse).
 //
 // Contrato de tempo (travado por teste):
-//   • abertura: aparece em 150–200ms (animação ease-out de ~200ms);
-//   • fechamento: recolhe 250–300ms DEPOIS do mouseleave (tempo de trânsito
-//     do mouse para dentro do peek) — ~275ms;
-//   • o peek NUNCA altera o estado `collapsed` persistido — o botão
-//     Recolher/Expandir é a ÚNICA preferência persistente;
-//   • expandida (acordeão), hover não abre peek nenhum.
+//   • abertura: ~180ms ease-out (janela 140–180ms — §15);
+//   • fechamento: 250–300ms DEPOIS do mouseleave (trânsito mouse ↔ painel);
+//   • `prefers-reduced-motion`: a animação de entrada sai (CSS).
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const PEEK_CLOSE_MS = 275;      // janela 250–300ms
-export const PEEK_ANIM_MS = 200;       // janela 180–220ms (CSS)
+export const PEEK_ANIM_MS = 180;       // janela 140–180ms (§15)
 export const PEEK_ANIM_EASE = 'ease-out';
 
 export interface SidebarPeekState {
-  /** Grupo aberto em peek (id da área) ou null. */
+  /** Grupo aberto no painel lateral (id da área) ou null. */
   peekId: string | null;
-  /** Posição vertical (px de viewport) para ancorar o peek. */
-  peekTop: number;
-  /** Hover começou num grupo (mini) — abre/renova o peek. */
-  onGroupEnter: (id: string, top: number) => void;
-  /** Hover saiu — agenda o fechamento (250–300ms). */
+  /** Hover/focus começou num grupo — abre (ou renova) o painel. */
+  onGroupEnter: (id: string) => void;
+  /** Hover/focus saiu — agenda o fechamento (250–300ms). */
   onGroupLeave: () => void;
-  /** Hover entrou no próprio peek — mantém aberto. */
+  /** Hover entrou no próprio painel — mantém aberto. */
   onPeekEnter: () => void;
-  /** Hover saiu do peek — fecha no mesmo tempo do grupo. */
+  /** Hover saiu do painel — fecha no mesmo tempo do grupo. */
   onPeekLeave: () => void;
-  /** Fecha na hora (clique/foco/Escape). */
+  /** Fecha na hora (clique em item, Escape, troca de rota). */
   closePeek: () => void;
   /**
-   * Clique no grupo (mini): TRAVA/destrava o flyout — NUNCA expande a sidebar
-   * (o único controle persistente é o botão Recolher/Expandir).
+   * Clique no grupo: TRAVA/destrava o painel.
    *   • fechado → abre e trava (fica mesmo com mouseleave);
    *   • aberto solto (hover) → trava;
-   *   • aberto e travaado → fecha.
+   *   • aberto e travado → fecha.
+   * NUNCA expande/recolhe a navegação — o único controle persistente é o pin.
    */
-  togglePeek: (id: string, top: number) => void;
+  togglePeek: (id: string) => void;
 }
 
-export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
-  // `pinned` = flyout travado pelo CLIQUE (sobrevive a mouseleave).
-  const [peek, setPeek] = useState<{ id: string; top: number; pinned: boolean } | null>(null);
+export function useSidebarPeek(): SidebarPeekState {
+  // `pinned` = painel travado pelo CLIQUE (sobrevive a mouseleave).
+  const [peek, setPeek] = useState<{ id: string; pinned: boolean } | null>(null);
   const timer = useRef<number | null>(null);
 
   const clear = useCallback(() => {
@@ -57,17 +60,16 @@ export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
     }
   }, []);
 
-  const onGroupEnter = useCallback((id: string, top: number) => {
-    if (!collapsed) return; // expandida = acordeão; nunca peek
+  const onGroupEnter = useCallback((id: string) => {
     clear();
-    // hover mantém/abre SOLTO; nunca destrava um flyout travado pelo clique.
-    setPeek((prev) => (prev?.id === id ? prev : { id, top, pinned: false }));
-  }, [collapsed, clear]);
+    // hover mantém/abre SOLTO; nunca destrava um painel travado pelo clique.
+    setPeek((prev) => (prev?.id === id ? prev : { id, pinned: false }));
+  }, [clear]);
 
   const scheduleClose = useCallback(() => {
     clear();
     timer.current = window.setTimeout(() => {
-      // flyout travado pelo clique NÃO fecha no mouseleave.
+      // painel travado pelo clique NÃO fecha no mouseleave.
       setPeek((prev) => (prev?.pinned ? prev : null));
       timer.current = null;
     }, PEEK_CLOSE_MS);
@@ -78,29 +80,32 @@ export function useSidebarPeek(collapsed: boolean): SidebarPeekState {
     setPeek(null);
   }, [clear]);
 
-  // Trocar de rota/recolher apaga o peek imediatamente.
+  // Escape fecha (teclado) — o painel nunca captura o foco: os itens seguem
+  // tabuláveis e o botão do grupo mantém o foco.
   useEffect(() => {
-    if (!collapsed) { clear(); setPeek(null); }
-  }, [collapsed, clear]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { clear(); setPeek(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [clear]);
 
   // Nunca vaza timer entre desmontagens.
   useEffect(() => clear, [clear]);
 
-  const togglePeek = useCallback((id: string, top: number) => {
-    if (!collapsed) return;
+  const togglePeek = useCallback((id: string) => {
     clear();
     setPeek((prev) => {
       if (prev?.id === id) {
-        // solto → trava; travaado → fecha.
-        return prev.pinned ? null : { id, top, pinned: true };
+        // solto → trava; travado → fecha.
+        return prev.pinned ? null : { id, pinned: true };
       }
-      return { id, top, pinned: true };
+      return { id, pinned: true };
     });
-  }, [collapsed, clear]);
+  }, [clear]);
 
   return {
     peekId: peek?.id ?? null,
-    peekTop: peek?.top ?? 0,
     togglePeek,
     onGroupEnter,
     onGroupLeave: scheduleClose,

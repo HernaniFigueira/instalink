@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { color, rawToken } from './helpers/ds-tokens';
 import { PANEL_ROUTES } from '../panel';
 import {
   DEFAULT_ACCENT_ID, NAV_ACCENTS, NAV_ACCENT_STORAGE_KEY,
@@ -25,11 +26,13 @@ describe('GoDoutor UI contract v2 · theme', () => {
     expect(DEFAULT_ACCENT_ID).toBe('azul-profundo');
     expect(NAV_ACCENTS.filter((theme) => theme.id === 'azul-profundo')).toHaveLength(1);
     const deep = findAccent('azul-profundo')!;
-    expect(deep.vars['--il-nav']).toBe('#071a33');
-    expect(deep.vars['--il-nav-hover']).toBe('#102d52');
-    expect(deep.vars['--il-nav-active']).toBe('#123b68');
-    expect(deep.vars['--il-nav-active-fg']).toBe('#93c5fd');
+    // DS 1.0 §13 — o preset pinta ACENTO, nunca superfície estrutural.
     expect(deep.vars['--accent']).toBe('#2563eb');
+    expect(deep.vars['--il-nav-active']).toBe(deep.vars['--accent-soft']);
+    expect(deep.vars['--il-nav-active-fg']).toBe(deep.vars['--accent-fg']);
+    for (const structural of ['--il-nav', '--il-nav-fg', '--il-nav-hover', '--il-nav-border', '--il-nav-muted', '--il-nav-icon']) {
+      expect(deep.vars[structural], structural).toBeUndefined();
+    }
   });
 
   it('retains the existing valid local preference and does not rewrite storage', () => {
@@ -45,14 +48,15 @@ describe('GoDoutor UI contract v2 · theme', () => {
 
   it('keeps all 21 presets and validates navigation/accent contrast with WCAG ratios', () => {
     expect(NAV_ACCENTS).toHaveLength(21);
+    // Estrutura da navegação (branca, fixa) medida uma vez, na fonte única.
+    expect(contrastRatio(color('--il-nav-fg'), color('--il-nav')), 'nav structure').toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(color('--il-nav-muted'), color('--il-nav')), 'nav muted').toBeGreaterThanOrEqual(4.5);
     for (const theme of NAV_ACCENTS) {
-      expect(contrastRatio(theme.vars['--il-nav-fg'], theme.vars['--il-nav']), `${theme.id} nav`).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(theme.vars['--il-nav-active-fg'], theme.vars['--il-nav-active']), `${theme.id} active`).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(theme.vars['--accent-contrast'], theme.vars['--accent']), `${theme.id} accent`).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(theme.vars['--accent-fg'], theme.vars['--accent-soft']), `${theme.id} accent foreground`).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(theme.vars['--il-nav-icon'], theme.vars['--il-nav']), `${theme.id} icon`).toBeGreaterThanOrEqual(3);
       for (const key of Object.keys(theme.vars)) {
-        expect(key.startsWith('--il-nav') || key.startsWith('--accent'), `${theme.id}.${key}`).toBe(true);
+        expect(key.startsWith('--il-nav-active') || key === '--il-nav-cta' || key.startsWith('--accent'), `${theme.id}.${key}`).toBe(true);
       }
     }
   });
@@ -76,11 +80,13 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   });
 
   it('uses neutral panels, compact radius tokens, and flat workspace surfaces', () => {
-    expect(css).toContain('--radius-xs: 4px;');
-    expect(css).toContain('--radius-sm: 6px;');
-    expect(css).toContain('--radius-md: 8px;');
-    expect(css).toMatch(/--radius-(?:lg|xl|2xl): 8px;/);
-    expect(css).toContain('--workspace-bg: var(--bg);');
+    // Escala compacta na FONTE ÚNICA; globals só aliasa.
+    expect(rawToken('--gd-radius-xs')).toBe('4px');
+    expect(rawToken('--gd-radius-sm')).toBe('6px');
+    expect(rawToken('--gd-radius-md')).toBe('8px');
+    for (const tok of ['lg', 'xl', '2xl']) expect(rawToken(`--gd-radius-${tok}`), tok).toBe('8px');
+    expect(rawToken('--radius-xs')).toBe('var(--gd-radius-xs)');
+    expect(rawToken('--workspace-bg')).toBe('var(--gd-bg-app)');
     expect(css).toMatch(/\.ws-panel\s*\{[^}]*box-shadow: none/);
     expect(css).toMatch(/\.il-platform\.workspace-shell\s*\{[^}]*background: var\(--workspace-bg\)/);
   });

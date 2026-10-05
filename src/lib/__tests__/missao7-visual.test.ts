@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById, contrastRatio, relativeLuminance } from '../nav-accent';
+import { NAV_ACCENTS, NAV_ACCENT_DEFAULT, navAccentById, contrastRatio } from '../nav-accent';
+import { color, contrast as dsContrast } from './helpers/ds-tokens';
 
 const root = path.resolve(__dirname, '../../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -43,20 +44,17 @@ describe('missão 7 · 1 — paleta de aparência (atual: 21 presets por famíli
     expect(NAV_ACCENT_DEFAULT).toBe('azul-profundo'); // default aprovado; preferência salva preservada
   });
 
-  it('contraste AA real (WCAG): o texto do nav é legível em QUALQUER preset', () => {
-    // A régua é a do módulo (lib/nav-accent.ts: relativeLuminance/contrastRatio
-    // — WCAG), não uma fórmula paralela. Limiar AA para texto normal = 4.5.
+  it('contraste AA real (WCAG): acento e estrutura legíveis em QUALQUER preset', () => {
+    // DS 1.0 §13 — a ESTRUTURA da navegação é branca e fixa: o texto da
+    // sidebar é neutro (contraste medido no token resolvido, não em regex).
+    expect(dsContrast('--il-nav-fg', '--il-nav'), 'estrutura da navegação').toBeGreaterThanOrEqual(4.5);
+    expect(dsContrast('--il-nav-muted', '--il-nav-hover'), 'texto secundário').toBeGreaterThanOrEqual(4.5);
+    // O TEMA pinta só o acento: o par ativo e o par do CTA principal são AA
+    // em qualquer um dos 21 presets (mesma régua WCAG do módulo).
     for (const a of NAV_ACCENTS) {
-      const bg = a.vars['--il-nav'];
-      const fg = a.vars['--il-nav-fg'];
-      expect(contrastRatio(fg, bg), a.id).toBeGreaterThanOrEqual(4.5);
-      // contrato A: em preset CLARO, o texto do nav é near-black; em escuro, claro
-      const navIsDark = relativeLuminance(bg) < 0.35;
-      if (navIsDark) {
-        expect(relativeLuminance(fg), a.id).toBeGreaterThan(0.7);
-      } else {
-        expect(relativeLuminance(fg), a.id).toBeLessThan(0.1);
-      }
+      expect(contrastRatio(a.vars['--il-nav-active-fg'], a.vars['--il-nav-active']), `${a.id} ativo`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(a.vars['--accent-fg'], a.vars['--accent-soft']), `${a.id} acento`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(a.vars['--accent-contrast'], a.vars['--accent']), `${a.id} CTA`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -140,15 +138,19 @@ describe('missão 7 · 4 — pets: bloco, ação e cards', () => {
 });
 
 describe('missão 7 · 5 — encaixe estratégico e divisórias', () => {
-  it('o painel principal assenta com um canto especial no encontro com a lateral', () => {
+  it('o painel principal não tem canto decorativo: a divisa é a borda da sidebar', () => {
+    // DS 1.0 §10/§12 — topbar em 100% da largura ACIMA da sidebar branca;
+    // nenhum raio decorativo no encontro (a separação é 1px + superfície).
     expect(css).toMatch(/\.workspace-main-col \{[\s\S]*?overflow: clip/);
-    // Refino final: o acabamento da junção é no canto INFERIOR (o de cima
-    // estava errado) — par `overflow: clip` + border-bottom-left-radius.
-    expect(css).toMatch(/\.workspace-main-col \{[\s\S]*?border-bottom-left-radius: var\(--radius-xl\)/);
+    const col = css.slice(css.indexOf('.workspace-main-col {'), css.indexOf('.workspace-content {'));
+    expect(col).not.toMatch(/border-(top|bottom)-left-radius/);
+    expect(css).toMatch(/\.il-platform \.workspace-sidebar \{[\s\S]*?background: var\(--il-nav\)/);
+    expect(color('--il-nav')).toBe('#ffffff');
   });
 
   it('divisórias mais nítidas (sem poluir)', () => {
-    expect(css).toContain('--border-soft: #e6eaf3;');
+    // O valor vive na fonte única (DS) e chega aqui por alias.
+    expect(color('--border-soft')).toBe('#eef2f6');
   });
 
   it('modo claro preservado — sem tokens dark', () => {

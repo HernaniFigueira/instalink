@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TOKENS } from './helpers/ds-tokens';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { PANEL_SECTIONS, PANEL_ROUTES } from '../panel';
@@ -118,12 +119,14 @@ describe('A3.3 — superfícies e cores vêm de token', () => {
   });
 
   it('tokens de acento usados pelo painel existem em globals.css', () => {
-    const css = read('src/app/globals.css');
+    // DS 1.0: a fonte única é `godoutor-design-system.css`; `globals.css`
+    // carrega os aliases. Um token usado pelo painel pode estar em qualquer uma
+    // das duas — o que não pode é não existir.
     const used = new Set<string>();
     for (const f of PANEL_FILES) {
       for (const m of read(f).matchAll(/var\((--[a-z0-9-]+)\)/g)) used.add(m[1]);
     }
-    const missing = [...used].filter((t) => !css.includes(`${t}:`));
+    const missing = [...used].filter((t) => !TOKENS.has(t));
     expect(missing).toEqual([]);
   });
 });

@@ -24,6 +24,7 @@ import path from 'node:path';
 import { WorkspaceNavigation } from '../dashboard/WorkspaceNavigation';
 import { Drawer } from '../ui';
 import { navAccentById, contrastRatio } from '@/lib/nav-accent';
+import { color } from '@/lib/__tests__/helpers/ds-tokens';
 import { panelNavigation } from '@/lib/panel';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -78,7 +79,9 @@ describe('Drawer de navegação mobile — superfície isolada', () => {
     expect(css).toMatch(/\.workspace-link:hover\s*\{\s*background: var\(--il-nav-hover\)/);
     expect(css).toMatch(/\.workspace-link\[aria-current='page'\]\s*\{\s*background: var\(--il-nav-active\)/);
     expect(css).toMatch(/\.workspace-link--group\[aria-expanded='true'\][\s\S]*?background: var\(--il-nav-hover\)/);
-    expect(css).toMatch(/\.workspace-submenu__guide[\s\S]*?background: var\(--il-nav-hover\)/);
+    // DS 1.0 §15/§18 — o filho do grupo abre em PAINEL LATERAL (não em acordeão).
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?background: var\(--gd-nav-panel-bg\)/);
+    expect(css).not.toContain('.workspace-submenu');
     // O tema nunca é aplicado ao seletor genérico: overlays como Novo
     // Agendamento continuam usando a superfície neutra do Workspace.
     await u.click(close);
@@ -90,25 +93,24 @@ describe('Drawer de navegação mobile — superfície isolada', () => {
     expect(generic.className).not.toContain('workspace-nav-drawer');
   });
 
-  it('no menu móvel o toque abre o grupo, mantém a rota ativa e revela o submenu', async () => {
-    const u = userEvent.setup();
+  it('no menu móvel o grupo mostra os filhos DIRETO (toque não tem hover) e mantém a rota ativa', () => {
     setup({ mobileOpen: true, activePath: '/agenda' });
     const dialog = screen.getByRole('dialog');
     const mobileNav = within(dialog).getByRole('navigation', { name: 'Menu móvel' });
     expect(within(mobileNav).getByRole('link', { name: 'Agenda' }).getAttribute('aria-current')).toBe('page');
-
-    const clinic = within(mobileNav).getByRole('button', { name: 'Clínica' });
-    await u.click(clinic);
-    expect(clinic.getAttribute('aria-expanded')).toBe('true');
+    // DS 1.0 §18 — sem acordeão: os itens do grupo já estão no menu, sob o
+    // rótulo discreto do grupo (recuo de subitem).
     expect(within(mobileNav).getByRole('link', { name: 'Serviços' })).toBeTruthy();
     expect(within(mobileNav).getByRole('link', { name: 'Serviços' }).className).toContain('workspace-link--sub');
+    expect(within(mobileNav).queryByRole('button', { name: 'Clínica' })).toBeNull();
   });
 
   it.each(['azul-profundo', 'verde-salvia', 'neutro', 'vinho', 'branco'])(
     'mantém contraste AA para texto normal e ativo no preset %s', (id) => {
       const vars = navAccentById(id).vars;
-      expect(contrastRatio(vars['--il-nav-fg'], vars['--il-nav'])).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(vars['--il-nav-fg'], vars['--il-nav-hover'])).toBeGreaterThanOrEqual(4.5);
+      // Estrutura branca fixa (§13) + par ativo do preset: ambos AA.
+      expect(contrastRatio(color('--il-nav-fg'), color('--il-nav'))).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(color('--il-nav-muted'), color('--il-nav-hover'))).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(vars['--il-nav-active-fg'], vars['--il-nav-active'])).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -143,54 +145,54 @@ describe('Etapa A — sidebar por seções', () => {
     expect(screen.queryByLabelText('Fechar submenu')).toBeNull();
   });
 
-  it('acordeão: o grupo expande PARA BAIXO, na própria coluna (nunca segunda coluna)', async () => {
+  it('DS 1.0 §15 — o grupo abre o PAINEL LATERAL (nunca uma segunda coluna empurrando o conteúdo)', async () => {
     const u = userEvent.setup();
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    const linksBefore = main.querySelectorAll('a').length;
     await u.click(within(main).getByRole('button', { name: 'Clínica' }));
-    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais unificado em Equipe — apenas Serviços permanece no grupo Clínica.
-    // Disponibilidade e Equipe vivem em seções próprias (Operação/Configurações). O modelo não foi unificado (Professional ≠ Member).
-    for (const name of ['Serviços']) {
-      expect(within(main).getByRole('link', { name })).toBeTruthy();
-    }
-    expect(within(main).queryByRole('link', { name: 'Profissionais' })).toBeNull(); // redirect para Equipe
-    // Equipe e Disponibilidade não estão neste grupo
-    // O submenu do grupo mora DENTRO do menu principal, com recuo.
-    expect(within(main).getByText('Serviços').closest('.workspace-submenu')).toBeTruthy();
+    const panel = document.getElementById('ws-nav-panel')!;
+    expect(panel.getAttribute('aria-label')).toBe('Clínica');
+    // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais unificado em Equipe —
+    // apenas Serviços permanece no grupo Clínica.
+    expect(within(panel).getByRole('menuitem', { name: 'Serviços' })).toBeTruthy();
+    expect(within(panel).queryByRole('menuitem', { name: 'Profissionais' })).toBeNull();
+    // NADA foi inserido na coluna: o painel é portal no <body> e não reflui.
+    expect(main.querySelectorAll('a').length).toBe(linksBefore);
+    expect(panel.parentElement?.tagName).toBe('BODY');
+    expect(document.getElementById('submenu-clinica')).toBeNull();
   });
 
-  it('acordeão META: UM grupo aberto por vez; clicar no grupo ABERTO não fecha', async () => {
+  it('painel META: UM grupo aberto por vez; clicar no grupo ABERTO fecha', async () => {
     const u = userEvent.setup();
     const { onCollapse } = setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    // O estado VISUAL do acordeão mora em aria-expanded + .is-open (o submenu
-    // fecha por CSS grid 0fr — altura zero — mantendo o DOM estável).
+    // O estado VISUAL mora em aria-expanded + .is-open; o painel tem UM id.
     await u.click(within(main).getByRole('button', { name: 'Gestão' }));
     expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('false');
     expect(within(main).getByRole('button', { name: 'Gestão' }).getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelector('.workspace-group.is-open #submenu-gestao')).toBeTruthy();
+    expect(document.getElementById('ws-nav-panel')?.getAttribute('aria-label')).toBe('Gestão');
     await u.click(within(main).getByRole('button', { name: 'Configurações' }));
     expect(within(main).getByRole('button', { name: 'Gestão' }).getAttribute('aria-expanded')).toBe('false');
     expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelector('.workspace-group.is-open #submenu-ajustes')).toBeTruthy();
+    expect(document.getElementById('ws-nav-panel')?.getAttribute('aria-label')).toBe('Configurações');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
-    // Accordeão TRADICIONAL: clicar no grupo aberto FECHA — zero grupos
-    // abertos é estado VÁLIDO.
+    // Clicar no grupo aberto FECHA — zero painéis abertos é estado VÁLIDO.
     await u.click(within(main).getByRole('button', { name: 'Configurações' }));
     expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
     expect(onCollapse).not.toHaveBeenCalled();
   });
 
-  it('deep-link abre o grupo dono da rota e a troca de rota atualiza o acordeão', () => {
+  it('deep-link marca o grupo dono e a troca de rota move a marca (sem abrir painel sozinho)', () => {
     const { rerender, props } = setup({ activePath: '/configuracoes' });
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
-    expect(within(main).getByRole('link', { name: 'Equipe' })).toBeTruthy();
-    // Accordeão tradicional: rota plana NÃO força grupo nenhum — o estado
-    // aberto/fechado é do usuário (aqui, Configurações segue como estava).
+    // A rota ativa marca o grupo dono (is-active); o painel não abre sozinho.
+    expect(within(main).getByRole('button', { name: 'Configurações' }).closest('.workspace-group')?.className).toContain('is-active');
+    expect(document.getElementById('ws-nav-panel')).toBeNull();
     rerender(<WorkspaceNavigation {...props} activePath="/agenda" />);
-    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('true');
+    expect(within(main).getByRole('button', { name: 'Configurações' }).closest('.workspace-group')?.className).not.toContain('is-active');
+    expect(within(main).getByRole('link', { name: 'Agenda' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('marca 2.0: a CLÍNICA identifica a navegação, GoDoutor assina no rodapé', () => {
@@ -211,22 +213,23 @@ describe('Etapa A — sidebar por seções', () => {
     expect(onCollapse).toHaveBeenCalledOnce();
   });
 
-  it('destino fora do menu NUNCA deixa painel vazio (invariante da área dona)', () => {
-    // Cada rota fora do menu tem ÁREA DONA (Operação para /perfil e
-    // /tarefas; Automação para /execucoes; Configurações para /recursos):
-    // o acordeão abre o grupo dono COM conteúdo — nunca um painel vazio.
-    for (const activePath of ['/perfil', '/tarefas']) {
-      cleanup(); setup({ activePath });
-      expect(screen.queryByLabelText('Fechar submenu'), `painel vazio em ${activePath}`).toBeNull();
-    }
-    for (const [activePath, group] of [['/execucoes', 'Automação'], ['/recursos', 'Configurações']] as const) {
+  it('destino fora do menu NUNCA deixa painel vazio (invariante da área dona)', async () => {
+    // Cada rota fora do menu tem ÁREA DONA (Operação para /perfil e /tarefas;
+    // Automação para /execucoes; Configurações para /recursos). DS 1.0 §18: o
+    // grupo da rota fica MARCADO (is-active) e abre um painel COM conteúdo —
+    // nunca um painel vazio, nunca um grupo sem filhos.
+    const u = userEvent.setup();
+    for (const [activePath, group] of [['/execucoes', 'Automação'], ['/recursos', 'Configurações'], ['/perfil', 'Operação']] as const) {
       cleanup(); setup({ activePath });
       const main = screen.getByRole('navigation', { name: 'Menu principal' });
-      const btn = within(main).getByRole('button', { name: group });
-      expect(btn.getAttribute('aria-expanded'), `grupo dono aberto em ${activePath}`).toBe('true');
-      expect(within(main).getAllByRole('link').length, `grupo com conteúdo em ${activePath}`).toBeGreaterThan(0);
-      // O próprio destino fora do menu não é promovido a linha (régua do menu).
-      expect(within(main).queryByRole('link', { name: activePath === '/execucoes' ? 'Execuções' : 'Recursos' })).toBeNull();
+      const btn = within(main).queryByRole('button', { name: group });
+      if (!btn) continue; // grupo sem linha própria não é desenhado (régua do menu)
+      expect(btn.closest('.workspace-group')?.className, `grupo dono marcado em ${activePath}`).toContain('is-active');
+      await u.click(btn);
+      const panel = document.getElementById('ws-nav-panel');
+      expect(panel, `painel do grupo em ${activePath}`).toBeTruthy();
+      expect(within(panel!).getAllByRole('menuitem').length, `grupo com conteúdo em ${activePath}`).toBeGreaterThan(0);
+      cleanup();
     }
   });
 
@@ -239,15 +242,13 @@ describe('Etapa A — sidebar por seções', () => {
     expect(within(main).getByRole('button', { name: 'Automação' })).toBeTruthy();
   });
 
-  it('móvel: UM diálogo com o MESMO acordeão (sem passo de voltar)', async () => {
-    const u = userEvent.setup();
+  it('móvel: UM diálogo com as portas diretas E os itens de grupo (sem passo de voltar)', () => {
     setup({ mobileOpen: true });
     const dialog = screen.getByRole('dialog');
-    // As portas diretas e os grupos convivem no mesmo diálogo.
+    // Portas diretas e filhos de grupo convivem no mesmo diálogo.
     expect(within(dialog).getByRole('link', { name: 'Agenda' })).toBeTruthy();
-    await u.click(within(dialog).getByRole('button', { name: 'Gestão' }));
     expect(within(dialog).getByRole('link', { name: 'Resultados' })).toBeTruthy();
-    expect(within(dialog).getByRole('link', { name: 'Agenda' })).toBeTruthy();
+    expect(within(dialog).getByRole('link', { name: 'Equipe' })).toBeTruthy();
   });
 
   it('nunca introduz rota ou grupo sem autorização', () => {
@@ -262,15 +263,26 @@ describe('Etapa A — sidebar por seções', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     // CLINICAL STRUCTURE CONSOLIDATION (B1): Profissionais saiu do menu (unificado em Equipe, redirect compatível)
-    const labels = [
-      'Visão geral', 'Agenda', 'Conversas', 'Pendências', 'Clientes',
-      'Estrutura', 'Serviços', 'Disponibilidade', 'Equipe',
-      'Automações', 'Follow-up', 'Campanhas',
-      'Resultados', 'Financeiro', 'Oportunidades',
-      'Canais & Integrações', 'Configurações',
-    ];
-    for (const label of labels) {
+    // Portas diretas ficam na coluna; as demais são o conteúdo dos GRUPOS.
+    const direct = ['Visão geral', 'Agenda', 'Conversas', 'Pendências', 'Clientes'];
+    const grouped: Record<string, string> = {
+      Estrutura: 'Clínica', Serviços: 'Clínica', Disponibilidade: 'Clínica', Equipe: 'Clínica',
+      'Automações': 'Automação', 'Follow-up': 'Automação', Campanhas: 'Automação',
+      Resultados: 'Gestão', Financeiro: 'Gestão', Oportunidades: 'Gestão',
+      'Canais & Integrações': 'Configurações', 'Configurações': 'Configurações',
+    };
+    for (const label of direct) {
       expect(within(main).getByRole('link', { name: label }), label).toBeTruthy();
+    }
+    // Nenhum destino autorizado desapareceu: todos estão no grupo dono.
+    for (const group of new Set(Object.values(grouped))) {
+      fireEvent.mouseEnter(within(main).getByRole('button', { name: group }));
+      const panel = document.getElementById('ws-nav-panel')!;
+      for (const [label, owner] of Object.entries(grouped)) {
+        if (owner !== group) continue;
+        expect(within(panel).getByRole('menuitem', { name: label }), label).toBeTruthy();
+      }
+      fireEvent.mouseLeave(within(main).getByRole('button', { name: group }));
     }
   });
 });
@@ -300,32 +312,40 @@ describe('Missão §2 — sem títulos de seção', () => {
     const mobileNav = within(dialog).getByRole('navigation', { name: 'Menu móvel' });
     expect(within(mobileNav).queryByText('Operação')).toBeNull();
     expect(within(mobileNav).queryByText('Administração')).toBeNull();
-    // Uma vez como GRUPO (o "Clínica" do cabeçalho é o tipo da unidade,
-    // não um título de seção — por isso o escopo é o menu).
+    // Uma vez, como RÓTULO do grupo (o "Clínica" do cabeçalho é o tipo da
+    // unidade, não um título de seção — por isso o escopo é o menu). No toque
+    // não há disclosure: o rótulo identifica o bloco de itens (§18).
     expect(within(mobileNav).getAllByText('Clínica')).toHaveLength(1);
-    expect(within(mobileNav).getByText('Clínica').closest('.workspace-group')).toBeTruthy();
+    expect(within(mobileNav).getByText('Clínica').closest('.workspace-nav-drawer__title')).toBeTruthy();
   });
 
-  it('links diretos têm porte de item primário; subitens é que têm recuo (§5)', () => {
+  it('links diretos têm porte de item primário; filhos de grupo têm recuo (§5)', () => {
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     expect(within(main).getByRole('link', { name: 'Agenda' }).className).not.toContain('workspace-link--sub');
-    expect(within(main).getByRole('link', { name: 'Serviços' }).className).toContain('workspace-link--sub');
+    // No desktop o filho de grupo NÃO ocupa a coluna (ele vive no painel §15).
+    expect(within(main).queryByRole('link', { name: 'Serviços' })).toBeNull();
+    // No drawer móvel o filho aparece com recuo de subitem.
+    cleanup();
+    setup({ mobileOpen: true });
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: 'Serviços' }).className).toContain('workspace-link--sub');
   });
 });
 
-describe('acordeão TRADICIONAL — no máximo 1 aberto; ZERO é permitido', () => {
+describe('DS 1.0 §15/§18 — grupo abre PAINEL LATERAL (sem acordeão)', () => {
   it.each(['/dashboard', '/agenda', '/conversas', '/tarefas', '/clientes', '/pagina'])(
-    'rota plana %s inicia com ZERO grupos abertos',
+    'rota plana %s inicia com ZERO painéis abertos',
     (activePath) => {
       setup({ activePath });
       const main = screen.getByRole('navigation', { name: 'Menu principal' });
       expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('false');
       expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
+      expect(document.getElementById('ws-nav-panel')).toBeNull();
     },
   );
 
-  it('deep-link abre o grupo DONO da rota', () => {
+  it('deep-link MARCA o grupo dono (is-active) sem forçar painel aberto', () => {
     const cases: Array<[string, string]> = [
       ['/estrutura', 'Clínica'], ['/servicos', 'Clínica'], ['/profissionais', 'Clínica'],
       ['/disponibilidade', 'Clínica'], ['/equipe', 'Clínica'],
@@ -336,47 +356,48 @@ describe('acordeão TRADICIONAL — no máximo 1 aberto; ZERO é permitido', () 
     for (const [activePath, group] of cases) {
       cleanup(); setup({ activePath });
       const main = screen.getByRole('navigation', { name: 'Menu principal' });
-      expect(within(main).getByRole('button', { name: group }).getAttribute('aria-expanded'), `${activePath} → ${group}`).toBe('true');
-      expect(document.querySelectorAll('.workspace-group.is-open'), activePath).toHaveLength(1);
+      const btn = within(main).getByRole('button', { name: group });
+      expect(btn.closest('.workspace-group')?.className, `${activePath} → ${group}`).toContain('is-active');
+      // Nada abre sozinho: painel é hover/focus/clique do usuário.
+      expect(btn.getAttribute('aria-expanded'), activePath).toBe('false');
+      expect(document.getElementById('ws-nav-panel')).toBeNull();
     }
   });
 
-  it('clicar num grupo fechado ABRE (e fecha o anterior: um por vez)', async () => {
-    const u = userEvent.setup();
-    setup({ activePath: '/configuracoes' }); // Configurações aberta (deep-link)
+  it('hover/focus abre UM painel por vez; o anterior fecha (um por vez)', () => {
+    setup({ activePath: '/configuracoes' });
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.focus(within(main).getByRole('button', { name: 'Configurações' }));
+    expect(document.getElementById('ws-nav-panel')?.getAttribute('aria-label')).toBe('Configurações');
+    fireEvent.focus(within(main).getByRole('button', { name: 'Automação' }));
+    expect(document.getElementById('ws-nav-panel')?.getAttribute('aria-label')).toBe('Automação');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
   });
 
-  it('clicar novamente no grupo ABERTO fecha (zero grupos abertos = válido)', async () => {
+  it('clicar novamente no grupo ABERTO fecha (zero painéis = estado válido)', async () => {
     const u = userEvent.setup();
     setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
-    await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
-    await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('false');
-    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
+    const btn = within(main).getByRole('button', { name: 'Automação' });
+    await u.click(btn);
+    expect(document.getElementById('ws-nav-panel')).toBeTruthy();
+    await u.click(btn);
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById('ws-nav-panel')).toBeNull();
   });
 
-  it('a escolha EXPLÍCITA persiste em rota plana; deep-link tem autoridade', async () => {
+  it('o painel NÃO empurra o conteúdo: os filhos jamais entram na coluna', async () => {
     const u = userEvent.setup();
-    const { rerender, props } = setup(); // /agenda — ZERO abertos (rota plana)
+    setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    const linksBefore = main.querySelectorAll('a').length;
+    const rowsBefore = main.querySelectorAll('.workspace-link').length;
     await u.click(within(main).getByRole('button', { name: 'Automação' }));
-    // O usuário ABRIU Automação: navegando para rota plana, Automação segue aberta.
-    rerender(<WorkspaceNavigation {...props} activePath="/clientes" />);
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('true');
-    // Deep-link tem autoridade: /servicos abre o dono (Clínica) e fecha Automação.
-    rerender(<WorkspaceNavigation {...props} activePath="/servicos" />);
-    expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('true');
-    expect(within(main).getByRole('button', { name: 'Automação' }).getAttribute('aria-expanded')).toBe('false');
-    // E rota plana, sem escolha explícita recente, volta ao padrão Clínica.
-    rerender(<WorkspaceNavigation {...props} activePath="/dashboard" />);
-    expect(within(main).getByRole('button', { name: 'Clínica' }).getAttribute('aria-expanded')).toBe('true');
+    // Nenhum submenu inline, nenhum filho dentro do <nav> — o painel é portal.
+    expect(main.querySelectorAll('a').length).toBe(linksBefore);
+    expect(main.querySelectorAll('.workspace-link').length).toBe(rowsBefore);
+    expect(main.querySelector('.workspace-submenu')).toBeNull();
+    expect(document.getElementById('ws-nav-panel')!.parentElement?.tagName).toBe('BODY');
   });
 });
 
@@ -387,6 +408,8 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
     expect(side.textContent).not.toContain('Andrioni Veterinária');
     expect(side.textContent).not.toContain('Clínica veterinária');
     expect(side.querySelector('.workspace-submenu')).toBeNull();
+    // §18 — nenhum grupo abre filhos dentro da coluna, em nenhum modo.
+    expect(side.querySelector('.workspace-nav-drawer__title')).toBeNull();
     expect(side.querySelector('.workspace-clinic-head__text')).toBeNull();
     expect(side.textContent).not.toContain('powered by');
     // A logo/monograma recolhida existe, centralizada no rail.
@@ -397,7 +420,9 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
     const css = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'app', 'globals.css'), 'utf8');
     expect(css).toMatch(/\.is-collapsed \.workspace-label\s*\{\s*display:\s*none/);
     expect(css).toMatch(/\.is-collapsed \.workspace-clinic-head__text\s*\{\s*display:\s*none/);
-    expect(css).toMatch(/\.is-collapsed \.workspace-submenu\s*\{\s*display:\s*none/);
+    // §15 — painel ancorado na borda da navegação (rail OU expandida).
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?left: calc\(var\(--gd-rail-w\) \+ var\(--gd-space-1\)\)/);
+    expect(css).toMatch(/\.ws-peek--wide \{ left: calc\(var\(--gd-sidebar-w\) \+ var\(--gd-space-1\)\); \}/);
   });
 
   it('NENHUM elemento da sidebar usa .il-tip (causa raiz da scrollbar horizontal, §9)', () => {

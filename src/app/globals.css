@@ -22,33 +22,31 @@
   /* ── Estrutura: fundo, superfícies e bordas ─────────────────── */
   /* Neutro base compatível. No workspace, `--workspace-bg` é sólido `--bg`;
      estes aliases antigos não aplicam gradiente ao shell. */
-  --bg: #f4f6f8;
-  --bg-top: #f4f6f8;
-  --bg-bottom: #f8f9fb;
-  --bg-tint: #eef1fa;         /* faixa/área de apoio */
-  --surface: #ffffff;         /* cartão */
-  --surface-2: #fbfcff;       /* cartão sobre cartão (profundidade leve) */
-  --surface-3: #f4f6fc;       /* área rebaixada (inset) */
-  --surface-hover: #f2f5fc;
-  --border: #e4e8f3;
-  --border-soft: #e6eaf3;
-  --border-strong: #d3daea;
+  --bg: var(--gd-bg-app);
+  --bg-tint: var(--gd-bg-subtle);         /* faixa/área de apoio */
+  --surface: var(--gd-bg-surface);         /* cartão */
+  --surface-2: var(--gd-bg-surface-2);       /* cartão sobre cartão (profundidade leve) */
+  --surface-3: var(--gd-bg-inset);       /* área rebaixada (inset) */
+  --surface-hover: var(--gd-bg-hover);
+  --border: var(--gd-border);
+  --border-soft: var(--gd-border-soft);
+  --border-strong: var(--gd-border-strong);
   /* A3.3 CONVERGÊNCIA: `--border-2` já era USADO por ClientProfileDrawer,
      NavSearch e DashboardShell mas nunca foi definido aqui — a declaração
      `border-[var(--border-2)]` não resolvia para nada. Definido como o degrau
      intermediário entre `--border` e `--border-strong`. */
-  --border-2: #dbe1ef;
+  --border-2: var(--gd-border-2);
 
   /* ── Texto ──────────────────────────────────────────────────── */
   /* MISSÃO 5 — escala INK (near-black quente, não preto puro nem lavado):
      títulos firmes, body com contraste, metadados discretos mas legíveis. */
-  --text: #262220;
-  --text-strong: #171310;
-  --text-muted: #524c46;
-  --text-faint: #6f6862;
+  --text: var(--gd-text);
+  --text-strong: var(--gd-text-strong);
+  --text-muted: var(--gd-text-muted);
+  --text-faint: var(--gd-text-faint);
   /* Idem: `--text-soft` era usado no placeholder/descrição do NavSearch sem
      existir. Fica entre `--text-muted` e `--text-faint`. */
-  --text-soft: #665f59;
+  --text-soft: var(--gd-text-soft);
 
   /* Tokens de compatibilidade fora da raiz do workspace. Ações autenticadas
      consomem `--accent`; semânticas continuam nos seus próprios tokens. */
@@ -57,23 +55,23 @@
   --skeleton-base: #e4e8f0;
   --skeleton-highlight: #f1f4f9;
   --brand-strong: #0c0a09;
-  --brand-soft: #f5f3f0;
-  --brand-softer: #faf9f7;
-  --brand-border: #e4ded6;
-  --brand-fg: #262220;
-  --brand-ring: rgba(28, 25, 23, 0.28);
+  --brand-soft: var(--gd-bg-subtle);
+  --brand-softer: var(--gd-bg-surface-2);
+  --brand-border: var(--gd-border);
+  --brand-fg: var(--gd-text);
+  --brand-ring: color-mix(in srgb, var(--gd-accent) 30%, transparent);
   /* Estado hover das superfícies TINTED (botão soft, chip, pílula). Existe
      para que nenhum componente escreva hex próprio: o hover é token. */
-  --brand-bg-hover: #ede9e3;
+  --brand-bg-hover: var(--gd-bg-hover);
 
   /* Aliases sun históricos. Em `.il-platform` apontam para warning semântico;
      superfícies decorativas amarelas não fazem parte do contrato ativo. */
-  --sun: #f7c948;
-  --sun-strong: #e0a800;
-  --sun-bg: #fff7e0;
-  --sun-bg-strong: #ffefc2;
-  --sun-border: #f0e0b0;
-  --sun-fg: #7a5800;
+  --sun: var(--gd-warning);
+  --sun-strong: var(--gd-warning-strong);
+  --sun-bg: var(--gd-warning-soft);
+  --sun-bg-strong: var(--gd-warning-soft-hover);
+  --sun-border: var(--gd-warning-border);
+  --sun-fg: var(--gd-warning-fg);
   /* Nomes legados (consumidos por ui.tsx e telas) → apontam para a marca.
      Uma futura identidade por negócio só precisa REATRIBUIR estes valores. */
   --action: var(--brand);
@@ -83,70 +81,70 @@
   --action-soft-border: var(--brand-border);
   /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
      tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
-  --accent: #2563eb;
-  --accent-fg: #1d4ed8;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --accent-border: #bfdbfe;
-  --accent-contrast: #ffffff;
+  --accent: var(--gd-accent);
+  --accent-fg: var(--gd-accent-fg);
+  --accent-hover: var(--gd-accent-hover);
+  --accent-soft: var(--gd-accent-soft);
+  --accent-border: var(--gd-accent-border);
+  --accent-contrast: var(--gd-accent-contrast);
 
   /* ── Estado ─────────────────────────────────────────────────── */
-  --success: #0f9f6e;
-  --success-strong: #0b7d55;
-  --success-bg: #e6f7ef;
-  --success-bg-hover: #d7f2e6;
-  --success-border: #b6e4cf;
-  --success-fg: #0a6a48;
+  --success: var(--gd-success);
+  --success-strong: var(--gd-success-strong);
+  --success-bg: var(--gd-success-soft);
+  --success-bg-hover: var(--gd-success-soft-hover);
+  --success-border: var(--gd-success-border);
+  --success-fg: var(--gd-success-fg);
 
-  --info: #0e86b4;
-  --info-strong: #0a6b91;
-  --info-bg: #e6f5fb;
-  --info-border: #b8e2f1;
-  --info-fg: #0a5d7e;
+  --info: var(--gd-info);
+  --info-strong: var(--gd-info-strong);
+  --info-bg: var(--gd-info-soft);
+  --info-border: var(--gd-info-border);
+  --info-fg: var(--gd-info-fg);
 
   /* ── Atenção (âmbar quente: perceptível sem ser gritante) ───── */
-  --warning: #d9860b;
-  --warning-strong: #b06b06;
-  --warning-bg: #fff4e0;
-  --warning-border: #ffd691;
-  --warning-fg: #7d4c00;
+  --warning: var(--gd-warning);
+  --warning-strong: var(--gd-warning-strong);
+  --warning-bg: var(--gd-warning-soft);
+  --warning-border: var(--gd-warning-border);
+  --warning-fg: var(--gd-warning-fg);
 
-  --attention: #8a5300;
-  --attention-bg: #fff4e0;
-  --attention-bg-hover: #ffe9c4;
-  --attention-border: #ffc978;
-  --attention-fg: #7d4c00;
-  --attention-mark: #ffb020;
+  --attention: var(--gd-warning-fg);
+  --attention-bg: var(--gd-warning-soft);
+  --attention-bg-hover: var(--gd-warning-soft-hover);
+  --attention-border: var(--gd-warning-border);
+  --attention-fg: var(--gd-warning-fg);
+  --attention-mark: var(--gd-warning);
   /* Texto sobre a marca âmbar: escuro o bastante para contraste AA. */
-  --attention-mark-fg: #5c3800;
+  --attention-mark-fg: var(--gd-warning-fg);
 
   /* ── Destrutivo ─────────────────────────────────────────────── */
-  --danger: #dc3b45;
-  --danger-strong: #b52530;
-  --danger-bg: #fdedef;
-  --danger-border: #f6c8cd;
-  --danger-fg: #a51f29;
+  --danger: var(--gd-danger);
+  --danger-strong: var(--gd-danger-strong);
+  --danger-bg: var(--gd-danger-soft);
+  --danger-border: var(--gd-danger-border);
+  --danger-fg: var(--gd-danger-fg);
 
   /* ── Apoio (lilás leve) ─────────────────────────────────────── */
-  --lilac: #7a5cd0;
-  --lilac-strong: #5f43ad;
-  --lilac-bg: #f2edfd;
-  --lilac-bg-hover: #e9e0fc;
-  --lilac-border: #dbccf7;
-  --lilac-fg: #54358f;
+  --lilac: var(--gd-info);
+  --lilac-strong: var(--gd-info-strong);
+  --lilac-bg: var(--gd-info-soft);
+  --lilac-bg-hover: var(--gd-info-soft);
+  --lilac-border: var(--gd-info-border);
+  --lilac-fg: var(--gd-info-fg);
 
   /* ── Apoio (teal leve) ──────────────────────────────────────── */
   /* A3.3 CONVERGÊNCIA (ponto 8): acento de contexto das PESSOAS (Clientes,
      Funil). Mesmo formato das outras famílias — só acento de ícone/detalhe,
      nunca bloco saturado. */
-  --teal: #0e9488;
-  --teal-strong: #0b7369;
-  --teal-bg: #e7f6f4;
-  --teal-border: #bfe4df;
-  --teal-fg: #0b6660;
+  --teal: var(--gd-info);
+  --teal-strong: var(--gd-info-strong);
+  --teal-bg: var(--gd-info-soft);
+  --teal-border: var(--gd-info-border);
+  --teal-fg: var(--gd-info-fg);
 
   /* Véu de modal/drawer: token único em vez de hex + opacidade avulsos. */
-  --overlay: rgba(13, 17, 34, 0.45);
+  --overlay: var(--gd-overlay);
 
   /* A3.4 — teto de altura da RAIL LATERAL da fila (Agenda). O valor exato é
      medido em runtime e sobrescrito inline no próprio `<aside>` (topo do
@@ -158,52 +156,52 @@
      permitido como texto, overlay e superfície de CÓDIGO (snippets de
      integração, chave de API). Centralizado aqui para não virar um zinc-900
      solto dentro de componente. */
-  --code-bg: #16181d;
-  --code-fg: #e6e8ee;
+  --code-bg: var(--gd-code-bg);
+  --code-fg: var(--gd-code-fg);
 
   /* ── Raio ───────────────────────────────────────────────────── */
   /* Missão 6 — radius CONTROLADO: menos bolha, mais produto profissional.
      Encaixes especiais (busca, chips, botão +) continuam pill; popovers e
      sheets usam xl/2xl moderados. */
-  --radius-xs: 5px;
-  --radius-sm: 7px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --radius-pill: 999px;
+  --radius-xs: var(--gd-radius-xs);
+  --radius-sm: var(--gd-radius-sm);
+  --radius-md: var(--gd-radius-md);
+  --radius-lg: var(--gd-radius-lg);
+  --radius-xl: var(--gd-radius-xl);
+  --radius-2xl: var(--gd-radius-2xl);
+  --radius-pill: var(--gd-radius-pill);
 
   /* ── Sombra (camadas suaves, nunca dura) ────────────────────── */
-  --shadow-xs: 0 1px 2px rgba(19, 26, 54, 0.05);
-  --shadow-sm: 0 1px 2px rgba(19, 26, 54, 0.05), 0 2px 6px -2px rgba(19, 26, 54, 0.06);
-  --shadow-md: 0 2px 6px -2px rgba(19, 26, 54, 0.08), 0 8px 20px -10px rgba(19, 26, 54, 0.12);
-  --shadow-lg: 0 6px 14px -6px rgba(19, 26, 54, 0.12), 0 20px 40px -20px rgba(19, 26, 54, 0.22);
-  --shadow-xl: 0 12px 24px -10px rgba(19, 26, 54, 0.16), 0 32px 64px -28px rgba(19, 26, 54, 0.30);
+  --shadow-xs: var(--gd-shadow-xs);
+  --shadow-sm: var(--gd-shadow-sm);
+  --shadow-md: var(--gd-shadow-md);
+  --shadow-lg: var(--gd-shadow-lg);
+  --shadow-xl: var(--gd-shadow-lg);
   --shadow-brand: 0 6px 16px -8px rgba(26, 23, 21, 0.50);
-  --shadow-inset: inset 0 1px 2px rgba(19, 26, 54, 0.06);
+  --shadow-inset: none;
 
   /* ── Espaçamento (escala do sistema; Tailwind continua valendo) ─ */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
+  --space-1: var(--gd-space-1);
+  --space-2: var(--gd-space-2);
+  --space-3: var(--gd-space-3);
+  --space-4: var(--gd-space-4);
+  --space-5: var(--gd-space-5);
+  --space-6: var(--gd-space-6);
+  --space-8: var(--gd-space-8);
+  --space-10: var(--gd-space-10);
 
   /* ── Foco visível ───────────────────────────────────────────── */
-  --focus-ring: 0 0 0 3px var(--brand-ring);
+  --focus-ring: var(--gd-focus-ring);
 
   /* ── MOTION (linguagem única — §15) ──────────────────────────────
    * Um sistema clínico é calmo: 180–220ms, uma curva só, sem bounce e sem
    * spring. Todo popover/accordion/segmented control/hover que anima usa
    * ESTES tokens — nenhum componente inventa a própria duração.
    * `prefers-reduced-motion` zera tudo no final do arquivo. */
-  --motion-fast: 180ms;
-  --motion-base: 200ms;
-  --motion-slow: 220ms;
-  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-fast: var(--gd-motion-fast);
+  --motion-base: var(--gd-motion-base);
+  --motion-slow: var(--gd-motion-slow);
+  --ease-standard: var(--gd-ease);
 
   /* ── Navegação do painel ───────────────────────────────────────
    * A3.3 CONVERGÊNCIA: estes são os ÚNICOS tokens de aparência da navegação e
@@ -220,16 +218,16 @@
    * sem migração destrutiva) — apenas não é mais aplicado ao painel.
    * Os derivadores legados seguem em lib/appearance.ts para sanitizar dado
    * antigo, não como feature ativa. */
-  --il-nav: #071a33;
-  --il-nav-fg: #f8fafc;
-  --il-nav-muted: #9aaec8;
-  --il-nav-icon: #9aaec8;
-  --il-nav-hover: #102d52;
-  --il-nav-active: #123b68;
-  --il-nav-active-fg: #93c5fd;
-  --il-nav-border: rgba(255, 255, 255, 0.12);
-  --il-nav-cta: #93c5fd;
-  --il-nav-cta-fg: #071a33;
+  --il-nav: var(--gd-nav-bg);
+  --il-nav-fg: var(--gd-nav-fg);
+  --il-nav-muted: var(--gd-nav-muted);
+  --il-nav-icon: var(--gd-nav-icon);
+  --il-nav-hover: var(--gd-nav-hover);
+  --il-nav-active: var(--gd-nav-active-bg);
+  --il-nav-active-fg: var(--gd-nav-active-fg);
+  --il-nav-border: var(--gd-nav-border);
+  --il-nav-cta: var(--gd-nav-cta);
+  --il-nav-cta-fg: var(--gd-accent-contrast);
 }
 
 html { scroll-behavior: smooth; }
@@ -518,9 +516,11 @@ body {
   border-radius: 9999px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
-  background: linear-gradient(140deg, #4d86f5, #7a5cd0);
-  box-shadow: var(--shadow-sm);
+  color: var(--gd-accent-fg);
+  /* DS 1.0 · §1 — sem gradiente decorativo: o avatar-placeholder usa o acento
+     suave tokenizado (mesma família de cor do resto do sistema). */
+  background: var(--gd-accent-soft);
+  box-shadow: var(--gd-shadow-xs);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -655,9 +655,9 @@ input[type='color'] { @apply cursor-pointer; }
   color-scheme: light;
 
   /* Geometria e tokens próprios do workspace autenticado. */
-  --topbar-h: 62px;
-  --sidebar-w: 256px;
-  --sidebar-w-mini: 68px;
+  --topbar-h: var(--gd-topbar-h);
+  --sidebar-w: var(--gd-sidebar-w);
+  --sidebar-w-mini: var(--gd-rail-w);
   --sheet-gap: 14px;
   --sheet-w: min(1160px, calc((100vw - var(--sheet-left, 0px)) * 0.74));
   /* Borda esquerda disponível para o Workspace Sheet. O shell sobrescreve em
@@ -667,10 +667,10 @@ input[type='color'] { @apply cursor-pointer; }
   --content-max: 960px;
 
   /* ── Altura de controle (mata a inconsistência de inputs/botões) ─ */
-  --control-h: 40px;
-  --control-h-sm: 34px;
-  --control-h-xs: 28px;
-  --control-h-touch: 44px;
+  --control-h: var(--gd-control-h);
+  --control-h-sm: var(--gd-control-h-sm);
+  --control-h-xs: var(--gd-control-h-xs);
+  --control-h-touch: var(--gd-control-h-touch);
 
   /* Identidade GoDoutor fica separada dos tokens estruturais abaixo. */
   --brand-600: #4f46e5;
@@ -681,23 +681,23 @@ input[type='color'] { @apply cursor-pointer; }
   --brand-50: #eef2ff;
 
   /* MISSÃO 5 — escala INK do workspace (near-black quente). */
-  --text-primary: #1c1815;
-  --text-secondary: #3d3833;
-  --text-muted: #524c46;
+  --text-primary: var(--gd-text);
+  --text-secondary: var(--gd-text-secondary);
+  --text-muted: var(--gd-text-muted);
   /* `--text-soft`/`--text-faint` são os degraus MAIS CLAROS que ainda passam
      AA (≥4.5:1) sobre a superfície mais escura usada como fundo (--surface-hover
      #f1f5f9). Antes o "#94a3b8" parecia elegante e reprovava em contraste. */
-  --text-soft: #665f59;
-  --text-faint: #6f6862;
+  --text-soft: var(--gd-text-soft);
+  --text-faint: var(--gd-text-faint);
 
-  --surface-base: #ffffff;
-  --surface-subtle: #f8fafc;
-  --surface-hover: #f1f5f9;
-  --border-base: #e2e8f0;
+  --surface-base: var(--gd-bg-surface);
+  --surface-subtle: var(--gd-bg-subtle);
+  --surface-hover: var(--gd-bg-hover);
+  --border-base: var(--gd-border);
   /* `--border-strong` é a borda de CONTROLE (input/select/botão secundário) e
      por isso precisa de 3:1 — é o tom mais claro possível que ainda cumpre. */
-  --border-strong-base: #7d8ca3;
-  --border-soft-base: #eef2f6;
+  --border-strong-base: var(--gd-border-strong);
+  --border-soft-base: var(--gd-border-soft);
   --border-2-base: #dbe3ec;
   --bg-base: #f8fafc;
   --bg-tint-base: #f1f5f9;
@@ -707,34 +707,34 @@ input[type='color'] { @apply cursor-pointer; }
   --text-faint-base: #5b6b80;
 
   /* Apelidos que o restante do produto consome (páginas, componentes, auth). */
-  --surface: var(--surface-base);
-  --surface-2: var(--surface-subtle);
-  --surface-3: var(--surface-hover);
-  --border: var(--border-base);
-  --border-soft: var(--border-soft-base);
-  --border-strong: var(--border-strong-base);
-  --border-2: var(--border-2-base);
+  --surface: var(--gd-bg-surface);
+  --surface-2: var(--gd-bg-surface-2);
+  --surface-3: var(--gd-bg-inset);
+  --border: var(--gd-border);
+  --border-soft: var(--gd-border-soft);
+  --border-strong: var(--gd-border-strong);
+  --border-2: var(--gd-border-2);
 
   /* Fundo estrutural sólido e neutro. Presets não o sobrescrevem. */
-  --bg: var(--bg-base);
-  --bg-tint: var(--bg-tint-base);
+  --bg: var(--gd-bg-app);
+  --bg-tint: var(--gd-bg-subtle);
   --bg-gradient: none;
   --agenda-unavailable: var(--surface-hover);
 
   /* ── Texto (apelidos → nomes canônicos) ─────────────────────── */
-  --text: var(--text-primary);
-  --text-strong: var(--text-strong-base);
-  --text-soft: var(--text-soft-base);
+  --text: var(--gd-text);
+  --text-strong: var(--gd-text-strong);
+  --text-soft: var(--gd-text-soft);
 
   /* Ponte legada de ação → tema. Tokens semânticos ficam fora desta ponte. */
   --brand: #2563eb;
   --brand-strong: #1d4ed8;
-  --brand-soft: #eff6ff;
-  --brand-softer: #f8fbff;
-  --brand-border: #bfdbfe;
-  --brand-fg: #1d4ed8;
-  --brand-ring: rgba(37, 99, 235, 0.28);
-  --brand-bg-hover: #dbeafe;
+  --brand-soft: var(--gd-bg-subtle);
+  --brand-softer: var(--gd-bg-surface-2);
+  --brand-border: var(--gd-border);
+  --brand-fg: var(--gd-text);
+  --brand-ring: color-mix(in srgb, var(--gd-accent) 30%, transparent);
+  --brand-bg-hover: var(--gd-bg-hover);
   --ops: var(--brand);
   --ops-soft: var(--brand-soft);
   --ops-fg: var(--brand-fg);
@@ -767,24 +767,24 @@ input[type='color'] { @apply cursor-pointer; }
 
   /* Compatibilidade visual temporária: tons históricos de estado/contexto
      convergem para neutro ou info; status real usa tokens semânticos. */
-  --lilac: var(--info);
-  --lilac-strong: var(--info-strong);
-  --lilac-bg: var(--info-bg);
-  --lilac-bg-hover: color-mix(in srgb, var(--info) 12%, white);
-  --lilac-border: var(--info-border);
-  --lilac-fg: var(--info-fg);
+  --lilac: var(--gd-info);
+  --lilac-strong: var(--gd-info-strong);
+  --lilac-bg: var(--gd-info-soft);
+  --lilac-bg-hover: var(--gd-info-soft);
+  --lilac-border: var(--gd-info-border);
+  --lilac-fg: var(--gd-info-fg);
 
-  --teal: var(--info);
-  --teal-strong: var(--info-strong);
-  --teal-bg: var(--info-bg);
-  --teal-border: var(--info-border);
-  --teal-fg: var(--info-fg);
-  --sun: var(--warning);
-  --sun-strong: var(--warning-strong);
-  --sun-bg: var(--warning-bg);
-  --sun-bg-strong: var(--warning-bg-hover);
-  --sun-border: var(--warning-border);
-  --sun-fg: var(--warning-fg);
+  --teal: var(--gd-info);
+  --teal-strong: var(--gd-info-strong);
+  --teal-bg: var(--gd-info-soft);
+  --teal-border: var(--gd-info-border);
+  --teal-fg: var(--gd-info-fg);
+  --sun: var(--gd-warning);
+  --sun-strong: var(--gd-warning-strong);
+  --sun-bg: var(--gd-warning-soft);
+  --sun-bg-strong: var(--gd-warning-soft-hover);
+  --sun-border: var(--gd-warning-border);
+  --sun-fg: var(--gd-warning-fg);
 
   /* ── Nomes legados de ação → apontam para a marca ────────────── */
   --action: var(--brand);
@@ -794,53 +794,53 @@ input[type='color'] { @apply cursor-pointer; }
   --action-soft-border: var(--brand-border);
   /* Default de identidade Deep Blue. A preferência pessoal salva aplica os
      tokens de accent/nav no shell; estrutura e semânticas permanecem fixas. */
-  --accent: #2563eb;
-  --accent-fg: #1d4ed8;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --accent-border: #bfdbfe;
-  --accent-contrast: #ffffff;
+  --accent: var(--gd-accent);
+  --accent-fg: var(--gd-accent-fg);
+  --accent-hover: var(--gd-accent-hover);
+  --accent-soft: var(--gd-accent-soft);
+  --accent-border: var(--gd-accent-border);
+  --accent-contrast: var(--gd-accent-contrast);
 
   /* ── VERDE DE ESTADO · concluído/confirmado ──────────────────── */
-  --success: #15803d;
-  --success-strong: #166534;
-  --success-bg: #f0fdf4;
-  --success-bg-hover: #dcfce7;
-  --success-border: #bbf7d0;
-  --success-fg: #166534;
+  --success: var(--gd-success);
+  --success-strong: var(--gd-success-strong);
+  --success-bg: var(--gd-success-soft);
+  --success-bg-hover: var(--gd-success-soft-hover);
+  --success-border: var(--gd-success-border);
+  --success-fg: var(--gd-success-fg);
 
   /* ── INFO · sinônimo semântico de comunicação ────────────────── */
-  --info: #2563eb;
-  --info-strong: #1d4ed8;
-  --info-bg: #eff6ff;
-  --info-border: #bfdbfe;
-  --info-fg: #1d4ed8;
+  --info: var(--gd-info);
+  --info-strong: var(--gd-info-strong);
+  --info-bg: var(--gd-info-soft);
+  --info-border: var(--gd-info-border);
+  --info-fg: var(--gd-info-fg);
 
   /* ── LARANJA · atenção operacional ───────────────────────────── */
-  --warning: #b45309;
-  --warning-strong: #92400e;  /* laranja atenção: AA com branco (badge do sino) */
-  --warning-bg: #fffbeb;
+  --warning: var(--gd-warning);
+  --warning-strong: var(--gd-warning-strong);  /* laranja atenção: AA com branco (badge do sino) */
+  --warning-bg: var(--gd-warning-soft);
   --warning-bg-hover: #fef3c7;
-  --warning-border: #fde68a;
-  --warning-fg: #92400e;
-  --attention: var(--warning-fg);
-  --attention-bg: var(--warning-bg);
-  --attention-bg-hover: var(--warning-bg-hover);
-  --attention-border: var(--warning-border);
-  --attention-fg: var(--warning-fg);
-  --attention-mark: #f59e0b;
-  --attention-mark-fg: #78350f;
+  --warning-border: var(--gd-warning-border);
+  --warning-fg: var(--gd-warning-fg);
+  --attention: var(--gd-warning-fg);
+  --attention-bg: var(--gd-warning-soft);
+  --attention-bg-hover: var(--gd-warning-soft-hover);
+  --attention-border: var(--gd-warning-border);
+  --attention-fg: var(--gd-warning-fg);
+  --attention-mark: var(--gd-warning);
+  --attention-mark-fg: var(--gd-warning-fg);
   /* Laranja com contraste ≥ 3:1 sobre branco: é o tom usado em ÍCONE/rail de
      "atenção" (Tarefas). O `--warning` puro continua sendo a cor de estado. */
   --orange-deep: #b45309;
 
   /* ── CORAL/VERMELHO · perigo, cancelamento ───────────────────── */
-  --danger: #dc2626;
-  --danger-strong: #b91c1c;
-  --danger-bg: #fef2f2;
+  --danger: var(--gd-danger);
+  --danger-strong: var(--gd-danger-strong);
+  --danger-bg: var(--gd-danger-soft);
   --danger-bg-hover: #fee2e2;
-  --danger-border: #fecaca;
-  --danger-fg: #b91c1c;
+  --danger-border: var(--gd-danger-border);
+  --danger-fg: var(--gd-danger-fg);
 
   /* Linha do horário atual na Agenda: coral, fina, com bolinha na origem.
      Token dedicado para a Agenda nunca hardcodar hex. */
@@ -848,48 +848,48 @@ input[type='color'] { @apply cursor-pointer; }
   --now-dot: #ef4444;
 
   /* ── Véu de modal/sheet ──────────────────────────────────────── */
-  --overlay: rgba(13, 18, 32, 0.42);
+  --overlay: var(--gd-overlay);
   --sheet-backdrop: rgba(13, 18, 32, 0.22);
 
   /* ── Raio (escala única; nada de raio avulso por tela) ────────── */
-  --radius-xs: 4px;
-  --radius-sm: 6px;    /* controles e ações */
-  --radius-md: 8px;    /* agrupamentos e overlays */
-  --radius-lg: 8px;
-  --radius-xl: 8px;
-  --radius-2xl: 8px;
-  --radius-pill: 999px;
+  --radius-xs: var(--gd-radius-xs);
+  --radius-sm: var(--gd-radius-sm);    /* controles e ações */
+  --radius-md: var(--gd-radius-md);    /* agrupamentos e overlays */
+  --radius-lg: var(--gd-radius-lg);
+  --radius-xl: var(--gd-radius-xl);
+  --radius-2xl: var(--gd-radius-2xl);
+  --radius-pill: var(--gd-radius-pill);
 
   /* ── Sombra (o painel é plano; sombra só cria profundidade real) ─
      Cartão normal: praticamente sem sombra. Popover/modal: sombra maior
      porque há empilhamento de camadas de verdade. */
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
-  --shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
-  --shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.18), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
+  --shadow-xs: var(--gd-shadow-xs);
+  --shadow-sm: var(--gd-shadow-sm);
+  --shadow-md: var(--gd-shadow-md);
+  --shadow-lg: var(--gd-shadow-lg);
+  --shadow-xl: var(--gd-shadow-lg);
   --shadow-brand: none;
-  --shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-inset: none;
   /* Sombra do Workspace Sheet: a mais alta do sistema (camada flutuante). */
   --shadow-sheet: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
 
   /* ── Foco visível ────────────────────────────────────────────── */
-  --focus-ring: 0 0 0 3px var(--brand-ring);
-  --focus-outline: 2px solid var(--accent);
+  --focus-ring: var(--gd-focus-ring);
+  --focus-outline: var(--gd-focus-outline);
 
   /* ── Navegação do painel ─────────────────────────────────────── */
   /* Sidebar — default Deep Blue; preferência válida sobrepõe estes tokens
      inline sem alterar estrutural, semânticas ou geometria. */
-  --il-nav: #071a33;
-  --il-nav-fg: #f8fafc;
-  --il-nav-muted: #9aaec8;
-  --il-nav-icon: #9aaec8;
-  --il-nav-hover: #102d52;
-  --il-nav-active: #123b68;
-  --il-nav-active-fg: #93c5fd;
-  --il-nav-border: rgba(255, 255, 255, 0.12);
-  --il-nav-cta: #93c5fd;
-  --il-nav-cta-fg: #071a33;
+  --il-nav: var(--gd-nav-bg);
+  --il-nav-fg: var(--gd-nav-fg);
+  --il-nav-muted: var(--gd-nav-muted);
+  --il-nav-icon: var(--gd-nav-icon);
+  --il-nav-hover: var(--gd-nav-hover);
+  --il-nav-active: var(--gd-nav-active-bg);
+  --il-nav-active-fg: var(--gd-nav-active-fg);
+  --il-nav-border: var(--gd-nav-border);
+  --il-nav-cta: var(--gd-nav-cta);
+  --il-nav-cta-fg: var(--gd-accent-contrast);
 
   color: var(--text);
 }
@@ -901,16 +901,18 @@ input[type='color'] { @apply cursor-pointer; }
 .workspace-shell {
   --brand: var(--accent);
   --brand-strong: var(--accent-hover);
-  --brand-soft: var(--accent-soft);
-  --brand-border: var(--accent-border);
-  /* fg universal for soft surfaces/icons/text links; solid CTAs use accent-contrast. */
+  --brand-soft: var(--gd-bg-subtle);
+  --brand-border: var(--gd-border);
+  /* Acento como TEXTO (ícone/texto sobre superfície suave): usa o fg do
+     acento, calculado para AA sobre o soft. CTAs sólidos usam
+     `--accent-contrast` (par do fundo cheio). */
   --brand-fg: var(--accent-fg);
-  --brand-ring: color-mix(in srgb, var(--accent) 30%, transparent);
-  --brand-bg-hover: color-mix(in srgb, var(--accent) 12%, white);
-  --focus-ring: 0 0 0 3px var(--brand-ring);
-  --focus-outline: 2px solid var(--accent);
-  --il-nav-cta: var(--il-nav-active-fg);
-  --workspace-bg: var(--bg);
+  --brand-ring: color-mix(in srgb, var(--gd-accent) 30%, transparent);
+  --brand-bg-hover: var(--gd-bg-hover);
+  --focus-ring: var(--gd-focus-ring);
+  --focus-outline: var(--gd-focus-outline);
+  --il-nav-cta: var(--gd-nav-cta);
+  --workspace-bg: var(--gd-bg-app);
   --bg-gradient: none;
 }
 
@@ -1140,16 +1142,29 @@ dialog.il-drawer .il-actionbar {
 /* ═══════════════════════════════════════════════════════════════
    APP SHELL — topbar, navegação por seções e conteúdo contextual
    ═══════════════════════════════════════════════════════════════
+   DS 1.0 · §12 — a TOP BAR ocupa 100% da largura, começa em x=0 e fica ACIMA
+   da sidebar; a sidebar começa ABAIXO dela. Estrutura:
+
+       ┌──────────────────────────────────────┐
+       │               TOP BAR                │
+       ├──────┬───────────────────────────────┤
+       │ RAIL │            CONTEÚDO           │
+       └──────┴───────────────────────────────┘
+
+   Implementação: o shell é um flex que QUEBRA linha — a topbar ocupa a
+   primeira linha inteira (`order: -1`, `flex-basis: 100%`), a navegação e o
+   conteúdo ficam na segunda. Nenhuma largura é calculada à mão.
    Geometria por token. O Workspace Sheet mede sua borda inicial no shell para
-   respeitar a sidebar/topbar sem alterar o comportamento já homologado. */
-.workspace-shell { display: flex; align-items: stretch; }
+   respeitar a navegação sem alterar o comportamento já homologado. */
+.workspace-shell { display: flex; flex-wrap: wrap; align-items: stretch; align-content: flex-start; }
+.workspace-shell > .ws-topbar { flex: 0 0 100%; width: 100%; order: -1; }
 /* Fundo de workspace: sólido, neutro e único para todas as rotas. O token
    não acompanha o tema; a grade interna da Agenda preserva seu próprio
    tratamento de estado, sem tingir o fundo externo. */
 /* `--workspace-bg` é aplicado pelo DashboardShell; telas autenticadas herdam
    o mesmo fundo e não definem background externo próprio. */
 :root {
-  --workspace-bg: var(--bg);
+  --workspace-bg: var(--gd-bg-app);
 }
 .il-platform.workspace-shell {
   background: var(--workspace-bg);
@@ -1161,12 +1176,10 @@ dialog.il-drawer .il-actionbar {
    clip` recorta sem criar contexto de rolagem (o sticky da topbar segue
    vivo). Fora daqui o layout permanece limpo — nada de arredondar tudo. */
 .workspace-main-col {
-  flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh;
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+  min-height: calc(100dvh - var(--gd-topbar-h));
   overflow: clip;
-  /* Encaixe estratégico na PARTE DE BAIXO da junção sidebar/workspace
-     (acabamento no canto inferior — o arredondamento de cima estava errado). */
-  border-bottom-left-radius: var(--radius-xl);
-  /* Fundo transparente para herdar a superfície neutra sólida do shell. */
+  /* DS 1.0 · §10 — sem canto decorativo: a divisa é a borda da sidebar. */
   background: transparent;
 }
 .workspace-content { min-width: 0; flex: 1; }
@@ -1552,8 +1565,10 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 /* ── Sidebar principal ──────────────────────────────────────── */
 .il-platform .workspace-sidebar {
   display: none; flex-direction: column; flex-shrink: 0;
-  position: sticky; top: 0;
-  width: var(--sidebar-w); height: 100dvh;
+  /* DS 1.0 · §12/§13 — sidebar BRANCA (estrutura fixa), presa abaixo da
+     top bar full-width; nunca projeta sombra sobre o conteúdo. */
+  position: sticky; top: var(--gd-topbar-h);
+  width: var(--sidebar-w); height: calc(100dvh - var(--gd-topbar-h));
   background: var(--il-nav);
   /* Separação sidebar × workspace SEM sombra projetada: só borda 1px sutil
      + a diferença natural de fundo (refino final — nenhuma shadow na divisa). */
@@ -1567,7 +1582,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-collapse-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: var(--radius-md); border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-md); border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
@@ -1678,7 +1693,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .ws-setup-mini {
   margin: 0 10px 10px; padding: 12px;
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--surface-3); border: 1px solid var(--border);
 }
 
 /* ── Cabeçalho da sidebar: a CLÍNICA é a identidade principal ──────
@@ -1693,8 +1708,8 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 .workspace-foot__item--collapse { color: var(--il-nav-muted); }
 .workspace-clinic-head__logo {
   width: 34px; height: 34px; border-radius: var(--radius-md);
-  object-fit: cover; flex-shrink: 0; background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  object-fit: cover; flex-shrink: 0; background: var(--surface-3);
+  border: 1px solid var(--border);
 }
 .workspace-clinic-head__mark {
   width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
@@ -1757,7 +1772,7 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 .workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
-  color: rgba(255, 255, 255, 0.55); letter-spacing: .01em;
+  color: var(--text-faint); letter-spacing: .01em;
 }
 .workspace-foot__brand strong { font-weight: 700; color: var(--il-nav-fg); }
 .is-collapsed .workspace-foot__item { justify-content: center; padding: 0; }
@@ -1775,34 +1790,21 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
    mesma curva do sistema. Missão 6: o conteúdo expandido abre DENTRO de um
    bloco premium (superfície interna encaixada, com recuo e borda suave) —
    decisão explícita do usuário, que reverte o "nunca um card" da FASE D. */
-.workspace-submenu {
-  display: grid; grid-template-rows: 0fr;
-  transition: grid-template-rows 200ms var(--ease-standard);
-}
-.workspace-group.is-open > .workspace-submenu { grid-template-rows: 1fr; }
-.workspace-submenu__clip {
-  overflow: hidden; min-height: 0;
-  opacity: 0; transform: translateY(-4px);
-  transition: opacity 200ms var(--ease-standard), transform 200ms var(--ease-standard);
-}
-.workspace-group.is-open > .workspace-submenu > .workspace-submenu__clip { opacity: 1; transform: none; }
-/* Missão 6 — o submenu é um painel INTERNO encaixado na sidebar: leve
-   fundo, borda e radius moderado (o "card" que a FASE D proibia). */
-.workspace-submenu__guide {
-  display: flex; flex-direction: column; gap: 3px;
-  margin: 3px 0 8px; padding: 6px;
-  background: var(--il-nav-hover);
-  border: 1px solid var(--il-nav-border);
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
+/* §18 — o ACORDEÃO que empurrava os filhos dentro da coluna foi REMOVIDO:
+   grupo abre o painel lateral (.ws-peek). Sobra só o recuo dos itens que o
+   drawer móvel mostra sob o rótulo do grupo. */
 .workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }
 .workspace-link--sub:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
-.workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); }
+.workspace-link--sub[aria-current='page'] { background: var(--il-nav-active); color: var(--il-nav-active-fg); }
 .workspace-link--sub .workspace-link__icon { width: 22px; height: 22px; }
-/* Missão §7/§8 — no rail recolhido o submenu NÃO existe inline: o clique no
-   ícone do grupo expande a sidebar e abre o grupo. */
-.is-collapsed .workspace-submenu { display: none; }
+/* Rótulo do grupo no drawer móvel (toque não tem hover: o grupo mostra os
+   filhos direto, sob um rótulo discreto). */
+.workspace-nav-drawer__title {
+  margin: var(--gd-space-3) 0 var(--gd-space-1); padding: 0 var(--gd-space-2);
+  font-size: var(--gd-font-size-metadata); font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-muted);
+}
+.workspace-nav-drawer__title:first-child { margin-top: var(--gd-space-1); }
 
 /* ── Aparência do sistema (missões 6–7) ─────────────────────────
    Personalização de cor da sidebar: presets SEGUROS escolhidos em
@@ -1827,32 +1829,42 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
    180–220ms), recolhe 250–300ms após o mouseleave (o delay vive no JS —
    lib/sidebar-peek.ts). Nunca altera o estado recolhido/expandido. */
 .ws-peek {
-  position: fixed; z-index: 90;
-  left: calc(var(--sidebar-w-mini, 72px) + 10px);
-  min-width: 210px; max-width: 260px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  position: fixed; z-index: var(--gd-z-nav-panel);
+  left: calc(var(--gd-rail-w) + var(--gd-space-1));
+  top: var(--gd-topbar-h);
+  min-width: var(--gd-nav-panel-w); max-width: 260px;
+  padding: var(--gd-space-2);
+  background: var(--gd-nav-panel-bg);
+  border: 1px solid var(--gd-nav-border);
   border-radius: var(--radius-md);
-  /* Flyout premium: ZERO sombra — separação só por borda 1px + contraste
-     do fundo sólido (contrato do refino final de consistência). */
+  /* Sem sombra projetada: a separação é borda 1px + contraste de superfície
+     (contrato do refino final mantido — §15 não pede elevação). Nada de
+     "caixa flutuante" com sombra. */
   box-shadow: none;
-  animation: ws-peek-in 200ms ease-out;
+  /* ALTURA ÚTIL: o painel começa abaixo da top bar e nunca passa da tela. */
+  max-height: calc(100dvh - var(--gd-topbar-h) - var(--gd-space-3));
+  overflow-y: auto;
+  animation: ws-peek-in var(--gd-motion-slow) var(--gd-ease);
 }
+/* Sidebar EXPANDIDA (pin): o painel nasce na borda dela — mesma altura, mesmo
+   contrato; nenhuma largura é medida no DOM. */
+.ws-peek--wide { left: calc(var(--gd-sidebar-w) + var(--gd-space-1)); }
 .ws-peek__title {
-  margin: 0 0 6px; padding: 2px 8px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-faint);
+  margin: 0 0 var(--gd-space-2); padding: var(--gd-space-1) var(--gd-space-2);
+  font-size: var(--gd-font-size-metadata); font-weight: var(--gd-weight-semibold);
+  letter-spacing: 0; text-transform: none;
+  color: var(--gd-text-muted);
 }
 .ws-peek__items { display: flex; flex-direction: column; gap: 2px; }
 .ws-peek__item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 9px; border-radius: var(--radius-sm);
-  font-size: 12.5px; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: var(--gd-space-2);
+  padding: 7px var(--gd-space-2); border-radius: var(--radius-sm);
+  font-size: var(--gd-font-size-secondary); font-weight: var(--gd-weight-medium); color: var(--gd-text);
   text-decoration: none;
-  transition: background-color 120ms ease;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease);
 }
-.ws-peek__item:hover { background: var(--surface-3); }
+.ws-peek__item:hover { background: var(--gd-nav-hover); }
+.ws-peek__item[aria-current='page'] { background: var(--gd-nav-active-bg); color: var(--gd-nav-active-fg); font-weight: var(--gd-weight-semibold); }
 @keyframes ws-peek-in {
   from { opacity: 0; transform: translateX(-6px); }
   to { opacity: 1; transform: none; }
@@ -1870,6 +1882,11 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 @media (max-width: 1199px) {
   .workspace-link { min-height: var(--control-h-touch); }
   .ws-crumbs__group { display: none; }
+  /* DS 1.0 · §12 — sem a sidebar (abaixo de 1200px) a coluna principal precisa
+     de base 100% para NÃO dividir a linha com a topbar full-width: com
+     `flex-basis: 0` o flexbox a acomodava na mesma linha (sobra zero) e a
+     página nascia com largura 0. Aqui ela passa a ocupar a própria linha. */
+  .workspace-shell > .workspace-main-col { flex: 1 1 100%; }
 }
 @media (max-width: 1023px) {
   .ws-account__trigger { padding: 4px; }
@@ -2082,6 +2099,15 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    Somente em telas pequenas (<768px) o fluxo natural do documento volta a
    existir (mobile: Lista/Dia com rolagem própria do layout). */
 .ag-page { display: flex; flex-direction: column; min-width: 0; }
+/* DS 1.0 · §5/§10 — LISTA de atendimentos: superfície contínua com fios de
+   1px (nada de um card por atendimento), alvo de toque confortável e hover
+   neutro do sistema. */
+.ag-list { display: flex; flex-direction: column; gap: 0; background: var(--gd-bg-surface); border: 1px solid var(--gd-border); border-radius: var(--gd-radius-md); overflow: hidden; }
+.ag-list__hint { padding: var(--gd-space-3); font-size: var(--gd-font-size-secondary); color: var(--gd-text-muted); border-bottom: 1px solid var(--gd-border-soft); }
+.ag-list__empty { padding: var(--gd-space-6); }
+.ag-list__row { min-height: 64px; padding: var(--gd-space-3) var(--gd-space-4); border-bottom: 1px solid var(--gd-border-soft); background: transparent; color: var(--gd-text); transition: background-color var(--gd-motion-fast) var(--gd-ease); }
+.ag-list__row:last-child { border-bottom: 0; }
+.ag-list__row:hover { background: var(--gd-bg-hover); }
 .ag-page > * { min-width: 0; }
 .ag-free-range:hover {
   background: var(--surface-hover);
@@ -2464,28 +2490,13 @@ dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; 
    Padrão único de TODO WorkspaceSheet (sem linguinha/aba externa).
    Circular, fundo suave, vermelho acolhedor (não agressivo), X legível,
    alvo ≥34px; hover reforça; tooltip "Fechar"; ESC também fecha. */
-.ws-sheet__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--border));
-  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
-  color: color-mix(in srgb, var(--danger) 75%, var(--text));
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
+/* DS 1.0 · §4 — o fechar do sheet é o CloseButton CANÔNICO (neutro).
+   A regra antiga era um "X vermelho" (danger 75% no ícone) e foi REMOVIDA:
+   fechar não é destrutivo e não pode competir com a ação de perigo real. */
+.ws-sheet__close { flex-shrink: 0; }
 .ws-sheet__close:hover {
-  background: color-mix(in srgb, var(--danger) 20%, var(--surface));
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
-  color: var(--danger-fg, var(--danger));
-}
-.ws-sheet__close:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
+  background: var(--gd-bg-hover);
+  color: var(--gd-text);
 }
 
 .ws-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }

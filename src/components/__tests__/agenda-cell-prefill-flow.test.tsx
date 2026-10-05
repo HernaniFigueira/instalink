@@ -13,9 +13,16 @@
 // Aqui o fluxo é o REAL e o catálogo é o REAL:
 //   AgendaPage (Dia, colunas por profissional)
 //     → click numa coordenada vertical conhecida (rect medido)
-//     → GridColumn → minuteFromOffsetY → newBookingSeedFromAgendaCell
-//     → setCreating → NewBookingSheet(initial)  [PROPS ESPIADAS]
+//     → GridColumn → minuteFromOffsetY → seed do slot
+//     → QUICK CREATE (Popover canônico ancorado no ponto — DS 1.0 §5)
+//     → "Mais opções" → NewBookingSheet(initial)  [PROPS ESPIADAS]
 //     → serviço / slots / preservação
+//
+// A superfície de entrada mudou (o clique abre o popover ancorado), mas o
+// contrato provado aqui é o MESMO: nenhum booking é criado sem confirmação, a
+// intenção do slot chega inteira ao fluxo completo e nada é recalculado na
+// tela. Por isso o helper `clickEmptyCell` atravessa o popover pela ação
+// "Mais opções" — é literalmente o caminho de quem quer o fluxo completo.
 //
 // Provas exigidas:
 //   1. o seed recebido contém date + time + professionalId;
@@ -228,14 +235,34 @@ async function renderAgenda(search = `?b=${BUSINESS}&view=day&data=${DATE}`) {
   await waitFor(() => expect(document.querySelector('[data-agenda-column]')).toBeTruthy(), { timeout: 5000 });
 }
 
-/** Clique REAL numa coordenada vertical conhecida da coluna. */
-async function clickEmptyCell(professionalId: string, time: string) {
+/** Popover do quick create (camada canônica em portal). */
+const quick = () => {
+  const el = document.querySelector<HTMLElement>('[data-layer]');
+  if (!el) throw new Error('quick create não abriu');
+  return el;
+};
+const hasQuick = () => !!document.querySelector('[data-layer]');
+
+/** "Mais opções" → fluxo completo (NewBookingSheet) com o MESMO preenchimento. */
+async function moreOptions() {
+  fireEvent.click(within(quick()).getByRole('button', { name: 'Mais opções' }));
+  await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+}
+
+/**
+ * Clique REAL numa coordenada vertical conhecida da coluna.
+ * `full: true` (padrão) atravessa o quick create por "Mais opções" — os testes
+ * abaixo provam o comportamento do FLUXO COMPLETO, que continua sendo o dono da
+ * validação e da gravação. `full: false` para logo no popover ancorado.
+ */
+async function clickEmptyCell(professionalId: string, time: string, opts: { full?: boolean } = {}) {
   // Respect the grid's post-drag click suppression between independently mounted test cases.
   await new Promise(resolve => setTimeout(resolve, 510));
   const start = gridStartMinute();
   const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
-  await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+  await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
+  if (opts.full !== false) await moreOptions();
   return start;
 }
 
@@ -273,7 +300,8 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
     const [h, m] = '10:00'.split(':').map(Number);
     const y = COL_RECT_TOP + (((h * 60 + m + 7) - start) / 60) * PX_PER_HOUR;
     fireEvent.click(col, { clientX: 120, clientY: y });
-    await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
+    await moreOptions();
     expect(seed().initial.time).toBe('10:00');
   });
 
@@ -423,7 +451,10 @@ describe('5 · Semana: coluna é dia — não inventa profissional', () => {
     );
     const col = gridColumn(`[data-agenda-column-date="${DATE}"]`);
     fireEvent.click(col, { clientX: 40, clientY: clientYFor('10:30') });
-    await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
+    // A coluna de DIA não inventa profissional — a intenção chega vazia ao
+    // fluxo completo, exatamente como antes.
+    await moreOptions();
 
     expect(seed().initial.date).toBe(DATE);
     expect(seed().initial.time).toBe('10:30');
@@ -450,6 +481,11 @@ describe('Clinical UX Closure — range and block mode', () => {
   it('09:00–13:00 opens directly, carries 240, persists selection until close; duration advanced', async () => {
     await renderAgenda();
     pointerRange(ORLANDO, '09:00', '13:00');
+    // DS 1.0 · §5 — o arraste abre o quick create com a duração desenhada;
+    // o fluxo completo recebe a MESMA intenção em "Mais opções".
+    await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
+    expect(within(quick()).getByText(/Faixa do atendimento: 09:00–13:00/)).toBeTruthy();
+    await moreOptions();
     await waitFor(() => expect(seed()?.initial.selectedDurationMin).toBe(240));
     expect(seed().initial).toMatchObject({ time: '09:00', date: DATE, professionalId: ORLANDO });
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Fim').nextElementSibling?.textContent).toBe('13:00');

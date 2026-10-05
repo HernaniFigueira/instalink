@@ -8,7 +8,7 @@
 // `children` e `title`. Nenhuma tela reimplementa drawer.
 //
 // Comportamento garantido (briefing):
-//   • abre pela direita com animação de 200ms (e saída simétrica);
+//   • abre pela direita com animação de 180ms (DS 1.0 · §15; saída simétrica);
 //   • NUNCA cobre a topbar (top: --topbar-h + --sheet-gap) nem a sidebar
 //     (largura limitada por --sheet-left, medido em runtime pelo shell);
 //   • margem de --sheet-gap (14px) nas extremidades, raio e sombra elegantes;
@@ -28,8 +28,12 @@ import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from './OverlayDismissGuard';
+import { CloseButton } from '@/components/ui';
 
-const MOTION_MS = 200;
+// DS 1.0 · §15 — janela de movimento do sistema é 140–180ms (ease-out). A
+// entrada/saída do sheet vivia em 200ms; entra na janela sem virar animação
+// decorativa (o tempo de saída acompanha, e prefers-reduced-motion zera).
+const MOTION_MS = 180;
 
 const SHEET_WIDTH_PRESETS: Record<string, string> = {
   'max-w-xs': '20rem', 'max-w-sm': '24rem',
@@ -168,16 +172,14 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
                 <Icon n={minimized ? 'expand' : 'minimize'} size={16} />
               </button>
             )}
-            {/* X padrão no topo à direita — herdado por TODO WorkspaceSheet. */}
-            <button
-              type="button"
+            {/* DS 1.0 · §4 — fechar = o CloseButton CANÔNICO (neutro, um só em
+                todo o sistema). O "X vermelho" herdado por todos os sheets foi
+                eliminado: fechar não é ação destrutiva. */}
+            <CloseButton
               className="ws-sheet__close"
-              aria-label={`Fechar ${title}`}
-              title="Fechar"
+              label={`Fechar ${title}`}
               onClick={() => requestClose('close-button')}
-            >
-              <Icon n="x" size={16} />
-            </button>
+            />
           </div>
         </header>
 

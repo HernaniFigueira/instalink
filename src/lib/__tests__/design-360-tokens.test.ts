@@ -1,35 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import postcss from 'postcss';
+import { contrast } from './helpers/ds-tokens';
 
-// Evaluate actual CSS variables; no snapshots/string-matching of class names.
-const css = postcss.parse(readFileSync(resolve('src/app/globals.css'), 'utf8'));
-const tokens = new Map<string, string>();
-for (const selector of [':root', '.il-platform']) {
-  css.walkRules(selector, rule => { rule.walkDecls(/^--/, decl => { tokens.set(decl.prop, decl.value); }); });
-}
-function color(token: string, seen = new Set<string>()): string {
-  if (token.startsWith('#')) return token;
-  if (seen.has(token)) throw new Error(`Cyclic token: ${token}`);
-  seen.add(token);
-  const value = tokens.get(token);
-  if (!value) throw new Error(`Missing color: ${token}`);
-  const alias = value.match(/^var\((--[^)]+)\)$/);
-  if (alias) return color(alias[1], seen);
-  if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`Not a solid sRGB color: ${token}=${value}`);
-  return value;
-}
-function luminance(token: string): number {
-  const hex = color(token);
-  const linear = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
-  return linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
-}
-function contrast(a: string, b: string): number {
-  const pair = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (pair[0] + .05) / (pair[1] + .05);
-}
+// Avalia os tokens REAIS do DS 1.0 (fonte única: godoutor-design-system.css,
+// com os aliases de globals.css resolvidos) — nenhum snapshot de classe.
+// D1a — computed WCAG sRGB contrast of the scoped palette
 
 describe('D1a — computed WCAG sRGB contrast of the scoped palette', () => {
   for (const fg of ['--text', '--text-strong', '--text-muted', '--text-faint', '--text-soft']) {

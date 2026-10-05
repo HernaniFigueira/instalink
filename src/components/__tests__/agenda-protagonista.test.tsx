@@ -9,7 +9,9 @@
 //   5–6. quick create “+” NO TOPO (missão 6: o botão volta como ação global
 //        premium — reversão explícita do pedido do usuário);
 //   7. Dia/Semana/Lista funcionando (Mês fora da UI; lógica preservada);
-//   8. [◀] [▶] funcionando — botão “Hoje” removido;
+//   8. toolbar canônica do DS 1.0: `Hoje · [◀] data [▶]` — o “Hoje” voltou
+//      como AÇÃO (supersede o contrato da correção cirúrgica) e a data é o
+//      DatePicker canônico (fim do `<input type="date">` nativo);
 //   9. “Novo agendamento” continua abrindo o fluxo existente;
 //  10. Filtros continuam abrindo;  11. Fila continua abrindo;
 //  12. fotos reais de profissionais preservadas (Avatar src=photo);
@@ -238,20 +240,25 @@ describe('Dia/Semana/Lista e navegação [◀][▶] (correção cirúrgica)', ()
     expect(await screen.findByText('Dra. Foto Real')).toBeTruthy();
   });
 
-  it('8. [◀] [▶] funcionam — e o botão “Hoje” não existe mais', async () => {
+  it('8. toolbar `Hoje · [◀] data [▶]` — DatePicker canônico, sem input nativo', async () => {
     const user = userEvent.setup();
-    await renderAgenda();
-    // Contrato da correção: o botão “Hoje” saiu da navegação de data.
-    expect(screen.queryByRole('button', { name: 'Hoje' })).toBeNull();
+    const { container } = await renderAgenda();
     // Data de partida = o foco atual da agenda (URL da fixture).
     const before = new URLSearchParams(window.location.search).get('data')!;
-    // Próximo dia → +1; anterior → volta.
+    // Próximo dia → +1; anterior → volta (mesmas setas, mesmo motor).
     await user.click(screen.getByRole('button', { name: /Próximo dia/ }));
     await waitFor(() => expect(window.location.search).toContain(`data=${addDaysISO(before, 1)}`));
     await user.click(screen.getByRole('button', { name: /Dia anterior/ }));
     await waitFor(() => expect(window.location.search).toContain(`data=${before}`));
-    // A data/período continua visível.
-    expect(screen.getByTitle(/clique para escolher a data/)).toBeTruthy();
+    // DS 1.0 · §5 — o “Hoje” voltou como AÇÃO de uma linha.
+    await user.click(screen.getByRole('button', { name: 'Hoje' }));
+    await waitFor(() => expect(window.location.search).toContain('data='));
+    expect(screen.getByRole('button', { name: 'Hoje' }).getAttribute('aria-pressed')).toBe('true');
+    // A data é o DatePicker canônico (abre o calendário do design system) e o
+    // `<input type="date">` nativo NÃO existe mais na tela.
+    const trigger = screen.getByRole('button', { name: /^Escolher data/ });
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(container.querySelector('input[type="date"]')).toBeNull();
   });
 });
 
