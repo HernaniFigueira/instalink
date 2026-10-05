@@ -55,7 +55,24 @@ detalhe; Lista como superfície contínua com fios de 1px (não pilha de cards);
   sistema; só permanecem o `Sheet`/`Dialog` de `src/components/ui.tsx`, o widget público
   (`components/public/*`, superfície do cliente final) e um comentário.
 
-**5 · Catálogo vivo.** `/dev/design-system` (fora da navegação final, gateado em produção)
+**5 · Segunda rodada de limpezas (varredura até o fim da fila).**
+
+- **`<select>` cru: zero no produto.** Os 15 restantes em 8 arquivos (`pagina` 4,
+  `master/suporte` 2, `IntegracoesView` 2, `QueuePanel` 2, `catalog-panels` 2,
+  `configuracoes` 1, `organizacao` 1, `BusinessHours` 1) foram migrados para o `Select`
+  canônico, cada um com o rótulo certo (`Field`/`aria-label`) e sem estourar a linha em
+  que vive o controle.
+- **Responsive virou teste, não memória.** `tests/design-system/responsive-qa.mjs`
+  mede as seis superfícies principais em **1440/1366/1024/390**: rolagem horizontal do
+  documento e largura útil da coluna principal (**48/48**). O caso do Dashboard em
+  1024px — que era exceção documentada — está **limpo em todas as larguras medidas**
+  (a correção anterior da coluna do shell o resolveu) e agora é verificado a cada rodada.
+- **Achado novo corrigido no mobile:** em Oportunidades, aos 390px, a barra de ações não
+  quebrava e o CTA primário “Nova oportunidade” ficava **cortado** (medido: `right=439`
+  numa viewport de 390). A barra passou a ocupar a própria linha e a quebrar abaixo de
+  `sm`; o gate de responsive cobre o caso.
+
+**6 · Catálogo vivo.** `/dev/design-system` (fora da navegação final, gateado em produção)
 com os estados de repouso, hover, focus, disabled, loading, erro, vazio e selecionado.
 
 ## Contratos re-apontados (não enfraquecidos)
@@ -103,7 +120,8 @@ Next **production** (`next start`) + Chromium 153 headless. Screenshots em
 | `shell-qa.mjs` | topbar full-width, sidebar branca, rail, painel de grupo sem reflow, pin, 390 | **22/22** |
 | `agenda-qa.mjs` | toolbar canônica (sem `input[type=date]`), quick create ancorado sem POST, Escape, “Mais opções”, hover card, drawer, Lista no mobile | **23/23** |
 | `surfaces-qa.mjs` | fechamento clínico (ActionSection, Dialog canônico, Danger solid, sem PATCH ao abrir/fechar), estado finalizado, Oportunidades (0 `<select>` cru, filtros em uma linha, 1 primary, 3 Dialogs), Disponibilidade (Dialog, Escape) | **40/40** |
-| `audit-2-probe.mjs` | AUDIT #2 — `/configuracoes`, `/canais` (abas e sub-abas) e `/campanhas`: carregam sem erro de runtime, **zero** camada artesanal, os 5 Dialogs migrados (3× conectar, gerar chave, adicionar webhook) + campanha abrem com foco CONTIDO, fecham com Escape e o CloseButton não é vermelho; console sem erro inesperado | **18/18** |
+| `responsive-qa.mjs` | 6 superfícies × 4 larguras (1440/1366/1024/390): sem rolagem horizontal, coluna principal na largura útil (390 → `x=0 w=390`) | **48/48** |
+| `audit-2-probe.mjs` | AUDIT #2 — `/configuracoes`, `/canais` (abas e sub-abas) e `/campanhas`: carregam sem erro de runtime, **zero** camada artesanal, os 5 Dialogs migrados (3× conectar, gerar chave, adicionar webhook) + campanha abrem com foco CONTIDO, fecham com Escape e o CloseButton não é vermelho; **todo `<select>` renderizado** (inclusive o de “Tipo do recurso”, atrás da aba Agenda) é o componente canônico; console sem erro inesperado | **25/25** |
 
 Medições citadas: dialog da revisão **672px**; detalhe da oportunidade **720px**; filtros
 na mesma linha com `barHeight=74`; `artesanalOverlays() === 0` nas três superfícies;
@@ -114,7 +132,9 @@ na mesma linha com `barHeight=74`; `artesanalOverlays() === 0` nas três superf�
 - `git diff --check` — limpo.
 - `npx tsc --noEmit` — **0** erros.
 - `npm run build` — **compiled successfully** (136 páginas).
-- Suíte completa: **5 falhas / 3246 passou (3251)**, todas baseline de domínio
+- Contrato de source: `ds-sem-controle-artesanal.test.ts` — **4/4** (zero `<select>` cru,
+  zero camada artesanal, `CloseButton` neutro, zero gradiente decorativo).
+- Suíte completa: **5 falhas / 3250 passou (3255)**, todas baseline de domínio
   (`a34-instagram` 2, `automation-audit-p4` 1, `whatsapp-robustness` 1, `pipeline` 1) —
   `pipeline` é dependente de data/hora real (“Este horário já passou”). **Nenhuma
   regressão nova**; as 2 falhas de contrato do fechamento clínico foram re-apontadas para o
@@ -150,17 +170,20 @@ tinham QA (Canais & Integrações, Campanhas), com FIX:**
 
 ## Pendências declaradas (não silenciadas)
 
-1. **15 `<select>` crus em 8 arquivos** (§6 do contrato, com o motivo de cada um) — a
-   Agenda, as Oportunidades e o formulário de bloqueio já saíram da lista.
-2. **1 camada artesanal** restante fora do painel: o widget público do cliente final
-   (`components/public/*`), que não carrega a biblioteca do painel por desenho.
-3. **Overflow horizontal do dashboard em 1024px** (`.dsh-metric`): pré-existente, medido,
-   com correção planejada (`min-w-0`/`auto-fit`).
-4. `lib/appearance.ts` (tokens de nav legados) sai quando o campo legado sair do payload.
+1. **Nenhuma camada artesanal no painel** e **nenhum `<select>` cru no produto** —
+   ambas as filas foram fechadas nesta rodada. O que resta fora do sistema é só a
+   **superfície pública** (`components/public/*`), que não carrega a biblioteca do painel
+   por desenho (widget do cliente final, sem sessão).
+2. `lib/appearance.ts` (tokens de nav legados) sai quando o campo legado sair do payload.
+3. **Fora do escopo declarado desta PR** (não silenciado): o board de Oportunidades e os
+   `catalog-panels` continuam com cartões próprios — o domínio e o fluxo estão intactos e
+   a conversão visual deles é trabalho da fila seguinte, não desta fase.
 
 ## Veredito
 
-`IMPLEMENTADO / HOMOLOGADO EM BROWSER REAL / SEM MERGE`. A PR entrega o Design System 1.0
+`IMPLEMENTADO / HOMOLOGADO EM BROWSER REAL / SEM MERGE` (duas rodadas de limpeza: os
+`<select>` crus e o overflow do Dashboard saíram da lista de exceções; o painel não tem
+camada artesanal nem controle fora do sistema). A PR entrega o Design System 1.0
 com App Shell e Agenda como primeira superfície, propaga os primitives canônicos para as
 superfícies tocadas nesta rodada e **documenta** o que ainda está na fila — sem ampliar
 autoridade, sem tocar domínio e sem declarar homologação que não tenha sido renderizada.

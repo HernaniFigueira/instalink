@@ -536,7 +536,10 @@ export function EsteiraView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* DS 1.0 · §12/§26 — no celular a barra de ações ocupa a própria linha e
+            QUEBRA: sem isto o CTA primário ("Nova oportunidade") saía cortado
+            aos 390px (medido em browser real). */}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Alternar modo simples / completo — botão do DS (secondary), com a
               seleção anunciada por aria-pressed em vez de repintar de acento. */}
           <Button

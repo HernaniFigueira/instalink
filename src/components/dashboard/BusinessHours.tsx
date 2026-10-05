@@ -18,7 +18,7 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import { Avatar, Button, Dialog, HoursChips, IconButton, Notice, buttonCls } from '@/components/ui';
+import { Avatar, Button, Dialog, HoursChips, IconButton, Notice, Select, buttonCls } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { PermissionNotice } from './AccessNotice';
 import {
@@ -134,9 +134,13 @@ export function DayHoursList({ initial, onSubmit, saving, submitLabel, footer }:
                     <input type="time" value={p.start} onChange={(e) => setPeriod(i, j, { start: e.target.value })} className={inputCls} aria-label={`${label} início`} />
                     <span className="text-[var(--text-faint)] text-xs">até</span>
                     <input type="time" value={p.end} onChange={(e) => setPeriod(i, j, { end: e.target.value })} className={inputCls} aria-label={`${label} fim`} />
-                    <select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} className={inputCls} aria-label={`${label} intervalo`}>
-                      {SLOT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    {/* DS 1.0 · §6 — Select canônico, na mesma linha dos inputs de
+                        hora (largura pelo wrapper, não pelo controle). */}
+                    <span className="w-[132px]">
+                      <Select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} aria-label={`${label} intervalo`}>
+                        {SLOT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
+                    </span>
                     {days[i].length > 1 && (
                       <button type="button" onClick={() => removePeriod(i, j)} className="text-[var(--text-faint)] hover:text-[var(--danger)] px-1" aria-label={`Remover período de ${label}`}>
                         <Icon n="x" size={14} />

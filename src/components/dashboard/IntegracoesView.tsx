@@ -6,7 +6,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { ApiKey, SafeWebhookConfig, WebhookDelivery, WebhookEvent } from '@/lib/types';
 import { VALID_WEBHOOK_EVENTS } from '@/lib/types';
-import { Button, Dialog, Notice } from '@/components/ui';
+import { Button, Dialog, Field, Notice, Select } from '@/components/ui';
 
 function formatDateTime(iso: string): string {
   if (!iso) return '';
@@ -548,33 +548,23 @@ print(res.json())`}</pre>
 
             {/* Filtros para gerar código pré-selecionado */}
             <div className="grid sm:grid-cols-2 gap-3 bg-zinc-50 p-3.5 rounded-xl border border-zinc-200">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Pré-selecionar Serviço</label>
-                <select
-                  value={previewServiceId}
-                  onChange={(e) => setPreviewServiceId(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-zinc-300 bg-white"
-                >
+              <Field label="Pré-selecionar serviço">
+                <Select value={previewServiceId} onChange={(e) => setPreviewServiceId(e.target.value)} aria-label="Pré-selecionar serviço">
                   <option value="">Nenhum (cliente escolhe na tela)</option>
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Pré-selecionar Profissional</label>
-                <select
-                  value={previewProId}
-                  onChange={(e) => setPreviewProId(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-zinc-300 bg-white"
-                >
+              <Field label="Pré-selecionar profissional">
+                <Select value={previewProId} onChange={(e) => setPreviewProId(e.target.value)} aria-label="Pré-selecionar profissional">
                   <option value="">Qualquer profissional</option>
                   {pros.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
 
             {/* 1. Link Direto */}
