@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { clearToken } from '@/lib/client-auth';
+import { resetSessionMeCache } from '@/lib/session-me';
 
 const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
   { href: '/master', label: 'Visão geral', exact: true },
@@ -96,6 +98,10 @@ export default function MasterLayout({ children }: { children: React.ReactNode }
             <Link href="/login" onClick={async (e) => {
               e.preventDefault();
               try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+              // P0: logout é fronteira de identidade — nenhum resíduo desta
+              // conta (token local, contexto em cache) pode sobreviver.
+              clearToken();
+              resetSessionMeCache();
               window.location.assign('/login');
             }} className="font-bold bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg">Sair</Link>
           </div>

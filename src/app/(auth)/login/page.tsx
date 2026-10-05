@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { saveToken } from '@/lib/client-auth';
+import { resetSessionMeCache } from '@/lib/session-me';
 import { landingPathFor } from '@/lib/landing';
 import { readLastBusinessId, rememberLastBusinessId, resolveActiveBusinessId } from '@/lib/business-context';
 
@@ -42,6 +43,13 @@ function LoginForm() {
       if (!data.token) {
         throw new Error('Não recebemos a sessão do servidor. Tente novamente.');
       }
+      // FRONTEIRA DE IDENTIDADE (P0): o login cria uma identidade NOVA.
+      // Tudo que o cliente guardou da conta anterior deixa de valer AGORA:
+      //  • cache (e requisição em voo) de /api/auth/me da conta antiga;
+      //  • o token anterior é substituído pelo recém-emitido.
+      // A preferência de unidade é por usuário (business-context), então a
+      // conta nova NUNCA herda a clínica escolhida pela conta anterior.
+      resetSessionMeCache();
       saveToken(data.token);
       const me = await fetch('/api/auth/me');
       if (!me.ok) {
@@ -64,10 +72,13 @@ function LoginForm() {
         return;
       }
 
+      // A preferência de unidade é lida PARA A CONTA QUE ACABOU DE ENTRAR
+      // (me.id) — nunca a da conta que estava neste navegador antes.
+      const currentUserId = String(meData?.user?.id || '');
       const selectedId = resolveActiveBusinessId(
         params.get('b'),
         businesses,
-        readLastBusinessId(),
+        readLastBusinessId(currentUserId),
       );
 
       if (businesses.length > 1 && !selectedId) {
@@ -78,7 +89,7 @@ function LoginForm() {
 
       const primary = businesses.find((b: { id?: string }) => b.id === selectedId);
       if (primary) {
-        rememberLastBusinessId(primary.id);
+        rememberLastBusinessId(primary.id, currentUserId);
         const dest = landingPathFor({
           role: primary.role,
           permissions: primary.permissions || {},

@@ -22,7 +22,15 @@
 // (lib/panel.ts) — nunca de uma lista paralela de caminhos.
 import { routeRequiresBusiness } from './panel';
 
+// ── Preferência de unidade: POR CONTA (P0) ──────────────────────────────
+// A chave antiga era GLOBAL do navegador: a clínica escolhida por uma conta
+// decidia (quando o id também fosse acessível) a unidade de OUTRA conta no
+// mesmo navegador — um dos vetores do incidente Andrioni → Hamburguer Podrão.
+// O valor canônico agora é namespaced por usuário; a chave global sobrevive
+// apenas como compatibilidade de LEITURA para chamadores antigos que não
+// conhecem o usuário, e nunca é adotada por uma conta identificada.
 export const LAST_BUSINESS_STORAGE_KEY = 'godoutor:last-business';
+export const LAST_BUSINESS_SCOPED_PREFIX = 'godoutor:last-business:';
 
 /**
  * Id da empresa para uma rota /api/businesses/[id]/...
@@ -68,10 +76,27 @@ export function resolveActiveBusinessId(
   return list.length === 1 ? list[0].id : '';
 }
 
-/** Lê a última clínica escolhida no navegador. Nunca concede acesso por si só. */
-export function readLastBusinessId(): string {
+/** Chave da preferência de uma conta. Sem usuário → chave global (compat). */
+export function lastBusinessStorageKey(userId?: string | null): string {
+  const uid = String(userId || '').trim();
+  return uid ? `${LAST_BUSINESS_SCOPED_PREFIX}${uid}` : LAST_BUSINESS_STORAGE_KEY;
+}
+
+/**
+ * Lê a última clínica escolhida no navegador PARA ESTA CONTA. Nunca concede
+ * acesso por si só (o chamador valida contra a lista de /api/auth/me).
+ *
+ * Com `userId`: lê SOMENTE a chave da conta — a chave global (não atribuível)
+ * jamais decide o tenant de uma conta identificada. Sem `userId`: comportamento
+ * legado (chave global), para chamadores que ainda não conhecem o usuário.
+ */
+export function readLastBusinessId(userId?: string | null): string {
   if (typeof window === 'undefined') return '';
   try {
+    const uid = String(userId || '').trim();
+    if (uid) {
+      return String(window.localStorage.getItem(lastBusinessStorageKey(uid)) || '').trim();
+    }
     return String(window.localStorage.getItem(LAST_BUSINESS_STORAGE_KEY) || '').trim();
   } catch {
     return '';
@@ -79,12 +104,18 @@ export function readLastBusinessId(): string {
 }
 
 /** Persiste somente o id já validado contra /api/auth/me pelo chamador. */
-export function rememberLastBusinessId(id: string): void {
+export function rememberLastBusinessId(id: string, userId?: string | null): void {
   if (typeof window === 'undefined') return;
   try {
+    const uid = String(userId || '').trim();
+    const key = lastBusinessStorageKey(uid);
     const value = String(id || '').trim();
-    if (value) window.localStorage.setItem(LAST_BUSINESS_STORAGE_KEY, value);
-    else window.localStorage.removeItem(LAST_BUSINESS_STORAGE_KEY);
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+    // Higiene (P0): a chave global não é atribuível a ninguém; uma vez que a
+    // preferência passou a ser POR CONTA, ela não pode continuar existindo
+    // como candidata a decidir o tenant de outra conta.
+    if (uid) window.localStorage.removeItem(LAST_BUSINESS_STORAGE_KEY);
   } catch {
     // armazenamento indisponível não pode impedir login/navegação
   }

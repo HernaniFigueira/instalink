@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hasRequestCredentials, userFromRequestFromDB } from '@/lib/auth';
+import { hasRequestCredentials, requestIdentityFromDB, clearSessionOn } from '@/lib/auth';
 import { readDB } from '@/lib/db';
 import {
   accessibleBusinesses, agendaScopeFor, isMasterUser, permissionsFor, resolveAccess,
@@ -15,8 +15,11 @@ import type { BusinessAppearance } from '@/lib/types';
 export async function GET(req: NextRequest) {
   if (!hasRequestCredentials(req)) return NextResponse.json({ user: null }, { status: 401 });
   const db = await readDB();
-  const user = userFromRequestFromDB(req, db);
-  if (!user) return NextResponse.json({ user: null }, { status: 401 });
+  // P0: identidade resolvida pelo contrato único (a sessão MAIS RECENTE vence
+  // quando cookie e Bearer divergem) — nunca silenciosamente a conta anterior.
+  const identity = requestIdentityFromDB(req, db);
+  if (!identity) return NextResponse.json({ user: null }, { status: 401 });
+  const user = identity.user;
   // Sessão de suporte é resolvida sobre o mesmo snapshot da identidade: a
   // empresa em suporte precisa aparecer para o painel abrir, sem nova leitura.
   const support = isMasterUser(user) ? supportFromRequestFromDB(req, db, user.id) : null;
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest) {
     unitIds: businesses.filter((b) => b.organizationId === o.id).map((b) => b.id),
     canManage: o.ownerId === user.id || db.organizationMembers.some((m) => m.organizationId === o.id && m.userId === user.id && m.active && m.role === 'ADMIN'),
   }));
-  return NextResponse.json({
+  const res = NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, role: user.role || 'owner', photo: user.photo || '', phone: user.phone || '', title: user.title || '', conselho: user.conselho || '', professionalBio: user.professionalBio || '' },
     isMaster: isMasterUser(user),
     businesses: list,
@@ -67,5 +70,14 @@ export async function GET(req: NextRequest) {
     support: support
       ? { id: support.id, businessId: support.businessId, mode: support.mode, reason: support.reason, expiresAt: support.expiresAt }
       : null,
+    // Reconciliação (P0): havia duas credenciais válidas de contas diferentes.
+    // `staleCredential` diz ao cliente qual credencial PERDEU, para que ele a
+    // descarte (`bearer` → apaga o token local; `cookie` → o cookie já é
+    // removido abaixo). Campo aditivo, só aparece quando houve conflito.
+    ...(identity.conflict ? { staleCredential: identity.stale?.via ?? null } : {}),
   });
+  // Remove o cookie obsoleto que perdeu a disputa — o navegador não pode
+  // continuar apresentando uma identidade antiga a cada request.
+  if (identity.stale?.via === 'cookie') clearSessionOn(res);
+  return res;
 }
