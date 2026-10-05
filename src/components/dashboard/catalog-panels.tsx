@@ -16,7 +16,7 @@ import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import { apiSend } from '@/lib/api-client';
 import type { Availability, AvailabilityException, ScheduleResource, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Drawer } from '@/components/ui';
+import { Avatar, Badge, Button, Drawer, Select } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
@@ -174,11 +174,12 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
             <span className="text-[11px] text-zinc-500">Duração padrão para novos agendamentos — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
-          <select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className={input + ' mt-1'}>
+          {/* DS 1.0 · §6 — Select canônico (mesma altura/raio/foco/seta do painel). */}
+          <Select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className="mt-1" aria-label="Grupo do serviço">
             <option value="">Sem grupo (opcional)</option>
             {suggestedGroupName && <option value="__suggested">{suggestedGroupName} (sugerido)</option>}
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </Select>
           {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado automaticamente ao salvar</p>}
           <span className="text-[11px] text-zinc-500">Usado para organizar os serviços da clínica.</span></label>
 
@@ -415,10 +416,10 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
         <label className="block"><span className="text-xs font-semibold text-zinc-500">DATA</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">TIPO</span>
-          <select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1">
+          <Select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="mt-1" aria-label="Tipo de dia especial">
             <option value="closed">Fechado o dia todo</option>
             <option value="special">Horário especial</option>
-          </select></label>
+          </Select></label>
         {!closed && (
           <>
             <label className="block"><span className="text-xs font-semibold text-zinc-500">DAS</span>

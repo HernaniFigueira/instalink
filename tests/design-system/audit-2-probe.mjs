@@ -96,6 +96,42 @@ try {
     ok('AUDIT#2 · botão "Adicionar webhook" disponível na sub-aba', false, 'não encontrado');
   }
 
+  // ── Superfícies com os selects recém-migrados: em DOM RENDERIZADO, todo
+  //    `select` do painel tem de ser o componente canônico (`il-field-control`).
+  //    Onde o controle vive atrás de aba, a aba é aberta antes de medir — senão
+  //    o teste "passaria" sem ter renderizado nada.
+  async function medirSelects(route, label, openTab) {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2200);
+    if (openTab) {
+      await page.locator('[role="tab"]', { hasText: openTab }).first().click().catch(() => {});
+      await page.waitForTimeout(1800);
+    }
+    const counts = await page.evaluate(() => ({
+      total: document.querySelectorAll('select').length,
+      canonicos: document.querySelectorAll('select.il-field-control').length,
+      crus: Array.from(document.querySelectorAll('select')).filter((s) => !s.classList.contains('il-field-control'))
+        .map((s) => s.getAttribute('aria-label') || s.getAttribute('name') || '(sem rótulo)').slice(0, 3),
+    }));
+    ok(`§6 · ${label}: todo <select> renderizado é o componente canônico`,
+      counts.crus.length === 0 && counts.total === counts.canonicos,
+      `total=${counts.total} canonicos=${counts.canonicos} crus=${JSON.stringify(counts.crus)}`);
+    return counts;
+  }
+
+  const cfg = await medirSelects('/configuracoes', 'Configurações → Agenda (Salas e equipamentos)', 'Agenda');
+  ok('§6 · o Select migrado de "Tipo do recurso" renderiza de fato (evidência, não suposição)',
+    cfg.total >= 1, `selects renderizados=${cfg.total}`);
+
+  const embed = await medirSelects('/canais', 'Canais → Integrações → Agendamento externo', 'Integrações');
+  const embedCounts = await page.evaluate(() => document.querySelectorAll('select.il-field-control').length);
+  ok('§6 · os Selects migrados do widget/embed renderizam quando a aba abre',
+    embed.crus.length === 0, `total=${embed.total} canonicos=${embed.canonical ?? embedCounts}`);
+
+  await medirSelects('/organizacao', 'Organização');
+  await medirSelects('/pagina', 'Página (legado)');
+  await medirSelects('/master/suporte', 'Suporte (master)');
+
   // Campanhas → abre "Nova campanha" e confere o Dialog canônico.
   await page.goto(`${BASE}/campanhas`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);

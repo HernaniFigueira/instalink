@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ListSkeleton } from '@/components/ui';
+import { Field, ListSkeleton, Select } from '@/components/ui';
 
 interface UnitRow {
   id: string; name: string; organizationId: string; organizationName: string; slug: string;
@@ -100,25 +100,23 @@ function SuporteForm() {
       {error && <p className="mb-4 text-sm font-semibold bg-red-600 text-white rounded-xl px-4 py-3">{error}</p>}
 
       <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 max-w-xl">
-        <label className="block">
-          <span className="text-[11px] font-bold text-zinc-500">ORGANIZATION</span>
-          <select value={orgId} onChange={(e) => { setOrgId(e.target.value); setUnitId(''); }}
-            className="block w-full mt-1 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm">
+        {/* DS 1.0 · §6 — console master também usa o Select canônico (mesma
+            altura, raio, borda, foco e seta do painel). */}
+        <Field label="Organização">
+          <Select value={orgId} onChange={(e) => { setOrgId(e.target.value); setUnitId(''); }} aria-label="Organização">
             <option value="">Todas / escolher…</option>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        </label>
+          </Select>
+        </Field>
 
-        <label className="block">
-          <span className="text-[11px] font-bold text-zinc-500">UNIDADE</span>
-          <select value={unitId} onChange={(e) => setUnitId(e.target.value)}
-            className="block w-full mt-1 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm">
+        <Field label="Unidade">
+          <Select value={unitId} onChange={(e) => setUnitId(e.target.value)} aria-label="Unidade">
             <option value="">Selecione…</option>
             {unitsOfOrg.map((u) => (
               <option key={u.id} value={u.id}>{u.name} ({u.organizationName || '—'})</option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
 
         <fieldset>
           <legend className="text-[11px] font-bold text-zinc-500">MODO</legend>

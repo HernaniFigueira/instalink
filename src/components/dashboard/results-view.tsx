@@ -188,7 +188,10 @@ export function FunnelView({ funnel }: { funnel: ResultsPayload['funnel'] }) {
                   className={cn('h-full rounded-full', s.tracked ? (s.group === 'lead' ? 'bg-[var(--brand)]' : 'bg-[var(--success)]') : 'bg-[var(--border)]')}
                   style={s.tracked
                     ? { width: `${width}%` }
-                    : { width: '100%', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(0,0,0,0.08) 6px, rgba(0,0,0,0.08) 12px)' }}
+                    // Textura de ESTADO (dado ausente), não decoração: hachura
+                    // tokenizada. O rótulo "não rastreado" continua sendo o
+                    // significado — a textura é reforço, nunca a única pista.
+                    : { width: '100%', backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, var(--gd-border) 6px, var(--gd-border) 12px)' }}
                 />
               </div>
               <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{s.hint}</p>
