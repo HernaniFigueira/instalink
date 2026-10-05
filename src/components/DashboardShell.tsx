@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { loadMe } from '@/lib/session-me';
+import { loadMe, resetSessionMeCache } from '@/lib/session-me';
 import { clearToken } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
@@ -14,7 +14,10 @@ import {
 } from '@/lib/panel';
 import { isSessionExpired } from '@/lib/http';
 import type { BusinessMode, FeatureId, PermissionId } from '@/lib/types';
-import { readLastBusinessId, rememberLastBusinessId, requiresActiveBusiness, resolveActiveBusinessId } from '@/lib/business-context';
+import {
+  businessContextNeedsCanonicalization, readLastBusinessId, rememberLastBusinessId,
+  requiresActiveBusiness, resolveActiveBusinessId,
+} from '@/lib/business-context';
 import { mayLeaveEditor } from '@/components/dashboard/useUnsavedChanges';
 import { WorkspaceContext } from '@/components/dashboard/WorkspaceContext';
 import { ConversationsDock } from '@/components/dashboard/ConversationsDock';
@@ -77,7 +80,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [support, setSupport] = useState<SupportInfo | null>(null);
   const [ready, setReady] = useState(false);
   const [contextError, setContextError] = useState(false);
-  const [rememberedBusinessId, setRememberedBusinessId] = useState('');
+  // P0 — a preferência de unidade é POR CONTA: guardamos o id JUNTO com o
+  // usuário que o registrou. Numa troca de conta dentro da SPA (sem reload), a
+  // preferência da conta anterior deixa de valer imediatamente — nunca decide
+  // a unidade da conta nova.
+  const [userId, setUserId] = useState('');
+  const [remembered, setRemembered] = useState<{ userId: string; id: string }>({ userId: '', id: '' });
   const [collapsed, setCollapsed] = useState(() => {
     // Renome com migração (bloco 5 da correção): chave canônica
     // 'godoutor-side-v2'; a antiga 'il-side-v2' só é lida como fallback.
@@ -149,6 +157,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         setOrganizations(d.organizations || []);
         if (!d.businesses?.length && pathname !== '/organizacao') router.replace(`/organizacao?organization=${d.organizations![0].id}`);
         setUser(d.user || null);
+        setUserId(d.user.id);
         setBusinesses(d.businesses || []);
         setReady(true);
         lastContextAt.current = Date.now();
@@ -156,9 +165,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       .catch(() => setContextError(true));
   }, [router]);
 
+  // Preferência de unidade DA CONTA atual (reavaliada quando a identidade
+  // muda): a chave é namespaced por usuário, então a conta nova não herda a
+  // clínica escolhida pela conta anterior.
   useEffect(() => {
-    setRememberedBusinessId(readLastBusinessId());
-  }, []);
+    if (!userId) return;
+    setRemembered({ userId, id: readLastBusinessId(userId) });
+  }, [userId]);
+
+  const rememberedBusinessId = remembered.userId === userId ? remembered.id : '';
 
   useEffect(() => {
     // 401 (sessão inexistente/expirada/inválida) é o ÚNICO status que inicia
@@ -187,6 +202,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // ?b= explícito → última unidade lembrada → única unidade. Com 2+ unidades
   // sem escolha válida, abre o seletor em vez de assumir um tenant pela ordem
   // do banco (causa raiz do login Andrioni → "Hamburguer Podrão").
+  //
+  // HISTÓRICO (P0, 2026-10): aquela primeira correção fechou só a decisão de
+  // tenant pela ORDEM do array. O incidente tinha OUTROS caminhos, abertos na
+  // CAMADA DE SESSÃO e corrigidos depois: (1) cookie antigo vencendo o Bearer
+  // novo em `userFromRequestFromDB` — duas credenciais válidas de contas
+  // diferentes resolviam para a conta anterior; (2) cache module-global do
+  // `/api/auth/me` servindo o contexto da conta anterior dentro do TTL;
+  // (3) `godoutor:last-business` global, decidindo unidade entre contas. A
+  // preferência de unidade hoje é namespaced por usuário e o id guardado aqui
+  // carrega o DONO junto — troca de conta não aplica a preferência antiga.
   useEffect(() => {
     if (!ready || businesses.length === 0) return;
     const requested = params.get('b');
@@ -194,8 +219,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     if (resolved) {
       if (rememberedBusinessId !== resolved) {
-        rememberLastBusinessId(resolved);
-        setRememberedBusinessId(resolved);
+        rememberLastBusinessId(resolved, userId);
+        setRemembered({ userId, id: resolved });
       }
       if (requiresActiveBusiness(pathname) && requested !== resolved) {
         const qs = new URLSearchParams(params.toString());
@@ -208,7 +233,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (requiresActiveBusiness(pathname) && businesses.length > 1) {
       router.replace('/selecionar-clinica');
     }
-  }, [ready, businesses, rememberedBusinessId, params, pathname, router]);
+  }, [ready, businesses, rememberedBusinessId, userId, params, pathname, router]);
 
   const activePath = activePanelPath(pathname);
   const activeRoute = activePanelRoute(pathname);
@@ -248,8 +273,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (id === '__overview') { router.push(`/organizacao?organization=${business?.organizationId || ''}`); return; }
     if (id === '__add') { router.push(`/organizacao?organization=${business?.organizationId || ''}&add=1`); return; }
     // Em rota que não é de unidade (ex.: /organizacao) a troca leva ao painel.
-    rememberLastBusinessId(id);
-    setRememberedBusinessId(id);
+    rememberLastBusinessId(id, userId);
+    setRemembered({ userId, id });
     const target = routeRequiresBusiness(pathname) ? pathname : '/dashboard';
     router.push(switchUnitHref(target, new URLSearchParams(params.toString()), id));
   }
@@ -262,7 +287,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   async function logout() {
     if (!mayLeaveEditor()) return;
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+    // Fronteira de identidade (P0): encerra a credencial local E o contexto
+    // em cache — o próximo login não pode herdar nada desta conta (token,
+    // cache/in-flight de /api/auth/me, unidade ativa). A preferência de
+    // unidade fica onde está: ela é namespaced por usuário (business-context).
     clearToken();
+    resetSessionMeCache();
     window.location.assign('/login');
   }
 
@@ -293,6 +323,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
           <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
+        </div>
+        <div className="flex-1 min-w-0"><div className="px-6 lg:px-8 py-6"><PageSkeleton /></div></div>
+      </div>
+    );
+  }
+
+  // P2 — CONTEXTO DE TENANT HONESTO (a URL canônica vem antes do miolo).
+  //
+  // Um `?b=` que a conta NÃO alcança não é contexto, é lixo: o efeito acima já
+  // resolve a unidade legítima e reescreve a URL (`router.replace`), mas as
+  // TELAS de área leem o `?b=` da URL por conta própria. Se elas montassem
+  // antes da canonicalização, pediriam dados de OUTRO tenant; o servidor
+  // responderia 403 (isolamento correto) e a área exibiria "Seu perfil não
+  // possui acesso" — mensagem ERRADA, porque o papel tem acesso à área: só o
+  // id pedido não pertence à conta.
+  //
+  // Por isso o miolo não monta enquanto a URL não estiver canônica: o shell
+  // mostra o esqueleto (mesmo estado de carregamento de sempre) e a área
+  // carrega JÁ com a unidade legítima. Isto NÃO afrouxa autorização — a
+  // negação real por permissão (`panelAccess`, 403 das APIs, `?b=` alheio
+  // chamado direto na API) continua exatamente onde estava.
+  if (requiresActiveBusiness(pathname) && businessContextNeedsCanonicalization(params.get('b'), activeBusinessId)) {
+    return (
+      <div className="min-h-screen lg:flex" aria-label="Carregando painel">
+        <div className="hidden lg:flex w-[248px] shrink-0 flex-col bg-white border-r border-[var(--border)] p-3 gap-2">
+          <div className="h-9 w-32 bg-zinc-100 animate-pulse mb-2" />
+          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-7 bg-zinc-100 animate-pulse" />)}
         </div>
         <div className="flex-1 min-w-0"><div className="px-6 lg:px-8 py-6"><PageSkeleton /></div></div>
       </div>

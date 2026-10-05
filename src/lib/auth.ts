@@ -104,20 +104,163 @@ export function hasRequestCredentials(req: UserRequest): boolean {
   return !!sessionCookieId(req.cookies) || !!getBearerToken(req);
 }
 
-/**
- * Pure request authentication against a caller-owned DB snapshot. Cookie
- * precedence is preserved: a valid cookie wins, and only an invalid/missing
- * cookie falls back to Bearer, using the same snapshot in either case.
- */
-export function userFromRequestFromDB(req: UserRequest, db: Pick<DB, 'sessions' | 'users'>): User | null {
-  const viaCookie = getUserBySessionFromDB(db, sessionCookieId(req.cookies));
-  if (viaCookie) return viaCookie;
-  return getUserBySessionFromDB(db, getBearerToken(req));
+/** Linha de sessão VÁLIDA (existe, não expirou) — sem resolver o usuário. */
+export interface ValidSessionRow {
+  id: string;
+  userId: string;
+  createdAt?: string;
+  expiresAt: string;
 }
 
 /**
- * Auth unificada para API routes: tenta cookie httpOnly primeiro e,
- * se ausente/inválido, testa o Bearer token no MESMO snapshot. Requests sem
+ * Sessão válida do snapshot (existe e não expirou). `null` quando a
+ * credencial é ausente, desconhecida ou expirada — a mesma régua de
+ * `getUserBySessionFromDB`, sem resolver o usuário ainda.
+ */
+export function validSessionFromDB(
+  db: Pick<DB, 'sessions'>,
+  sessionId: string | undefined,
+): ValidSessionRow | null {
+  if (!sessionId) return null;
+  const session = db.sessions.find((s) => s.id === sessionId) as ValidSessionRow | undefined;
+  if (!session) return null;
+  if (new Date(session.expiresAt).getTime() < Date.now()) return null;
+  return session;
+}
+
+/** Quando a sessão foi emitida (ISO). Ausente/ilegível = 0 (a mais antiga). */
+function sessionIssuedAt(session: ValidSessionRow): number {
+  const at = Date.parse(String(session.createdAt || ''));
+  return Number.isFinite(at) ? at : 0;
+}
+
+/**
+ * IDENTIDADE DA REQUISIÇÃO — contrato único de sessão (P0).
+ *
+ * ── O BUG QUE ESTE CONTRATO FECHA ────────────────────────────────────────
+ * O navegador pode carregar DUAS credenciais ao mesmo tempo: o cookie
+ * httpOnly da sessão e o Bearer do localStorage (o app injeta o Bearer em
+ * toda chamada /api/*). Antes, um cookie válido venceria SEMPRE — mesmo que o
+ * Bearer válido pertencesse a outra conta. No Preview isso aconteceu de
+ * verdade: um login novo (Bearer novo) com o cookie antigo ainda aceito pelo
+ * navegador (cookie particionado/recusado no iframe) devolvia a identidade
+ * ANTERIOR — “entrei com a Andrioni e abriu o Orlando / Hamburguer Podrão”.
+ *
+ * ── REGRA (explícita, determinística, nunca silenciosa) ──────────────────
+ *   • nenhuma credencial válida            → null (401);
+ *   • só uma válida                        → ela decide;
+ *   • as duas válidas para o MESMO usuário → identidade única (sem conflito);
+ *   • as duas válidas para usuários DIFERENTES → vence a sessão ESTRITAMENTE
+ *     MAIS RECENTE (é a credencial que o humano acabou de criar; a antiga é a
+ *     que ficou para trás). Sem evidência de qual é a mais nova (mesmo
+ *     instante ou `createdAt` ausente), mantém-se a precedência anterior do
+ *     cookie — a mudança de contrato só acontece quando há evidência positiva
+ *     de frescor. Em qualquer conflito a credencial perdedora é reconciliada.
+ *
+ * A credencial perdedora é devolvida em `stale` para o chamador reconciliar o
+ * navegador (`/api/auth/me` remove o cookie perdedor) — e o login já revoga a
+ * sessão estrangeira apresentada (`revokePresentedForeignSessions`), de modo
+ * que a divergência não sobrevive ao próximo request.
+ */
+export interface RequestIdentity {
+  user: User;
+  via: 'cookie' | 'bearer' | 'cookie+bearer';
+  /** true quando cookie e Bearer apontavam para contas diferentes. */
+  conflict: boolean;
+  /** Credencial válida que PERDEU e deve ser descartada (null = não houve). */
+  stale: { sessionId: string; via: 'cookie' | 'bearer' } | null;
+}
+
+/** Identidade da requisição sobre um snapshot que o chamador já detém. */
+export function requestIdentityFromDB(
+  req: UserRequest,
+  db: Pick<DB, 'sessions' | 'users'>,
+): RequestIdentity | null {
+  const resolve = (session: ValidSessionRow | null): { session: ValidSessionRow; user: User } | null => {
+    if (!session) return null;
+    const user = db.users.find((u) => u.id === session.userId);
+    return user ? { session, user } : null;
+  };
+
+  const viaCookie = resolve(validSessionFromDB(db, sessionCookieId(req.cookies)));
+  const viaBearer = resolve(validSessionFromDB(db, getBearerToken(req)));
+
+  if (!viaCookie && !viaBearer) return null;
+  if (viaCookie && !viaBearer) return { user: viaCookie.user, via: 'cookie', conflict: false, stale: null };
+  if (viaBearer && !viaCookie) return { user: viaBearer.user, via: 'bearer', conflict: false, stale: null };
+
+  const cookie = viaCookie!;
+  const bearer = viaBearer!;
+  // Mesma conta: nada a reconciliar — a identidade é uma só.
+  if (cookie.user.id === bearer.user.id) {
+    return { user: cookie.user, via: 'cookie+bearer', conflict: false, stale: null };
+  }
+
+  // Contas diferentes: vence a sessão ESTRITAMENTE mais recente. Sem evidência
+  // (empate/data ilegível) preserva-se a precedência histórica do cookie — o
+  // login já revogou a sessão estrangeira apresentada, então a divergência não
+  // sobrevive ao próximo login.
+  const cookieNewer = sessionIssuedAt(cookie.session) >= sessionIssuedAt(bearer.session);
+  const winner = cookieNewer ? cookie : bearer;
+  const loser = cookieNewer ? bearer : cookie;
+  return {
+    user: winner.user,
+    via: cookieNewer ? 'cookie' : 'bearer',
+    conflict: true,
+    stale: { sessionId: loser.session.id, via: cookieNewer ? 'bearer' : 'cookie' },
+  };
+}
+
+/**
+ * Autenticação pura contra o snapshot do chamador. Agora SEMPRE pela
+ * identidade resolvida acima: nunca devolve silenciosamente a conta ANTERIOR
+ * quando duas credenciais válidas divergem.
+ */
+export function userFromRequestFromDB(req: UserRequest, db: Pick<DB, 'sessions' | 'users'>): User | null {
+  return requestIdentityFromDB(req, db)?.user ?? null;
+}
+
+/** Credenciais de sessão APRESENTADAS por esta requisição (cookie e Bearer). */
+export function presentedSessionIds(req: UserRequest): string[] {
+  const ids = [sessionCookieId(req.cookies), getBearerToken(req)];
+  return [...new Set(ids.filter((v): v is string => !!v && v.length > 0))];
+}
+
+/**
+ * FRONTEIRA DE IDENTIDADE (login): revoga as sessões apresentadas por este
+ * navegador que pertençam a OUTRA conta. É o que impede que o cookie da
+ * identidade anterior sobreviva — mesmo que o navegador recuse o Set-Cookie
+ * novo (iframe/partition) e continue mandando o cookie velho.
+ *
+ * Só toca o que esta requisição apresentou: sessões de outros dispositivos
+ * permanecem intactas. Login do MESMO usuário não revoga nada.
+ */
+export async function revokePresentedForeignSessions(req: UserRequest, keepUserId: string): Promise<string[]> {
+  const ids = new Set(presentedSessionIds(req));
+  if (ids.size === 0) return [];
+  const revoked = new Set<string>();
+  await updateDB((db) => {
+    db.sessions = db.sessions.filter((s) => {
+      if (ids.has(s.id) && s.userId !== keepUserId) { revoked.add(s.id); return false; }
+      return true;
+    });
+  });
+  return [...revoked];
+}
+
+/** Encerra sessões por id (logout encerra TODAS as credenciais apresentadas). */
+export async function destroySessions(sessionIds: string[]): Promise<void> {
+  const ids = new Set(sessionIds.filter((v): v is string => !!v && v.length > 0));
+  if (ids.size === 0) return;
+  await updateDB((db) => {
+    db.sessions = db.sessions.filter((s) => !ids.has(s.id));
+  });
+}
+
+/**
+ * Auth unificada para API routes sobre UM snapshot: aplica o contrato de
+ * identidade (`requestIdentityFromDB`) — cookie e Bearer válidos para contas
+ * diferentes nunca resolvem silenciosamente para a conta antiga. Requests sem
  * credenciais não consultam o documento.
  */
 export async function userFromRequest(req: UserRequest): Promise<User | null> {

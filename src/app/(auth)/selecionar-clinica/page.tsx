@@ -27,6 +27,7 @@ function destinationFor(business: ClinicChoice): string {
 
 export default function SelecionarClinicaPage() {
   const router = useRouter();
+  const [userId, setUserId] = useState('');
   const [clinics, setClinics] = useState<ClinicChoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,6 +45,9 @@ export default function SelecionarClinicaPage() {
       })
       .then((data) => {
         if (!alive || !data) return;
+        // A preferência de unidade é POR CONTA (P0): a escolha feita aqui vale
+        // só para o usuário logado — nunca para a próxima conta do navegador.
+        setUserId(String(data.user?.id || ''));
         if (data.isMaster && !data.support) {
           router.replace('/master');
           return;
@@ -54,7 +58,7 @@ export default function SelecionarClinicaPage() {
           return;
         }
         if (list.length === 1) {
-          rememberLastBusinessId(list[0].id);
+          rememberLastBusinessId(list[0].id, String(data.user?.id || ''));
           router.replace(destinationFor(list[0]));
           return;
         }
@@ -70,7 +74,7 @@ export default function SelecionarClinicaPage() {
   }, [router]);
 
   function choose(clinic: ClinicChoice) {
-    rememberLastBusinessId(clinic.id);
+    rememberLastBusinessId(clinic.id, userId);
     router.replace(destinationFor(clinic));
   }
 

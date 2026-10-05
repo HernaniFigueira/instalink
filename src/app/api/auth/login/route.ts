@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
-import { verifyPassword, createSession, setSessionOn } from '@/lib/auth';
+import { verifyPassword, createSession, setSessionOn, revokePresentedForeignSessions } from '@/lib/auth';
 import { rateLimit, ipFrom } from '@/lib/rate-limit';
 import { isMasterUser } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -16,6 +16,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'E-mail ou senha incorretos.' }, { status: 401 });
     }
     const sessionId = await createSession(user.id);
+    // FRONTEIRA DE IDENTIDADE (P0). Um login é a criação de uma identidade
+    // NOVA: se este navegador chegou apresentando uma credencial válida de
+    // OUTRA conta (o cookie antigo que o iframe continuou mandando), ela é
+    // revogada AGORA. Sem isso, o cookie velho sobreviveria ao login e
+    // continuaria sendo aceito como identidade — foi exatamente assim que
+    // "Andrioni" abriu "Hamburguer Podrão". A credencial recém-criada nunca é
+    // afetada, e login do mesmo usuário não revoga nada.
+    const revoked = await revokePresentedForeignSessions(req, user.id);
     // Último acesso (visível para o próprio usuário e para o suporte master).
     await updateDB((d) => {
       const u = d.users.find((x) => x.id === user.id);
@@ -23,7 +31,7 @@ export async function POST(req: NextRequest) {
       pushAudit(d, {
         action: 'user.login',
         actor: { id: user.id, email: user.email, role: user.role || 'owner' },
-        meta: { via: 'password' },
+        meta: revoked.length ? { via: 'password', revokedForeignSessions: revoked.length } : { via: 'password' },
       });
     });
     // Master da plataforma → /master; demais → /dashboard (mesmo endpoint).
