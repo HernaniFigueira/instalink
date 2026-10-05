@@ -11,7 +11,9 @@
 //
 // Sem I/O e sem relógio global: o servidor passa `now` e o autor.
 import { PET_SPECIES_LABELS, petAgeLabel } from './pets';
-import type { DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
+import { encounterClinicalAccess, type EncounterClinicalAccess } from './encounter-clinical';
+import { normalizeClinicType } from './encounter-sections';
+import type { ClinicType, DB, Encounter, EncounterFile, EncounterFollowUpMode, EncounterStatus } from './types';
 
 export interface EncounterStatusDef {
   id: EncounterStatus;
@@ -124,6 +126,47 @@ export const ENCOUNTER_LIMITS: Record<EncounterTextField, number> = {
 export const ENCOUNTER_TAGS_MAX = 8;
 export const ENCOUNTER_TAG_LEN = 40;
 
+/** Retorno ESTRUTURADO (FASE 2 · P3) — trio gravado em conjunto no registro. */
+export const ENCOUNTER_STRUCTURED_FOLLOW_UP_FIELDS = ['followUpMode', 'followUpDate', 'followUpDays'] as const;
+
+/**
+ * F1B1 · P1 — CAMPOS DE CONTEÚDO do registro em andamento (AUTORIDADE ÚNICA).
+ *
+ * Tudo o que é CONTEÚDO do atendimento — texto clínico, etiquetas, retorno
+ * estruturado, arquivos e o dado clínico da visita — está listado AQUI e em
+ * mais nenhum lugar. O PATCH faz UMA pergunta com esta lista ("esta chamada
+ * escreve conteúdo?") e, se sim, exige o PROFISSIONAL RESPONSÁVEL antes de
+ * aplicar qualquer um destes campos. Papel administrativo (Owner/Admin sem
+ * vínculo) lê e opera, mas não escreve conteúdo: `disabled` na tela não é
+ * segurança, e um PATCH direto não pode achar um caminho lateral.
+ *
+ * Regra de manutenção: campo novo de conteúdo ENTRA nesta lista. O servidor
+ * só grava o que está aqui — o teste de cobertura desta entrega trava isso.
+ */
+export const ENCOUNTER_CONTENT_FIELDS = [
+  ...ENCOUNTER_TEXT_FIELDS,
+  'tags',
+  ...ENCOUNTER_STRUCTURED_FOLLOW_UP_FIELDS,
+  'files',
+  'clinical',
+] as const;
+export type EncounterContentField = typeof ENCOUNTER_CONTENT_FIELDS[number];
+
+/**
+ * "Este PATCH modifica CONTEÚDO do Encounter?" — a única pergunta de autoria
+ * de conteúdo do servidor (F1B1 · P1).
+ *
+ * Metadados de transporte (`id`, `businessId`, `expectedVersion`) NÃO são
+ * conteúdo. Transições de estado (`action:'finalize'|'reopen'`) também não
+ * entram aqui: têm contrato próprio/legado e continuam com as suas regras —
+ * esta função é sobre EDIÇÃO DE CONTEÚDO, e só sobre isso.
+ */
+export function writesEncounterContent(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const payload = body as Record<string, unknown>;
+  return ENCOUNTER_CONTENT_FIELDS.some((field) => payload[field] !== undefined);
+}
+
 /**
  * F1A · INVARIANTE CLÍNICA — todo atendimento tem um PROFISSIONAL RESPONSÁVEL
  * concreto do tenant. Sem ele o atendimento NÃO começa: o registro clínico não
@@ -132,13 +175,23 @@ export const ENCOUNTER_TAG_LEN = 40;
  */
 export const ENCOUNTER_PROFESSIONAL_REQUIRED_ERROR = 'Defina o profissional responsável antes de iniciar o atendimento.';
 
-/** Rótulos humanos — usados na tela, na impressão e nos testes. */
+/**
+ * Rótulos humanos — usados na tela, na impressão e nos testes.
+ *
+ * F1B1 · COPY CLÍNICA (decisão de produto, sem tocar storage): os campos
+ * FÍSICOS continuam `complaint`/`evolution`/`guidance`/`followUp`/`internalNote`
+ * — nenhuma migration por nomenclatura. O que mudou foi só o que a tela diz:
+ * "Queixa principal", "Evolução clínica", "Orientações ao tutor", "Retorno" e
+ * "Nota interna" (esta última deixando claro que não sai na via do tutor).
+ * A via impressa e o EncounterSheet legado continuam com o texto antigo onde
+ * ele já era o contrato.
+ */
 export const ENCOUNTER_LABELS: Record<EncounterTextField, string> = {
-  complaint: 'O que o cliente procurou',
-  evolution: 'O que foi feito',
-  guidance: 'Orientações para o cliente',
-  followUp: 'Retorno sugerido',
-  internalNote: 'Anotação interna (não sai na via do cliente)',
+  complaint: 'Queixa principal',
+  evolution: 'Evolução clínica',
+  guidance: 'Orientações ao tutor',
+  followUp: 'Retorno',
+  internalNote: 'Nota interna',
 };
 
 /** Higieniza o texto: espaços normalizados e teto por campo. */
@@ -531,7 +584,14 @@ export function encounterInScope(e: Pick<Encounter, 'professionalId'>, professio
  * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
  * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
  */
-export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
+export function encounterView(
+  e: Encounter,
+  db: DB,
+  /** Ator autenticado (opcional): quando vem, a leitura também diz o que ele
+   *  PODE editar — o `disabled` da tela passa a espelhar o servidor em vez de
+   *  adivinhar. Sem ator, a leitura é somente leitura (`access: null`). */
+  actor?: { id: string; role: string } | null,
+): EncounterWorkspaceView {
   const pro = db.professionals.find((p) => p.id === e.professionalId);
   const svc = db.services.find((s) => s.id === e.serviceId);
   const booking = e.bookingId ? db.bookings.find((b) => b.id === e.bookingId && b.businessId === e.businessId) : undefined;
@@ -540,6 +600,7 @@ export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
     ? db.contacts.find((c) => c.id === e.contactId && c.businessId === e.businessId)
     : undefined;
   const pet = e.petId ? (db.pets || []).find((x) => x.id === e.petId && x.businessId === e.businessId) : undefined;
+  const business = (db.businesses || []).find((item) => item.id === e.businessId);
   return {
     ...e,
     professionalName: pro?.name || '',
@@ -579,6 +640,14 @@ export function encounterView(e: Encounter, db: DB): EncounterWorkspaceView {
       booking: booking ? { id: booking.id, date: booking.date, time: booking.time, status: booking.status } : null,
       queue: queue ? { id: queue.id, date: queue.date } : null,
     },
+    // F1B1 — capacidades + MÓDULOS da vertical resolvidos no SERVIDOR (vínculo
+    // real do profissional responsável + `Business.clinicType`). É o que a tela
+    // usa para montar a navegação e habilitar cada seção; a imposição continua
+    // no PATCH, nunca aqui.
+    clinicType: normalizeClinicType(business?.clinicType),
+    access: actor
+      ? encounterClinicalAccess(db, e, actor.id, actor.role)
+      : null,
   } as EncounterWorkspaceView;
 }
 
@@ -601,4 +670,8 @@ export interface EncounterWorkspaceView extends Encounter {
     booking: { id: string; date: string; time: string; status: string } | null;
     queue: { id: string; date: string } | null;
   };
+  /** Vertical da unidade (autoridade para resolver as SEÇÕES do workspace). */
+  clinicType: ClinicType;
+  /** F1B1 — o que ESTE ator pode editar (resolvido no servidor). */
+  access: EncounterClinicalAccess | null;
 }

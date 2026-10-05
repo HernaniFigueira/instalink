@@ -6,6 +6,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 
+// F1B1 — estrutura clínica do atendimento (anamnese da visita + avaliação
+// veterinária). Import TYPE-ONLY: em runtime não existe ciclo (o módulo de
+// regras importa os tipos daqui e é apagado na compilação desta linha).
+import type { EncounterClinicalData } from './encounter-clinical';
+
 export type ID = string;
 
 // Papel de PLATAFORMA (GoDoutor). 'master' = superadmin da plataforma,
@@ -852,6 +857,17 @@ export interface Encounter {
   // Arquivos do atendimento: SÓ referências/metadados — o binário fica no
   // Storage (Vercel Blob), nunca no documento. Aditivo/ausente = sem arquivos.
   files?: EncounterFile[];
+  /**
+   * F1B1 — DADO CLÍNICO OBSERVADO NESTE ATENDIMENTO (aditivo).
+   *
+   * Vive no Encounter e NÃO duplica o cadastro permanente do Pet: anamnese da
+   * visita (relatado) + avaliação veterinária (medido/examinado hoje). Dado
+   * permanente (espécie, raça, nascimento, sexo) continua em `Pet`; peso
+   * medido hoje vive AQUI. Ausente em documento anterior (normalizeDB cria a
+   * estrutura vazia — nunca copia Pet para dentro dela). A validação/merge
+   * está em `lib/encounter-clinical.ts`.
+   */
+  clinical?: EncounterClinicalData;
 }
 
 /** Como fica o acompanhamento depois deste atendimento. */

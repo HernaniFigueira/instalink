@@ -1,0 +1,279 @@
+# Clinical Encounter F1B1 — anamnese da visita, avaliação veterinária e modelo clínico estruturado
+
+**Estado (2026-10-04): IMPLEMENTADO · PATCH DE ISOLAMENTO POR VERTICAL APLICADO (revisão da PR) · PATCH DE AUTORIZAÇÃO SERVER-SIDE (P1) + AUDITORIA GRANULAR (P2) APLICADOS · AUTO-HOMOLOGADO LOCALMENTE em duas camadas — HTTP real 21/21 e **QA de browser em Chromium REAL 29/29** (1440/1280/1024/390, acessibilidade §29, console 0 erro inesperado, rede 0 resposta inesperada) · PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) ABERTA PARA REVISÃO (`MERGEABLE`) ·** **MERGE NÃO EXECUTADO.**
+
+Base `main` em `e2e2b6379ea2188524c6db8c5d050dab1cc9e5e0` (merge da PR #54, F1A, em produção com Vercel SUCCESS). Branch de sessão `arena/01a10740-instalink`. **Produção não foi usada para QA.**
+
+F1B1 fecha o recorte autorizado: **Encounter em andamento → registrar Queixa → Anamnese DA VISITA → Avaliação clínica veterinária → autosave seguro → sair/retomar → os dados clínicos continuam no MESMO Encounter**. Não é formulário gigante, não é construtor universal, não é prontuário completo: **Problemas, Conduta, Procedimentos e Anexos continuam indisponíveis** (F1B2/fase própria) e **finalização/reabertura/prescrição/exames/documentos/IA/financeiro/estoque não entraram**.
+
+---
+
+## 1. Auditoria clínica existente (§1) — EXISTE · REUTILIZAR · LEGADO · CRIAR
+
+| Conceito | Veredito | Evidência |
+| --- | --- | --- |
+| **Encounter** (`DB.encounters`, `instalink_doc`) | **EXISTE · REUTILIZAR** | multi-tenant (`businessId`), 1:1 por Booking/fila, vínculo Pet/Tutor/Professional/Service, `version` otimista, autosave e trava de saída do F1A |
+| **Queixa / evolução / orientações / retorno / nota interna** | **EXISTE · REUTILIZAR** | campos físicos `complaint · evolution · guidance · followUp · internalNote · tags`; só a **copy** mudou (§6) |
+| **AnamneseTemplate / AnamneseResponse** (motor P4) | **EXISTE · LEGADO PRESERVADO (não é o núcleo)** | `src/lib/anamnese.ts`, `src/app/api/anamnese/route.ts`, `AnamneseManager`, `AnamneseFiller`; continuam vivos na rota `/atendimento/[encounterId]/registro`, no Pet 360 e em Estrutura → Fichas |
+| **Avaliação / exame clínico / sinais vitais / peso medido / diagnóstico / problema / procedimento** | **NÃO EXISTIA como dado do atendimento** | não havia campo clínico estruturado no Encounter; o único peso do sistema era `Pet.weightKg` (cadastro permanente) |
+| **Seções do workspace** | **EXISTE (contrato do F1A) · REUTILIZAR** | `src/lib/encounter-sections.ts` já declara as seções e o `available` |
+| **Dado do Pet (espécie, raça, sexo, nascimento, peso do cadastro)** | **EXISTE · REUTILIZAR como contexto de leitura** | `DB.pets`; o workspace mostra e **não copia** |
+
+**Duplicatas evitadas:** não houve segunda entidade de atendimento, segundo motor de anamnese, segunda tabela/coleção clínica nem cópia de dado permanente do Pet para dentro do Encounter.
+
+**Decisão sobre o motor antigo (§8):** a infraestrutura antiga de persistência **não** foi transformada no núcleo do Clinical Encounter. O F1B1 **não** reaproveita `AnamneseTemplate/Response` como modelo da visita (o modelo antigo é de *fichas administrativas configuráveis*, com pergunta-resposta livre e sem versionamento otimista); ele cria o dado da visita **no próprio Encounter** (`Encounter.clinical`) e mantém o legado intacto, sem bridge implícito. Documentado e testado: a nova seção **não grava** em `anamneseResponses` e o motor legado **não grava** em `Encounter.clinical`. Nenhuma ficha antiga foi migrada nesta PR.
+
+---
+
+## 2. Modelo de dados (§11) — ADITIVO, sem DDL
+
+```
+Encounter
+  ├── (F1A) complaint · evolution · guidance · followUp · internalNote · tags
+  └── (F1B1) clinical?: {
+        anamnesis: {
+          history, diet,
+          appetite | waterIntake | urine | stool: 'not_reported' | 'usual' | 'changed',
+          vomiting | diarrhea: 'not_reported' | 'yes' | 'no',
+          medicationsReported, allergiesReported, observations,
+        },
+        assessment: {
+          veterinary: {
+            weightKg | temperatureC | heartRateBpm | respiratoryRateRpm
+            | capillaryRefillSeconds: number | null,
+            hydration, mucousMembranes, bodyCondition, physicalExam: string,
+          },
+        },
+      }
+```
+
+- **Um único source of truth:** `Encounter` continua sendo a raiz. A anamnese da visita é `Encounter.clinical.anamnesis`; a avaliação é `Encounter.clinical.assessment.veterinary` (o objeto `assessment` já nasce **por módulo** — `vet` hoje, outras verticais depois, sem reabrir o modelo).
+- **Tenant:** tudo dentro do Encounter (já `businessId`); nenhuma coleção nova, nenhuma rota nova.
+- **Versão/auditoria:** a MESMA `version` otimista do Encounter; toda gravação entra em `pushAudit` como `encounter.updated` com `meta.fields` (ex.: `clinical.anamnesis.appetite`, `clinical.assessment.veterinary.temperatureC`). Sem evento por tecla — o autosave só audita mudança real (a rota já compara antes/depois e não cria versão quando nada mudou).
+- **Professional responsável:** `Encounter.professionalId` (F1A). Não há segunda identidade clínica.
+- **Sem `Pet` duplicado:** `clinical` nunca copia species/breed/sex/birthDate; o peso do cadastro continua em `Pet.weightKg`.
+- **Normalização legada:** `normalizeDB` preenche a estrutura vazia para registros anteriores (aditivo, idempotente, sem derivar nada do Pet).
+
+**Validação no servidor (`src/lib/encounter-clinical.ts`, puro):** merge PARCIAL (só a fatia enviada), chaves desconhecidas recusadas (400), opções em lista fechada, números **finitos** com limite **técnico** (não clínico), vazio → `null`. `applyEncounterClinicalPatch` devolve `changedFields` para a auditoria. Não existe faixa clínica, alerta automático, "temperatura alta" ou diagnóstico — **o GoDoutor registra o dado; o profissional interpreta** (§9, §10).
+
+---
+
+## 3. Permanente × visita (§3)
+
+| Dado | Onde vive | Comportamento |
+| --- | --- | --- |
+| Espécie · raça · sexo · nascimento | `Pet` (cadastro) | mostrado no cabeçalho/contexto como **leitura** |
+| Peso do cadastro | `Pet.weightKg` | mostrado na Avaliação como **contexto** ("Peso do cadastro do paciente: 9.4 kg") |
+| Peso medido hoje · temperatura · FC · FR · TPC | `Encounter.clinical.assessment.veterinary` | gravado no atendimento; **não** sobrescreve o cadastro |
+| Queixa · evolução · orientações · retorno · nota interna | `Encounter` (F1A) | inalterado |
+| Alergias/medicações | `Encounter.clinical.anamnesis` ("o que foi relatado NESTA visita") | **não** escreve em `Pet.notes`; promoção a dado permanente é fluxo explícito futuro |
+
+Prova em teste: `f1b1-clinical-visit.test.ts` (§"peso medido hoje...") e QA HTTP (passo 6).
+
+---
+
+## 4. Anamnese da visita (§7)
+
+Campos mínimos aprovados, com controles claros:
+
+- **História atual / evolução do problema** (texto, 4 linhas);
+- **Alimentação** (texto);
+- **Apetite · Ingestão de água · Urina · Fezes** → `Normal · Alterado · Não informado`;
+- **Vômito · Diarreia** → `Sim · Não · Não informado`;
+- **Medicações em uso (relatadas nesta visita)** e **Alergias (relatadas nesta visita)**;
+- **Observações da anamnese**.
+
+Não há 40 perguntas, não há inferência clínica, não há cópia automática de nada. A tela diz em texto o que esses campos significam.
+
+---
+
+## 5. Avaliação clínica — pacote veterinário (§9)
+
+| Campo | Unidade | Tipo |
+| --- | --- | --- |
+| Peso | kg | número (vírgula ou ponto na digitação; **número** na persistência) |
+| Temperatura | °C | número |
+| Frequência cardíaca | bpm | número |
+| Frequência respiratória | rpm | número |
+| Tempo de preenchimento capilar | s | número |
+| Hidratação · Mucosas · Condição corporal | — | texto curto (descrição do profissional) |
+| Exame físico / achados gerais | — | texto |
+
+Limites **técnicos** (anti-lixo/overflow): peso 0…100 000; temperatura −273,15…1 000; FC/FR/TPC 0…1 000 000. Eles **não** são faixas clínicas. Texto não numérico **não é gravado**: a seção mostra o erro associado ao campo e preserva o que foi digitado (gate de validação local + validação no servidor).
+
+---
+
+## 6. Seções do workspace (§4), navegação (§5) e ISOLAMENTO POR VERTICAL
+
+**Autoridade única de módulos** (`src/lib/encounter-sections.ts`) — o `clinicType` **normalizado** do `Business` decide o que existe. Nenhuma tela, rota ou componente de seção faz `if (clinicType === 'veterinaria')`, e nada é inferido de nome, serviço, niche, slug, primeiro cadastro ou **Pet vinculado** (um registro legado de Pet numa clínica odontológica é fixture de teste justamente para provar que NÃO liga o módulo vet; ausente/inválido normaliza para `geral` = CORE somente).
+
+| `clinicType` | Módulos (`encounterModulesForClinic`) | Seções REAIS | Escrita de `clinical.*` |
+| --- | --- | --- | --- |
+| `veterinaria` | `core` + `vet` | **Atendimento · Anamnese · Avaliação** | aceita (anamnese e avaliação; exige Pet válido + responsável) |
+| `odontologica` | `core` + `odontology` | **Atendimento** | **400** — "Esta seção clínica não está disponível nesta unidade." |
+| `estetica` | `core` + `aesthetics` | **Atendimento** | **400** |
+| `medica` | `core` | **Atendimento** | **400** |
+| `geral` / ausente / inválido | `core` | **Atendimento** | **400** |
+
+| Seção | Módulo | Persistência | Vertical |
+| --- | --- | --- | --- |
+| **Atendimento** | `core` | `complaint · evolution · guidance · followUp · internalNote · tags` | todas |
+| **Anamnese** | `vet` | `clinical.anamnesis` | só veterinária |
+| **Avaliação** | `vet` | `clinical.assessment.veterinary` | só veterinária |
+| Problemas · Conduta · Procedimentos · Anexos | — | `available: false` — **não renderizadas** | F1B2/fase própria |
+
+**Vet-first:** só `veterinaria` liga o pacote veterinário. `medica/odontologica/estetica/geral` ficam **somente com o CORE** até que a abstração de paciente daquela vertical seja fechada — **não se inventa** paciente humano/odonto agora (nada de "Anamnese" genérica órfã). Isso é o oposto de esconder a seção na UI: o envio de ramo fora da vertical é recusado **no servidor**.
+
+**Ocultar módulo ≠ apagar dado.** Trocar o `clinicType` muda o que renderiza e o que o PATCH aceita; `clinical.anamnesis` e `clinical.assessment.veterinary` permanecem **byte a byte** no Encounter (leitura intacta, seção reaparece com o dado quando a vertical volta). A navegação do workspace é montada a partir de `availableEncounterSections(clinicType)`; se a seção ativa deixar de existir (vertical mudou com a tela aberta), o corpo cai para a inicial **sem** tocar no clínico.
+
+Navegação clínica contextual (`nav` do workspace, `aria-current="page"`, superfície neutra, teclado, mobile com rolagem horizontal contida). O cabeçalho continua **sticky**, com o **Pet protagonista** (nome, espécie, raça, idade) e o tutor como contexto (§17) — o header não virou ficha cadastral.
+
+---
+
+## 7. Autoridade única de persistência (§12) — o ponto arquitetural desta PR
+
+O risco do briefing era real: cada seção com autosave "ingênuo" e a sua cópia da versão produz 409 **interno** (Atendimento abre v5 → Anamnese salva v6 → Avaliação ainda manda v5). A solução implementada:
+
+```
+EncounterWorkspace (linha + versão + status + conflito)
+   └── EncounterWorkspaceBody  ← useEncounterAuthority
+         ├── Atendimento  (EncounterCoreSection com `authority`)
+         ├── Anamnese     (useClinicalSection → authority.version())
+         └── Avaliação    (useClinicalSection → authority.version())
+```
+
+- `useEncounterAuthority` (`src/components/dashboard/useEncounterAuthority.ts`) guarda a **linha atual** (`rowRef`, referência síncrona) e a **versão**; qualquer seção pergunta `version()` no instante do save e **publica** a linha confirmada (`publish`), de modo que a versão nova vale imediatamente para todas.
+- `useClinicalSection` (`src/components/dashboard/useClinicalSection.ts`) é o único autosave das seções clínicas: um request por vez, debounce, `applySaveResult` (texto novo nunca é sobrescrito pela resposta antiga), **409 → conflito do workspace**, `flush()` que só devolve `true` com persistência confirmada.
+- **Um indicador de status** (`encounter-workspace-save-state`: "Salvando… · Salvo agora · Erro ao salvar") e **um bloco de conflito** para o atendimento inteiro; "Continuar editando" / "Recarregar versão atual".
+- O `EncounterCoreSection` mantém o contrato do F1A quando usado isolado (testes e legado): sem `authority`, ele segue com a própria versão/indicador/guarda. **Nenhum segundo motor de save foi criado** — todos usam `PATCH /api/encounters`.
+- Seções **não** guardam a própria versão: proibido por construção (a versão vem da autoridade).
+
+---
+
+## 8. Dirty state entre seções, saída e autosave (§13, §19)
+
+- **Trocar de seção grava antes:** `goToSection` chama `flush()` da seção ativa; sucesso → troca; falha → **permanece** na seção, com o texto intacto e o erro visível; 409 → permanece e o conflito aparece com as duas saídas explícitas.
+- **Sair (Voltar, link do menu, Back do navegador, `beforeunload`)** passa pelo mesmo caminho: `flush` de todas as seções pendentes → só navega com persistência confirmada; falha → não navega, texto preservado e "Sair sem salvar" como escolha explícita no diálogo central. A regra do F1A (P1) continua íntegra e agora vale para as três seções.
+- Sem botão "Salvar" obrigatório em nenhuma seção; o status fica visível.
+
+---
+
+## 9. Permissões de escrita clínica (§14, §15, §16)
+
+Regra implementada no **servidor** (`encounterClinicalAccess`, usada no `PATCH` e devolvida na leitura como capacidade para a UI não mentir):
+
+| Quem | Conteúdo clínico (núcleo + anamnese + avaliação) |
+| --- | --- |
+| **Profissional responsável vinculado** (`Professional.userId === ator` **e** `Professional.id === Encounter.professionalId`) | **edita** enquanto `in_progress` |
+| **Owner/Admin sem vínculo Professional** | **não edita** (403) — papel administrativo não é identidade clínica; continua lendo/iniciando |
+| **Owner/Admin que É o profissional responsável** | edita como profissional (não como papel) |
+| **Recepção (`SECRETARIA`)** | não lê nem escreve (403) |
+| Outro profissional da mesma unidade | não vê (403) e não edita |
+| Outra unidade | 404 (nada cruza a fronteira) |
+| Registro `finalized` | leitura; edição depende da reabertura (F1C) |
+| Encounter **sem Pet válido no tenant** | **não grava dado clínico vet** (409, inclusive anamnese) — vínculo revalidado no servidor |
+| Unidade **sem o módulo** da seção (revisão) | **400** no ramo correspondente, independentemente de Pet/papel; o CORE continua editável pelo responsável |
+
+**Capacidades separadas (revisão) — não existe mais uma flag ambígua.** `encounterClinicalAccess` devolve `{ canEditCore, canEditVisitAnamnesis, canEditVeterinaryAssessment, modules, reason }`:
+
+- `canEditCore` — responsável vinculado + `status: draft` (o CORE é universal; **não** exige Pet — não se cria regra falsa de Pet para clínica humana);
+- `canEditVisitAnamnesis` / `canEditVeterinaryAssessment` — as anteriores **e** módulo `vet` ligado na vertical **e** Pet válido no tenant (só então a seção é editável; sem Pet, a UI fica coerente e o servidor responde 409);
+- `reason` distingue `editable · pet_required · pet_invalid · module_unavailable · professional_required · responsible_unavailable · finalized` — a orientação mostrada na tela não mente sobre o motivo.
+
+
+### 9.1 Gate de escrita de CONTEÚDO (patch P1) — uma definição, nenhuma exceção
+
+O gate do `PATCH` não é uma lista escrita à mão dentro da rota: existe **uma** definição de "este PATCH modifica conteúdo do Encounter", em `lib/encounters`:
+
+```ts
+ENCOUNTER_CONTENT_FIELDS = [
+  'complaint', 'evolution', 'guidance', 'followUp', 'internalNote',  // ENCOUNTER_TEXT_FIELDS
+  'tags',
+  'followUpMode', 'followUpDate', 'followUpDays',                     // retorno estruturado
+  'files',
+  'clinical',
+];
+writesEncounterContent(body) // ⇒ true se QUALQUER um deles veio no payload
+```
+
+`if (writesEncounterContent(body) && !access.canEditCore) → recusa` roda **antes** de qualquer campo ser aplicado, e só depois disso os gates específicos do módulo clínico continuam valendo (vertical → capacidades → Pet válido). Metadado de transporte (`id`, `businessId`, `expectedVersion`) não é conteúdo; **transições de estado** (`action:'finalize'`, `action:'reopen'`, `DELETE`) **não** passam por este gate — têm contrato próprio/legado e não foram tocadas nesta missão.
+
+Motivo do patch: o gate anterior olhava apenas `ENCOUNTER_TEXT_FIELDS` + `tags`, então `followUpMode`, `followUpDate`, `followUpDays` e `files` eram gravados **depois** do gate — um Owner/Admin sem vínculo Professional conseguia alterá-los por `PATCH` direto (provado: resposta `200` antes do patch). Papel administrativo **opera e lê**; conteúdo clínico só o profissional responsável escreve. Campo novo de conteúdo entra na lista (há teste de cobertura); a rota não grava nada fora dela.
+
+### 9.2 Auditoria granular (patch P2)
+
+`encounter.updated.meta.fields` registra **o que mudou de fato**, com o caminho do campo:
+
+- núcleo pelo nome físico: `["evolution", "followUpMode", "followUpDays", "files"]`;
+- clínico pelos caminhos calculados no merge (`applyEncounterClinicalPatch.changedFields`): `["clinical.anamnesis.appetite", "clinical.assessment.veterinary.temperatureC"]`;
+- misto: `["evolution", "clinical.anamnesis.appetite"]` — sem duplicata e **nunca** o rótulo coarse `"clinical"` quando há granularidade (a camada de persistência normaliza `clinical` em toda leitura, então a lista do merge é completa).
+
+Sem mudança real não há versão nova nem registro de auditoria (o autosave bate aqui com frequência); a auditoria só existe **após persistência real**, e a tentativa recusada não audita nada.
+
+Consequências documentadas (honestas): (a) um Encounter **legado sem `professionalId`** (anterior ao F1A) fica sem escrita clínica até ganhar responsável — leitura preservada; (b) o **Owner solo sem vínculo Professional** passa a precisar do vínculo para editar conteúdo clínico — é exatamente a regra pedida (e agora vale também para retorno estruturado e arquivos). **`disabled` de frontend nunca é a segurança**: o servidor impõe a regra e a UI apenas reflete a capacidade devolvida pela leitura.
+
+F1B1 **não** implementa coautoria/reassinatura: um atendimento tem um profissional responsável; colaboração fica para depois.
+
+---
+
+## 10. O que NÃO entrou (§20–§25)
+
+- Finalização/revisão/imutabilidade/nota complementar → **F1C** (nenhum botão novo de finalizar foi exposto; o workspace segue em andamento).
+- Problemas/hipóteses/diagnósticos, Conduta estruturada, Procedimentos, Anexos → **F1B2/fase própria** (seções declaradas e não renderizadas).
+- Prescrição, atestado, pedido de exame, assinatura, PDF clínico, financeiro, comanda, estoque, IA (nem botão) → fora.
+- Legado preservado: `/atendimento/[encounterId]/registro` (EncounterSheet intacto), `/api/anamnese`, `AnamneseManager`/`AnamneseFiller`, Pet 360, histórico 360 — **nada apagado, nada migrado**.
+- Sem DDL, sem migration, sem rename físico, sem big-bang.
+
+---
+
+## 11. Testes e QA (§26–§32)
+
+- **Domínio (`src/lib/__tests__/f1b1-clinical-visit.test.ts`, 26 casos):** seções reais/copy clínica · legado normaliza vazio · peso do Pet intacto · **A** sem Pet válido não grava · **B** profissional diferente não edita · **C** Owner sem vínculo não edita · **D** Recepção não edita · **E** responsável edita · **F** cross-tenant 404 · **G/H** anamnese e avaliação no mesmo `encounterId` · **I/J** versão compartilhada (versão velha = 409; versão publicada = sem 409 interno) · **K** concorrência externa = 409 real · **L** retry preserva o texto · **M** legado sem campos novos normaliza · validação (texto-como-número, limite técnico, chave desconhecida, merge parcial) · finalizado fechado · legado vivo · **isolamento por vertical (revisão):** resolução canônica de módulos/seções por `clinicType` (inclui ausente/inválido), ODONTO com CORE funcionando e módulo vet desligado **mesmo com Pet no tenant** (escrita vet = 400), GERAL sem `clinicType` = CORE somente, e **mudar a vertical preserva o clínico gravado** (leitura intacta + escrita vet recusada).
+- **Autorização server-side (`src/lib/__tests__/f1b1-clinical-visit.test.ts` + `src/lib/__tests__/f1b1-content-write-auth.test.ts`, 26 + 15 casos):** o segundo arquivo é o do patch P1/P2 e roda pela **API direta** (não pela UI): cobertura da definição única (`ENCOUNTER_CONTENT_FIELDS` = os 11 campos; transporte e `action` não ligam o gate; a rota não tem mais `writesCore`) · **Owner sem vínculo** recebe 403 em `followUpMode`/`followUpDate`/`followUpDays`/`files` (payload completo **e** campo isolado), com registro **byte-for-byte** intacto, versão intacta e nenhuma auditoria nova · **Recepção** 403 · **outro Professional da mesma unidade** 403/404 · **cross-tenant** 404 · núcleo (`complaint`/`evolution`/`internalNote`/`tags`) e `clinical` protegidos pela mesma régua · **profissional responsável grava** retorno estruturado + arquivos (versão sobe uma vez) e o Owner continua lendo · vertical continua isolando o módulo vet (odonto = 400) · **auditoria granular**: `["evolution"]`, `["followUpMode","followUpDays"]`, `["files"]`, `["clinical.anamnesis.appetite"]`, `["clinical.assessment.veterinary.temperatureC"]`, misto `["evolution","clinical.anamnesis.appetite",…]` sem duplicata e sem rótulo coarse · reenvio idêntico não audita · legado sem `clinical` normaliza na leitura e a primeira escrita real já nasce granular.
+- **Componente (`src/components/__tests__/f1b1-clinical-sections.test.tsx`, 19 casos, jsdom sobre os componentes REAIS):** rótulos/unidades/opções · payload com **número** (8,9 → 8.9) e fatia por seção · versão vinda da autoridade · 409 não apaga o texto local · texto inválido **não** é gravado (erro associado) · bloqueio de escrita desabilita e explica · **troca de seção grava antes; falha não troca; 409 mantém as duas saídas e preserva o texto** · indicador não mente com texto pendente · **vírgula e ponto são a MESMA mudança: "9,1" grava UMA vez e o "9.1" canônico do servidor não vira pendência** (regressão do achado da QA de browser) · **erro de validação não fica latched: o valor corrigido volta a gravar e o rodapé não anuncia "Erro ao salvar" sobre valor válido** · **"Sair sem salvar" + Descartar cumpre a saída (sem laço de diálogos)** · **navegação por vertical: ODONTOLÓGICA/GERAL renderizam SÓ o Atendimento (nenhuma aba de especialidade, nenhum campo vet, nenhum `clinical` no payload) e VETERINÁRIA continua com as três seções** · **CORE-only: gravar o Atendimento encerra o "Salvando…" no rodapé** (regressão do achado do patch).
+- **QA HTTP real (`tests/f1b1/http-qa.mjs`, 21/21 PASS):** servidor `next start` local + banco descartável `.cache/f1b1/qa.json` + **login real** (Michelle/Profissional, Owner, Maria/Recepção, profissional de outra unidade) + seed `scripts/seed-f1b1-qa.mjs`. Cobre: iniciar → queixa → anamnese (versão sobe uma vez) → avaliação com a versão nova (sem 409 interno) → sair → retomar (mesmo id) com TODOS os dados → peso do Pet intacto → 409 real sem sobrescrita → retry → Owner 403 → Recepção 403 → cross-tenant 404 → validações 400 → rota legada viva. **+ bypass (patch P1): Owner sem vínculo e Recepção recebem 403 em `followUpMode`/`followUpDate`/`followUpDays`/`files` (payload completo E campo isolado), com o Encounter byte-for-byte intacto, versão intacta e nenhuma auditoria nova; o profissional responsável grava os mesmos campos e a auditoria sai granular (lida do próprio banco descartável).** **+ vertical (revisão): os tenants odontológico e de estética veem `clinicType` normalizado, `canEditCore: true`, capacidades vet `false`, têm a escrita de `clinical` recusada (400, mesma mensagem do servidor), o CORE gravando de verdade e NADA de vet no registro.** **0 5xx inesperado**; 403/404/400 provocados pela própria QA, documentados.
+- **QA de browser (`tests/f1b1/qa.mjs`, EXECUTADO — 29/29 PASS):** Chromium **real** 153.0.8010.0 (Playwright 1.63) contra `next start` + banco descartável `.cache/f1b1/qa.json`. Cobre, com esperas determinísticas (nunca "estado estale"): workspace canônico com o Pet protagonista · as três seções reais · trocar de seção grava ANTES · anamnese e avaliação preenchidas · **uma digitação = UMA gravação** (o número canônico que volta do servidor não gera PATCH extra — prova o achado corrigido) · **F5 com texto pendente: prompt nativo do navegador, recusar mantém o texto, o autosave conclui e o dado fica gravado** (§13) · **menu lateral com pendência: grava e só então navega** (§13) · sair → F5 → retomar com TODOS os valores no MESMO `encounterId` · falha 500 induzida não troca de seção, mostra o erro e preserva o texto; retry grava o texto que ficou preso · 409 real de outra tela: conflito visível, texto local intacto, nada sobrescrito, saída por escolha explícita ("Recarregar versão atual") · Owner sem vínculo lê e não edita · Recepção bloqueada · cross-tenant 404 · **§29 acessibilidade: `aria-current` na seção ativa, nome acessível com UNIDADE ("Peso (kg)"), `inputmode="decimal"`, mensagem de erro associada ao campo por `aria-describedby`, Tab alcança o próximo campo e valor inválido não vai para o servidor** · **§13 sair com gravação falhando: fica na tela, explica e só sai por escolha explícita ("Sair sem salvar" → "Descartar") — e o descarte NÃO grava o texto** · **1440/1280/1024/390 sem rolagem horizontal** · console 0 erro inesperado e rede 0 resposta inesperada (as 4 falhas de recurso do console são 500/409/404 **provocados pela própria QA** e contabilizados). Ambiente: os CDNs de browser são bloqueados neste sandbox (`ECONNRESET` em `cdn.playwright.dev`; `googlechromelabs.github.io` e mirrors do apt inacessíveis), então o Chromium veio do pacote npm **`@sparticuz/chromium`** (binário + libs embutidos no tarball do registry) via `QA_EXECUTABLE_PATH` + `LD_LIBRARY_PATH`/`FONTCONFIG_PATH` locais. **PATCH (revisão) — no WORKSPACE REAL (não só na função de resolução):** login real nos tenants **odontológico** e **estético** (`odontológica`/`estética` com encontro próprio), workspace abrindo SÓ com Atendimento (zero abas de especialidade, nenhum campo vet), CORE gravando de verdade (`Salvo agora`), escrita vet pelo servidor recusada (400) e nada persistido; **§13 ADVERSARIAL:** com o atendimento aberto e preenchido, a unidade veterinária é trocada para odontológica → o módulo some, a escrita vet morre no servidor (400) e **o clínico gravado permanece intacto**; trocada para **sem `clinicType`** (com Pet vinculado, niche `pet` e serviço veterinário como ISCAS de inferência) → continua CORE somente e normaliza para `geral`; de volta a `veterinaria` → as três seções reaparecem **com o dado no lugar** (ocultar ≠ apagar). Reprodução: `node scripts/seed-f1b1-qa.mjs` → `GODOUTOR_DB_FILE=.cache/f1b1/qa.json npm run start -- -p 3111` → `QA_EXECUTABLE_PATH=<chromium> node tests/f1b1/qa.mjs`.
+- **Gates desta PR (pós-patch P1/P2):** `git diff --check` limpo · `npm run typecheck` 0 · `npm run build` OK · `npx vitest run` **3146 PASS / 4 FAIL (3150)** com as **4 falhas baseline intocadas** (3× `a34-instagram`, 1× `automation-audit-p4`) — a baseline 3123/3127 + os 8 casos do patch de vertical + os **15 casos** do patch de autorização/auditoria —, sem `skip`/`only`/`todo` e sem enfraquecer expectativa.
+
+**Contratos legados ajustados com o produto como autoridade (declarado):** (a) `a34-encounter` — as provas de concorrência/versão e a edição após reabertura passam a escrever **como o profissional responsável** (Dra. Bia), e o caso do ADMIN ganhou a asserção nova: reabrir é administrativo, **escrever conteúdo clínico exige vínculo** (403) e o responsável edita; (b) `a34-encounter-integrity` — a clínica do cenário é solo, então o **Proprietário é o profissional responsável vinculado** (fixture explícita); (c) `encounter-core-save-guard` — o rótulo do campo é a copy clínica nova (`Evolução clínica`); (d) `f1a-encounter-start-resume` — as seções reais agora são três; (e) `encounter-core-section` — a cerca estrutural passa a valer também para o corpo do workspace. **Nenhuma expectativa enfraquecida.**
+
+---
+
+## 12. Revisão independente (§30)
+
+| Risco a provar | Veredito | Evidência |
+| --- | --- | --- |
+| Dados desaparecem ao trocar de seção | **Encontrado na 2ª passagem · CORRIGIDO** | (1) a troca de seção consultava um registro PARALELO de seções e não a autoridade — a Anamnese podia ser trocada sem flush; (2) `unregisterSection` zerava o flag de "pendente", então o re-registro da seção apagava o sinal de quem estava digitando (o rodapé chegava a dizer "Salvo agora" com texto pendente). Correções: `authority.registeredSection(id)` é a única fonte da troca, o flag de pendente só é zerado no DESMONTE real, e a identidade de `onSaved` é estável. Coberto por testes nos DOIS sentidos (Atendimento→Anamnese e Anamnese→Avaliação, sucesso e falha) e pelo teste do indicador |
+| Seção usa versão antiga | **Não reproduzido** | a versão vem de `authority.version()`; teste I/J + QA HTTP passo 4 |
+| Owner escreve clínica sem ser Professional | **Não reproduzido** | 403 no servidor + teste C + QA HTTP passo 8 |
+| Recepção escreve | **Não reproduzido** | 403 (permissão + papel) + teste D + QA HTTP |
+| Profissional de outro Encounter escreve | **Não reproduzido** | escopo do profissional (403) + teste B |
+| Tenant leak | **Não reproduzido** | 404 em leitura e escrita + teste F + QA HTTP |
+| Campos permanentes do Pet duplicados | **Não reproduzido** | `clinical` só guarda o da visita; Pet intacto (teste + QA passo 6) |
+| Duas fontes de anamnese divergentes | **Não reproduzido** | uma só raiz (`Encounter.clinical`); o motor legado fica na rota antiga e não é alimentado |
+| Workspace voltou a carregar o legado | **Não reproduzido** | cerca estrutural em teste; `EncounterSheet` byte-idêntico na rota `/registro` |
+| F1B2/F1C entrou escondido | **Não reproduzido** | seções indisponíveis não renderizam; `clinical` recusa chaves desconhecidas (problemas/diagnóstico = 400) |
+| 409 sobrescreve texto | **Não reproduzido** | 409 não publica, não navega e não apaga o rascunho (teste + QA HTTP passo 9 + QA de browser) |
+| Autosave perde campo | **Não reproduzido** | merge parcial por fatia + `applySaveResult` (teste de merge + I/J) |
+| Texto pendente sumir no F5/Back | **Não reproduzido** | prompt nativo do navegador; recusar mantém o texto e o autosave conclui (QA de browser, passo 5) |
+| Indicador anunciar "Erro ao salvar" sobre valor válido | **Encontrado na 3ª passagem (browser) · CORRIGIDO** | o erro de validação de um valor inválido ficava **latched** no status do workspace (só era limpo por um save bem-sucedido) e reaparecia como "Erro ao salvar" assim que qualquer seção ficava pendente — mesmo com o rascunho já válido. Correção: `status(state, error, owner)` marca QUEM publicou o erro e `clearStatus(owner)` limpa apenas o erro daquela seção quando o rascunho volta a ser gravável (o erro de outra seção/conflito nunca é apagado por engano) |
+| "Sair sem salvar" não sair (laço de diálogos) | **Encontrado na 3ª passagem (browser) · CORRIGIDO** | com a gravação falhando, "Sair sem salvar" → "Descartar" era interceptado de novo pelo guard de navegação (os rascunhos das seções vivem em estado, não em refs como no núcleo do F1A) e a saída nunca acontecia. Correção: `allowNavigation()` no guard — a decisão HUMANA de descartar autoriza EXATAMENTE a próxima navegação (consumida no próximo evento e expirada em 250 ms) |
+| **Vazamento de módulo vet para outra vertical** | **Não reproduzido (2ª passagem, patch)** | `availableEncounterSections(clinicType)` é a única autoridade; workspace real renderizado nos tenants odontológico/estético com **zero** abas de especialidade e o PATCH recusando `clinical` (400) no servidor; teste de resolução para VET/ODONTO/MEDICA/ESTETICA/GERAL/ausente |
+| **Vertical inferida por Pet/niche/serviço/slug** | **Não reproduzido** | clínica sem `clinicType` com **Pet vinculado, niche `pet` e serviço veterinário** (iscas) continua CORE somente e o servidor normaliza para `geral`; Pet legado na clínica odontológica não liga nada |
+| **Esconder módulo apagar dado clínico** | **Não reproduzido** | trocar `clinicType` (vet → odonto → sem tipo → vet) preserva `clinical.anamnesis` e `clinical.assessment.veterinary` byte a byte, com a recusa de escrita sem sobrescrever o valor existente |
+| **Rodapé preso em "Salvando…" após gravar (CORE-only)** | **Encontrado na 2ª passagem (browser) · CORRIGIDO** | o sucesso do CORE publicava a linha mas não o estado: numa vertical cuja única superfície é o Atendimento (odonto/estética/geral) o indicador do workspace ficava "Salvando…" para sempre depois de gravar de verdade. Correção: `authority.status('saved', '', 'atendimento')` no caminho de sucesso (o `dirty` de texto mais novo, quando existe, prevalece — nunca "Salvo agora" com pendência) + teste de regressão em jsdom |
+| Gravação duplicada da mesma mudança | **Encontrado na QA de browser · CORRIGIDO** | digitar `9,1` gerava **dois** PATCH: o servidor devolve o número canônico `9.1` e o rascunho `9,1` voltava a parecer "mudança nova" (indicador piscava "Salvando…" sem nada ter mudado). Correção: `canonicalNumber()` na chave do rascunho (vírgula e ponto = a MESMA mudança; valor inválido continua sendo mudança distinta) + caso de regressão em jsdom + verificação "uma digitação = UMA gravação" na QA de browser |
+| **Bypass de escrita de conteúdo por `PATCH` direto (P1)** | **Confirmado pela revisão independente · CORRIGIDO e PROVADO** | o gate olhava só `ENCOUNTER_TEXT_FIELDS` + `tags`; `followUpMode`, `followUpDate`, `followUpDays` e `files` eram aplicados **depois** dele. Prova antes/depois com a mesma base: com a rota anterior, `PATCH {followUpMode:'interval',followUpDays:30}` como Owner sem vínculo devolveu **200**; com o patch, **403** e registro byte-for-byte intacto. Correção: definição única `ENCOUNTER_CONTENT_FIELDS`/`writesEncounterContent()` + gate antes de qualquer aplicação; 15 testes pela API direta (Owner/Recepção/outro Professional/cross-tenant + caminho legítimo do responsável) e 3 checks novos na QA HTTP real |
+| **Auditoria coarse com granularidade disponível (P2)** | **Confirmado · CORRIGIDO** | `encounter.updated.meta.fields` registrava `["clinical"]` (e `["evolution","clinical"]` no misto) mesmo com `applyEncounterClinicalPatch.changedFields` já calculado. Antes do patch a QA devolveu exatamente esses rótulos; depois, `["clinical.anamnesis.appetite","clinical.assessment.veterinary.temperatureC"]`. O rótulo coarse foi removido (não há caso em que falte granularidade: `normalizeDB` materializa `clinical` em toda leitura) e há teste que falha se `"clinical"` voltar |
+| Transições (`finalize`/`reopen`/`DELETE`) mudadas de carona | **Não reproduzido** | o gate de conteúdo é explícito sobre o que é conteúdo: `writesEncounterContent({action:'finalize'})` = `false` (testado); as transições seguem com os contratos próprios e os testes legados intactos |
+
+Limite declarado: a revisão foi **estática + automatizada + HTTP real + browser real** (29/29), incluindo a 2ª passagem adversarial com a vertical trocada em tempo real e a 3ª passagem (P1/P2) tentando bypassar o profissional responsável campo a campo pela API direta. O que **não** houve foi inspeção estética/visual humana do desenho (isso é próprio da revisão humana da PR); a QA de browser prova comportamento (DOM, eventos, autosave, `beforeunload`, navegação real), não gosto de layout.
+
+---
+
+## 13. Decisões adiadas para B2/C (explícitas)
+
+- **F1B2:** Problemas/hipóteses/diagnósticos, Conduta estruturada (plano/medicações/procedimentos), Procedimentos, Serviço → Procedure (com auditoria de estoque/financeiro), Anexos.
+- **F1C:** finalização, revisão, imutabilidade, nota complementar, reabertura, assinatura e via do cliente revisada; decidir se `canFinalize` passa a considerar o dado clínico novo.
+- **Verticais não veterinárias (decisão explícita do patch):** `medica/odontologica/estetica/geral` ficam **somente com o CORE** — Anamnese da visita e Avaliação veterinária **não** aparecem nem aceitam escrita. Motivo declarado: a abstração de paciente/tutor dessas verticais (paciente humano, odontograma, ficha estética) **não está fechada**, e "não inventar" era exigência do briefing. Módulos `odontology`/`aesthetics` já estão nomeados na autoridade de módulos para quando a especialidade tiver seção REAL (UI + persistência + leitura + autosave + permissões + testes), com dado histórico preservado desde já.
+- **Depois:** colaboração/reassinatura clínica, promoção explícita de dado da visita → cadastro permanente, integração do motor antigo de fichas com o Clinical OS (ou descontinuação planejada), especialidades (odontologia/estética) por SEÇÕES. Aqui a decisão de fila é do autor do plano; o recorte F1B1 **não** abre nenhuma delas.

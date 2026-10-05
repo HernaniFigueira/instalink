@@ -23,9 +23,19 @@ import {
   hasExpectedVersion, versionConflict,
   // FASE 2 · P3 — retorno estruturado + arquivos (aditivos).
   cleanEncounterFiles, isFollowUpMode, validateFollowUp,
+  // F1B1 · P1 — autoridade única de "este PATCH escreve conteúdo?".
+  writesEncounterContent,
 } from '@/lib/encounters';
 // F1A — operação canônica de iniciar/retomar (mesma usada por /encounters/start).
 import { startOrResumeEncounter } from '@/lib/encounter-start';
+// F1B1 — dado clínico do atendimento (anamnese da visita + avaliação vet) e a
+// autoridade de escrita clínica (servidor, nunca o `disabled` do frontend).
+import {
+  applyEncounterClinicalPatch, clinicalWriteError, encounterClinicalAccess,
+} from '@/lib/encounter-clinical';
+// Isolamento por vertical: os ramos de `clinical` que ESTA unidade aceita
+// (autoridade única em `encounter-sections`, nunca `if (clinicType === ...)`).
+import { CLINICAL_BRANCH_MODULES, clinicalBranchesForClinic, normalizeClinicType } from '@/lib/encounter-sections';
 import { applyBookingStatusTx } from '@/lib/booking-status';
 import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
@@ -76,15 +86,15 @@ export async function GET(req: NextRequest) {
     if (!encounterInScope(found, guard.ctx.professionalScope)) {
       return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
     }
-    return NextResponse.json({ ok: true, encounter: view(found, db) });
+    return NextResponse.json({ ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
   }
   if (queueId) {
     const found = encounterForQueue(scoped, businessId, queueId);
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
+    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
   }
   if (bookingId) {
     const found = scoped.find((e) => e.bookingId === bookingId) || null;
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db) : null });
+    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
   }
   if (contactId || customerId || phone) {
     // Telefone é aceito como atalho da tela, mas quem resolve é a BASE: o
@@ -92,7 +102,7 @@ export async function GET(req: NextRequest) {
     const resolvedContactId = contactId
       || (phone ? (db.contacts.find((c) => c.businessId === businessId && c.phone === onlyDigits(phone))?.id || '') : '');
     const list = encountersForCustomer(scoped, businessId, { contactId: resolvedContactId, customerId });
-    return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db)) });
+    return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
   }
   // Lista por período (agenda/relatório): `from`/`to` opcionais em YYYY-MM-DD.
   const from = String(req.nextUrl.searchParams.get('from') || '');
@@ -101,7 +111,7 @@ export async function GET(req: NextRequest) {
     .filter((e) => (!from || e.date >= from) && (!to || e.date <= to))
     .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1))
     .slice(0, 300);
-  return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db)) });
+  return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
 }
 
 /**
@@ -139,7 +149,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({
       ok: true,
-      encounter: view(result.encounter, await readDB()),
+      encounter: view(result.encounter, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }),
       // `reused` é o contrato histórico da tela (abre o que já existe).
       reused: !result.created,
       created: result.created,
@@ -261,9 +271,66 @@ export async function PATCH(req: NextRequest) {
       }
       const conflict = versionConflict(target, body.expectedVersion);
       if (conflict.conflict) throw err(conflict.message, 409);
+      // ── F1B1 · AUTORIDADE DE ESCRITA DE CONTEÚDO (servidor) ───────────────
+      // Papel administrativo não é identidade clínica: escrever CONTEÚDO do
+      // atendimento exige que o ator seja o PROFISSIONAL RESPONSÁVEL vinculado
+      // (vínculo real Professional.userId === ator). A pergunta é UMA só e usa
+      // a lista única `ENCOUNTER_CONTENT_FIELDS` (lib/encounters): texto
+      // clínico, etiquetas, retorno ESTRUTURADO (followUpMode/Date/Days),
+      // arquivos e `clinical`. Sem isso, `followUpMode`/`files` eram gravados
+      // por Owner/Admin sem vínculo (bypass P1) — o `disabled` da tela não é
+      // segurança e o PATCH direto não pode ter caminho lateral.
+      // Recepção/outros papéis não escrevem; o dado clínico da visita exige
+      // ainda o gate do próprio módulo (vertical + capacidades + Pet válido).
+      const writesEncounter = writesEncounterContent(body);
+      const clinicalObject = body.clinical !== undefined && body.clinical && typeof body.clinical === 'object'
+        && !Array.isArray(body.clinical)
+        ? body.clinical as Record<string, unknown>
+        : null;
+      const clinicalBranches = clinicalObject ? Object.keys(clinicalObject) : [];
+      const access = encounterClinicalAccess(d, target, guard.ctx.user.id, String(guard.ctx.role || ''));
+      if (writesEncounter && !access.canEditCore) {
+        const denied = clinicalWriteError(access, 'core');
+        throw err(denied.message, denied.status);
+      }
+      // ── ISOLAMENTO POR VERTICAL (defesa em profundidade) ────────────────
+      // A UI esconder a seção não é o gate: o SERVIDOR recusa escrita de um
+      // ramo clínico que a vertical da unidade não liga. Esconder módulo não
+      // apaga nada — o dado já gravado permanece legível e intocado.
+      const enabledBranches = clinicalBranchesForClinic(
+        normalizeClinicType(d.businesses.find((item) => item.id === target.businessId)?.clinicType),
+      );
+      // Só ramos CONHECIDOS passam por este gate: chave futura/desconhecida
+      // segue para a validação (400 específico), nunca é "aceita em silêncio".
+      const knownBranches = clinicalBranches.filter((branch) => branch in CLINICAL_BRANCH_MODULES);
+      const outsideVertical = knownBranches.find((branch) => !enabledBranches.includes(branch));
+      if (outsideVertical) {
+        throw err('Esta seção clínica não está disponível nesta unidade.', 400);
+      }
+      if (clinicalBranches.includes('anamnesis') && !access.canEditVisitAnamnesis) {
+        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
+      }
+      if (clinicalBranches.includes('assessment') && !access.canEditVeterinaryAssessment) {
+        throw err(clinicalWriteError(access, 'clinical').message, clinicalWriteError(access, 'clinical').status);
+      }
       const before = { ...target };
+      // Cada campo aplicado abaixo é membro de `ENCOUNTER_CONTENT_FIELDS`
+      // (autoridade única). Nada de conteúdo é gravado fora do gate acima.
       for (const field of ENCOUNTER_TEXT_FIELDS) {
         if (body[field] !== undefined) target[field] = cleanText(body[field], field);
+      }
+      // F1B1 — dado clínico da visita: MESMO Encounter, mesma versão, um
+      // único source of truth. O merge é validado campo a campo (números
+      // finitos com limite técnico, opções fechadas) e o que não veio no
+      // payload permanece exatamente como estava. `changedFields` traz os
+      // caminhos GRANULARES que mudaram de fato (ex.: `clinical.anamnesis.
+      // appetite`) e é exatamente o que vai para a auditoria.
+      let clinicalChangedFields: string[] = [];
+      if (body.clinical !== undefined) {
+        const merged = applyEncounterClinicalPatch(target.clinical, body.clinical);
+        if (!merged.ok) throw err(merged.error, 400);
+        target.clinical = merged.clinical;
+        clinicalChangedFields = merged.changedFields;
       }
       if (body.tags !== undefined) target.tags = cleanTags(body.tags);
       // FASE 2 · P3 — retorno estruturado (validado antes de gravar).
@@ -283,11 +350,23 @@ export async function PATCH(req: NextRequest) {
       }
       // FASE 2 · P3 — arquivos: só referências (o binário fica no Storage).
       if (body.files !== undefined) target.files = cleanEncounterFiles(body.files);
-      const changed = ([
+      // ── AUDITORIA GRANULAR (P2) ───────────────────────────────────────────
+      // Campos do núcleo entram pelo nome físico; o dado clínico entra pelos
+      // caminhos GRANULARES calculados no merge (clinical.anamnesis.appetite,
+      // clinical.assessment.veterinary.temperatureC) — nunca o rótulo coarse
+      // "clinical", porque a granularidade SEMPRE existe aqui: a camada de
+      // persistência materializa/normaliza `clinical` em toda leitura
+      // (normalizeDB → normalizeEncounterClinical), então o merge compara duas
+      // estruturas já normalizadas e lista exatamente o que mudou de fato.
+      const changed: string[] = ([
         'complaint', 'evolution', 'guidance', 'followUp', 'internalNote', 'tags',
         'followUpMode', 'followUpDate', 'followUpDays', 'files',
       ] as const)
-        .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]));
+        .filter((f) => JSON.stringify((before as any)[f]) !== JSON.stringify((target as any)[f]))
+        .slice();
+      for (const field of clinicalChangedFields) {
+        if (!changed.includes(field)) changed.push(field);   // sem duplicata
+      }
       if (changed.length === 0) {
         // Nada mudou: não inventa versão nova nem suja a auditoria (o autosave
         // da tela bate aqui com frequência e precisa ser barato e honesto).
@@ -309,7 +388,7 @@ export async function PATCH(req: NextRequest) {
         from: 'in_care', to: 'finalized', at: now,
       });
     }
-    return NextResponse.json({ ok: true, encounter: view(updated, await readDB()) });
+    return NextResponse.json({ ok: true, encounter: view(updated, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] PATCH falhou:', e);

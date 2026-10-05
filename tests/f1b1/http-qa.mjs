@@ -1,0 +1,385 @@
+// ═══════════════════════════════════════════════════════════════
+// Clinical Encounter F1B1 — QA HTTP REAL (servidor `next start` local,
+// banco DESCARTÁVEL, login REAL por cookie).
+// ═══════════════════════════════════════════════════════════════
+// Roda o fluxo do briefing no nível do SERVIDOR (onde a autoridade mora):
+// agenda → iniciar → Atendimento → Anamnese → Avaliação → sair → retomar →
+// permissões (Profissional responsável / Owner sem vínculo / Recepção /
+// outro tenant) e o versionamento compartilhado entre seções.
+//
+// Uso (local e descartável):
+//   node scripts/seed-f1b1-qa.mjs
+//   GODOUTOR_DB_FILE=.cache/f1b1/qa.json npm run start -- -p 3111
+//   node tests/f1b1/http-qa.mjs
+//
+// Este arquivo NÃO substitui o QA de browser (`tests/f1b1/qa.mjs`): ele prova
+// contrato, persistência, permissão e versionamento com o servidor de verdade.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+
+const base = process.env.QA_BASE_URL || 'http://127.0.0.1:3111';
+if (process.env.DATABASE_URL) throw Error('DATABASE_URL must be absent (local disposable QA).');
+if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw Error('Local disposable QA only');
+
+const BIZ = 'f1b1-vet-qa';
+const OD = 'f1b1-odonto-qa';
+const ES = 'f1b1-estetica-qa';
+const OTHER = 'f1b1-outra-qa';
+const password = 'GodoutorF1B12026!';
+const today = new Date().toISOString().slice(0, 10);
+
+const result = { checks: [], expected: [], unexpected: [], server: [] };
+const ok = (label) => { result.checks.push(label); console.log('PASS', label); };
+
+/** Cliente HTTP com cookie jar (login real pela rota /api/auth/login). */
+function client() {
+  const jar = new Map();
+  const cookieHeader = () => [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+  const absorb = (res) => {
+    const raw = res.headers.getSetCookie?.() || [];
+    for (const line of raw) {
+      const [pair] = line.split(';');
+      const idx = pair.indexOf('=');
+      jar.set(pair.slice(0, idx), pair.slice(idx + 1));
+    }
+  };
+  const request = async (method, path, body) => {
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(jar.size ? { cookie: cookieHeader() } : {}) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    absorb(res);
+    if (res.status >= 500) result.server.push({ status: res.status, path });
+    const data = await res.json().catch(() => null);
+    return { status: res.status, data };
+  };
+  return { request, jar };
+}
+
+async function login(email) {
+  const c = client();
+  const res = await c.request('POST', '/api/auth/login', { email: `${email}@godoutor.local`, password });
+  assert.equal(res.status, 200, `login ${email}: ${res.status}`);
+  assert.ok([...c.jar.keys()].length > 0, 'sessão por cookie');
+  return c;
+}
+
+const ANAMNESIS = {
+  history: 'Tutora relata coceira nas orelhas há 3 dias, piora à noite.',
+  diet: 'Ração seca habitual; trocou de marca há 1 semana.',
+  appetite: 'usual', waterIntake: 'changed', urine: 'usual', stool: 'changed',
+  vomiting: 'no', diarrhea: 'yes',
+  medicationsReported: 'Antipulgas mensal (relatado).',
+  allergiesReported: 'Tutor relata reação a ração de frango.',
+  observations: 'Mel está mais quieta segundo a tutora.',
+};
+const ASSESSMENT = {
+  weightKg: 9.1, temperatureC: 38.4, heartRateBpm: 118, respiratoryRateRpm: 30,
+  hydration: 'Normohidratada', mucousMembranes: 'Róseas e úmidas',
+  capillaryRefillSeconds: 2, bodyCondition: 'Escore corporal 5/9',
+  physicalExam: 'Exame otológico: eritema em orelha direita, sem secreção.',
+};
+
+try {
+  await fs.mkdir('.cache/f1b1', { recursive: true });
+
+  // ── 0 · logins reais das personas ────────────────────────────────────────
+  const michelle = await login('michelle.f1b1');
+  const owner = await login('owner.f1b1');
+  const maria = await login('recepcao.f1b1');
+  const fora = await login('fora.f1b1');
+  ok('login real: Michelle (Profissional) · Owner · Maria (Recepção) · outra unidade');
+
+  // ── 1 · agenda → iniciar atendimento (Michelle é a profissional da agenda) ─
+  const agenda = await michelle.request('GET', `/api/bookings?businessId=${BIZ}&mode=manage&from=${today}&to=${today}&limit=50`);
+  assert.equal(agenda.status, 200);
+  const booking = (agenda.data.bookings || []).find((b) => b.id === 'bk-mel-2');
+  assert.ok(booking, 'agendamento do fluxo encontrado na agenda');
+  ok('Agenda real do tenant devolve o agendamento do paciente (Pet vinculado)');
+
+  const started = await michelle.request('POST', '/api/encounters/start', { businessId: BIZ, bookingId: 'bk-mel-2' });
+  assert.equal(started.status, 200, `start: ${started.status} ${JSON.stringify(started.data)}`);
+  const encounterId = started.data.encounter.id;
+  assert.equal(started.data.outcome, 'created');
+  assert.equal(started.data.encounter.petId, 'pet-mel');
+  assert.equal(started.data.encounter.access.canEditVisitAnamnesis, true);
+  assert.equal(started.data.encounter.access.canEditVeterinaryAssessment, true);
+  assert.deepEqual(started.data.encounter.access.modules, ['core', 'vet']);
+  assert.equal(started.data.encounter.clinicType, 'veterinaria');
+  ok(`iniciar atendimento → mesmo encounterId canônico (${encounterId.slice(0, 8)}…)`);
+
+  // ── 2 · Atendimento (queixa principal) com a versão da autoridade ───────
+  let row = started.data.encounter;
+  const queixa = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: row.version,
+    complaint: 'Coceira nas orelhas (queixa principal).',
+  });
+  assert.equal(queixa.status, 200);
+  row = queixa.data.encounter;
+  assert.equal(row.clinical.anamnesis.history, '');       // anamnese ainda vazia
+  ok('Atendimento: Queixa principal gravada (copy clínica, campo físico preservado)');
+
+  // ── 3 · Anamnese (fatia própria, versão COMPARTILHADA) ──────────────────
+  const anamnese = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: row.version,
+    clinical: { anamnesis: ANAMNESIS },
+  });
+  assert.equal(anamnese.status, 200);
+  const versionAfterAnamnese = anamnese.data.encounter.version;
+  assert.equal(versionAfterAnamnese, row.version + 1);
+  assert.equal(anamnese.data.encounter.clinical.anamnesis.appetite, 'usual');
+  assert.equal(anamnese.data.encounter.complaint, 'Coceira nas orelhas (queixa principal).');
+  ok('Anamnese da visita gravada no MESMO Encounter (e a versão subiu uma vez)');
+
+  // ── 4 · Avaliação usando a versão NOVA (sem 409 interno) ────────────────
+  const stale = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: row.version,   // versão velha de propósito
+    clinical: { assessment: { veterinary: { weightKg: 9.1 } } },
+  });
+  assert.equal(stale.status, 409);
+  const avaliacao = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: versionAfterAnamnese,
+    clinical: { assessment: { veterinary: ASSESSMENT } },
+  });
+  assert.equal(avaliacao.status, 200);
+  assert.equal(avaliacao.data.encounter.clinical.assessment.veterinary.temperatureC, 38.4);
+  assert.equal(avaliacao.data.encounter.clinical.anamnesis.diarrhea, 'yes');   // anamnese intacta
+  ok('Avaliação usa a versão nova: sem 409 interno e sem perder a anamnese');
+
+  // ── 5 · sair → F5 → retomar: MESMO encounterId com TODOS os dados ───────
+  const resumed = await michelle.request('POST', '/api/encounters/start', { businessId: BIZ, bookingId: 'bk-mel-2' });
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.data.encounter.id, encounterId);
+  assert.equal(resumed.data.outcome, 'resumed');
+  const reloaded = await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
+  const loaded = reloaded.data.encounter;
+  assert.equal(loaded.petId, 'pet-mel');
+  assert.equal(loaded.petName, 'Mel');
+  assert.equal(loaded.context.responsible.name, 'Isabelle Tutora QA');
+  assert.equal(loaded.clinical.anamnesis.history, ANAMNESIS.history);
+  assert.equal(loaded.clinical.assessment.veterinary.weightKg, 9.1);
+  assert.equal(loaded.clinical.assessment.veterinary.physicalExam, ASSESSMENT.physicalExam);
+  assert.equal(loaded.clinical.assessment.veterinary.heartRateBpm, 118);
+  assert.equal(loaded.clinical.assessment.veterinary.respiratoryRateRpm, 30);
+  assert.equal(loaded.complaint, 'Coceira nas orelhas (queixa principal).');
+  ok('sair → retomar (mesmo id) → TODOS os dados das três seções continuam no Encounter');
+
+  // ── 6 · peso medido hoje NÃO altera o cadastro permanente do Pet ────────
+  const pets = await michelle.request('GET', `/api/pets?businessId=${BIZ}`);
+  const mel = (pets.data.pets || []).find((p) => p.id === 'pet-mel');
+  assert.ok(mel);
+  assert.equal(Number(mel.weightKg), 9.4);      // cadastro intacto (medida de hoje = 9.1)
+  ok('peso medido hoje vive no Encounter; o cadastro do Pet continua 9.4 kg');
+
+  // ── 7 · concorrência EXTERNA: 409 real, nada sobrescrito ────────────────
+  const current = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+  const otherTab = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: current.version,
+    clinical: { anamnesis: { history: 'Gravado em OUTRA tela.' } },
+  });
+  assert.equal(otherTab.status, 200);
+  const conflict = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: current.version,
+    clinical: { anamnesis: { history: 'Texto local (não pode sobrescrever).' } },
+  });
+  assert.equal(conflict.status, 409);
+  const afterConflict = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+  assert.equal(afterConflict.clinical.anamnesis.history, 'Gravado em OUTRA tela.');
+  ok('409 real de outra tela: nada sobrescrito (o texto do servidor permanece)');
+
+  // retry com a versão atual grava o MESMO texto (o texto local não se perde)
+  const retry = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: afterConflict.version,
+    clinical: { anamnesis: { history: 'Texto local (retry após o conflito).' } },
+  });
+  assert.equal(retry.status, 200);
+  assert.equal(retry.data.encounter.clinical.anamnesis.history, 'Texto local (retry após o conflito).');
+  ok('retry com a versão atual grava o MESMO texto local (nada perdido)');
+
+  // ── 8 · permissões de escrita clínica (servidor) ────────────────────────
+  const ownerWrite = await owner.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: retry.data.encounter.version,
+    clinical: { anamnesis: { history: 'Owner sem vínculo profissional.' } },
+  });
+  assert.equal(ownerWrite.status, 403);
+  result.expected.push({ status: 403, who: 'Owner', route: '/api/encounters' });
+  const ownerRead = await owner.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
+  assert.equal(ownerRead.status, 200);
+  assert.equal(ownerRead.data.encounter.access.canEditVisitAnamnesis, false);
+  assert.equal(ownerRead.data.encounter.access.canEditVeterinaryAssessment, false);
+  ok('Owner sem vínculo Professional: lê o atendimento e NÃO escreve conteúdo clínico (403)');
+
+  const mariaRead = await maria.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
+  assert.equal(mariaRead.status, 403);
+  result.expected.push({ status: 403, who: 'Recepção', route: '/api/encounters' });
+  const mariaWrite = await maria.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: 1, clinical: { anamnesis: { history: 'Recepção.' } },
+  });
+  assert.equal(mariaWrite.status, 403);
+  ok('Recepção: sem leitura e sem escrita clínica (403 no servidor)');
+
+  // profissional de OUTRA unidade: 404 (não existe para ele)
+  const foraRead = await fora.request('GET', `/api/encounters?businessId=${OTHER}&id=${encounterId}`);
+  assert.equal(foraRead.status, 404);
+  const foraWrite = await fora.request('PATCH', '/api/encounters', {
+    businessId: OTHER, id: encounterId, expectedVersion: 1, clinical: { anamnesis: { history: 'Outro tenant.' } },
+  });
+  assert.equal(foraWrite.status, 404);
+  result.expected.push({ status: 404, who: 'outra unidade', route: '/api/encounters' });
+  ok('cross-tenant: 404 na leitura e na escrita (nada cruza a fronteira)');
+
+  // ── 9 · validação do payload clínico (unidade ≠ texto; limite técnico) ──
+  const fresh = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+  const textAsNumber = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: fresh.version,
+    clinical: { assessment: { veterinary: { weightKg: '9 kg' } } },
+  });
+  assert.equal(textAsNumber.status, 400);
+  const absurd = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: fresh.version,
+    clinical: { assessment: { veterinary: { temperatureC: 999999 } } },
+  });
+  assert.equal(absurd.status, 400);
+  result.expected.push({ status: 400, who: 'payload', route: '/api/encounters' });
+  const unknownSection = await michelle.request('PATCH', '/api/encounters', {
+    businessId: BIZ, id: encounterId, expectedVersion: fresh.version,
+    clinical: { problems: [{ text: 'otite' }] },
+  });
+  assert.equal(unknownSection.status, 400);
+  ok('validação: número como texto, valor absurdo e seção futura são recusados (400)');
+
+  // ── 10 · seções REAIS expostas pelo contrato do workspace ───────────────
+  const workspace = await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`);
+  assert.equal(workspace.data.encounter.clinical.anamnesis.history, 'Texto local (retry após o conflito).');
+  ok('leitura final devolve o Encounter com anamnese + avaliação + contexto do Pet');
+
+  // ── 10b · ISOLAMENTO POR VERTICAL (odonto/estética): o módulo vet não
+  // existe lá — nem para ler, nem para escrever; o CORE continua vivo.
+  for (const [tenant, email, encounterId, label] of [
+    [OD, 'odonto.f1b1', 'enc-odonto-qa', 'odontológica'],
+    [ES, 'estetica.f1b1', 'enc-estetica-qa', 'estética'],
+  ]) {
+    const doctor = await login(email);
+    const read = await doctor.request('GET', `/api/encounters?businessId=${tenant}&id=${encounterId}`);
+    assert.equal(read.status, 200, `${label}: leitura`);
+    const view = read.data.encounter;
+    assert.equal(view.clinicType, label === 'odontológica' ? 'odontologica' : 'estetica');
+    assert.equal(view.access.canEditCore, true, `${label}: CORE é universal`);
+    assert.equal(view.access.canEditVisitAnamnesis, false, `${label}: anamnese vet ligada`);
+    assert.equal(view.access.canEditVeterinaryAssessment, false, `${label}: avaliação vet ligada`);
+    // Escrita de ramo da especialidade veterinária: recusada pelo SERVIDOR.
+    const vetWrite = await doctor.request('PATCH', '/api/encounters', {
+      businessId: tenant, id: encounterId, expectedVersion: view.version,
+      clinical: {
+        anamnesis: { history: 'não pode gravar' },
+        assessment: { veterinary: { weightKg: 7 } },
+      },
+    });
+    assert.equal(vetWrite.status, 400, `${label}: ramo vet aceito (${vetWrite.status})`);
+    assert.match(String(vetWrite.data?.error || ''), /não está disponível nesta unidade/i);
+    result.expected.push({ status: 400, who: label, route: '/api/encounters' });
+    // CORE grava de verdade (a vertical não é uma tela morta).
+    const core = await doctor.request('PATCH', '/api/encounters', {
+      businessId: tenant, id: encounterId, expectedVersion: view.version,
+      complaint: `Queixa principal na vertical ${label}`,
+    });
+    assert.equal(core.status, 200, `${label}: CORE deveria gravar`);
+    // E o clínico NÃO foi tocado por tabela.
+    const after = (await doctor.request('GET', `/api/encounters?businessId=${tenant}&id=${encounterId}`)).data.encounter;
+    assert.equal(after.clinical.anamnesis.history, '', `${label}: anamnese vet recebeu dado`);
+    assert.equal(after.clinical.assessment.veterinary.weightKg, null, `${label}: avaliação vet recebeu dado`);
+    assert.equal(after.complaint, `Queixa principal na vertical ${label}`);
+    ok(`vertical ${label}: só CORE · leitura/escrita vet recusadas (400) · nada gravado`);
+  }
+
+  // ── 10c · P1 — BYPASS DE ESCRITA DE CONTEÚDO (followUp/files) ───────────
+  // Regra canônica: TODA mutação de conteúdo exige o profissional responsável.
+  // Antes do patch, followUpMode/followUpDate/followUpDays/files ficavam FORA
+  // do gate: um Owner sem vínculo Professional gravava por PATCH direto.
+  // Prova adversarial real: 403 + registro byte-for-byte intacto + versão
+  // intacta + nenhuma auditoria nova.
+  const dbAuditFor = async () => {
+    const raw = await fs.readFile(process.env.GODOUTOR_DB_FILE || '.cache/f1b1/qa.json', 'utf8');
+    const doc = JSON.parse(raw);
+    return (doc.audit || []).filter((a) => a.action === 'encounter.updated' && a.meta?.encounterId === encounterId);
+  };
+  const BYPASS = [
+    ['followUpMode', { followUpMode: 'interval', followUpDays: 30 }],
+    ['followUpDate', { followUpMode: 'date', followUpDate: '2026-12-01' }],
+    ['followUpDays', { followUpMode: 'interval', followUpDays: 45 }],
+    ['files', { files: [{ id: 'f-qa-1', name: 'otoscopia.jpg', url: 'https://cdn.qa/otoscopia.jpg', size: 1024, createdAt: today, by: 'Owner' }] }],
+  ];
+  for (const [who, session] of [['Owner sem vínculo Professional', owner], ['Recepção', maria]]) {
+    const before = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    const antesJson = JSON.stringify(before);
+    const auditAntes = (await dbAuditFor()).length;
+    // Campo isolado: o gate precisa olhar o campo, não o trio completo.
+    const SOLO = { followUpMode: 'interval', followUpDate: '2026-12-01', followUpDays: 30, files: BYPASS[3][1].files };
+    for (const [label, payload] of BYPASS) {
+      const attempt = await session.request('PATCH', '/api/encounters', {
+        businessId: BIZ, id: encounterId, expectedVersion: before.version, ...payload,
+      });
+      assert.equal(attempt.status, 403, `${who} → ${label}: ${attempt.status}`);
+      result.expected.push({ status: 403, who, route: '/api/encounters', field: label });
+      const solo = await session.request('PATCH', '/api/encounters', {
+        businessId: BIZ, id: encounterId, expectedVersion: before.version, [label]: SOLO[label],
+      });
+      assert.equal(solo.status, 403, `${who} → ${label} isolado: ${solo.status}`);
+    }
+    const depois = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    assert.equal(JSON.stringify(depois), antesJson, `${who}: o registro mudou depois de tentativa recusada`);
+    assert.equal(depois.version, before.version, `${who}: a versão subiu em tentativa recusada`);
+    assert.equal((await dbAuditFor()).length, auditAntes, `${who}: auditoria criada em tentativa recusada`);
+    ok(`${who}: followUpMode/Date/Days e files recusados (403) · dado, versão e auditoria intactos`);
+  }
+
+  // ── 10d · P2 — caminho legítimo + AUDITORIA GRANULAR ────────────────────
+  {
+    const before = (await michelle.request('GET', `/api/encounters?businessId=${BIZ}&id=${encounterId}`)).data.encounter;
+    const legit = await michelle.request('PATCH', '/api/encounters', {
+      businessId: BIZ, id: encounterId, expectedVersion: before.version,
+      followUpMode: 'interval', followUpDays: 30,
+      files: [{ id: 'f-qa-1', name: 'otoscopia.jpg', url: 'https://cdn.qa/otoscopia.jpg', size: 1024, createdAt: today, by: 'Michelle' }],
+      evolution: 'Evolução da consulta (auditoria granular).',
+    });
+    assert.equal(legit.status, 200, `profissional responsável deveria gravar: ${legit.status}`);
+    assert.equal(legit.data.encounter.followUpMode, 'interval');
+    assert.equal(legit.data.encounter.followUpDays, 30);
+    assert.equal(legit.data.encounter.files.length, 1);
+    assert.equal(legit.data.encounter.version, before.version + 1);
+
+    const clinicalWrite = await michelle.request('PATCH', '/api/encounters', {
+      businessId: BIZ, id: encounterId, expectedVersion: legit.data.encounter.version,
+      clinical: { anamnesis: { appetite: 'changed' }, assessment: { veterinary: { temperatureC: 38.6 } } },
+    });
+    assert.equal(clinicalWrite.status, 200);
+    const audit = await dbAuditFor();
+    const coreFields = audit[audit.length - 2].meta.fields;
+    const clinicalFields = audit[audit.length - 1].meta.fields;
+    assert.deepEqual(coreFields, ['evolution', 'followUpMode', 'followUpDays', 'files'], `core audit: ${coreFields}`);
+    assert.deepEqual(clinicalFields, [
+      'clinical.anamnesis.appetite', 'clinical.assessment.veterinary.temperatureC',
+    ], `clinical audit: ${clinicalFields}`);
+    for (const entry of audit) {
+      assert.ok(!entry.meta.fields.includes('clinical'), 'auditoria coarse "clinical" com granularidade disponível');
+      assert.equal(new Set(entry.meta.fields).size, entry.meta.fields.length, 'campo duplicado na auditoria');
+    }
+    ok('profissional responsável grava retorno/arquivos/evolução · auditoria granular (sem rótulo coarse, sem duplicata)');
+  }
+
+  const legacyPage = await michelle.request('GET', `/atendimento/${encounterId}/registro?b=${BIZ}`);
+  assert.ok([200, 307, 308].includes(legacyPage.status), `legado: ${legacyPage.status}`);
+  ok('registro completo (legado) continua acessível na rota própria');
+} finally {
+  const failures = result.server.length;
+  console.log('\n── resumo QA HTTP F1B1 ──');
+  console.log(`checks: ${result.checks.length} · 5xx inesperados: ${failures}`);
+  console.log(`respostas esperadas (403/404/400 provocados): ${result.expected.length}`);
+  if (failures) {
+    console.log('5xx:', JSON.stringify(result.server, null, 2));
+    process.exitCode = 1;
+  }
+  await fs.writeFile('.cache/f1b1/http-qa-result.json', JSON.stringify(result, null, 2)).catch(() => {});
+  if (!failures) console.log('OK · QA HTTP F1B1 sem 5xx inesperado');
+}

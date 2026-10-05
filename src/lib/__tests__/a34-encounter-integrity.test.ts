@@ -56,7 +56,10 @@ async function seed() {
   db.users.push({ id: OWNER, name: 'Dona Unidade', email: 'r2@example.com', passwordHash: 'x', createdAt: NOW, role: 'owner' });
   db.businesses.push(business(BIZ));
   db.businesses.push(business(OTHER));
-  db.professionals.push({ id: 'pro-1', businessId: BIZ, name: 'Bia', role: '', photo: '', active: true, userId: '', followsBusinessHours: true, createdAt: NOW } as any);
+  // F1B1 — neste cenário a clínica é solo: o PROPRIETÁRIO é o profissional
+  // responsável (vínculo real `Professional.userId`). A escrita clínica é dele
+  // — papel administrativo sozinho não escreve mais (ver f1b1-clinical-visit).
+  db.professionals.push({ id: 'pro-1', businessId: BIZ, name: 'Bia', role: '', photo: '', active: true, userId: OWNER, followsBusinessHours: true, createdAt: NOW } as any);
   db.services.push({ id: 'svc-1', businessId: BIZ, name: 'Limpeza', durationMin: 60, price: 100, description: '', active: true, bookable: true, professionalIds: [], createdAt: NOW, updatedAt: NOW } as any);
   db.contacts.push({ id: 'ct-r2', businessId: BIZ, name: 'Seu Zé', phone: '11933332222', customerId: '', createdAt: NOW } as any);
   // Walk-in: chegou sem horário marcado, já em atendimento.

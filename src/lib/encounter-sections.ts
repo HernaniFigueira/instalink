@@ -15,9 +15,50 @@
 //     módulo e ordem);
 //   • `module` separa o CORE clínico das especialidades (vet hoje; odontologia
 //     e estética depois) sem criar uma segunda entidade de atendimento.
-import type { Encounter } from './types';
+import { isClinicType, type ClinicType, type Encounter } from './types';
 
-export type EncounterModuleId = 'core' | 'vet' | 'odontology' | 'aesthetics';
+/**
+ * MÓDULOS do Clinical Encounter. O CORE é o mesmo para todo mundo; cada
+ * VERTICAL liga o SEU módulo em cima do mesmo Encounter (nunca uma entidade
+ * por especialidade). Módulos sem seção `available` não renderizam nada.
+ */
+export type EncounterModuleId = 'core' | 'vet' | 'odontology' | 'aesthetics' | 'medical';
+
+/**
+ * AUTORIDADE ÚNICA de módulos por vertical (§ isolamento por vertical).
+ *
+ *   veterinaria → CORE + VET
+ *   odontologica → CORE + ODONTOLOGY (nenhuma seção odontológica implementada)
+ *   estetica    → CORE + AESTHETICS  (idem)
+ *   medica      → CORE               (contrato médico ainda não existe)
+ *   geral/ausente → CORE             (fallback conservador)
+ *
+ * NUNCA inferir por nome, serviço, existência de Pet, nicho ou slug: só
+ * `Business.clinicType` (normalizado) decide. Um Pet cadastrado NÃO liga o
+ * módulo veterinário; uma clínica odontológica com Pet continua só com o CORE.
+ */
+const CLINIC_MODULES: Record<ClinicType, EncounterModuleId[]> = {
+  veterinaria: ['core', 'vet'],
+  odontologica: ['core', 'odontology'],
+  estetica: ['core', 'aesthetics'],
+  medica: ['core'],
+  geral: ['core'],
+};
+
+/** Normaliza a vertical da unidade (ausente/inválido = 'geral', nada de adivinhar). */
+export function normalizeClinicType(value: unknown): ClinicType {
+  return isClinicType(value) ? value : 'geral';
+}
+
+/** Módulos que ESTA vertical liga, na ordem canônica. */
+export function encounterModulesForClinic(clinicType: unknown): EncounterModuleId[] {
+  return [...CLINIC_MODULES[normalizeClinicType(clinicType)]];
+}
+
+/** O módulo está ligado nesta vertical? (só o clinicType decide) */
+export function isEncounterModuleEnabled(module: EncounterModuleId, clinicType: unknown): boolean {
+  return encounterModulesForClinic(clinicType).includes(module);
+}
 
 export interface EncounterSectionDef {
   id: string;
@@ -41,29 +82,72 @@ export const ENCOUNTER_SECTIONS: EncounterSectionDef[] = [
     id: 'atendimento', label: 'Atendimento', module: 'core', order: 10, available: true,
     hint: 'Registro clínico do atendimento: o que foi feito, orientações e retorno.',
   },
-  // ── Estrutura planejada (F1B/F1C) — NÃO renderizada enquanto indisponível ──
-  { id: 'anamnese', label: 'Anamnese', module: 'core', order: 20, available: false },
-  { id: 'avaliacao', label: 'Avaliação', module: 'core', order: 30, available: false },
+  // ── F1B1 — SEÇÕES REAIS (UI + persistência + leitura + autosave + testes) ──
+  // Só vira `available: true` quem tem TODAS as cinco coisas na mesma entrega.
+  // F1B1 · VET-FIRST (revisão de isolamento por vertical): a anamnese desta
+  // entrega é a da VISITA VETERINÁRIA (apetite/água/urina/fezes/vômito/diarreia)
+  // e depende do paciente do Encounter (Pet). A abstração de paciente humano/
+  // odontológico ainda NÃO foi fechada no novo Clinical Encounter — então ela
+  // pertence ao módulo VET nesta etapa, e não vaza para outras verticais.
+  // Quando a abstração de paciente humano for fechada, esta seção é
+  // parametrizada por módulo (não duplicada).
+  {
+    id: 'anamnese', label: 'Anamnese', module: 'vet', order: 20, available: true,
+    hint: 'Histórico e contexto relatados NESTA visita (não é cadastro permanente do paciente).',
+  },
+  {
+    id: 'avaliacao', label: 'Avaliação', module: 'vet', order: 30, available: true,
+    hint: 'Exame clínico de hoje: medidas e achados do profissional.',
+  },
+  // ── Estrutura planejada (F1B2/F1C) — NÃO renderizada enquanto indisponível ──
   { id: 'problemas', label: 'Problemas', module: 'core', order: 40, available: false },
   { id: 'conduta', label: 'Conduta', module: 'core', order: 50, available: false },
   { id: 'procedimentos', label: 'Procedimentos', module: 'vet', order: 60, available: false },
   { id: 'anexos', label: 'Anexos', module: 'core', order: 70, available: false },
 ];
 
-/** Seções REAIS de um atendimento, na ordem canônica. */
-export function availableEncounterSections(): EncounterSectionDef[] {
-  return ENCOUNTER_SECTIONS.filter((s) => s.available).sort((a, b) => a.order - b.order);
+/**
+ * Ramos de `Encounter.clinical` → módulo dono. É esta tabela que o SERVIDOR usa
+ * para recusar escrita de módulo desligado na vertical (defesa em profundidade:
+ * a UI esconder não é o gate). O dado NUNCA é apagado por isto (§ não apagar).
+ */
+export const CLINICAL_BRANCH_MODULES: Record<string, EncounterModuleId> = {
+  anamnesis: 'vet',
+  assessment: 'vet',
+};
+
+/** Ramos de `clinical` que ESTA vertical aceita escrever. */
+export function clinicalBranchesForClinic(clinicType: unknown): string[] {
+  const modules = new Set(encounterModulesForClinic(clinicType));
+  return Object.keys(CLINICAL_BRANCH_MODULES).filter((branch) => modules.has(CLINICAL_BRANCH_MODULES[branch]));
+}
+
+/**
+ * Seções REAIS desta vertical, na ordem canônica. Sem `clinicType` o fallback é
+ * CONSERVADOR (só o CORE) — nada de módulo de especialidade por omissão.
+ */
+export function availableEncounterSections(clinicType?: unknown): EncounterSectionDef[] {
+  const modules = new Set(encounterModulesForClinic(clinicType));
+  return ENCOUNTER_SECTIONS
+    .filter((s) => s.available && modules.has(s.module))
+    .sort((a, b) => a.order - b.order);
 }
 
 /** Seção inicial do workspace (nunca depende de ordem de array de dados). */
-export function firstEncounterSectionId(): string {
-  return availableEncounterSections()[0]?.id || 'atendimento';
+export function firstEncounterSectionId(clinicType?: unknown): string {
+  return availableEncounterSections(clinicType)[0]?.id || 'atendimento';
 }
 
-/** Resolve a seção ativa: id existe e está disponível, senão a inicial. */
-export function resolveEncounterSection(id: string | null | undefined): EncounterSectionDef {
-  const found = ENCOUNTER_SECTIONS.find((s) => s.id === id && s.available);
-  return found || availableEncounterSections()[0] || ENCOUNTER_SECTIONS[0];
+/** A seção está ligada nesta vertical E implementada? */
+export function isEncounterSectionEnabled(id: string, clinicType?: unknown): boolean {
+  return availableEncounterSections(clinicType).some((s) => s.id === id);
+}
+
+/** Resolve a seção ativa: id ligado nesta vertical, senão a inicial. */
+export function resolveEncounterSection(id: string | null | undefined, clinicType?: unknown): EncounterSectionDef {
+  const available = availableEncounterSections(clinicType);
+  const found = available.find((s) => s.id === id);
+  return found || available[0] || ENCOUNTER_SECTIONS[0];
 }
 
 // ── F1A · CAPACIDADES DO NÚCLEO CLÍNICO ───────────────────────────────────
@@ -127,7 +211,12 @@ export function encounterSectionTitleFor(sectionId: string): string {
  * é só o ponto de extensão, sem odontograma, Fitzpatrick ou formulário
  * universal.
  */
-export function isModuleAvailable(module: EncounterModuleId, _encounter?: Pick<Encounter, 'id'>): boolean {
+export function isModuleAvailable(
+  module: EncounterModuleId,
+  clinicType?: unknown,
+  _encounter?: Pick<Encounter, 'id'>,
+): boolean {
+  if (!isEncounterModuleEnabled(module, clinicType)) return false;
   if (module === 'core') return true;
   return ENCOUNTER_SECTIONS.some((s) => s.module === module && s.available);
 }

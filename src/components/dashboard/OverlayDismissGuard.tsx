@@ -140,6 +140,8 @@ export function useUnsavedChangesGuard(
   options: { beforeNavigate?: (reason: DismissReason, proceed: () => void) => void } = {},
 ) {
   const confirmation = useOverlayDismissGuard();
+  /** Próxima navegação já autorizada por uma escolha HUMANA (ex.: "Descartar"). */
+  const bypassNext = useRef(false);
   const stateRef = useRef(state);
   const beforeNavigateRef = useRef(options.beforeNavigate);
   const bypassLink = useRef(false);
@@ -179,6 +181,7 @@ export function useUnsavedChangesGuard(
     const navigation = (window as Window & { navigation?: EventTarget & { traverseTo?: (key: string) => unknown; navigate?: (url: string) => unknown } }).navigation;
     const onNavigate = (event: Event) => {
       const navEvent = event as Event & { cancelable: boolean; navigationType?: string; destination?: { url?: string; key?: string; sameDocument?: boolean } };
+      if (bypassNext.current) { bypassNext.current = false; return; }   // autorizada explicitamente
       if (leaving.current || bypassLink.current || !navEvent.cancelable || event.defaultPrevented) return;
       const targetUrl = navEvent.destination?.url;
       if (!targetUrl || targetUrl === window.location.href) return;
@@ -223,5 +226,17 @@ export function useUnsavedChangesGuard(
     };
   }, [state.dirty, state.saving, state.error, state.context, state.title, state.description, confirmation.requestClose]);
 
-  return { dialog: confirmation.dialog, requestClose: confirmation.requestClose };
+  /**
+   * Autoriza EXATAMENTE a próxima navegação programática. É o que permite a uma
+   * escolha explícita do humano ("Sair sem salvar" → "Descartar") ser cumprida:
+   * sem isto, o guard re-perguntaria a decisão já tomada e a saída viraria um
+   * laço de diálogos. Consumida no próximo evento de navegação (e expirada em
+   * seguida, para não liberar uma navegação futura sem querer).
+   */
+  const allowNavigation = useCallback(() => {
+    bypassNext.current = true;
+    window.setTimeout(() => { bypassNext.current = false; }, 250);
+  }, []);
+
+  return { dialog: confirmation.dialog, requestClose: confirmation.requestClose, allowNavigation };
 }

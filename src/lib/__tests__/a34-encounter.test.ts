@@ -114,10 +114,15 @@ async function patch(body: Record<string, any>, tk = token) {
 }
 
 let token = '';
+// F1B1 — quem ESCREVE conteúdo clínico é o PROFISSIONAL RESPONSÁVEL vinculado
+// (aqui: Dra. Bia / pro-1). O Proprietário continua lendo, iniciando,
+// finalizando e reabrindo — e a edição de conteúdo é dela.
+let profToken = '';
 beforeEach(async () => {
   fs.rmSync(TEMP_DB_FILE, { force: true });
   await seed();
   token = await createSession(OWNER);
+  profToken = await createSession(PROF_USER);
 });
 
 describe('A3.4 · Bloco 5 — regras puras do registro', () => {
@@ -296,10 +301,11 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     expect(db.audit.filter((a) => a.meta?.encounterId === e.id).map((a) => a.action))
       .toEqual(['encounter.created', 'encounter.finalized']);
 
-    // A porta certa: reabrir (auditado) e SÓ ENTÃO editar.
+    // A porta certa: reabrir (auditado) e SÓ ENTÃO editar — e quem edita o
+    // CONTEÚDO é o profissional responsável (F1B1), não o papel administrativo.
     const reabrir = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, token);
     expect(reabrir.status).toBe(200);
-    const depois = await patch({ businessId: BIZ, id: e.id, evolution: 'agora sim' }, token);
+    const depois = await patch({ businessId: BIZ, id: e.id, evolution: 'agora sim' }, profToken);
     expect(depois.status).toBe(200);
     expect((await json(depois)).encounter.evolution).toBe('agora sim');
 
@@ -323,8 +329,13 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     expect(direto.status).toBe(409);
     const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, adminToken);
     expect(reabre.status).toBe(200);
-    const edita = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, adminToken);
-    expect(edita.status).toBe(200);
+    // F1B1 — reabrir é ato administrativo; ESCREVER conteúdo clínico não: o
+    // Admin sem vínculo profissional recebe 403 (papel ≠ identidade clínica).
+    const editaAdmin = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, adminToken);
+    expect(editaAdmin.status).toBe(403);
+    // O responsável vinculado (Dra. Bia / pro-1) edita normalmente.
+    const editaProf = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, profToken);
+    expect(editaProf.status).toBe(200);
   });
 
   it('PROFISSIONAL também NÃO edita finalizado direto (nem o próprio)', async () => {
@@ -349,14 +360,14 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     // Aba A salvou primeiro (versão 1 → 2).
     const abaA = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba A', expectedVersion: 1,
-    }, token);
+    }, profToken);
     expect(abaA.status).toBe(200);
     expect((await json(abaA)).encounter.version).toBe(2);
 
     // Aba B ainda acha que está na 1: recusa EXPLÍCITA, com recado claro.
     const abaB = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba B', expectedVersion: 1,
-    }, token);
+    }, profToken);
     expect(abaB.status).toBe(409);
     expect((await json(abaB)).error).toBe(ENCOUNTER_VERSION_ERROR);
 
@@ -368,15 +379,16 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     // Recarregando (versão 2), a aba B consegue salvar o que ela quer.
     const abaB2 = await patch({
       businessId: BIZ, id: e.id, evolution: 'texto da aba B', expectedVersion: 2,
-    }, token);
+    }, profToken);
     expect(abaB2.status).toBe(200);
     expect((await json(abaB2)).encounter.version).toBe(3);
   });
 
   it('finalizar e reabrir também respeitam expectedVersion', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    // Primeiro salva (1 → 2); quem ainda manda versão 1 é recusado já no finalize.
-    await patch({ businessId: BIZ, id: e.id, evolution: 'limpeza feita' }, token);
+    // Primeiro salva (1 → 2) como o profissional responsável; quem ainda manda
+    // versão 1 é recusado já no finalize (transição administrativa).
+    await patch({ businessId: BIZ, id: e.id, evolution: 'limpeza feita' }, profToken);
     const finVelho = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 1 }, token);
     expect(finVelho.status).toBe(409);
     const finOk = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 2 }, token);
@@ -449,7 +461,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
     const igual = await patch({
       businessId: BIZ, id: e.id, evolution: 'limpeza', expectedVersion: 1,
-    }, token);
+    }, profToken);
     expect(igual.status).toBe(200);
     expect((await json(igual)).encounter.version).toBe(1);
     const db = await readDB();
@@ -464,7 +476,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     await writeDB(db);
     const res = await patch({
       businessId: BIZ, id: e.id, evolution: 'agora com versão', expectedVersion: 1,
-    }, token);
+    }, profToken);
     expect(res.status).toBe(200);
     expect((await json(res)).encounter.version).toBe(2);
   });

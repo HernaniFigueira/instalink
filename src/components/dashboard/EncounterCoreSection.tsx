@@ -42,6 +42,7 @@ import {
   canEditEncounter, encounterContentPayload, encounterDraftKey,
 } from '@/lib/encounters';
 import { supportsEncounterCapability, type EncounterCoreCapability } from '@/lib/encounter-sections';
+import type { EncounterAuthority, EncounterSectionApi } from './useEncounterAuthority';
 import type { Encounter } from '@/lib/types';
 import {
   persistenceState, useUnsavedChangesGuard,
@@ -67,6 +68,19 @@ interface Props {
    * Uma implementação só, usada por todos (nada de cinco guardas paralelas).
    */
   registerLeave?: (leave: (reason: DismissReason, proceed: () => void) => void) => void;
+  /**
+   * F1B1 — AUTORIDADE do workspace. Quando presente, esta seção NÃO guarda a
+   * própria versão nem o próprio indicador: pergunta a versão na hora de
+   * salvar, publica a linha confirmada e registra o flush compartilhado. Sem
+   * autoridade (uso isolado/legado e testes do F1A), o comportamento é o de
+   * sempre — o contrato do F1A não muda.
+   */
+  authority?: EncounterAuthority;
+  /**
+   * O workspace diz se este ator pode editar (capacidade resolvida no
+   * SERVIDOR e devolvida na leitura). Ausente = a régua antiga (status).
+   */
+  canEdit?: boolean;
 }
 
 /**
@@ -136,7 +150,9 @@ interface SaveOutcome {
 
 const SAVED: SaveOutcome = { ok: true, conflict: false, message: '' };
 
-export function EncounterCoreSection({ businessId, encounter, onSaved, registerLeave }: Props) {
+export function EncounterCoreSection({
+  businessId, encounter, onSaved, registerLeave, authority, canEdit,
+}: Props) {
   const [row, setRow] = useState<EncounterCoreRow>(encounter);
   const [form, setForm] = useState<CoreForm>(() => formOf(encounter));
   const [autoState, setAutoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -182,7 +198,7 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
 
   const keyOf = (f: CoreForm) => encounterDraftKey({ ...f, followUpMode: '', followUpDate: '', followUpDays: 0 });
 
-  const editable = canEditEncounter(row);
+  const editable = canEditEncounter(row) && (canEdit === undefined || canEdit === true);
   const dirty = useMemo(() => keyOf(form) !== lastSaved.current, [form]);
 
   /**
@@ -206,10 +222,15 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
     if (inflight.current) return inflight.current;
 
     setAutoState('saving');
+    authority?.status('saving', '', 'atendimento');
     const run = (async () => {
+      // A versão vem da AUTORIDADE (fonte única do workspace) quando ela
+      // existe: outra seção pode ter gravado desde o último render e o 409
+      // interno deixaria de ser um acidente para virar regra.
+      const expectedVersion = authority ? authority.version() : current.version;
       const res = await apiSend<{ encounter: EncounterCoreRow }>(
         '/api/encounters', 'PATCH',
-        encounterContentPayload(businessId, current.id, { ...sentForm, followUpMode: '' }, current.version),
+        encounterContentPayload(businessId, current.id, { ...sentForm, followUpMode: '' }, expectedVersion),
         { scope: 'action', area: 'Atendimento' },
       );
       if (!res.ok) {
@@ -222,6 +243,10 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
         setAutoState('error');
         setConflict(outcome.conflict);
         setError(outcome.message);
+        if (authority) {
+          if (outcome.conflict) authority.conflict(outcome.message);
+          else authority.status('error', outcome.message, 'atendimento');
+        }
         return false;
       }
       const serverRow = res.data!.encounter;
@@ -240,6 +265,14 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
       setError('');
       setLeaveBlocked(false);
       setPendingLeave(null);
+      // Publica na autoridade: TODAS as seções passam a usar a versão nova.
+      authority?.publish(serverRow);
+      // §19 · o indicador do WORKSPACE volta a dizer a verdade. Sem isto, uma
+      // unidade cujo único editor é o CORE (vertical sem módulo de
+      // especialidade) ficaria "Salvando…" para sempre depois de GRAVAR. Se
+      // ainda houver texto mais novo na tela, o `dirty` do rodapé prevalece —
+      // nunca se anuncia "Salvo agora" com pendência real.
+      authority?.status('saved', '', 'atendimento');
       onSaved?.();
       return true;
     })();
@@ -249,7 +282,7 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
     } finally {
       inflight.current = null;
     }
-  }, [businessId, onSaved, updateForm]);
+  }, [authority, businessId, onSaved, updateForm]);
 
   // Autosave: só em rascunho, só com mudança real, um request por vez, só
   // depois de o dedo parar. Conflito desliga o automatismo (insistir só
@@ -315,12 +348,17 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
     setPendingLeave(null);
   }, [businessId, updateForm]);
 
-  const guardState = {
-    dirty,
-    saving: autoState === 'saving',
-    error: autoState === 'error' ? error : '',
-    context: 'edit' as const,
-  };
+  // Quando o workspace comanda (autoridade presente), a guarda de navegação é
+  // DELE — uma só para o atendimento inteiro. Aqui fica inerte para não existir
+  // dois guardas disputando o mesmo clique/Back.
+  const guardState = authority
+    ? { dirty: false, saving: false, error: '', context: 'edit' as const }
+    : {
+      dirty,
+      saving: autoState === 'saving',
+      error: autoState === 'error' ? error : '',
+      context: 'edit' as const,
+    };
   /**
    * O contrato abaixo (`requestLeave`, registrado mais adiante) é a ÚNICA
    * resposta de saída do núcleo — inclusive para o Back do navegador, links do
@@ -371,6 +409,28 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
 
   // Registro do contrato: Voltar, menu, Back e saídas programáticas caem aqui.
   useEffect(() => { registerLeave?.(requestLeave); }, [registerLeave, requestLeave]);
+
+  // F1B1 — flush compartilhado do workspace (troca de seção e saída) na MESMA
+  // autoridade que a troca de seção consulta: `true` só quando a gravação foi
+  // CONFIRMADA (mesma régua do `flushForLeave`).
+  useEffect(() => {
+    if (!authority) return;
+    authority.registerSection({
+      id: 'atendimento',
+      flush: async () => (await flushForLeave()).ok,
+      dirty: () => keyOf(latest.current.form) !== lastSaved.current,
+    });
+    return () => authority.unregisterSection('atendimento');
+  }, [authority, flushForLeave]);
+
+  // Sair da seção não deixa pendência fantasma (só no desmonte REAL).
+  useEffect(() => () => authority?.sectionDirty('atendimento', false), [authority]);
+
+  // Dirty REATIVO para o guard do workspace (ler o ref não re-renderiza).
+  useEffect(() => {
+    if (!authority) return;
+    authority.sectionDirty('atendimento', dirty);
+  }, [authority, dirty]);
   leaveRef.current = requestLeave;   // o guarda central pergunta ao núcleo
 
   const persistence = persistenceState({
@@ -395,7 +455,7 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
 
         {/* ── CONFLITO DE VERSÃO: nunca sai sozinho e nunca sobrescreve ──
             Duas saídas explícitas; nenhuma delas apaga o texto sem escolha. */}
-        {conflict && (
+        {conflict && !authority && (
           <div className="encounter-core__conflict" role="alert">
             <p className="encounter-core__conflict-copy">
               Este atendimento foi alterado em outra tela. Suas alterações ainda não foram salvas.
@@ -454,19 +514,23 @@ export function EncounterCoreSection({ businessId, encounter, onSaved, registerL
         )}
       </div>
 
-      <footer className="encounter-page__footer">
-        <span
-          className={`encounter-page__save-state encounter-page__save-state--${persistence}`}
-          role="status"
-          aria-live="polite"
-          data-testid="encounter-core-save-state"
-        >
-          {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving
-            : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error
-              : persistence === 'dirty' ? 'Salvando…'
-                : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
-        </span>
-      </footer>
+      {/* Indicador de persistência: quando o WORKSPACE comanda, existe UM só
+          (o do rodapé do workspace). Isolado, o núcleo mantém o seu. */}
+      {!authority && (
+        <footer className="encounter-page__footer">
+          <span
+            className={`encounter-page__save-state encounter-page__save-state--${persistence}`}
+            role="status"
+            aria-live="polite"
+            data-testid="encounter-core-save-state"
+          >
+            {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving
+              : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error
+                : persistence === 'dirty' ? 'Salvando…'
+                  : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
+          </span>
+        </footer>
+      )}
       {dialog}
     </section>
   );

@@ -1,35 +1,40 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// F1A · WORKSPACE CLÍNICO DO ATENDIMENTO
+// F1A/F1B1 · WORKSPACE CLÍNICO DO ATENDIMENTO
 // ═══════════════════════════════════════════════════════════════
 // Não é um card no dashboard: é a ÁREA DE TRABALHO do atendimento.
 //
 //   • cabeçalho CONTEXTUAL PERSISTENTE com o PACIENTE (pet) como protagonista
-//     e o tutor como contexto — nunca o contrário;
-//   • estado clínico visível em texto (Não iniciado · Em atendimento ·
-//     Finalizado) — nunca só por cor;
-//   • o corpo é o NÚCLEO REAL do atendimento (`EncounterCoreSection`) — o
-//     EncounterSheet legado NÃO é montado aqui (ele carrega anamnese, anexos,
-//     pagamento e pós-atendimento, que são de fases futuras);
-//   • navegação interna preparada para F1B: só o que está DISPONÍVEL é
-//     renderizado (nada de aba morta, placeholder decorativo ou módulo falso).
+//     e o tutor como contexto — nunca o contrário; o Pet continua mostrando
+//     nome, espécie, raça e idade (dado permanente vem do cadastro, em leitura);
+//   • estado clínico visível em texto (Em atendimento · Finalizado) — nunca só
+//     por cor;
+//   • o corpo é o workspace (`EncounterWorkspaceBody`), que reúne as SEÇÕES
+//     REAIS: Atendimento (núcleo do F1A), Anamnese (relatado nesta visita) e
+//     Avaliação (exame veterinário de hoje). O `EncounterSheet` legado NÃO é
+//     montado aqui — ele continua intacto na rota `/registro`;
+//   • navegação interna: só o que está DISPONÍVEL é renderizado (nada de aba
+//     morta, placeholder decorativo ou módulo falso);
+//   • a persistência tem UMA autoridade (versão única do Encounter) e a saída
+//     (Voltar/menu/Back/F5) só acontece com gravação confirmada ou descarte
+//     explícito — a invariante do F1A continua valendo para todas as seções.
 //
 // Persistência é do SERVIDOR: abrir, sair, dar F5, colar a URL ou voltar pela
 // Agenda caem no MESMO `encounterId` — o workspace apenas LÊ por id.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { PageBackAction, Skeleton, StatusBadge } from '@/components/ui';
-import { EncounterCoreSection, type EncounterCoreRow } from './EncounterCoreSection';
 import type { DismissReason } from './OverlayDismissGuard';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
 import { ENCOUNTER_CLINICAL_STATE } from '@/lib/encounters';
-import { availableEncounterSections, resolveEncounterSection } from '@/lib/encounter-sections';
+import { EncounterWorkspaceBody } from './EncounterWorkspaceBody';
+import type { EncounterAuthorityRow } from './useEncounterAuthority';
 import { formatDateBR } from '@/lib/tz';
 
-export interface EncounterWorkspaceRow extends EncounterCoreRow {
+export type EncounterWorkspaceRow = EncounterAuthorityRow & {
   /**
    * Nomes resolvidos na LEITURA (a mesma conveniência do modelo antigo).
    * O cabeçalho prefere `context` e cai aqui só quando o vínculo não resolveu.
@@ -41,13 +46,13 @@ export interface EncounterWorkspaceRow extends EncounterCoreRow {
   customerPhone?: string;
   context?: {
     clinicalState: 'not_started' | 'in_progress' | 'finalized';
-    patient: { id: string; name: string; speciesLabel: string; breed: string; ageLabel: string } | null;
+    patient: { id: string; name: string; speciesLabel: string; breed: string; ageLabel: string; weightKg?: number } | null;
     responsible: { id: string; name: string; phone: string };
     service: { id: string; name: string; durationMin: number } | null;
     professional: { id: string; name: string; role: string } | null;
     booking: { id: string; date: string; time: string; status: string } | null;
   };
-}
+};
 
 interface Props {
   businessId: string;
@@ -70,13 +75,6 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   const [loadError, setLoadError] = useState('');
   const [notFound, setNotFound] = useState(false);
   const [forbidden, setForbidden] = useState(false);
-  const [sectionId, setSectionId] = useState<string>('');
-
-  // Seções REAIS (F1A: somente "Atendimento"). A navegação interna só aparece
-  // quando existe mais de uma seção implementada — o contrato de estrutura
-  // (F1B) vive em lib/encounter-sections.ts, não em aba desabilitada.
-  const sections = useMemo(() => availableEncounterSections(), []);
-  const section = useMemo(() => resolveEncounterSection(sectionId), [sectionId]);
 
   useEffect(() => {
     if (!businessId || !encounterId) return;
@@ -107,10 +105,10 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   }, [businessId, encounterId]);
 
   /**
-   * SAIR PASSA PELO NÚCLEO. O botão Voltar não navega por conta própria: quem
-   * decide é o `EncounterCoreSection`, que só autoriza depois de persistência
-   * confirmada (ou descarte confirmado no diálogo). Texto clínico não sai
-   * da tela sem estar gravado.
+   * SAIR PASSA PELO CORPO. O botão Voltar não navega por conta própria: quem
+   * decide é o `EncounterWorkspaceBody`, que tenta gravar TODAS as seções
+   * pendentes e só autoriza a saída com persistência confirmada (ou descarte
+   * confirmado no diálogo). Texto clínico não sai da tela sem estar gravado.
    */
   const guardedLeave = useRef<((reason: DismissReason, proceed: () => void) => void) | null>(null);
   const registerLeave = useCallback((leave: (reason: DismissReason, proceed: () => void) => void) => {
@@ -118,10 +116,15 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   }, []);
   const leave = useCallback(() => {
     const guard = guardedLeave.current;
-    // Sem núcleo montado (erro/404/estado vazio) não há texto a perder.
+    // Sem corpo montado (erro/404/estado vazio) não há texto a perder.
     if (guard) guard('close-button', () => router.replace(returnTo));
     else router.replace(returnTo);
   }, [router, returnTo]);
+
+  /** O cabeçalho acompanha a linha mais recente publicada pela autoridade. */
+  const syncRow = useCallback((next: EncounterAuthorityRow) => {
+    setRow((prev) => (prev ? { ...prev, ...next } : (next as EncounterWorkspaceRow)));
+  }, []);
 
   if (!permissionsReady || loading) {
     return (
@@ -197,45 +200,20 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         </div>
       </header>
 
-      {/* ── Navegação interna: só quando há mais de uma seção REAL ── */}
-      {sections.length > 1 && (
-        <nav className="encounter-workspace__nav" aria-label="Seções do atendimento">
-          {sections.map((s) => {
-            const active = s.id === section.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                aria-current={active ? 'page' : undefined}
-                data-active={active || undefined}
-                className="encounter-workspace__nav-item"
-                onClick={() => setSectionId(s.id)}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </nav>
-      )}
-
-      {/* ── Corpo: a seção REAL (núcleo clínico F1A) ──
-          É o `EncounterCoreSection`, NÃO o `EncounterSheet` legado: o núcleo
-          declara as capacidades que suporta e nada de F1B/F1C entra aqui
-          (anamnese, anexos, pagamento, pós-atendimento, reabertura). O
-          componente legado continua existindo, intacto, onde já funcionava. */}
-      {section.id === 'atendimento' && (
-        <EncounterCoreSection
-          businessId={businessId}
-          encounter={row as EncounterCoreRow}
-          registerLeave={registerLeave}
-          onSaved={() => { /* autosave mantém o workspace montado */ }}
-        />
-      )}
+      {/* ── Corpo: SEÇÕES REAIS sobre UMA autoridade de persistência ──
+          É o `EncounterWorkspaceBody` (e não o `EncounterSheet` legado, que
+          continua vivo na rota `/registro` com os módulos de F1B2/F1C). */}
+      <EncounterWorkspaceBody
+        businessId={businessId}
+        row={row}
+        onRow={syncRow}
+        registerLeave={registerLeave}
+      />
 
       {row.status === 'finalized' && (
         <p className="encounter-workspace__hint">
           <Icon n="lock" size={13} /> Registro finalizado: a finalização completa e a revisão clínica
-          entram no F1B/F1C.
+          entram no F1B2/F1C.
         </p>
       )}
     </main>

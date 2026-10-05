@@ -2827,6 +2827,27 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 }
 .encounter-workspace__nav-item:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 .encounter-workspace__section { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+/* ── F1B1 · seções clínicas (Anamnese + Avaliação) ──────────────────────────
+   Fundo claro, divisores discretos, campos agrupados e largura de leitura:
+   nada de card-wall, gradiente ou glow. A unidade (kg · °C · bpm · rpm · s)
+   vive no rótulo do campo — o valor continua NÚMERO. */
+.encounter-workspace__section[data-section] .encounter-workspace__content { display: flex; flex-direction: column; gap: 16px; }
+.encounter-section__hint {
+  margin: 0;
+  max-width: 76ch;
+  color: var(--text-muted, #66736c);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.encounter-clinical__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px 18px;
+  align-items: start;
+}
+@media (max-width: 767px) {
+  .encounter-clinical__grid { grid-template-columns: 1fr; gap: 12px; }
+}
 .encounter-workspace__content {
   width: min(100%, 1280px);
   flex: 1;
