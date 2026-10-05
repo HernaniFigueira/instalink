@@ -33,6 +33,7 @@ import {
 } from './useEncounterAuthority';
 import { useUnsavedChangesGuard, type DismissReason } from './OverlayDismissGuard';
 import { availableEncounterSections, resolveEncounterSection } from '@/lib/encounter-sections';
+import { EncounterFinalizationPanel } from './EncounterFinalizationPanel';
 
 interface Props {
   businessId: string;
@@ -275,6 +276,19 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
           readOnlyHint={readOnlyHint}
         />
       )}
+
+      <EncounterFinalizationPanel
+        businessId={businessId}
+        row={current}
+        canFinalize={canEditCore && current.status === 'draft'}
+        flush={flushAll}
+        authority={authority}
+        revisions={current.finalizationRevisions || []}
+        addenda={current.addenda || []}
+        reopenEvents={current.reopenEvents || []}
+        canReopen={Boolean(current.canReopen)}
+        canAddendum={Boolean(current.canAddendum)}
+      />
 
       {blockedLeave && (
         <div className="encounter-core__error-block">

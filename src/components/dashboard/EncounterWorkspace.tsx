@@ -44,6 +44,10 @@ export type EncounterWorkspaceRow = EncounterAuthorityRow & {
   professionalName?: string;
   bookingStatus?: string;
   customerPhone?: string;
+  finalizationRevisions?: import('@/lib/types').EncounterFinalizationRevision[];
+  addenda?: import('@/lib/types').EncounterAddendum[];
+  reopenEvents?: Array<{ at: string; actorUserId: string; meta?: Record<string, unknown> }>;
+  canReopen?: boolean;
   context?: {
     clinicalState: 'not_started' | 'in_progress' | 'finalized';
     patient: { id: string; name: string; speciesLabel: string; breed: string; ageLabel: string; weightKg?: number } | null;

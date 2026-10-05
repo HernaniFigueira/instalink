@@ -1,5 +1,11 @@
 # GoDoutor — Histórico
 
+## 2026-10-05 — Clinical Encounter F1C (finalização e imutabilidade)
+
+F1C introduz revisões/snapshots profundos de cada finalização (`encounterFinalizationRevisions`), fingerprint SHA-256 e notas complementares append-only (`encounterAddenda`) no mesmo DB documental, sem DDL e sem segunda entidade de atendimento. A autoria clínica da finalização e da nota é o Professional responsável vinculado ao usuário; a transição administrativa de reabertura preserva a regra existente, exige motivo e registra a revisão anterior. Finalizado bloqueia conteúdo e DELETE no servidor; finalize/reopen não aceitam mutação piggyback. A rota canônica devolve o histórico do mesmo Encounter e o workspace oferece Revisar e finalizar, estado READ-ONLY, nota complementar e histórico.
+
+Auditoria prévia registrada em `docs/CLINICAL-ENCOUNTER-F1C.md`: EventLog anterior não carregava conteúdo before/after nem snapshot, logo não reconstruía o documento finalizado com segurança. A revisão pós-implementação corrigiu a versão pós-flush (`authority.version()`), a publicação canônica das transições, a timeline cronológica e a navegação do Pet 360 para a rota canônica.
+
 ## 2026-10-05 — Clinical Encounter F1B2 (problemas/hipóteses/diagnósticos + conduta + procedimentos)
 
 > Empilhado sobre o **F1B1 congelado em `11021c2521aabd456f6531ca3b714fe7b5b1e1e9`** (PR [#55](https://github.com/HernaniFigueira/instalink/pull/55) OPEN, `MERGEABLE`, Vercel SUCCESS, **merge NÃO executado**, HEAD não alterado, nenhum commit novo na branch dela). **O F1B2 está implementado e auto-homologado no working tree da branch de sessão `arena/01a10740-instalink`, SEM COMMIT e SEM PR própria:** a sessão é fixa nessa branch — commit/push nela moveria o HEAD congelado da #55, o que está proibido. Decisão pendente do responsável: (a) merge da #55 → F1B2 em branch nova a partir do `main` resultante, ou (b) autorização explícita para commit na branch da sessão. Produção não usada; QA só em base descartável.
@@ -393,3 +399,8 @@ Correções restritas à faixa visível com drawer, navegação dirty, copy ativ
 ### PR53 — último polimento pré-F1
 
 Range simplificado com duração humana, copy de bloqueios/regras/recursos, dias especiais derivados, secondary outline no normal e soft no hover, confirmação limpa, escala Geist e cinco temas ativos mantendo21 presets históricos. Dashboard limitado a4 tarefas com “Ver todas”; revisão encontrou/corrigiu flag de link ausente e projeção de exceção fora da rotina. `PRE-F1-POLISH.md` registra decisão do usuário, revisão separada, backlog e protocolo de homologação. Sem produção, merge ou F1.
+
+- 2026-10-05 · F1C post-review: finalize idempotency now publishes the workflow
+  event only for a real transition; revision/addendum history reads require
+  businessId plus encounterId; server-derived canAddendum/canReopen capabilities
+  now gate the finalization UI.

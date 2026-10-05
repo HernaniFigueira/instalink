@@ -584,6 +584,17 @@ export function encounterInScope(e: Pick<Encounter, 'professionalId'>, professio
  * origem → entrada da fila. É o que permite "Agendar retorno" abrir o
  * formulário já preenchido, sem obrigar a recepção a redigitar o cliente.
  */
+/** Server authority for append-only addenda; intentionally independent of draft/editability. */
+export function isResponsibleProfessional(db: DB, encounter: Encounter, actorId: string): boolean {
+  const professional = (db.professionals || []).find((item) =>
+    item.businessId === encounter.businessId
+    && item.id === encounter.professionalId
+    && item.active !== false
+    && item.userId === actorId,
+  );
+  return Boolean(professional);
+}
+
 export function encounterView(
   e: Encounter,
   db: DB,
@@ -648,6 +659,9 @@ export function encounterView(
     access: actor
       ? encounterClinicalAccess(db, e, actor.id, actor.role)
       : null,
+    canReopen: Boolean(actor && ['OWNER', 'ADMIN', 'MASTER'].includes(String(actor.role || '').toUpperCase())),
+    // F1C: addenda are clinical authorship, not an administrative role capability.
+    canAddendum: Boolean(actor && e.status === 'finalized' && isResponsibleProfessional(db, e, actor.id)),
   } as EncounterWorkspaceView;
 }
 
@@ -674,4 +688,11 @@ export interface EncounterWorkspaceView extends Encounter {
   clinicType: ClinicType;
   /** F1B1 — o que ESTE ator pode editar (resolvido no servidor). */
   access: EncounterClinicalAccess | null;
+  /** F1C: administrative transition only; does not grant clinical authorship. */
+  canReopen?: boolean;
+  /** F1C: server-derived clinical authorship for append-only addenda. */
+  canAddendum?: boolean;
+  finalizationRevisions?: import('./types').EncounterFinalizationRevision[];
+  addenda?: import('./types').EncounterAddendum[];
+  reopenEvents?: Array<{ at: string; actorUserId: string; meta?: Record<string, unknown> }>;
 }

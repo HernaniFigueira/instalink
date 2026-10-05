@@ -104,6 +104,9 @@ export function emptyDB(): DB {
     queue: [],
     // A3.4 · Bloco 5 — registros de atendimento
     encounters: [],
+    // F1C — revisão/snapshot e notas complementares do atendimento.
+    encounterFinalizationRevisions: [],
+    encounterAddenda: [],
     // FASE 2 · Product Revolution (aditivas — documento antigo ganha []).
     pets: [], anamneseTemplates: [], anamneseResponses: [],
     financeEntries: [], followUpRules: [], followUpOutreach: [],
@@ -124,6 +127,7 @@ export function normalizeDB(raw: unknown): DB {
     'integrations', 'integrationEvents', 'queue', 'encounters',
     // FASE 2 · Product Revolution
     'pets', 'anamneseTemplates', 'anamneseResponses', 'financeEntries', 'followUpRules', 'followUpOutreach',
+    'encounterFinalizationRevisions', 'encounterAddenda',
   ] as const) {
     if (!Array.isArray((base as any)[key])) (base as any)[key] = [];
   }

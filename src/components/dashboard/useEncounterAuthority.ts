@@ -38,6 +38,11 @@ export type EncounterAuthorityRow = Encounter & { version: number } & {
   petName?: string;
   serviceName?: string;
   professionalName?: string;
+  finalizationRevisions?: import('@/lib/types').EncounterFinalizationRevision[];
+  addenda?: import('@/lib/types').EncounterAddendum[];
+  reopenEvents?: Array<{ at: string; actorUserId: string; meta?: Record<string, unknown> }>;
+  canReopen?: boolean;
+  canAddendum?: boolean;
 };
 
 export type EncounterSaveState = 'idle' | 'saving' | 'saved' | 'error';

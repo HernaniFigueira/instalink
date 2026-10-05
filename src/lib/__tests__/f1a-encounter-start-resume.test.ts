@@ -269,7 +269,7 @@ describe('F1A · startOrResumeEncounter', () => {
     const id = created.body.encounterId;
     const fin = await encountersPATCH(jsonReq('/api/encounters', {
       businessId: BIZ, id, action: 'finalize', expectedVersion: encounterVersion(created.body.encounter),
-    }, ownerToken, 'PATCH'));
+    }, profToken, 'PATCH'));
     expect(fin.status).toBe(200);
     const after = await start({ businessId: BIZ, bookingId: 'bk-mel' });
     expect(after.res.status).toBe(200);
