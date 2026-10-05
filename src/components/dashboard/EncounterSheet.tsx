@@ -150,6 +150,8 @@ export function EncounterSheet({
   const [filesUnavailable, setFilesUnavailable] = useState(false);
   const [paymentSeed, setPaymentSeed] = useState<PaymentSeed | null>(null);
   const [paymentDone, setPaymentDone] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
+  const finalizeOperation = useRef('');
   // §P1.13 — REGRA DE HONESTIDADE: "Registrar pagamento" grava em
   // /api/finance (permissão 'financeiro'). Quem não tem a permissão (ex.:
   // profissional que atende) NÃO recebe a ação — nenhum botão visível pode
@@ -437,8 +439,16 @@ export function EncounterSheet({
     const current = latest.current.row;
     if (!current) return;
     setError(''); setSaved(''); setBusy(action);
+    if (action === 'reopen' && reopenReason.trim().length < 3) {
+      setBusy('');
+      setError('Informe o motivo da reabertura.');
+      return;
+    }
+    const key = action === 'finalize' ? (finalizeOperation.current || (finalizeOperation.current = crypto.randomUUID())) : '';
     const res = await apiSend<{ encounter: EncounterRow }>('/api/encounters', 'PATCH', {
       businessId, id: current.id, action, expectedVersion: current.version,
+      ...(key ? { idempotencyKey: key } : {}),
+      ...(action === 'reopen' ? { reason: reopenReason.trim() } : {}),
     }, { scope: 'action', area: 'Atendimento' });
     setBusy('');
     if (!res.ok) { setConflict(res.status === 409); setError(res.message); return; }
@@ -467,6 +477,7 @@ export function EncounterSheet({
       }
     } else {
       setSaved('Registro reaberto para edição (a reabertura fica na auditoria).');
+      setReopenReason('');
       setFollowUpOpen(false);
     }
     onChanged?.();
@@ -557,9 +568,13 @@ export function EncounterSheet({
             </Button>
           )}
           {row && !isDraft && canReopen && (
-            <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy} className="w-full sm:w-auto">
-              {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
-            </Button>
+            <div className="w-full sm:w-auto">
+              <label className="mb-1 block text-xs text-[var(--text-muted)]" htmlFor="legacy-reopen-reason">Motivo da reabertura</label>
+              <Textarea id="legacy-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} disabled={!!busy} className="mb-2 min-h-16" />
+              <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy || reopenReason.trim().length < 3} className="w-full sm:w-auto">
+                {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
+              </Button>
+            </div>
           )}
         </>
       );

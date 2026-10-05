@@ -835,6 +835,8 @@ export interface Encounter {
   finalizedBy: string;
   /** Quem assina o registro (nome do profissional no momento da finalização). */
   signedBy: string;
+  /** F1C: revisão/snapshot criado em cada finalização; ausente em legado até finalizar. */
+  finalizationRevisionId?: string;
   /**
    * F1A — INÍCIO CLÍNICO (canônico do Clinical Encounter).
    *
@@ -868,6 +870,33 @@ export interface Encounter {
    * está em `lib/encounter-clinical.ts`.
    */
   clinical?: EncounterClinicalData;
+}
+
+/** F1C — fronteira imutável do conteúdo no instante da finalização. */
+export interface EncounterFinalizationRevision {
+  id: ID;
+  businessId: ID;
+  encounterId: ID;
+  revisionNumber: number;
+  encounterVersion: number;
+  finalizedAt: string;
+  finalizedByUserId: string;
+  finalizedByProfessionalId: string;
+  /** Cópia profunda, sem referências mutáveis ao Encounter atual. */
+  snapshot: Record<string, unknown>;
+  fingerprint?: string;
+}
+
+/** F1C — entrada clínica append-only, sem editar os campos finalizados. */
+export interface EncounterAddendum {
+  id: ID;
+  businessId: ID;
+  encounterId: ID;
+  revisionId: ID;
+  authorUserId: string;
+  authorProfessionalId: string;
+  text: string;
+  createdAt: string;
 }
 
 /** Como fica o acompanhamento depois deste atendimento. */
@@ -1153,6 +1182,10 @@ export interface DB {
   queue: QueueEntry[];
   // ── A3.4 · Bloco 5: registros de atendimento (dado sensível, com dono) ──
   encounters: Encounter[];
+  /** F1C — histórico imutável das fronteiras de finalização. */
+  encounterFinalizationRevisions: EncounterFinalizationRevision[];
+  /** F1C — notas clínicas complementares append-only. */
+  encounterAddenda: EncounterAddendum[];
   // ── FASE 2 · Product Revolution (ADITIVAS; defaults em normalizeDB) ──
   pets: Pet[]; // P6 — veterinária: tutor (contato) ≠ pet (paciente)
   anamneseTemplates: AnamneseTemplate[]; // P4 — motor único de anamnese
@@ -2158,7 +2191,7 @@ export type AuditAction =
   | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
   // A3.4 · Bloco 5 — registro do atendimento
   | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'
-  | 'encounter.reopened' | 'encounter.removed'
+  | 'encounter.reopened' | 'encounter.addendum_added' | 'encounter.removed'
   // A3.4 · Bloco 7 — base de clientes entra e sai em arquivo
   | 'contact.imported' | 'contact.exported'
   // P3 — esteira operacional e integrações

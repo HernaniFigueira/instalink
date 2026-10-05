@@ -36,7 +36,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
-import { encounterLegacyRecordHref, encounterWorkspaceHref } from '@/lib/encounter-workspace';
+import { encounterHref, encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
@@ -207,7 +207,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   //     exatamente o que o histórico abria antes do F1A.
   const openEncounter = (target: { id?: string; bookingId?: string }) => router.push(
     target.id && !target.bookingId
-      ? encounterLegacyRecordHref(target.id, businessId, `${window.location.pathname}${window.location.search}`)
+      ? encounterHref(target.id, businessId, `${window.location.pathname}${window.location.search}`)
       : encounterWorkspaceHref({
         businessId, ...target, returnTo: `${window.location.pathname}${window.location.search}`,
       }),

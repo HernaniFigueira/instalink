@@ -12,6 +12,7 @@
 // para o mesmo booking devolve o registro existente (idempotência de UI), nunca
 // um documento duplicado.
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash, randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { pushAudit } from '@/lib/audit';
@@ -19,7 +20,7 @@ import { emitAutomationEvent } from '@/lib/automation/events';
 import {
   ENCOUNTER_TEXT_FIELDS, ENCOUNTER_VERSION_REQUIRED_ERROR, cleanTags, cleanText, canFinalize,
   encounterClinicalState, encounterForQueue, encounterInScope, encountersForCustomer,
-  encounterView as view, type EncounterClinicalState,
+  encounterView as view, isResponsibleProfessional, type EncounterClinicalState,
   hasExpectedVersion, versionConflict,
   // FASE 2 · P3 — retorno estruturado + arquivos (aditivos).
   cleanEncounterFiles, isFollowUpMode, validateFollowUp,
@@ -42,7 +43,7 @@ import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { effectiveTimezone } from '@/lib/tz';
 import { onlyDigits } from '@/lib/utils';
-import type { DB, Encounter } from '@/lib/types';
+import type { DB, Encounter, EncounterFinalizationRevision, EncounterAddendum } from '@/lib/types';
 
 function err(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -54,9 +55,44 @@ function encounterVersionOf(row: { version?: number }): number {
   return Number.isFinite(v) && v > 0 ? v : 1;
 }
 
-/** Quem pode reabrir um registro finalizado: quem manda na unidade. */
+/** Quem pode reabrir um registro finalizado: contrato administrativo existente. */
 function canReopen(role: string): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MASTER';
+}
+
+
+/** Deep copy explícita: o snapshot não mantém referências ao documento mutável. */
+function finalizationSnapshot(e: Encounter): Record<string, unknown> {
+  const fields = [
+    'id', 'businessId', 'bookingId', 'queueId', 'serviceId', 'professionalId', 'customerId', 'contactId',
+    'customerName', 'date', 'time', 'complaint', 'evolution', 'guidance', 'followUp', 'followUpMode',
+    'followUpDate', 'followUpDays', 'internalNote', 'tags', 'files', 'petId', 'clinical', 'version',
+    'startedAt', 'status', 'finalizedAt', 'finalizedBy', 'signedBy', 'finalizationRevisionId',
+  ];
+  const raw = Object.fromEntries(fields.map((field) => [field, (e as any)[field]]));
+  return JSON.parse(JSON.stringify(raw));
+}
+
+function snapshotFingerprint(snapshot: Record<string, unknown>): string {
+  return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+}
+
+function currentRevision(db: DB, businessId: string, encounterId: string): EncounterFinalizationRevision | undefined {
+  return (db.encounterFinalizationRevisions || [])
+    .filter((revision) => revision.businessId === businessId && revision.encounterId === encounterId)
+    .sort((a, b) => b.revisionNumber - a.revisionNumber)[0];
+}
+
+function withEncounterHistory<T extends Record<string, unknown>>(db: DB, encounterId: string, value: T) {
+  const encounter = value.encounter as (Record<string, unknown> & { businessId?: string }) | undefined;
+  if (!encounter) return value;
+  const tenantId = String(encounter.businessId || '');
+  const history = {
+    finalizationRevisions: (db.encounterFinalizationRevisions || []).filter((revision) => revision.businessId === tenantId && revision.encounterId === encounterId).sort((a, b) => a.revisionNumber - b.revisionNumber),
+    addenda: (db.encounterAddenda || []).filter((addendum) => addendum.businessId === tenantId && addendum.encounterId === encounterId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    reopenEvents: db.audit.filter((entry) => entry.businessId === tenantId && entry.action === 'encounter.reopened' && entry.meta?.encounterId === encounterId),
+  };
+  return { ...value, encounter: { ...encounter, ...history } };
 }
 
 export async function GET(req: NextRequest) {
@@ -87,7 +123,7 @@ export async function GET(req: NextRequest) {
     if (!encounterInScope(found, guard.ctx.professionalScope)) {
       return NextResponse.json({ error: 'Você só registra os seus próprios atendimentos.' }, { status: 403 });
     }
-    return NextResponse.json({ ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
+    return NextResponse.json(withEncounterHistory(db, found.id, { ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }));
   }
   if (queueId) {
     const found = encounterForQueue(scoped, businessId, queueId);
@@ -199,9 +235,18 @@ export async function PATCH(req: NextRequest) {
       // de concorrência. Quem está numa versão velha E num registro finalizado
       // precisa ouvir a instrução certa — reabrir —, não um "recarregue".
       if (action === 'finalize') {
+        // Retry after a committed request is safe when the client reuses its
+        // operation key; no second revision/audit event is created.
+        const idem = String(body.idempotencyKey || '');
+        if (idem && d.audit.some((entry) => entry.action === 'encounter.finalized' && entry.businessId === businessId && entry.meta?.encounterId === id && entry.meta?.idempotencyKey === idem)) {
+          return { encounter: target, finalizedNow: false };
+        }
         const conflict = versionConflict(target, body.expectedVersion);
         if (conflict.conflict) throw err(conflict.message, 409);
         assertCanFinalizeCare(target); // in_care → finalized
+        if (!isResponsibleProfessional(d, target, guard.ctx.user.id)) {
+          throw err('Somente o profissional responsável pode finalizar clinicamente este atendimento.', 403);
+        }
         const check = canFinalize(target);
         if (!check.ok) throw err(check.error, 400);
         target.status = 'finalized';
@@ -212,6 +257,17 @@ export async function PATCH(req: NextRequest) {
         target.updatedAt = now;
         target.updatedBy = guard.ctx.user.id;
         target.version = encounterVersionOf(target) + 1;
+        const snapshot = finalizationSnapshot(target);
+        const revision: EncounterFinalizationRevision = {
+          id: randomUUID(), businessId, encounterId: target.id,
+          revisionNumber: (currentRevision(d, businessId, target.id)?.revisionNumber || 0) + 1,
+          encounterVersion: target.version, finalizedAt: now,
+          finalizedByUserId: guard.ctx.user.id,
+          finalizedByProfessionalId: target.professionalId,
+          snapshot, fingerprint: snapshotFingerprint(snapshot),
+        };
+        d.encounterFinalizationRevisions.push(revision);
+        target.finalizationRevisionId = revision.id;
         // FASE 2 · P3 — finalizar CONCLUI o agendamento de origem pelo serviço
         // OFICIAL (histórico + automações + evento P4 + conversão do lead):
         // Results/Funil leem booking.status — sem isto o ciclo mentiria.
@@ -235,7 +291,7 @@ export async function PATCH(req: NextRequest) {
         }
         pushAudit(d, {
           action: 'encounter.finalized', businessId, actor: guard.ctx.user,
-          meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version, workflow: 'in_care>finalized' },
+          meta: { encounterId: target.id, bookingId: target.bookingId, version: target.version, revisionId: revision.id, revisionNumber: revision.revisionNumber, idempotencyKey: String(body.idempotencyKey || ''), workflow: 'in_care>finalized' },
         }, now);
         emitAutomationEvent(d, {
           event: 'encounter.completed',
@@ -245,22 +301,46 @@ export async function PATCH(req: NextRequest) {
           customerId: target.customerId || undefined,
           data: { encounterId: target.id, professionalId: target.professionalId, serviceId: target.serviceId, version: target.version },
         });
-        return target;
+        return { encounter: target, finalizedNow: true };
       }
       if (action === 'reopen') {
         const conflict = versionConflict(target, body.expectedVersion);
         if (conflict.conflict) throw err(conflict.message, 409);
         if (target.status === 'draft') throw err('Este registro ainda é rascunho.', 409);
         if (!reopen) throw err('Só quem administra a unidade reabre um registro finalizado.', 403);
+        const reason = cleanText(String(body.reason || ''), 'internalNote');
+        if (reason.length < 3) throw err('Informe o motivo da reabertura.', 400);
         target.status = 'draft';
         target.updatedAt = now;
         target.updatedBy = guard.ctx.user.id;
         target.version = encounterVersionOf(target) + 1;
         pushAudit(d, {
           action: 'encounter.reopened', businessId, actor: guard.ctx.user,
-          meta: { encounterId: target.id, version: target.version },
+          meta: { encounterId: target.id, version: target.version, reason, previousRevisionId: target.finalizationRevisionId || '' },
         }, now);
-        return target;
+        return { encounter: target, finalizedNow: false };
+      }
+
+      if (action === 'addendum') {
+        const conflict = versionConflict(target, body.expectedVersion);
+        if (conflict.conflict) throw err(conflict.message, 409);
+        if (target.status !== 'finalized') throw err('Nota complementar só pode ser adicionada a um atendimento finalizado.', 409);
+        if (!isResponsibleProfessional(d, target, guard.ctx.user.id)) throw err('Somente o profissional responsável pode adicionar uma nota complementar.', 403);
+        const professional = d.professionals.find((item) => item.businessId === target.businessId && item.id === target.professionalId && item.active !== false && item.userId === guard.ctx.user.id)!;
+        const text = cleanText(String(body.text || ''), 'internalNote');
+        if (text.length < 1) throw err('Escreva a nota complementar.', 400);
+        const revision = currentRevision(d, businessId, target.id);
+        if (!revision) throw err('A finalização deste atendimento não possui revisão auditável.', 409);
+        const addendum: EncounterAddendum = {
+          id: randomUUID(), businessId, encounterId: target.id, revisionId: revision.id,
+          authorUserId: guard.ctx.user.id, authorProfessionalId: professional.id, text, createdAt: now,
+        };
+        d.encounterAddenda.push(addendum);
+        target.updatedAt = now; target.updatedBy = guard.ctx.user.id;
+        target.version = encounterVersionOf(target) + 1;
+        pushAudit(d, { action: 'encounter.addendum_added', businessId, actor: guard.ctx.user,
+          meta: { encounterId: target.id, revisionId: revision.id, version: target.version, addendumId: addendum.id } }, now);
+        return { encounter: target, finalizedNow: false };
       }
 
       // ── Edição de conteúdo ──
@@ -376,7 +456,7 @@ export async function PATCH(req: NextRequest) {
       if (changed.length === 0) {
         // Nada mudou: não inventa versão nova nem suja a auditoria (o autosave
         // da tela bate aqui com frequência e precisa ser barato e honesto).
-        return target;
+        return { encounter: target, finalizedNow: false };
       }
       target.updatedAt = now;
       target.updatedBy = guard.ctx.user.id;
@@ -385,16 +465,17 @@ export async function PATCH(req: NextRequest) {
         action: 'encounter.updated', businessId, actor: guard.ctx.user,
         meta: { encounterId: target.id, fields: changed, version: target.version },
       }, now);
-      return target;
+      return { encounter: target, finalizedNow: false };
     });
-    if (action === 'finalize') {
+    if (updated.finalizedNow) {
       void publishWorkflowEvent({
-        businessId, type: 'encounter.finalized', entityType: 'encounter', entityId: updated.id,
-        actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: updated.bookingId || undefined,
+        businessId, type: 'encounter.finalized', entityType: 'encounter', entityId: updated.encounter.id,
+        actor: { id: guard.ctx.user.id, name: guard.ctx.user.name }, bookingId: updated.encounter.bookingId || undefined,
         from: 'in_care', to: 'finalized', at: now,
       });
     }
-    return NextResponse.json({ ok: true, encounter: view(updated, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) });
+    const responseDB = await readDB();
+    return NextResponse.json(withEncounterHistory(responseDB, updated.encounter.id, { ok: true, encounter: view(updated.encounter, responseDB, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }));
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] PATCH falhou:', e);
@@ -409,7 +490,6 @@ export async function DELETE(req: NextRequest) {
     const guard = await requireBusiness(req, businessId, 'atendimento');
     if (!guard.ok) return guard.res;
     const id = String(body.id || '');
-    const role = String(guard.ctx.role || '');
     const now = new Date().toISOString();
     await updateDB((d: DB) => {
       const idx = d.encounters.findIndex((e) => e.id === id && e.businessId === businessId);
@@ -418,14 +498,16 @@ export async function DELETE(req: NextRequest) {
       if (!encounterInScope(target, guard.ctx.professionalScope)) {
         throw err('Você só registra os seus próprios atendimentos.', 403);
       }
-      // Documento finalizado é histórico: só quem administra apaga.
-      if (target.status === 'finalized' && !canReopen(role)) {
-        throw err('Registro finalizado só é apagado por quem administra a unidade.', 403);
+      // F1C: finalização é uma fronteira histórica. Nem a administração
+      // destrói o documento finalizado; correções passam por addendum ou
+      // reabertura auditada, nunca por DELETE.
+      if (target.status === 'finalized') {
+        throw err('Registro finalizado é histórico e não pode ser apagado.', 409);
       }
       d.encounters.splice(idx, 1);
       pushAudit(d, {
         action: 'encounter.removed', businessId, actor: guard.ctx.user,
-        meta: { encounterId: id, bookingId: target.bookingId, wasFinalized: target.status === 'finalized' },
+        meta: { encounterId: id, bookingId: target.bookingId, wasFinalized: false },
       }, now);
     });
     return NextResponse.json({ ok: true });

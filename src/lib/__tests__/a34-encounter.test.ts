@@ -12,7 +12,7 @@
 import './helpers/temp-db';
 
 import fs from 'node:fs';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { emptyDB, readDB, writeDB } from '../db';
 import { createSession } from '../auth';
@@ -271,7 +271,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   it('finalizar assina o registro e cria a versão seguinte', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza completa', guidance: 'evitar frios' });
     expect(e.version).toBe(1);
-    const fin = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
+    const fin = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
     expect(fin.status).toBe(200);
     const finalized = (await json(fin)).encounter;
     expect(finalized.status).toBe('finalized');
@@ -285,7 +285,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
   // ═══════════════════════════════════════════════════════════════════
   it('doc/OWNER NÃO edita registro finalizado direto — só reabrindo', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza completa' });
-    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
 
     const direto = await patch({
       businessId: BIZ, id: e.id, evolution: 'mudei por baixo', expectedVersion: e.version,
@@ -303,7 +303,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
 
     // A porta certa: reabrir (auditado) e SÓ ENTÃO editar — e quem edita o
     // CONTEÚDO é o profissional responsável (F1B1), não o papel administrativo.
-    const reabrir = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, token);
+    const reabrir = await patch({ businessId: BIZ, id: e.id, action: 'reopen', reason: 'Correção auditada' }, token);
     expect(reabrir.status).toBe(200);
     const depois = await patch({ businessId: BIZ, id: e.id, evolution: 'agora sim' }, profToken);
     expect(depois.status).toBe(200);
@@ -319,7 +319,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
 
   it('ADMIN da unidade também NÃO edita finalizado direto', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
     const adminToken = await createSession(ADMIN_USER);
     // O admin VÊ o registro (tem a permissão por padrão)…
     const get = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&bookingId=bk-1`, undefined, adminToken, 'GET'));
@@ -327,7 +327,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     // …e ainda assim a edição direta é recusada. Precisa reabrir.
     const direto = await patch({ businessId: BIZ, id: e.id, guidance: 'x' }, adminToken);
     expect(direto.status).toBe(409);
-    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, adminToken);
+    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen', reason: 'Correção auditada' }, adminToken);
     expect(reabre.status).toBe(200);
     // F1B1 — reabrir é ato administrativo; ESCREVER conteúdo clínico não: o
     // Admin sem vínculo profissional recebe 403 (papel ≠ identidade clínica).
@@ -340,12 +340,12 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
 
   it('PROFISSIONAL também NÃO edita finalizado direto (nem o próprio)', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     const profToken = await createSession(PROF_USER);
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
     const direto = await patch({ businessId: BIZ, id: e.id, evolution: 'x' }, profToken);
     expect([403, 409]).toContain(direto.status);
     // E reabrir não é para ele — quem administra é que reabre.
-    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen' }, profToken);
+    const reabre = await patch({ businessId: BIZ, id: e.id, action: 'reopen', reason: 'Correção auditada' }, profToken);
     expect(reabre.status).toBe(403);
     const db = await readDB();
     expect(db.encounters.find((x) => x.id === e.id)!.evolution).toBe('limpeza');
@@ -389,13 +389,13 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     // Primeiro salva (1 → 2) como o profissional responsável; quem ainda manda
     // versão 1 é recusado já no finalize (transição administrativa).
     await patch({ businessId: BIZ, id: e.id, evolution: 'limpeza feita' }, profToken);
-    const finVelho = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 1 }, token);
+    const finVelho = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 1 }, profToken);
     expect(finVelho.status).toBe(409);
-    const finOk = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 2 }, token);
+    const finOk = await patch({ businessId: BIZ, id: e.id, action: 'finalize', expectedVersion: 2 }, profToken);
     expect(finOk.status).toBe(200);
-    const reopenVelho = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 1 }, token);
+    const reopenVelho = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 1, reason: 'Correção auditada' }, token);
     expect(reopenVelho.status).toBe(409);
-    const reopenOk = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 3 }, token);
+    const reopenOk = await patch({ businessId: BIZ, id: e.id, action: 'reopen', expectedVersion: 3, reason: 'Correção auditada' }, token);
     expect(reopenOk.status).toBe(200);
     expect((await json(reopenOk)).encounter.version).toBe(4);
   });
@@ -483,7 +483,7 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
 
   it('finalizar sem conteúdo responde 400 com a razão', async () => {
     const e = await createFor('bk-1');
-    const res = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
+    const res = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
     expect(res.status).toBe(400);
     expect((await json(res)).error).toMatch(/o que foi feito/i);
   });
@@ -505,17 +505,17 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     expect(fin.status).toBe(403);
   });
 
-  it('registro finalizado não é apagado por profissional, mas é por quem administra', async () => {
+  it('registro finalizado não é apagado por profissional nem administração', async () => {
     const e = await createFor('bk-1', { evolution: 'limpeza' });
-    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
     const profToken = await createSession(PROF_USER);
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, profToken);
     const doProf = await encountersDELETE(jsonReq('/api/encounters', { businessId: BIZ, id: e.id }, profToken, 'DELETE'));
-    expect(doProf.status).toBe(403);
+    expect(doProf.status).toBe(409);
     const doDono = await encountersDELETE(jsonReq('/api/encounters', { businessId: BIZ, id: e.id }, token, 'DELETE'));
-    expect(doDono.status).toBe(200);
+    expect(doDono.status).toBe(409);
     const db = await readDB();
-    expect(db.encounters.some((x) => x.id === e.id)).toBe(false);
-    expect(db.audit.some((a) => a.action === 'encounter.removed' && a.meta?.wasFinalized === true)).toBe(true);
+    expect(db.encounters.some((x) => x.id === e.id)).toBe(true);
+    expect(db.audit.some((a) => a.action === 'encounter.removed' && a.meta?.wasFinalized === true)).toBe(false);
   });
 
   it('isolamento entre unidades: o agendamento de fora não abre registro aqui', async () => {
@@ -565,6 +565,113 @@ describe('A3.4 · Bloco 5 — registro pelas rotas reais', () => {
     const res = await encountersPOST(jsonReq('/api/encounters', { businessId: BIZ, queueId: 'q-outra' }, token));
     expect(res.status).toBe(404);
     expect((await readDB()).encounters).toHaveLength(0);
+  });
+
+  it('F1C: finalização cria snapshot, addendum é append-only e reabertura preserva revisões', async () => {
+    const e = await createFor('bk-1', { evolution: 'estado inicial', clinical: undefined });
+    const fin = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-op-1' }, profToken);
+    expect(fin.status).toBe(200);
+    const finBody = await json(fin);
+    expect(finBody.encounter.finalizationRevisions).toHaveLength(1);
+    expect(finBody.encounter.finalizationRevisions[0].revisionNumber).toBe(1);
+    expect(finBody.encounter.addenda).toHaveLength(0);
+    const first = await readDB();
+    const revision1 = first.encounterFinalizationRevisions.find((revision) => revision.encounterId === e.id)!;
+    expect(revision1.revisionNumber).toBe(1);
+    expect(revision1.snapshot.evolution).toBe('estado inicial');
+    expect(revision1.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    const retry = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-op-1', expectedVersion: 2 }, profToken);
+    expect(retry.status).toBe(200);
+    expect((await readDB()).encounterFinalizationRevisions.filter((revision) => revision.encounterId === e.id)).toHaveLength(1);
+    expect((await patch({ businessId: BIZ, id: e.id, evolution: 'bypass', expectedVersion: 2 }, profToken)).status).toBe(409);
+    const note = await patch({ businessId: BIZ, id: e.id, action: 'addendum', text: 'Resultado complementar recebido.', expectedVersion: 2 }, profToken);
+    expect(note.status).toBe(200);
+    const noteBody = await json(note);
+    expect(noteBody.encounter.addenda).toHaveLength(1);
+    expect(noteBody.encounter.addenda[0].text).toBe('Resultado complementar recebido.');
+    const persistedAfterNote = await readDB();
+    expect(persistedAfterNote.encounterAddenda).toHaveLength(1);
+    const afterNoteGet = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, profToken, 'GET'));
+    expect((await json(afterNoteGet)).encounter.addenda).toHaveLength(1);
+    const reopened = await patch({ businessId: BIZ, id: e.id, action: 'reopen', reason: 'Correção de registro antes do fechamento administrativo', expectedVersion: 3 }, token);
+    expect(reopened.status).toBe(200);
+    const reopenedBody = await json(reopened);
+    expect(reopenedBody.encounter.reopenEvents).toHaveLength(1);
+    expect(reopenedBody.encounter.reopenEvents[0].meta.reason).toBe('Correção de registro antes do fechamento administrativo');
+    await patch({ businessId: BIZ, id: e.id, evolution: 'estado corrigido', expectedVersion: 4 }, profToken);
+    const second = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-op-2', expectedVersion: 5 }, profToken);
+    expect(second.status).toBe(200);
+    const secondBody = await json(second);
+    expect(secondBody.encounter.finalizationRevisions.map((revision: any) => revision.revisionNumber)).toEqual([1, 2]);
+    expect(secondBody.encounter.addenda).toHaveLength(1);
+    expect(secondBody.encounter.reopenEvents).toHaveLength(1);
+    const finalDB = await readDB();
+    expect(finalDB.encounterFinalizationRevisions.filter((revision) => revision.encounterId === e.id).map((revision) => revision.revisionNumber)).toEqual([1, 2]);
+    expect(finalDB.encounterFinalizationRevisions.find((revision) => revision.id === revision1.id)?.snapshot.evolution).toBe('estado inicial');
+    expect(finalDB.audit.filter((entry) => entry.meta?.encounterId === e.id).map((entry) => entry.action)).toContain('encounter.reopened');
+  });
+
+  it('F1C: histórico filtra revision e addendum por tenant além do encounterId', async () => {
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-tenant-history' }, profToken);
+    const db = await readDB();
+    const ownRevision = db.encounterFinalizationRevisions.find((revision) => revision.encounterId === e.id)!;
+    db.encounterFinalizationRevisions.push({ ...ownRevision, id: 'revision-other-tenant', businessId: OTHER, fingerprint: 'b'.repeat(64), snapshot: { evolution: 'TENANT B' } } as any);
+    db.encounterAddenda.push({ id: 'addendum-other-tenant', businessId: OTHER, encounterId: e.id, revisionId: 'revision-other-tenant', authorUserId: 'other', authorProfessionalId: 'other', text: 'TENANT B', createdAt: '2026-09-19T13:00:00.000Z' } as any);
+    await writeDB(db);
+    const response = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, token, 'GET'));
+    const body = await json(response);
+    expect(body.encounter.finalizationRevisions).toHaveLength(1);
+    expect(body.encounter.finalizationRevisions[0].businessId).toBe(BIZ);
+    expect(body.encounter.addenda).toHaveLength(0);
+  });
+
+  it('F1C: Professional responsável mantém addendum após finalização sem editar conteúdo', async () => {
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-can-addendum' }, profToken);
+    const response = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, profToken, 'GET'));
+    const body = await json(response);
+    expect(body.encounter.status).toBe('finalized');
+    expect(body.encounter.access.canEditCore).toBe(false);
+    expect(body.encounter.canAddendum).toBe(true);
+    const ownerResponse = await encountersGET(jsonReq(`/api/encounters?businessId=${BIZ}&id=${e.id}`, undefined, token, 'GET'));
+    expect((await json(ownerResponse)).encounter.canAddendum).toBe(false);
+  });
+
+  it('F1C: retry finalize não publica Domain Event novamente', async () => {
+    const workflow = await import('../workflow-events');
+    const publish = vi.spyOn(workflow, 'publishWorkflowEvent');
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    publish.mockClear();
+    const first = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-event-retry' }, profToken);
+    expect(first.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const beforeRetry = await readDB();
+    const countsBefore = {
+      revision: beforeRetry.encounterFinalizationRevisions.filter((revision) => revision.encounterId === e.id).length,
+      audit: beforeRetry.audit.filter((entry) => entry.action === 'encounter.finalized' && entry.meta?.encounterId === e.id).length,
+      automation: beforeRetry.automationRuns.filter((run) => run.businessId === BIZ && run.triggerEvent === 'encounter.completed').length,
+      version: beforeRetry.encounters.find((encounter) => encounter.id === e.id)!.version,
+    };
+    const retry = await patch({ businessId: BIZ, id: e.id, action: 'finalize', idempotencyKey: 'f1c-event-retry', expectedVersion: 2 }, profToken);
+    expect(retry.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(publish).toHaveBeenCalledTimes(1);
+    const afterRetry = await readDB();
+    expect({
+      revision: afterRetry.encounterFinalizationRevisions.filter((revision) => revision.encounterId === e.id).length,
+      audit: afterRetry.audit.filter((entry) => entry.action === 'encounter.finalized' && entry.meta?.encounterId === e.id).length,
+      automation: afterRetry.automationRuns.filter((run) => run.businessId === BIZ && run.triggerEvent === 'encounter.completed').length,
+      version: afterRetry.encounters.find((encounter) => encounter.id === e.id)!.version,
+    }).toEqual(countsBefore);
+    publish.mockRestore();
+  });
+
+  it('F1C: Owner sem identidade Professional não finaliza clinicamente', async () => {
+    const e = await createFor('bk-1', { evolution: 'limpeza' });
+    const denied = await patch({ businessId: BIZ, id: e.id, action: 'finalize' }, token);
+    expect(denied.status).toBe(403);
+    expect((await readDB()).encounterFinalizationRevisions).toHaveLength(0);
   });
 
   it('a lista por cliente casa por identidade (contato) — não por nome', async () => {
