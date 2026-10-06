@@ -38,6 +38,7 @@ import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { encounterHref, encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { PetsSection } from '@/components/dashboard/PetsSection';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { useOverlayDismissGuard, useUnsavedChangesGuard } from './OverlayDismissGuard';
@@ -48,18 +49,20 @@ export interface VisibleNote { id: string; at: string; by: string; byName: strin
 
 /** Pessoa como o Cliente 360 devolve (fonte: /api/people360). */
 export interface Person360 {
-  key: string; contactId: string; note: string;
+  key: string; contactId: string; name: string; phone: string;
+  /** Campos administrativos existem somente na projeção ampla do servidor. */
+  note?: string;
   notes?: VisibleNote[];
-  customerId: string; name: string; phone: string; email: string;
-  registered: boolean;
-  accountStatus: 'none' | 'active';
+  customerId?: string; email?: string;
+  registered?: boolean;
+  accountStatus?: 'none' | 'active';
   accountEmail?: string;
   accountPhone?: string;
   mustChangePassword?: boolean;
   /** Foto da conta global, quando existe vínculo ('' = usar iniciais). */
   avatar?: string;
-  customerSince: string; source: string; marketingOptIn: boolean;
-  orders: number; spent: number; lastOrderAt: string;
+  customerSince?: string; source?: string; marketingOptIn?: boolean;
+  orders?: number; spent?: number; lastOrderAt?: string;
   /** A3.3 — dados cadastrais (carteirinha). */
   profile?: ContactProfile;
   age?: number | null;
@@ -73,10 +76,10 @@ export interface Person360 {
     /** Etapa canônica do atendimento (scheduled|arrived|in_care|finalized|…). */
     workflowState?: string;
   }>;
-  leads: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
+  leads?: Array<{ id: string; origin: string; status: string; stageId: string; stageName: string; interest: string; action: string; createdAt: string; stageHistory?: any[]; priority?: string; assignedUserId?: string; lastInteraction?: string }>;
   conversations?: Array<{ id: string; channel: string; status: string; at: string; preview: string; unread: number }>;
   tasks?: Array<{ id: string; title: string; status: string; dueAt: string; dueLabel: string; assignedUserId: string; assigneeName: string; leadId: string; bookingId: string }>;
-  lastSeen: string;
+  lastSeen?: string;
 }
 
 // Data civil completa em toda linha do histórico do Cliente 360.
@@ -130,10 +133,26 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // FASE 2 · P2 — "Iniciar atendimento" do próximo agendamento futuro.
   // A3.4 · Bloco 5 — registros de atendimento da pessoa. A permissão é PRÓPRIA
   // (`atendimento`): sem ela, a aba nem aparece e a rota não é chamada.
-  const { permissions } = usePanelPermissions();
+  const { permissions, professionalId } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // FASE 2 · P2 — aba Financeiro só existe com a permissão correspondente.
   const canFinance = permissions.financeiro === true;
+  // CLINICAL ACCESS: acesso clínico não concede Conversas nem Oportunidades —
+  // as abas só existem com a permissão do módulo (nada de aba vazia de CRM
+  // para quem atende). A visão clínica também não carrega observações
+  // administrativas (o servidor não as envia neste recorte).
+  // `'none'` = papel de atendimento SEM vínculo Professional: para ele não
+  // existe CRM nenhum (nenhum paciente é legível), então a única visão
+  // coerente é a clínica — a MESMA regra do título da lista em /clientes.
+  const agendaScope = useWorkspace().agendaScope;
+  const clinicalView = agendaScope === 'own' || agendaScope === 'none';
+  const canWhats = permissions.whatsapp === true;
+  // CLINICAL ACCESS: o acesso clínico é da UNIDADE, mas iniciar/abrir o
+  // atendimento é do profissional RESPONSÁVEL pelo agendamento — o servidor
+  // recusa assumir o atendimento alheio (403). A ação só aparece para o
+  // agendamento do próprio profissional.
+  const canStartBooking = (b: { professionalId?: string } | null): boolean =>
+    !!b && (!clinicalView || (!!professionalId && b.professionalId === professionalId));
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
@@ -154,15 +173,20 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [tagDraft, setTagDraft] = useState('');
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
-  const tags = useMemo(() => (person.tags && person.tags.length
-    ? person.tags
-    : clientTags({
-      name: person.name, accountStatus: person.accountStatus, marketingOptIn: person.marketingOptIn,
-      bookingsCount: person.bookings.length,
-      // Ponto 9 — só atendimento concluído autoriza "Cliente atendido".
-      attendedCount: countAttended(person.bookings),
-      leadsCount: person.leads.length, profile,
-    })).filter(tag => !['acesso', 'marketing'].includes(tag.id)), [person, profile]);
+  const tags = useMemo(() => {
+    // Etiquetas derivam de conta, consentimento, métricas e perfil CRM. Não são
+    // uma projeção clínica e nunca são recalculadas localmente para Professional.
+    if (clinicalView) return [];
+    return (person.tags && person.tags.length
+      ? person.tags
+      : clientTags({
+        name: person.name, accountStatus: person.accountStatus || 'none', marketingOptIn: person.marketingOptIn === true,
+        bookingsCount: person.bookings.length,
+        // Ponto 9 — só atendimento concluído autoriza "Cliente atendido".
+        attendedCount: countAttended(person.bookings),
+        leadsCount: (person.leads || []).length, profile,
+      })).filter(tag => !['acesso', 'marketing'].includes(tag.id));
+  }, [clinicalView, person, profile]);
 
   // O cadastro mudou em relação ao que veio do servidor? Serve para não mandar
   // PATCH à toa e para dizer com clareza "nada para salvar".
@@ -342,7 +366,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         ) : undefined,
       });
     }
-    for (const l of person.leads) {
+    for (const l of person.leads || []) {
       const d = stageDef(l as any);
       const nextId = nextStageForLead(l as any);
       const lostId = lostStageId();
@@ -405,13 +429,13 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     { id: 'overview', label: 'Visão geral', icon: 'grid' },
     { id: 'bookings', label: 'Agenda', icon: 'calendar', count: person.bookings.length },
     { id: 'encounters', label: 'Atendimento', icon: 'fileText', count: encountersLoaded && !encountersError ? encounters.length : undefined },
-    { id: 'conversations', label: 'Conversas', icon: 'chat', count: (person.conversations || []).length },
+    ...(canWhats ? [{ id: 'conversations' as const, label: 'Conversas', icon: 'chat', count: (person.conversations || []).length }] : []),
     { id: 'files', label: 'Arquivos', icon: 'upload', count: encounters.reduce((n, e) => n + ((e.files || []).length), 0) },
     ...(canFinance ? [{ id: 'finance' as const, label: 'Financeiro', icon: 'wallet', count: financeEntries.length }] : []),
     { id: 'timeline', label: 'Histórico', icon: 'history', count: timeline.length },
-    { id: 'leads', label: 'Oportunidades', icon: 'spark', count: person.leads.length },
+    ...(canFunil ? [{ id: 'leads' as const, label: 'Oportunidades', icon: 'spark', count: (person.leads || []).length }] : []),
     { id: 'tasks', label: 'Tarefas', icon: 'tasks', count: (person.tasks || []).length },
-    { id: 'notes', label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length },
+    ...(clinicalView ? [] : [{ id: 'notes' as const, label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length }]),
   ];
 
   useEffect(() => {
@@ -440,7 +464,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     if (!canEncounter || encountersLoaded) return;
     const q = person.contactId
       ? `contactId=${encodeURIComponent(person.contactId)}`
-      : person.customerId ? `customerId=${encodeURIComponent(person.customerId)}` : '';
+      : person.phone ? `phone=${encodeURIComponent(person.phone)}` : '';
     if (!q) { setEncountersLoaded(true); return; }
     let cancelled = false;
     setEncountersError('');
@@ -452,7 +476,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         setEncountersLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [canEncounter, encountersLoaded, person.contactId, person.customerId, businessId, variant]);
+  }, [canEncounter, encountersLoaded, person.contactId, person.phone, businessId, variant]);
 
   // FASE 2 · P2/P7 — cobranças do paciente (uma carga; sem permissão = sem chamada).
   useEffect(() => {
@@ -505,36 +529,40 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       backHref={variant === 'page' ? (pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`) : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? (
         <>
-          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
           {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
               textarea e o foca com highlight sutil (sem modal novo). */}
-          <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
-            <Icon n="pencil" size={14} /> Registrar nota
-          </Button>
+          {!clinicalView && (
+            <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+              <Icon n="pencil" size={14} /> Registrar nota
+            </Button>
+          )}
           {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
               registro; antes disso a chegada é registrada na Agenda. */}
-          {canEncounter && nextBooking && (nextBooking.workflowState === 'arrived' || nextBooking.workflowState === 'in_care') && (
+          {canEncounter && canStartBooking(nextBooking) && (nextBooking!.workflowState === 'arrived' || nextBooking!.workflowState === 'in_care') && (
             <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
               <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => {
-            const opening = !editing;
-            if (editing) requestCloseEdit(); else setEditing(true);
-            // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
-            // campo + highlight sutil (1–2s). Fechar não mexe no foco.
-            if (opening) focusFieldSoon('client-edit-name');
-          }}>
-            <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
-          </Button>
+          {!clinicalView && (
+            <Button variant="secondary" size="sm" onClick={() => {
+              const opening = !editing;
+              if (editing) requestCloseEdit(); else setEditing(true);
+              // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+              // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+              if (opening) focusFieldSoon('client-edit-name');
+            }}>
+              <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
+            </Button>
+          )}
           <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
         </>
       ) : (
         <>
-          {person.phone && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+          {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
             <Icon n="calendarPlus" size={14} /> Novo agendamento
           </Button>
@@ -552,22 +580,24 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       <div className="p-4">
         <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5 client360-idcard">
           <div className="client360-idcard__identity relative flex flex-wrap items-start gap-4">
-            {/* Ponto 8 — foto real da conta global quando existe; sem ela, iniciais. */}
-            <Avatar name={person.name} src={person.avatar || undefined} size={64} />
+            {/* Avatar de conta e perfil rico pertencem somente à visão administrativa. */}
+            <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={64} />
             <div className="client360-idcard__primary min-w-0 flex-1">
               <h2 className="text-xl font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
-              <p className="text-sm text-[var(--text-muted)] mt-0.5">
-                {age !== null ? `${age} anos` : 'Idade não informada'}
-                {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
-              </p>
-              <div className="client360-idcard__tags flex flex-wrap items-center gap-1.5 mt-2.5">
-                {tags.map((t) => (
-                  <span key={t.id} title={t.hint}>
-                    <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
-                  </span>
-                ))}
-                {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
-              </div>
+              {!clinicalView && <>
+                <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                  {age !== null ? `${age} anos` : 'Idade não informada'}
+                  {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
+                </p>
+                <div className="client360-idcard__tags flex flex-wrap items-center gap-1.5 mt-2.5">
+                  {tags.map((t) => (
+                    <span key={t.id} title={t.hint}>
+                      <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
+                    </span>
+                  ))}
+                  {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
+                </div>
+              </>}
             </div>
 
           </div>
@@ -576,14 +606,16 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <dl className="client360-idcard__data relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
             <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
               action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
-            <Data label="E-mail" value={person.email || '—'} />
-            <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
-            <Data label="Data de nascimento" value={profile.birthDate ? profile.birthDate.split('-').reverse().join('/') : '—'} />
-            <Data label="Idade" value={age !== null ? `${age} anos` : '—'} />
-            <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
-            <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
-            <Data label="Origem" value={person.source || '—'} />
-            <Data label="Atendimentos" value={String(person.bookings.length)} />
+            {!clinicalView && <>
+              <Data label="E-mail" value={person.email || '—'} />
+              <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
+              <Data label="Data de nascimento" value={profile.birthDate ? profile.birthDate.split('-').reverse().join('/') : '—'} />
+              <Data label="Idade" value={age !== null ? `${age} anos` : '—'} />
+              <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
+              <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
+              <Data label="Origem" value={person.source || '—'} />
+              <Data label="Atendimentos" value={String(person.bookings.length)} />
+            </>}
           </dl>
         </div>
 
@@ -605,9 +637,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
               </p>
-              <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
-                <Icon n="pencil" size={12} /> Editar
-              </Button>
+              {!clinicalView && (
+                <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
+                  <Icon n="pencil" size={12} /> Editar
+                </Button>
+              )}
             </div>
             <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
               {addressLine && (
@@ -907,7 +941,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-[var(--border)] p-3">
+                {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-3">
                   <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
                   {lastNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
@@ -915,7 +949,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
                   <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
-                </div>
+                </div>}
                 {canFinance ? (
                   <div className="rounded-lg border border-[var(--border)] p-3">
                     <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
@@ -927,7 +961,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     )}
                     <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
                   </div>
-                ) : (
+                ) : !clinicalView && (
                   <div className="rounded-lg border border-[var(--border)] p-3">
                     <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
                     <div className="flex flex-wrap gap-1.5 mt-2">
@@ -1075,11 +1109,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
 
           {tab === 'leads' && (
-            person.leads.length === 0
+            (person.leads || []).length === 0
               ? <Empty hint="Nenhuma oportunidade aberta para esta pessoa." action={canFunil ? <Link href={`/funil?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Abrir oportunidades</Link> : undefined} />
               : (
                 <ul className="divide-y divide-[var(--border-soft)]">
-                  {person.leads.map((l) => {
+                  {(person.leads || []).map((l) => {
                     const d = stageDef(l as any);
                     const nextId = nextStageForLead(l as any);
                     return (
@@ -1196,7 +1230,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </div>
       </div>
       </>) : (
-        <ClientQuickPreview person={person} tags={tags} />
+        <ClientQuickPreview person={person} tags={tags} clinicalView={clinicalView} />
       )}
     </ProfileShell>
     </>
@@ -1256,9 +1290,10 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
  * Sem abas e sem carregar atendimentos/financeiro: quem quer o histórico
  * completo segue para a página, e é isso que a ação primária oferece.
  */
-function ClientQuickPreview({ person, tags }: {
+function ClientQuickPreview({ person, tags, clinicalView }: {
   person: Person360;
   tags: { id: string; label: string; tone?: string; hint?: string }[];
+  clinicalView: boolean;
 }) {
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
@@ -1271,26 +1306,26 @@ function ClientQuickPreview({ person, tags }: {
   return (
     <div className="p-4 space-y-3.5">
       <div className="flex flex-wrap items-start gap-3.5">
-        <Avatar name={person.name} src={person.avatar || undefined} size={56} />
+        <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={56} />
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
           <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
             {person.phone ? formatPhoneBR(person.phone) : 'Sem telefone'}
-            {person.email ? ` · ${person.email}` : ''}
+            {!clinicalView && person.email ? ` · ${person.email}` : ''}
           </p>
-          <p className="text-[12px] text-[var(--text-faint)] mt-0.5">
+          {!clinicalView && <p className="text-[12px] text-[var(--text-faint)] mt-0.5">
             {age !== null ? `${age} anos` : 'Idade não informada'}
             {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
-          </p>
+          </p>}
         </div>
 
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      {!clinicalView && <div className="flex flex-wrap gap-1.5">
         {tags.length ? tags.map((t) => (
           <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
         )) : <Badge tone="zinc">Sem etiquetas</Badge>}
-      </div>
+      </div>}
 
       <div className="rounded-[var(--radius-md)] border border-[var(--border)] divide-y divide-[var(--border)]">
         <div className="px-3.5 py-2.5">

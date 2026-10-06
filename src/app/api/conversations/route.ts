@@ -8,7 +8,7 @@ import {
   pauseAi, resumeAi, setAgentState, agentStateLabel,
 } from '@/lib/inbox/assistant-ops';
 import { requireBusiness } from '@/lib/access';
-import { canAccessContact, canAccessConversation, isProfessionalScoped } from '@/lib/data-scope';
+import { canAccessConversation, isLinkedContact, isProfessionalScoped } from '@/lib/data-scope';
 import { resolveConversationContact, conversationRegistered } from '@/lib/conversation-identity';
 import { integrationStatus, serverCredentialsConfigured } from '@/lib/whatsapp';
 import { deliverWhatsappMessage } from '@/lib/whatsapp-cloud-api';
@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
         const conv = d.conversations.find((c) => c.id === conversationId && c.businessId === businessId);
         const contact = d.contacts.find((c) => c.id === contactId && c.businessId === businessId);
         if (!conv || !contact) return null;
-        if (isProfessionalScoped(ctx) && !canAccessContact(d, ctx, contact)) return null;
+        if (isProfessionalScoped(ctx) && !isLinkedContact(d, ctx, contact)) return null;
         conv.contactId = contact.id;
         if (!conv.customerId && contact.customerId) conv.customerId = contact.customerId;
         return { conversation: conv, contact };
