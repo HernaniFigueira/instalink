@@ -446,7 +446,7 @@ export function EsteiraView() {
 
   const priorityBadge = (priority?: LeadPriority) => {
     switch (priority) {
-      case 'urgent': return <span className="bg-[var(--danger)] text-white text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider shadow-xs">Urgente</span>;
+      case 'urgent': return <span className="bg-[var(--danger-bg)] text-[var(--danger-fg)] border border-[var(--danger-border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Urgente</span>;
       case 'high': return <span className="bg-[var(--warning-bg)] text-[var(--warning-fg)] border border-[var(--warning-border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Alta</span>;
       case 'low': return <span className="bg-[var(--surface-3)] text-[var(--text-muted)] border border-[var(--border)] text-[10px] px-2 py-0.5 rounded-pill font-semibold uppercase tracking-wider">Baixa</span>;
       default: return null;

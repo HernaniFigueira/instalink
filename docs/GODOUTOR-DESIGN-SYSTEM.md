@@ -207,9 +207,9 @@ arquivo identificado (nada “escondido” como exceção).
 | Lista de atendimentos como pilha de cards | lista com fios de 1px | `agenda/page.tsx`, `globals.css` (`.ag-list`) | ✅ |
 | `<select>` cru restante (15 ocorrências em 8 arquivos) | `Select` + `Field`/`aria-label` | `pagina` (4), `master/suporte` (2), `IntegracoesView` (2), `QueuePanel` (2), `catalog-panels` (2), `configuracoes` (1), `organizacao` (1), `BusinessHours` (1) | ✅ (**zero** no produto) |
 | Barra de ações do funil sem quebra no celular (CTA cortado aos 390px) | `flex-wrap` + largura própria abaixo de `sm` | `dashboard/EsteiraView.tsx` | ✅ (medido em browser real) |
-| Ícones/cabeçalhos de página com chip próprio | `PageHeader`/`ActionSection` | dashboard, clientes, equipe, resultados, financeiro | ⏳ |
+| Ícones/cabeçalhos de página com chip próprio | `PageHeader`/`ActionSection` | dashboard, clientes, equipe, resultados, financeiro | ✅ (clientes/equipe/resultados/financeiro já usam `PageHeader`; o header da Visão geral foi alinhado aos tokens do chip canônico `surface-2`+`accent` na consolidação 2026-10-06) |
 | `lib/appearance.ts` (tokens de nav legados) | — | `src/lib/appearance.ts` | ⏳ (remover quando o campo sair do payload) |
-| Board de oportunidades / kanban com cartões próprios | `Table`/`Card` semântico | `dashboard/EsteiraView.tsx`, `catalog-panels.tsx` | ⏳ (fora do escopo visual desta PR: domínio intacto) |
+| Board de oportunidades / kanban com cartões próprios | `Table`/`Card` semântico | `dashboard/EsteiraView.tsx`, `catalog-panels.tsx` | ✅ tokens (consolidação 2026-10-06: prioridade “Urgente” saiu do Danger SOLID para o par soft `danger-bg/fg/border`; o listbox da biblioteca veterinária trocou `zinc-200`/`shadow-lg` por `--border`/`shadow-md`; pontos de etapa permanecem “cor+rótulo”). O drag-and-drop do kanban é **interação preservada**, não identidade visual — a conversão estrutural para `Table` fica como refactor não-visual opcional e não bloqueia o DS 1.0. |
 
 ## 8. Verificação
 
