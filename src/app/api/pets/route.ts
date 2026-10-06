@@ -6,6 +6,20 @@ import { sanitizePet, validatePet, petsOfTutor } from '@/lib/pets';
 import { isLinkedContact, isLinkedPet, isProfessionalScoped, scopeReadablePets } from '@/lib/data-scope';
 import type { Pet } from '@/lib/types';
 
+/** Projeção clínica do Pet: mantém o vínculo com o tutor necessário ao Pet 360,
+ * mas não expõe metadados internos da entidade. Admin/Recepção conservam o DTO.
+ */
+type ClinicalPet = Pick<Pet,
+  'id' | 'tutorId' | 'name' | 'photo' | 'species' | 'breed' | 'sex' |
+  'birthDate' | 'weightKg' | 'notes' | 'active'
+>;
+
+function petResponse(pet: Pet, ctx: { professionalScope: string }): Pet | ClinicalPet {
+  if (!isProfessionalScoped(ctx)) return pet;
+  const { id, tutorId, name, photo, species, breed, sex, birthDate, weightKg, notes, active } = pet;
+  return { id, tutorId, name, photo, species, breed, sex, birthDate, weightKg, notes, active };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // FASE 2 · P6 — PETS (pacientes veterinários) — API
 // ═══════════════════════════════════════════════════════════════
@@ -29,7 +43,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     vet: business?.clinicType === 'veterinaria',
     clinicType: business?.clinicType || 'geral',
-    pets: tutorId ? petsOfTutor(all, tutorId) : all,
+    pets: (tutorId ? petsOfTutor(all, tutorId) : all).map((pet) => petResponse(pet, guard.ctx)),
   });
 }
 
@@ -74,7 +88,7 @@ export async function POST(req: NextRequest) {
         db.pets.push(pet);
         return pet;
       });
-      return NextResponse.json({ ok: true, pet: saved });
+      return NextResponse.json({ ok: true, pet: petResponse(saved, guard.ctx) });
     }
 
     if (action === 'delete') {

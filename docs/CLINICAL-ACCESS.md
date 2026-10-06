@@ -1,12 +1,7 @@
 # Clinical Access — continuidade assistencial e histórico longitudinal
 
-> **STATUS: implementado e auto-verificado na branch de sessão
-> `arena/01a10c9e-instalink` (base `main` @ `714e3277`, merge da PR #60).
-> PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) aberta contra `main`; MERGE NÃO autorizado nesta sessão.**
-> Evidência de runtime: **smoke HTTP 32/32** contra o build de PRODUÇÃO local
-> (`next start`) + banco descartável (`scripts/smoke-clinical-access.mjs`) e
-> **QA de browser 17/17 em Chromium real** (`tests/clinical-access/qa.mjs`).
-> Produção (dados reais) não foi usada em momento nenhum.
+> **STATUS: projeções clínicas mínimas/allow-list e fechamento de privacidade implementados e validados** na branch fixa desta sessão `arena/3c022fd4-instalink`. A branch foi avançada por fast-forward de `714e3277` até `5cc1a885` (HEAD remoto da PR #61) antes de aplicar, após revisão semântica, somente o delta do checkpoint `arena/bceef42d-instalink@4c32931`. A PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) continua aberta contra `main`, mas seu HEAD remoto permanece `arena/01a10c9e-instalink` @ `5cc1a885`; o commit desta sessão não foi enviado à branch da PR. Não foi criada outra PR; o corpo da PR foi atualizado apenas para registrar que este patch e suas validações não integram o HEAD remoto. A branch/HEAD da PR não foi alterada e não houve merge. Design System e Agenda UX não foram tocados.
+> Evidência desta branch, em build de produção (`next start`) e fixtures descartáveis: **smoke HTTP 33/33** e **browser QA 20/20 em Chromium 153 real**. Dados reais de produção não foram usados.
 
 ## 1. Decisão de domínio
 
@@ -86,24 +81,31 @@ passa a projetar a leitura clínica do servidor com rótulo contextual
 - `src/lib/data-scope.ts`: `operationalScope` × `patientAccess`; leitura
   clínica (`canReadContact/canReadPet/canReadPerson/scopeReadable*`) e escrita
   de CRM (`isLinkedContact/isLinkedPet`) separadas; guarda de tenant.
-- APIs: `contacts` (GET clínico, PATCH/observação presos ao vínculo), `pets`
-  (GET clínico, escrita presa ao vínculo), `people360` (read model clínico com
-  projeção que remove CRM/conta), `search` (pessoas/pets clínicos; agenda e
-  conversas operacionais), `encounters` (leitura clínica por id e por
-  `petId|contactId|customerId|phone`; escrita inalterada), `bookings`
-  (`mode=patient` escopado ao paciente), `overview` (bloco `whatsapp` só com a
-  permissão).
-- UI: `clientes/page.tsx` (rótulo "Pacientes", busca/contagem/empty-state,
-  ações de CRM ocultas), `ClientProfileDrawer` (abas Conversas/Oportunidades e
-  observações administrativas só com permissão/fora do recorte clínico; edição
-  cadastral e nota administrativas fora do recorte; "Iniciar atendimento" só
-  no agendamento do próprio profissional), `Pet360Sheet` (agenda do paciente
-  via `mode=patient&petId=`), `dashboard` (card sem métricas de conversa para
-  quem não tem a permissão), `atendimento/[encounterId]` (comentário do
-  contrato).
+- APIs e projeções: `contacts` GET clínico permite só `id/name/phone`;
+  `people360` permite só `key/contactId/name/phone/bookings` e usa chave
+  clínica opaca; `search` projeta nome/telefone para tutor e nome do pet, sem
+  procurar pelo e-mail; `pets` GET e update POST clínicos usam allow-list e
+  preservam `tutorId`. A resposta administrativa de Owner/Recepção continua
+  integral nessas rotas. O Encounter clínico remove `customerId` tanto do
+  registro corrente quanto dos snapshots de finalização; a resposta
+  administrativa é preservada. Estas correções são na projeção/resposta e não
+  mudam a autorização canônica do servidor nem o domínio de Encounter. `PATCH`
+  de cadastro/observação de contatos e escrita de pets seguem presos ao vínculo;
+  `bookings` (`mode=patient`) segue limitado ao paciente, sem alterar o escopo de
+  gestão da Agenda; `overview` inclui `whatsapp` somente com permissão. `search`
+  clínico aceita apenas nome/telefone para pessoas.
+- UI: `clientes/page.tsx` rotula a lista como "Pacientes" e limita a busca
+  visível a nome/telefone; não oferece cadastro ou filtros de CRM ao
+  Professional. `ClientProfileDrawer` não apresenta e-mail, perfil cadastral,
+  tags nem notas administrativas na projeção clínica. `Pet360Sheet` usa a
+  agenda do paciente via `mode=patient&petId=`; `dashboard` só mostra métricas
+  de conversa com a permissão.
 - `EncounterWorkspace`/seções: nenhuma mudança de escrita; o read-only alheio
   já era desenhado por `access` (F1) — agora o servidor entrega a leitura com
   `canEditCore=false` e o motivo visível.
+- O ajuste de privacidade desta etapa fica na fronteira de serialização: não
+  altera `scopeReadableContacts`, o domínio/escrita de Encounter ou o escopo da
+  Agenda de gestão. Owner/Recepção mantêm as respostas administrativas.
 
 ## 6. Preparação para IA (sem IA nesta fase)
 
@@ -113,39 +115,40 @@ procedimentos), o que permite no futuro um resumo assistido **revisado pelo
 profissional** citando os Encounters-fonte. Nenhum LLM/JEV/OAAS foi
 implementado; nada aqui torna o prontuário assinado por máquina.
 
-## 7. Evidência
+## 7. Evidência local (branch fixa `arena/3c022fd4-instalink`, patch sobre `5cc1a885`)
 
-- Suíte nova `src/lib/__tests__/clinical-access.test.ts` — **22 testes** com as
-  rotas reais e banco descartável, cobrindo A–M do contrato (§17), o adversarial
-  entre dois tenants e o caso do **Owner com vínculo Professional legítimo**
-  (identidade clínica vem do vínculo, nunca do papel administrativo: escreve no
-  próprio Encounter e continua barrado no Encounter alheio).
-- Suítes existentes alinhadas ao novo contrato (sem afrouxar expectativas):
-  `workflow-permissoes`, `f1a-encounter-start-resume`, `fase2-patient360`,
-  `homologacao-vet-pet360`.
+- `src/lib/__tests__/clinical-access.test.ts` — **23 testes** com rotas reais e
+  banco descartável, cobrindo A–M, isolamento entre tenants, ausência de chaves
+  sensíveis, busca clínica só por nome/telefone e preservação do DTO
+  administrativo para Owner/Recepção.
+- Testes focados após os últimos ajustes: **4 arquivos, 89/89** (`clinical-access`,
+  `contacts`, `workflow-permissoes`, `clinical-ux-closure`).
+- `npm run typecheck` — passou. `npm run build` — passou.
 - Smoke HTTP local (`scripts/seed-clinical-access-qa.mjs` +
-  `scripts/smoke-clinical-access.mjs`) — **32 PASS / 0 FAIL** contra o build de
-  produção local (`next start`, porta 3020) com DB descartável e login real dos
-  5 perfis (A–M do §23).
-- **QA de browser EXECUTADO** (`tests/clinical-access/qa.mjs`) — **17 PASS /
-  0 FAIL em Chromium real** (Playwright 1.63 + Chromium 153 do pacote npm
-  `@sparticuz/chromium`, porque os CDNs de browser são bloqueados no sandbox),
-  contra o MESMO build de produção e a MESMA fixture descartável:
-  Michele abre `/clientes` como **"Pacientes"** (sem cadastro administrativo),
-  acha a paciente do colega, vê o **histórico longitudinal com autor**, abre o
-  Encounter alheio **READ-ONLY** (campos bloqueados + motivo) e mantém o
-  PRÓPRIO editável; **agenda com uma única coluna — a dela**; "Conversas" fora da
-  navegação e da área; Orlando lê o registro da Michele **READ-ONLY** e mantém a
-  agenda própria; Recepção segue no administrativo e é **negada na área
-  clínica**; Owner lê a unidade **sem autoria clínica**; 390px sem rolagem
-  horizontal; **console 0 erro inesperado** e rede 0 resposta inesperada.
-  Evidência: `.cache/clinical-access/browser-qa.json` (não versionado).
-  Reprodução: `node scripts/seed-clinical-access-qa.mjs` →
-  `GODOUTOR_DB_FILE=.cache/clinical-access/qa.json npx next start -p 3020 -H 0.0.0.0`
-  → `LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts QA_BASE_URL=http://127.0.0.1:3020
-  QA_EXECUTABLE_PATH=/tmp/chromium node tests/clinical-access/qa.mjs`.
-- Gates desta fase: `git diff --check`, `npm run typecheck`, `npm run build`,
-  `npx vitest run` (baseline preexistente, sem regressão nova).
+  `scripts/smoke-clinical-access.mjs`) — **33 PASS / 0 FAIL**, em build de
+  produção local e fixture própria descartável (`next start`, porta 3021).
+- Browser QA (`tests/clinical-access/qa.mjs`) — **20 PASS / 0 FAIL** em
+  Chromium real, usando outra fixture descartável (`next start`, porta 3020).
+  Cobriu projeções exatas de Contacts/People360/Pets, a busca clínica limitada
+  a nome/telefone, ausência de CRM no drawer, continuidade longitudinal,
+  Encounter alheio read-only, preservação do administrativo de Owner/Recepção,
+  agenda individual, sem overflow em 390px, console sem erro inesperado e rede
+  sem resposta inesperada. Evidência: `.cache/clinical-access/browser-qa.json`
+  (descartável, não versionada).
+- Suíte completa Vitest nesta branch: **232 arquivos, 3.245 testes; 3.240
+  passaram e 5 falharam**: 3 em `a34-instagram.test.ts`, 1 em
+  `automation-audit-p4.test.ts` e 1 em `pipeline.test.ts`. São as mesmas cinco
+  falhas registradas na revalidação anterior do HEAD exato `5cc1a885`; as três
+  falhas também foram reproduzidas ao executar esses arquivos isoladamente.
+  Os arquivos/domínios envolvidos não fazem parte do patch. A falha de
+  `pipeline` decorre de fixture que tenta agendar em data passada. Portanto,
+  nenhuma falha nova foi atribuída a este delta.
+- `git diff --check` — passou.
+
+Reprodução de cada runtime QA: criar **fixture nova** com
+`node scripts/seed-clinical-access-qa.mjs .cache/clinical-access/<nome-novo>.json`,
+subir `next start` com `GODOUTOR_DB_FILE` apontando para ela e rodar o smoke ou
+browser QA. Não reutilizar fixture executada: o smoke pode alterar Encounter.
 
 ## 8. Fora do escopo (não implementado)
 

@@ -350,7 +350,7 @@ export default function ClientesPage() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por nome, telefone, e-mail ou CPF…"
+                  placeholder={clinicalView ? 'Buscar por nome ou telefone…' : 'Buscar por nome, telefone, e-mail ou CPF…'}
                   aria-label={clinicalView ? 'Buscar paciente' : 'Buscar cliente'}
                   className="w-full bg-[var(--surface-3)] border border-[var(--border)] rounded-md pl-9 pr-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:shadow-focus focus:border-[var(--brand)] focus:bg-white"
                 />
@@ -359,7 +359,7 @@ export default function ClientesPage() {
                 {total} {total === 1 ? (clinicalView ? 'paciente' : 'pessoa') : (clinicalView ? 'pacientes' : 'pessoas')} · pág {page}/{pages}
               </span>
             </div>
-            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel="Filtrar clientes" size="sm" />
+            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
           </div>
 
           {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (
@@ -368,7 +368,9 @@ export default function ClientesPage() {
                 icon={search ? 'search' : 'users'}
                 title={search || filter !== 'all' ? 'Ninguém encontrado' : (clinicalView ? 'Nenhum paciente ainda' : 'Nenhum cliente ainda')}
                 hint={search || filter !== 'all'
-                  ? 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na clínica e conversas criam o perfil automaticamente.'
+                  ? clinicalView
+                    ? 'Tente outro nome ou telefone ou volte para “Todos”.'
+                    : 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na clínica e conversas criam o perfil automaticamente.'
                   : clinicalView
                     ? 'Assim que um paciente for cadastrado ou agendado na clínica, ele aparece aqui — inclusive os atendidos por outro profissional.'
                     : 'Assim que alguém agendar, for cadastrado na clínica ou conversar pelo WhatsApp, o perfil aparece aqui.'}
@@ -405,14 +407,14 @@ export default function ClientesPage() {
                           </span>
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--text-muted)]">
                             <span className="inline-flex items-center gap-1"><Icon n="phone" size={11} /> {p.phone ? formatPhoneBR(p.phone) : 'sem telefone'}</span>
-                            <span className="inline-flex items-center gap-1"><Icon n="history" size={11} /> {p.lastSeen ? humanDay(p.lastSeen.slice(0, 10)) : 'sem contato'}</span>
+                            {!clinicalView && <span className="inline-flex items-center gap-1"><Icon n="history" size={11} /> {p.lastSeen ? humanDay(p.lastSeen.slice(0, 10)) : 'sem contato'}</span>}
                             {p.bookings.length > 0 && (
                               <span className="inline-flex items-center gap-1"><Icon n="calendar" size={11} /> {p.bookings.length} agend.</span>
                             )}
-                            {p.leads.length > 0 && (
-                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} em oportunidades</span>
+                            {!clinicalView && (p.leads || []).length > 0 && (
+                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {(p.leads || []).length} em oportunidades</span>
                             )}
-                            {p.orders > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent)}</span>}
+                            {!clinicalView && (p.orders || 0) > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent || 0)}</span>}
                           </span>
                         </span>
                       </button>

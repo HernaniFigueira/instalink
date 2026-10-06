@@ -83,8 +83,10 @@ async function textOf(page) { return (await page.locator('body').innerText()).re
 
 async function waitText(page, text, timeout = 20000) {
   const deadline = Date.now() + timeout;
+  const expected = text.normalize('NFC').toLocaleLowerCase('pt-BR');
   for (;;) {
-    if ((await textOf(page)).includes(text)) return true;
+    const current = (await textOf(page)).normalize('NFC').toLocaleLowerCase('pt-BR');
+    if (current.includes(expected)) return true;
     if (Date.now() > deadline) throw Error(`timeout esperando ${JSON.stringify(text)}`);
     await sleep(200);
   }
@@ -117,9 +119,36 @@ async function assertForeignReadOnly(page, label) {
   const { context, page } = await signIn('michele.ca@godoutor.test');
   await panel(page, '/clientes');
   await waitText(page, 'Tutora Ana QA');
+  const privacyProjection = await page.evaluate(async (businessId) => {
+    const contacts = await fetch(`/api/contacts?businessId=${businessId}&q=Ana`).then((response) => response.json());
+    const people = await fetch(`/api/people360?businessId=${businessId}&q=Ana`).then((response) => response.json());
+    const pets = await fetch(`/api/pets?businessId=${businessId}&tutorId=${encodeURIComponent(contacts.contacts?.[0]?.id || '')}`).then((response) => response.json());
+    return {
+      contact: contacts.contacts?.[0], person: people.people?.[0], pet: pets.pets?.[0],
+      contactsBody: JSON.stringify(contacts), peopleBody: JSON.stringify(people), petsBody: JSON.stringify(pets),
+    };
+  }, A);
+  assert.deepEqual(Object.keys(privacyProjection.contact || {}).sort(), ['id', 'name', 'phone']);
+  assert.deepEqual(Object.keys(privacyProjection.person || {}).sort(), ['bookings', 'contactId', 'key', 'name', 'phone']);
+  assert.deepEqual(Object.keys(privacyProjection.pet || {}).sort(), [
+    'active', 'birthDate', 'breed', 'id', 'name', 'notes', 'photo', 'sex', 'species', 'tutorId', 'weightKg',
+  ]);
+  for (const sentinel of [
+    'customer-ana-private-sentinel', 'privado@example.test', 'conta-privada@example.test',
+    'campanha-privada', 'NOTA_ADMIN_PRIVADA', 'HISTORICO_ADMIN_PRIVADO',
+    'PROFILE_ADMIN_SENTINEL', 'RUA_PRIVADA_SENTINELA', 'TAG_PERFIL_PRIVADA',
+  ]) {
+    assert.ok(!privacyProjection.contactsBody.includes(sentinel), `contacts payload leaked ${sentinel}`);
+    assert.ok(!privacyProjection.peopleBody.includes(sentinel), `people360 payload leaked ${sentinel}`);
+    assert.ok(!privacyProjection.petsBody.includes(sentinel), `pets payload leaked ${sentinel}`);
+  }
+  ok('Michele · API contacts/people360/pets entrega projeções clínicas sem CRM/conta/perfil do tutor');
   const heading = (await page.locator('h1').first().innerText()).trim();
   assert.equal(heading, 'Pacientes', `título clínico esperado, veio ${heading}`);
   ok('Michele · /clientes abre como "Pacientes" (rota preservada)');
+  const patientSearch = page.getByRole('textbox', { name: 'Buscar paciente' });
+  assert.equal(await patientSearch.getAttribute('placeholder'), 'Buscar por nome ou telefone…');
+  ok('Michele · a busca clínica aceita somente nome/telefone e não expõe campos de CRM');
   assert.equal(await page.getByRole('button', { name: /Novo cliente/i }).count(), 0);
   ok('Michele · sem cadastro administrativo de cliente (CRM fora do acesso clínico)');
   ok('Michele · lista traz a paciente do colega (Isabelle/Tutora Ana, nunca atendida por ela)');
@@ -127,6 +156,16 @@ async function assertForeignReadOnly(page, label) {
   // Histórico longitudinal na ficha do tutor.
   await page.getByRole('button', { name: 'Abrir perfil de Tutora Ana QA' }).click();
   await page.waitForURL(/\/clientes\/.+\?/, { timeout: 30000 });
+  await waitText(page, 'Telefone / WhatsApp');
+  const tutorProfileText = await textOf(page);
+  for (const sentinel of [
+    'privado@example.test', 'conta-privada@example.test', 'campanha-privada',
+    'NOTA_ADMIN_PRIVADA', 'HISTORICO_ADMIN_PRIVADO', 'PROFILE_ADMIN_SENTINEL',
+    'RUA_PRIVADA_SENTINELA', 'RESPONSAVEL_PRIVADO', 'TAG_PERFIL_PRIVADA',
+  ]) assert.ok(!tutorProfileText.includes(sentinel), `clinical UI leaked ${sentinel}`);
+  assert.ok(!/e-?mail|\bCPF\b|origem|data de nascimento|\bidade\b|cliente desde|sem etiquetas|cadastro|endereço|observação administrativa/i.test(tutorProfileText),
+    'clinical tutor UI must not show CRM/profile fields or empty tag placeholders');
+  ok('Michele · UI do tutor não mostra e-mail, perfil cadastral, etiquetas ou notas administrativas');
   await page.getByRole('tab', { name: /Atendimento/ }).click();
   await waitText(page, 'Dr. Orlando QA');
   const body = await textOf(page);

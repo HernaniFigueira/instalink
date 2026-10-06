@@ -26,6 +26,7 @@ import type { BusinessCustomer, Customer } from '@/lib/types';
 //       observação (append-only): nada é sobrescrito nem apagado e o registro
 //       guarda autor + data + contexto.
 
+/** CRM administrativo completo: não usar para a leitura clínica do tutor. */
 function toDTO(c: BusinessCustomer, customer?: Customer | null, counts?: { bookings?: number; attended?: number; leads?: number }) {
   const account = customer || null;
   const accountStatus = account ? ('active' as const) : ('none' as const);
@@ -60,6 +61,15 @@ function toDTO(c: BusinessCustomer, customer?: Customer | null, counts?: { booki
   };
 }
 
+/**
+ * Read model de tutor para continuidade clínica. Mantê-lo em allow-list:
+ * o Professional só recebe a identidade mínima necessária para reconhecer e
+ * contatar o tutor; alterações ao DTO de CRM não ampliam este contrato.
+ */
+function toClinicalContactDTO(c: Pick<BusinessCustomer, 'id' | 'name' | 'phone'>) {
+  return { id: c.id, name: c.name, phone: c.phone };
+}
+
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const guard = await requireBusiness(req, businessId, 'clientes');
@@ -79,11 +89,17 @@ export async function GET(req: NextRequest) {
       (qd.length >= 3 && phoneKey(c.phone).includes(phoneKey(qd))))
     : all;
   const sorted = [...filtered].sort((a, b) => (a.lastInteraction < b.lastInteraction ? 1 : -1)).slice(0, limit);
+  // `professionalScope` é resolvido no servidor por access-core. Papéis de
+  // acesso amplo (OWNER/ADMIN/MASTER/suporte/Recepção) mantêm o DTO de CRM,
+  // inclusive quando Owner também tem vínculo Professional (scope = '').
+  const clinicalProjection = isProfessionalScoped(guard.ctx);
   return NextResponse.json({
-    contacts: sorted.map((contact) => toDTO(
-      contact,
-      guard.db.customers.find((customer) => customer.id === contact.customerId) || null,
-    )),
+    contacts: sorted.map((contact) => clinicalProjection
+      ? toClinicalContactDTO(contact)
+      : toDTO(
+        contact,
+        guard.db.customers.find((customer) => customer.id === contact.customerId) || null,
+      )),
     total: filtered.length,
   });
 }
@@ -98,7 +114,7 @@ export async function POST(req: NextRequest) {
     // Cadastro livre de cliente é da recepção/gestão: um profissional recortado
     // não cria (nem enumera por telefone) cadastros fora dos seus atendimentos.
     if (isProfessionalScoped(ctx)) {
-      return NextResponse.json({ error: 'O cadastro de novos clientes é feito pela recepção. Você acessa os clientes dos seus atendimentos.' }, { status: 403 });
+      return NextResponse.json({ error: 'O cadastro de novos clientes é feito pela recepção. Você acessa os pacientes clínicos permitidos da unidade.' }, { status: 403 });
     }
     const name = String(body.name || '').trim().slice(0, 80);
     const phone = normalizeCustomerPhone(body.phone);
@@ -346,7 +362,9 @@ export async function PATCH(req: NextRequest) {
         applyContactProfile(c, body.profile);
       }
       c.updatedAt = new Date().toISOString();
-      return toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null, counts);
+      return isProfessionalScoped(guard.ctx)
+        ? toClinicalContactDTO(c)
+        : toDTO(c, db.customers.find((customer) => customer.id === c.customerId) || null, counts);
     });
     if (!updated) return NextResponse.json({ error: 'Contato não encontrado.' }, { status: 404 });
     return NextResponse.json({ ok: true, contact: updated });

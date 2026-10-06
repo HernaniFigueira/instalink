@@ -54,13 +54,19 @@ check('A · busca não vaza a agenda do outro profissional',
 check('A · busca sem permissão de WhatsApp não traz conversas',
   searchAna.status === 200 && !searchAna.data.groups.some((h) => h.group === 'conversas'));
 
+const contacts = await api('GET', `/api/contacts?businessId=${A}&q=Ana`, null, michele);
+const clinicalContact = contacts.data.contacts?.[0];
+check('B · /api/contacts entrega ao Professional somente id/nome/telefone',
+  contacts.status === 200 && JSON.stringify(Object.keys(clinicalContact || {}).sort()) === JSON.stringify(['id', 'name', 'phone']),
+  JSON.stringify(clinicalContact));
+
 const p360 = await api('GET', `/api/people360?businessId=${A}&q=Ana`, null, michele);
 const ana = (p360.data.people || []).find((p) => p.name === 'Tutora Ana QA');
 check('B · Paciente 360 do tutor abre para quem atende', p360.status === 200 && !!ana, `(${p360.status})`);
-check('B · tutor vem com o básico do cuidado e SEM CRM',
-  !!ana && ana.leads.length === 0 && ana.orders === 0 && ana.spent === 0 && ana.note === ''
-  && !JSON.stringify(ana).includes('Observação administrativa'),
-  JSON.stringify({ leads: ana?.leads?.length, orders: ana?.orders, note: ana?.note }));
+check('B · People 360 usa projeção clínica allow-list sem CRM/conta/perfil',
+  !!ana && JSON.stringify(Object.keys(ana).sort()) === JSON.stringify(['bookings', 'contactId', 'key', 'name', 'phone'])
+  && !JSON.stringify({ contact: clinicalContact, person: ana }).match(/customer-ana-private-sentinel|privado@example\.test|conta-privada@example\.test|campanha-privada|NOTA_ADMIN_PRIVADA|HISTORICO_ADMIN_PRIVADO|PROFILE_ADMIN_SENTINEL|RUA_PRIVADA_SENTINELA|TAG_PERFIL_PRIVADA/),
+  JSON.stringify({ fields: Object.keys(ana || {}), key: ana?.key }));
 
 const hist = await api('GET', `/api/encounters?businessId=${A}&petId=pet-isabelle`, null, michele);
 const histIds = (hist.data.encounters || []).map((e) => e.id).sort();

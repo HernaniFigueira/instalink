@@ -512,12 +512,10 @@ describe('Profissional · só o que tem vínculo (Clientes, Pets, 360, busca)', 
     // CLINICAL ACCESS: os pacientes da clínica (dos colegas inclusive) entram.
     expect(names).toEqual(expect.arrayContaining(['Tutor Alfa', 'Tutor Beta', 'Tutor Gama']));
     const alfa = (own.people || own.persons || own.items).find((p: any) => p.name === 'Tutor Alfa');
-    // O histórico COMERCIAL não vem junto com o acesso clínico.
-    expect(alfa.leads).toEqual([]);
-    expect(alfa.conversations).toEqual([]);
-    expect(alfa.orders).toBe(0);
-    expect(alfa.spent).toBe(0);
-    expect(alfa.notes).toEqual([]);
+    // O histórico COMERCIAL não faz parte da projeção clínica (chaves ausentes).
+    for (const field of ['leads', 'conversations', 'orders', 'spent', 'notes', 'email', 'customerId', 'profile', 'tags']) {
+      expect(alfa).not.toHaveProperty(field);
+    }
     // O próprio agendamento de outro profissional aparece como CONTEXTO do
     // paciente (continuidade), mas a AGENDA do Orlando continua só dele.
     const beta = (own.people || own.persons || own.items).find((p: any) => p.name === 'Tutor Beta');
@@ -538,11 +536,20 @@ describe('Profissional · só o que tem vínculo (Clientes, Pets, 360, busca)', 
     // O pet do colega é legível, mas não editável por quem não o atende.
     expect((await upd('pet-b', 'ct-b')).status).toBe(404);
     expect((await upd('pet-b', 'ct-a')).status).toBe(404); // não "adota" o pet alheio
-    expect((await upd('pet-a', 'ct-a')).status).toBe(200);
+    const ownPetUpdate = await upd('pet-a', 'ct-a');
+    expect(ownPetUpdate.status).toBe(200);
+    const ownPetBody = await j(ownPetUpdate);
+    expect(Object.keys(ownPetBody.pet).sort()).toEqual([
+      'active', 'birthDate', 'breed', 'id', 'name', 'notes', 'photo', 'sex', 'species', 'tutorId', 'weightKg',
+    ]);
     expect((await petsPOST(req('POST', '/api/pets', T.orlando, { businessId: B, action: 'create', tutorId: 'ct-a', pet: { name: 'Novo', species: 'gato' } }))).status).toBe(403);
     expect((await petsPOST(req('POST', '/api/pets', T.orlando, { businessId: B, action: 'delete', id: 'pet-a' }))).status).toBe(403);
     for (const t of [T.owner, T.admin, T.maria]) {
-      expect((await j(await petsGET(req('GET', `/api/pets?businessId=${B}`, t)))).pets).toHaveLength(3);
+      const broad = await j(await petsGET(req('GET', `/api/pets?businessId=${B}`, t)));
+      expect(broad.pets).toHaveLength(3);
+      expect(broad.pets[0]).toMatchObject({ businessId: B, tutorId: 'ct-a' });
+      expect(broad.pets[0]).toHaveProperty('createdAt');
+      expect(broad.pets[0]).toHaveProperty('updatedAt');
     }
   });
   it('Busca global: pacientes da unidade aparecem; conversas/agendamentos alheios não', async () => {

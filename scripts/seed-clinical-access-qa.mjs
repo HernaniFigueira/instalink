@@ -76,9 +76,24 @@ const contact = (id, businessId, name, phone, extra = {}) => ({
   id, businessId, customerId: '', name, phone, email: '', createdAt: now, updatedAt: now,
   source: 'manual', lastInteraction: now, marketingOptIn: false, note: '', ...extra,
 });
+const PRIVATE_CUSTOMER_ID = 'customer-ana-private-sentinel';
 const contacts = [
-  // Paciente da clínica: tutora da Isabelle — o Orlando atende, a Michele também.
-  contact('ct-ana', A, 'Tutora Ana QA', '11911110001', { note: 'Observação administrativa do CRM — não é clínica.' }),
+  // Sentinelas adversariais: Professional não deve receber CRM, conta ou perfil.
+  contact('ct-ana', A, 'Tutora Ana QA', '11911110001', {
+    customerId: PRIVATE_CUSTOMER_ID,
+    email: 'privado@example.test',
+    source: 'campanha-privada',
+    marketingOptIn: true,
+    note: 'NOTA_ADMIN_PRIVADA',
+    notes: [{ id: 'note-private', at: now, by: 'u-owner', byName: 'Dona da Clínica QA', text: 'HISTORICO_ADMIN_PRIVADO' }],
+    profile: {
+      birthDate: '1982-03-04', cpf: '11122233344', gender: 'DADO_IDENTIFICAVEL_PRIVADO',
+      adminNote: 'PROFILE_ADMIN_SENTINEL',
+      address: { cep: '01001000', street: 'RUA_PRIVADA_SENTINELA', number: '77', complement: 'APTO_PRIVADO', district: 'BAIRRO_PRIVADO', city: 'CIDADE_PRIVADA', state: 'SP' },
+      guardian: { isMinor: false, name: 'RESPONSAVEL_PRIVADO', phone: '11999990000', cpf: '55566677788', contactId: '', relationship: 'VÍNCULO_PRIVADO' },
+      tags: ['TAG_PERFIL_PRIVADA'],
+    },
+  }),
   // CRM puro: só lead/campanha, sem pegada clínica — não é paciente.
   contact('ct-lead', A, 'Contato Só Lead QA', '11999998888', { source: 'campanha' }),
   contact('ct-bruno', A, 'Tutor Bruno QA', '11922220002'),
@@ -140,6 +155,11 @@ const tasks = [
 
 const db = {
   users, businesses, members, professionals, services, availability, contacts, pets, bookings, encounters,
+  customers: [{
+    id: PRIVATE_CUSTOMER_ID, name: 'Tutora Ana QA', phone: '11900000000', email: 'conta-privada@example.test',
+    passwordHash: 'account-password-hash-sentinel', googleId: 'google-account-sentinel', avatar: 'private-avatar-sentinel',
+    createdAt: now, mustChangePassword: true, accessCreatedAt: now,
+  }],
   tasks,
   encounterFinalizationRevisions: [{
     id: 'rev-1', businessId: A, encounterId: 'enc-orlando-final', revisionNumber: 1, encounterVersion: 5,

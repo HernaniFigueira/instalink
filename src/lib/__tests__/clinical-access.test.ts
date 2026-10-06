@@ -48,6 +48,9 @@ import type { DB } from '../types';
 const NOW = '2026-09-18T12:00:00Z'; // 09:00 em São Paulo
 const A = 'b-andrioni';   // clínica A — Pet Isabelle (Orlando → Michele)
 const OUT = 'b-bioclin';  // clínica B — outro tenant, nunca alcançável
+const PRIVATE_CUSTOMER_ID = 'customer-ana-private-sentinel';
+const PRIVATE_CONTACT_EMAIL = 'privado@example.test';
+const PRIVATE_ACCOUNT_EMAIL = 'conta-privada@example.test';
 
 function req(method: string, path: string, token: string, body?: unknown): NextRequest {
   return new NextRequest(`http://localhost${path}`, {
@@ -114,8 +117,28 @@ beforeEach(async () => {
     id, businessId, customerId: '', name, phone, email: '', createdAt: NOW, updatedAt: NOW, source: 'manual',
     lastInteraction: NOW, marketingOptIn: false, note: '', ...extra,
   } as any);
+  d.customers.push({
+    id: PRIVATE_CUSTOMER_ID, name: 'Tutora Ana', phone: '11900000000', email: PRIVATE_ACCOUNT_EMAIL,
+    passwordHash: 'account-password-hash-sentinel', googleId: 'google-account-sentinel', avatar: 'private-avatar-sentinel',
+    createdAt: NOW, mustChangePassword: true, accessCreatedAt: NOW,
+  } as any);
   d.contacts.push(
-    contact('ct-ana', 'Tutora Ana', '11911110001', A, { note: 'Observação administrativa do CRM' }),
+    contact('ct-ana', 'Tutora Ana', '11911110001', A, {
+      customerId: PRIVATE_CUSTOMER_ID,
+      email: PRIVATE_CONTACT_EMAIL,
+      source: 'campanha-privada',
+      lastInteraction: '2026-09-17T11:12:13.000Z',
+      marketingOptIn: true,
+      note: 'NOTA_ADMIN_PRIVADA',
+      notes: [{ id: 'note-ana-private', at: NOW, by: 'u-owner', byName: 'Dona Admin', text: 'HISTORICO_ADMIN_PRIVADO' }],
+      profile: {
+        birthDate: '1982-03-04', cpf: '11122233344', gender: 'DADO_IDENTIFICAVEL_PRIVADO',
+        adminNote: 'PROFILE_ADMIN_SENTINEL',
+        address: { cep: '01001000', street: 'RUA_PRIVADA_SENTINELA', number: '77', complement: 'APTO_PRIVADO', district: 'BAIRRO_PRIVADO', city: 'CIDADE_PRIVADA', state: 'SP' },
+        guardian: { isMinor: false, name: 'RESPONSAVEL_PRIVADO', phone: '11999990000', cpf: '55566677788', contactId: '', relationship: 'VÍNCULO_PRIVADO' },
+        tags: ['TAG_PERFIL_PRIVADA'],
+      },
+    }),
     contact('ct-bruno', 'Tutor Bruno', '11922220002'),
     // CRM puro: só lead/campanha, sem pegada clínica — NÃO é paciente da clínica.
     contact('ct-lead', 'Contato Só Lead', '11988887777', A, { source: 'campanha' }),
@@ -139,10 +162,10 @@ beforeEach(async () => {
   );
   d.encounters.push(
     // Orlando atendeu a Isabelle (rascunho em andamento) — paciente da clínica.
-    encounterFixture('enc-orlando', { bookingId: 'bk-orlando', evolution: 'Dermatite da Isabelle — Orlando', date: '2026-09-10' }),
+    encounterFixture('enc-orlando', { bookingId: 'bk-orlando', customerId: PRIVATE_CUSTOMER_ID, evolution: 'Dermatite da Isabelle — Orlando', date: '2026-09-10' }),
     // E um atendimento ANTERIOR finalizado (documento fechado, com revisão).
     encounterFixture('enc-orlando-final', {
-      status: 'finalized', date: '2026-08-20', version: 5, evolution: 'Retorno anterior finalizado',
+      customerId: PRIVATE_CUSTOMER_ID, status: 'finalized', date: '2026-08-20', version: 5, evolution: 'Retorno anterior finalizado',
       finalizedAt: NOW, finalizedBy: 'u-orlando', signedBy: 'Dr. Orlando', finalizationRevisionId: 'rev-1',
     }),
     // Michele atendeu o Thor (Encounter PRÓPRIO).
@@ -161,7 +184,7 @@ beforeEach(async () => {
   d.encounterFinalizationRevisions.push({
     id: 'rev-1', businessId: A, encounterId: 'enc-orlando-final', revisionNumber: 1, encounterVersion: 5,
     finalizedAt: NOW, finalizedByUserId: 'u-orlando', finalizedByProfessionalId: 'pro-orlando',
-    snapshot: { evolution: 'Retorno anterior finalizado' }, fingerprint: 'fp-1',
+    snapshot: { customerId: PRIVATE_CUSTOMER_ID, evolution: 'Retorno anterior finalizado' }, fingerprint: 'fp-1',
   } as any);
   d.tasks.push(
     // Pendência do trabalho do Orlando — a Michele NÃO deve ver (§13).
@@ -259,6 +282,49 @@ describe('Clinical Access · as duas noções são separadas na autoridade únic
 // 2 · A/B/C — localizar, abrir e ler o histórico longitudinal
 // ═══════════════════════════════════════════════════════════════
 describe('Professional · continuidade assistencial com paciente de outro profissional', () => {
+  it('Contacts · tutor clínico recebe allow-list mínima; Owner/Recepção preservam o DTO administrativo', async () => {
+    const professionalResponse = await contactsGET(req('GET', `/api/contacts?businessId=${A}&q=Ana`, T.michele));
+    expect(professionalResponse.status).toBe(200);
+    const professionalBody = await j(professionalResponse);
+    expect(professionalBody.total).toBe(1);
+    expect(professionalBody.contacts).toHaveLength(1);
+    const clinicalContact = professionalBody.contacts[0];
+    expect(clinicalContact).toEqual({ id: 'ct-ana', name: 'Tutora Ana', phone: '11911110001' });
+    for (const field of [
+      'email', 'customerId', 'registered', 'accountStatus', 'accountEmail', 'accountPhone',
+      'mustChangePassword', 'source', 'lastInteraction', 'marketingOptIn', 'note', 'notes',
+      'profile', 'age', 'tags',
+    ]) {
+      expect(clinicalContact).not.toHaveProperty(field);
+    }
+
+    // Owner tem Professional ativo na fixture, mas BROAD_ACCESS mantém scope=''.
+    // Recepção também conserva exatamente o caminho administrativo pré-existente.
+    for (const token of [T.owner, T.maria]) {
+      const response = await contactsGET(req('GET', `/api/contacts?businessId=${A}&q=Ana`, token));
+      expect(response.status).toBe(200);
+      const adminContact = (await j(response)).contacts[0];
+      expect(adminContact).toMatchObject({
+        id: 'ct-ana', customerId: PRIVATE_CUSTOMER_ID, name: 'Tutora Ana', phone: '11911110001',
+        email: PRIVATE_CONTACT_EMAIL, registered: true, accountStatus: 'active',
+        accountEmail: PRIVATE_ACCOUNT_EMAIL, accountPhone: '11900000000', mustChangePassword: true,
+        source: 'campanha-privada', marketingOptIn: true, note: 'NOTA_ADMIN_PRIVADA',
+        profile: { adminNote: 'PROFILE_ADMIN_SENTINEL' },
+      });
+      expect(adminContact.notes.map((note: any) => note.text)).toContain('HISTORICO_ADMIN_PRIVADO');
+      expect(adminContact.tags.map((tag: any) => tag.id)).toContain('marketing');
+    }
+
+    const unlinked = await j(await contactsGET(req('GET', `/api/contacts?businessId=${A}&limit=50`, T.semvinculo)));
+    expect(unlinked).toMatchObject({ contacts: [], total: 0 });
+    const otherTenant = await contactsGET(req('GET', `/api/contacts?businessId=${OUT}&q=Ana`, T.michele));
+    expect([401, 403, 404]).toContain(otherTenant.status);
+    const foreignUser = await contactsGET(req('GET', `/api/contacts?businessId=${A}&q=Ana`, T.fora));
+    expect([401, 403, 404]).toContain(foreignUser.status);
+    expect(await otherTenant.text()).not.toContain(PRIVATE_CONTACT_EMAIL);
+    expect(await foreignUser.text()).not.toContain(PRIVATE_CUSTOMER_ID);
+  });
+
   it('A · Michele localiza a Isabelle ANTES de ter qualquer Encounter próprio', async () => {
     const db = await readDB();
     expect(db.encounters.some((e) => e.professionalId === 'pro-michele' && e.petId === 'pet-isabelle')).toBe(false);
@@ -268,6 +334,13 @@ describe('Professional · continuidade assistencial com paciente de outro profis
     // Pets: o paciente aparece na busca por tutor.
     const pets = await j(await petsGET(req('GET', `/api/pets?businessId=${A}&tutorId=ct-ana`, T.michele)));
     expect((pets.pets as any[]).map((p: any) => p.id)).toEqual(['pet-isabelle']);
+    expect(pets.pets[0]).toMatchObject({ id: 'pet-isabelle', tutorId: 'ct-ana' });
+    expect(Object.keys(pets.pets[0]).sort()).toEqual([
+      'active', 'birthDate', 'breed', 'id', 'name', 'notes', 'photo', 'sex', 'species', 'tutorId', 'weightKg',
+    ]);
+    for (const sentinel of [PRIVATE_CUSTOMER_ID, PRIVATE_CONTACT_EMAIL, 'NOTA_ADMIN_PRIVADA', 'PROFILE_ADMIN_SENTINEL']) {
+      expect(JSON.stringify(pets)).not.toContain(sentinel);
+    }
     // Busca global: pessoas/pets sim; agenda/conversa alheia não.
     const search = await j(await searchGET(req('GET', `/api/search?businessId=${A}&q=Isabelle`, T.michele)));
     const groups = (search.groups as any[]).map((h: any) => h.group);
@@ -276,22 +349,51 @@ describe('Professional · continuidade assistencial com paciente de outro profis
     expect(groups).not.toContain('conversas');
   });
 
-  it('B · abre o Pet 360 e recebe o tutor básico do cuidado, sem o CRM dele', async () => {
+  it('B · People 360/Search projetam o tutor sem CRM, conta, perfil cadastral ou chave global', async () => {
     const p360 = await j(await p360GET(req('GET', `/api/people360?businessId=${A}&q=Ana`, T.michele)));
     const ana = (p360.people as any[]).find((p: any) => p.name === 'Tutora Ana');
     expect(ana).toBeTruthy();
-    expect(ana.phone).toBe('11911110001');
-    // Nome/telefone/agendamentos do paciente permanecem; o COMERCIAL sai.
-    expect(ana.note).toBe('');
-    expect(ana.notes).toEqual([]);
-    expect(ana.source).toBe('');
-    expect(ana.marketingOptIn).toBe(false);
-    expect(ana.orders).toBe(0);
-    expect(ana.spent).toBe(0);
-    expect(ana.leads).toEqual([]);
-    expect(ana.conversations).toEqual([]);
-    expect(ana.accountEmail).toBe('');
-    expect(JSON.stringify(p360)).not.toContain('Observação administrativa do CRM');
+    expect(ana).toMatchObject({ contactId: 'ct-ana', name: 'Tutora Ana', phone: '11911110001' });
+    expect(Object.keys(ana).sort()).toEqual(['bookings', 'contactId', 'key', 'name', 'phone']);
+    expect(ana.key).toMatch(/^clinical:[a-f0-9]{64}$/);
+    for (const field of [
+      'customerId', 'email', 'registered', 'accountStatus', 'accountEmail', 'accountPhone',
+      'mustChangePassword', 'avatar', 'customerSince', 'source', 'marketingOptIn', 'note', 'notes',
+      'profile', 'age', 'tags', 'orders', 'spent', 'lastOrderAt', 'leads', 'conversations', 'tasks', 'lastSeen',
+    ]) {
+      expect(ana).not.toHaveProperty(field);
+    }
+    const privateSentinels = [
+      PRIVATE_CUSTOMER_ID, PRIVATE_CONTACT_EMAIL, PRIVATE_ACCOUNT_EMAIL, 'campanha-privada',
+      'NOTA_ADMIN_PRIVADA', 'HISTORICO_ADMIN_PRIVADO', 'PROFILE_ADMIN_SENTINEL',
+      'RUA_PRIVADA_SENTINELA', 'TAG_PERFIL_PRIVADA',
+    ];
+    for (const sentinel of privateSentinels) expect(JSON.stringify(p360)).not.toContain(sentinel);
+
+    const search = await j(await searchGET(req('GET', `/api/search?businessId=${A}&q=Ana`, T.michele)));
+    const personHit = (search.groups as any[]).find((hit: any) => hit.group === 'pessoas' && hit.title === 'Tutora Ana');
+    expect(personHit).toBeTruthy();
+    expect(personHit.subtitle).toContain('(11) 91111-0001');
+    expect(personHit.subtitle).not.toContain(PRIVATE_CONTACT_EMAIL);
+    const searchKey = decodeURIComponent(personHit.href.split('/clientes/')[1].split('?')[0]);
+    expect(searchKey).toBe(ana.key);
+    const openedBySearchKey = await j(await p360GET(req('GET', `/api/people360?businessId=${A}&key=${encodeURIComponent(ana.key)}`, T.michele)));
+    expect(openedBySearchKey.people.map((person: any) => person.contactId)).toEqual(['ct-ana']);
+    const byPrivateEmail = await j(await searchGET(req('GET', `/api/search?businessId=${A}&q=${PRIVATE_CONTACT_EMAIL}`, T.michele)));
+    expect(byPrivateEmail.groups).toEqual([]);
+    const p360ByPrivateEmail = await j(await p360GET(req('GET', `/api/people360?businessId=${A}&q=${PRIVATE_CONTACT_EMAIL}`, T.michele)));
+    expect(p360ByPrivateEmail.people).toEqual([]);
+    const contactsByPrivateEmail = await j(await contactsGET(req('GET', `/api/contacts?businessId=${A}&q=${PRIVATE_CONTACT_EMAIL}`, T.michele)));
+    expect(contactsByPrivateEmail.contacts).toEqual([]);
+
+    for (const token of [T.owner, T.maria]) {
+      const adminP360 = await j(await p360GET(req('GET', `/api/people360?businessId=${A}&q=Ana`, token)));
+      const administrativeAna = adminP360.people.find((person: any) => person.name === 'Tutora Ana');
+      expect(administrativeAna).toMatchObject({
+        customerId: PRIVATE_CUSTOMER_ID, email: PRIVATE_CONTACT_EMAIL, accountEmail: PRIVATE_ACCOUNT_EMAIL,
+        note: 'NOTA_ADMIN_PRIVADA', source: 'campanha-privada', profile: { adminNote: 'PROFILE_ADMIN_SENTINEL' },
+      });
+    }
   });
 
   it('C · o histórico da Isabelle é LONGITUDINAL e diz quem atendeu cada visita', async () => {
@@ -309,6 +411,12 @@ describe('Professional · continuidade assistencial com paciente de outro profis
     const byId = await j(await encGET(req('GET', `/api/encounters?businessId=${A}&id=enc-orlando-final`, T.michele)));
     expect(byId.encounter.finalizationRevisions).toHaveLength(1);
     expect(byId.encounter.finalizationRevisions[0].snapshot.evolution).toBe('Retorno anterior finalizado');
+    // A continuidade expõe o prontuário, não o identificador global da conta.
+    expect(byId.encounter).not.toHaveProperty('customerId');
+    expect(byId.encounter.finalizationRevisions[0].snapshot).not.toHaveProperty('customerId');
+    expect(JSON.stringify(byId)).not.toContain(PRIVATE_CUSTOMER_ID);
+    const ownerById = await j(await encGET(req('GET', `/api/encounters?businessId=${A}&id=enc-orlando-final`, T.owner)));
+    expect(ownerById.encounter.customerId).toBe(PRIVATE_CUSTOMER_ID);
   });
 });
 
@@ -457,7 +565,10 @@ describe('Professional · módulos comerciais continuam fora', () => {
     expect(ov.showMoney).toBe(false);
     // Oportunidades também não: o lead do paciente do Orlando não é da Michele.
     const p360 = await j(await p360GET(req('GET', `/api/people360?businessId=${A}&q=Ana`, T.michele)));
-    expect((p360.people as any[]).find((p: any) => p.name === 'Tutora Ana').leads).toEqual([]);
+    const tutor = (p360.people as any[]).find((p: any) => p.name === 'Tutora Ana');
+    for (const field of ['leads', 'orders', 'spent', 'notes', 'conversations', 'email', 'customerId', 'profile', 'tags']) {
+      expect(tutor).not.toHaveProperty(field);
+    }
   });
 });
 

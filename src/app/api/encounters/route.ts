@@ -39,7 +39,7 @@ import {
 // (autoridade única em `encounter-sections`, nunca `if (clinicType === ...)`).
 import { CLINICAL_BRANCH_MODULES, clinicalBranchesForClinic, normalizeClinicType } from '@/lib/encounter-sections';
 import { applyBookingStatusTx } from '@/lib/booking-status';
-import { canReadClinicalRecords } from '@/lib/data-scope';
+import { canReadClinicalRecords, isProfessionalScoped } from '@/lib/data-scope';
 import { assertCanFinalizeCare } from '@/lib/appointment-workflow-tx';
 import { publishWorkflowEvent } from '@/lib/workflow-events';
 import { effectiveTimezone } from '@/lib/tz';
@@ -96,6 +96,39 @@ function withEncounterHistory<T extends Record<string, unknown>>(db: DB, encount
   return { ...value, encounter: { ...encounter, ...history } };
 }
 
+/**
+ * Clinical access needs the tutor/contact link, not the global Customer ID.
+ * Keep the stored Encounter and broad administrative response unchanged; this
+ * is an API projection for narrowly scoped Professional contexts only.
+ */
+function clinicalEncounterResponse<T extends Record<string, any>>(
+  value: T,
+  ctx: { professionalScope: string },
+): T {
+  if (!isProfessionalScoped(ctx)) return value;
+  const project = (row: Record<string, any>) => {
+    if (!row || typeof row !== 'object') return row;
+    const { customerId: _customerId, finalizationRevisions, ...safe } = row;
+    if (!Array.isArray(finalizationRevisions)) return safe;
+    return {
+      ...safe,
+      finalizationRevisions: finalizationRevisions.map((revision: Record<string, any>) => {
+        const snapshot = revision?.snapshot;
+        if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return revision;
+        const { customerId: _snapshotCustomerId, ...safeSnapshot } = snapshot;
+        return { ...revision, snapshot: safeSnapshot };
+      }),
+    };
+  };
+  if (value.encounter && typeof value.encounter === 'object') {
+    return { ...value, encounter: project(value.encounter) };
+  }
+  if (Array.isArray(value.encounters)) {
+    return { ...value, encounters: value.encounters.map(project) };
+  }
+  return value;
+}
+
 export async function GET(req: NextRequest) {
   const businessId = String(req.nextUrl.searchParams.get('businessId') || '');
   const guard = await requireBusiness(req, businessId, 'atendimento');
@@ -135,15 +168,18 @@ export async function GET(req: NextRequest) {
     if (!clinicalRead) {
       return NextResponse.json({ error: 'Seu acesso não tem vínculo clínico nesta unidade.' }, { status: 403 });
     }
-    return NextResponse.json(withEncounterHistory(db, found.id, { ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }));
+    return NextResponse.json(clinicalEncounterResponse(
+      withEncounterHistory(db, found.id, { ok: true, encounter: view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }),
+      guard.ctx,
+    ));
   }
   if (queueId) {
     const found = encounterForQueue(scoped, businessId, queueId);
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
+    return NextResponse.json(clinicalEncounterResponse({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null }, guard.ctx));
   }
   if (bookingId) {
     const found = scoped.find((e) => e.bookingId === bookingId) || null;
-    return NextResponse.json({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null });
+    return NextResponse.json(clinicalEncounterResponse({ ok: true, encounter: found ? view(found, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) : null }, guard.ctx));
   }
   if (contactId || customerId || phone || petId) {
     // HISTÓRICO LONGITUDINAL DO PACIENTE: todos os registros do paciente no
@@ -157,7 +193,7 @@ export async function GET(req: NextRequest) {
     const resolvedContactId = contactId
       || (phone ? (db.contacts.find((c) => c.businessId === businessId && c.phone === onlyDigits(phone))?.id || '') : '');
     const list = encountersForCustomer(tenantEncounters, businessId, { contactId: resolvedContactId, customerId, petId });
-    return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
+    return NextResponse.json(clinicalEncounterResponse({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) }, guard.ctx));
   }
   // Lista por período (agenda/relatório): `from`/`to` opcionais em YYYY-MM-DD.
   const from = String(req.nextUrl.searchParams.get('from') || '');
@@ -166,7 +202,7 @@ export async function GET(req: NextRequest) {
     .filter((e) => (!from || e.date >= from) && (!to || e.date <= to))
     .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1))
     .slice(0, 300);
-  return NextResponse.json({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) });
+  return NextResponse.json(clinicalEncounterResponse({ ok: true, encounters: list.map((e) => view(e, db, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') })) }, guard.ctx));
 }
 
 /**
@@ -202,14 +238,14 @@ export async function POST(req: NextRequest) {
         from: result.encounter.bookingId ? 'arrived' : undefined, to: 'in_care', at: now,
       });
     }
-    return NextResponse.json({
+    return NextResponse.json(clinicalEncounterResponse({
       ok: true,
       encounter: view(result.encounter, await readDB(), { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }),
       // `reused` é o contrato histórico da tela (abre o que já existe).
       reused: !result.created,
       created: result.created,
       outcome: result.outcome,
-    });
+    }, guard.ctx));
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] POST falhou:', e);
@@ -492,7 +528,10 @@ export async function PATCH(req: NextRequest) {
       });
     }
     const responseDB = await readDB();
-    return NextResponse.json(withEncounterHistory(responseDB, updated.encounter.id, { ok: true, encounter: view(updated.encounter, responseDB, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }));
+    return NextResponse.json(clinicalEncounterResponse(
+      withEncounterHistory(responseDB, updated.encounter.id, { ok: true, encounter: view(updated.encounter, responseDB, { id: guard.ctx.user.id, role: String(guard.ctx.role || '') }) }),
+      guard.ctx,
+    ));
   } catch (e: any) {
     const status = e?.status || 500;
     if (status === 500) console.error('[encounters] PATCH falhou:', e);

@@ -7,6 +7,7 @@ import { getBusinessPipeline, normalizeLeadStageId } from '@/lib/pipeline';
 import { taskDueLabel } from '@/lib/automation/tasks';
 import { todayISO } from '@/lib/tz';
 import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
+import { clinicalPeople360Key } from '@/lib/clinical-people360-key';
 // A3.3 — carteirinha do cliente: o 360 entrega também o cadastro rico.
 import { ageFromBirthDate, clientTags, countAttended, emptyProfile, isMinor, profileOf } from '@/lib/contact-profile';
 import type { ContactProfile } from '@/lib/types';
@@ -204,7 +205,7 @@ export async function GET(req: NextRequest) {
     }
     p.email = p.email || c.email || '';
     p.marketingOptIn = p.marketingOptIn || c.marketingOptIn === true;
-    if (!p.lastSeen || c.lastInteraction > p.lastSeen) p.lastSeen = c.lastInteraction;
+    if (!clinical && (!p.lastSeen || c.lastInteraction > p.lastSeen)) p.lastSeen = c.lastInteraction;
     accountFor(p);
   }
 
@@ -283,7 +284,7 @@ export async function GET(req: NextRequest) {
     if (!p) continue;
     const assignee = task.assignedUserId ? db.users.find((u) => u.id === task.assignedUserId) : null;
     p.tasks.push({ id: task.id, title: task.title, status: task.status, dueAt: task.dueAt || '', dueLabel: taskDueLabel(task.dueAt || '', today), assignedUserId: task.assignedUserId || '', assigneeName: assignee?.name || '', leadId: task.leadId || '', bookingId: task.bookingId || '' });
-    if (!p.lastSeen || task.updatedAt > p.lastSeen) p.lastSeen = task.updatedAt;
+    if (!clinical && (!p.lastSeen || task.updatedAt > p.lastSeen)) p.lastSeen = task.updatedAt;
   }
   // Conversas (WhatsApp/agente) entram como eventos independentes do histórico.
   for (const c of conversations) {
@@ -297,31 +298,16 @@ export async function GET(req: NextRequest) {
   }
 
   let people = [...map.values()];
-  // PROJEÇÃO CLÍNICA: o acesso clínico não entrega o CRM do tutor. Observações
-  // administrativas, origem comercial, consentimento de marketing e dados de
-  // conta/login saem do payload de quem atende; contato, nome, telefone,
-  // carteirinha clínica e histórico de agendamentos permanecem.
+  // PROJEÇÃO CLÍNICA: o recorte de linhas e a projeção de campos são
+  // autoridades diferentes. A lista continua limitada à pegada clínica da
+  // unidade, mas a resposta final usa allow-list (identidade básica + agenda
+  // contextual); não envia CRM, conta, perfil cadastral ou etiquetas.
   if (clinical) {
     people = people.filter((p) => canReadPerson(db, businessId, guard.ctx, { contactId: p.contactId, customerId: p.customerId, phone: p.phone }));
-    for (const p of people) {
-      p.note = '';
-      p.notes = [];
-      p.source = '';
-      p.marketingOptIn = false;
-      p.orders = 0;
-      p.spent = 0;
-      p.lastOrderAt = '';
-      p.leads = [];
-      p.conversations = [];
-      // Conta/login e credenciais são administração da plataforma, não clínica.
-      p.accountEmail = '';
-      p.accountPhone = '';
-      p.mustChangePassword = false;
-    }
   }
   // Etiquetas DERIVADAS depois de todos os eventos conhecidos: uma pessoa pode
   // ser "cliente atendido" E "lead no funil" ao mesmo tempo.
-  people.forEach((p) => {
+  if (!clinical) people.forEach((p) => {
     p.tags = clientTags({
       name: p.name,
       accountStatus: p.accountStatus,
@@ -341,30 +327,45 @@ export async function GET(req: NextRequest) {
     people = people.filter((p) =>
       p.name.toLowerCase().includes(q)
       || (qd && p.phone.includes(qd))
-      || p.email.toLowerCase().includes(q)
-      // CPF só entra na busca com trecho longo: 2-3 dígitos casariam com quase todos.
-      || (qd.length >= 6 && onlyDigitsOf(p.profile.cpf).includes(qd)),
+      || (!clinical && p.email.toLowerCase().includes(q))
+      // CPF só entra na busca administrativa com trecho longo: 2-3 dígitos casariam com quase todos.
+      || (!clinical && qd.length >= 6 && onlyDigitsOf(p.profile.cpf).includes(qd)),
     );
   }
-  if (keyFilter) people = people.filter((p) => p.key === keyFilter);
-  if (accessFilter === 'active' || accessFilter === 'none') {
+  // Clinical route keys are opaque hashes of the internal identity aliases;
+  // account/consent/profile filters are intentionally unavailable there.
+  if (keyFilter) people = people.filter((p) =>
+    (clinical ? clinicalPeople360Key(p.key) : p.key) === keyFilter,
+  );
+  if (!clinical && (accessFilter === 'active' || accessFilter === 'none')) {
     people = people.filter((p) => p.accountStatus === accessFilter);
   }
-  if (consentFilter === 'yes' || consentFilter === 'no') {
+  if (!clinical && (consentFilter === 'yes' || consentFilter === 'no')) {
     const want = consentFilter === 'yes';
     people = people.filter((p) => p.marketingOptIn === want);
   }
-  if (minorFilter) people = people.filter((p) => isMinor(p.profile));
+  if (!clinical && minorFilter) people = people.filter((p) => isMinor(p.profile));
   if (attendedOnly) people = people.filter((p) => countAttended(p.bookings) > 0);
   const total = people.length;
   const pros = new Map(db.professionals.filter((p) => p.businessId === businessId).map((p) => [p.id, p.name]));
-  const slice = people.slice((page - 1) * limit, page * limit).map((p) => ({
-    ...p,
-    bookings: p.bookings.map((b) => ({
+  const slice = people.slice((page - 1) * limit, page * limit).map((p) => {
+    const patientBookings = p.bookings.map((b) => ({
       ...b,
       service: services.get(b.serviceId) || 'Serviço',
       professional: b.professionalId ? pros.get(b.professionalId) || '' : '',
-    })),
-  }));
+    }));
+    if (clinical) {
+      // Allow-list: no email, global Customer ID/status, account data, CRM
+      // notes/source/marketing, profile, age, tags, metrics, leads or tasks.
+      return {
+        key: clinicalPeople360Key(p.key),
+        contactId: p.contactId,
+        name: p.name,
+        phone: p.phone,
+        bookings: patientBookings,
+      };
+    }
+    return { ...p, bookings: patientBookings };
+  });
   return NextResponse.json({ people: slice, total, page, pages: Math.max(1, Math.ceil(total / limit)) });
 }
