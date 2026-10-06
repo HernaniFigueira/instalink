@@ -78,6 +78,20 @@ const FILE = resolveLocalDbFile();
  */
 export const LEGACY_DOC_TABLE = 'instalink_doc';
 
+/**
+ * Supabase production stores the legacy single-document payload in a dedicated
+ * schema. Preview/production may still expose a stale DATABASE_URL from the
+ * former Neon setup, so the presence of a Supabase connection env is the
+ * authority for the relation name as well as for the connection itself.
+ *
+ * Keep the unqualified legacy name for local/Neon-compatible environments.
+ */
+export function legacyDocRelation(env: NodeJS.ProcessEnv = process.env): string {
+  return env.SUPABASE_DB_URL || env.POSTGRES_URL
+    ? 'godoutor_app.instalink_doc'
+    : LEGACY_DOC_TABLE;
+}
+
 export function emptyDB(): DB {
   return {
     deletionAuthorizations: [],
@@ -552,7 +566,7 @@ async function createDocTableOnce(): Promise<void> {
   if (!docReady) {
     docReady = (async () => {
       try {
-        await getPool().query(`CREATE TABLE IF NOT EXISTS ${LEGACY_DOC_TABLE} (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)`);
+        await getPool().query(`CREATE TABLE IF NOT EXISTS ${legacyDocRelation()} (id SMALLINT PRIMARY KEY, data JSONB NOT NULL)`);
       } catch (err) {
         docReady = null; // nunca cachear garantia falha
         if (isPermissionDenied(err)) {
@@ -588,7 +602,7 @@ async function pgRead(): Promise<DB> {
   // FAIL-CLOSED: qualquer erro (timeout, TLS, conexão, resposta inválida)
   // propaga como exceção. emptyDB SOMENTE quando a linha não existe.
   return withDocGuarantee(async () => {
-    const res = await getPool().query(`SELECT data FROM ${LEGACY_DOC_TABLE} WHERE id = 1`);
+    const res = await getPool().query(`SELECT data FROM ${legacyDocRelation()} WHERE id = 1`);
     if (res.rows.length === 0) return emptyDB();
     return normalizeDB(res.rows[0].data);
   });
@@ -619,7 +633,7 @@ async function pgWrite(db: DB): Promise<void> {
 // árbitro e o modo arquivo usa o mesmo mutex de `updateDB`.
 async function pgReadCas(): Promise<{ db: DB; hash: string | null }> {
   return withDocGuarantee(async () => {
-    const res = await getPool().query(`SELECT data, md5(data::text) AS hash FROM ${LEGACY_DOC_TABLE} WHERE id = 1`);
+    const res = await getPool().query(`SELECT data, md5(data::text) AS hash FROM ${legacyDocRelation()} WHERE id = 1`);
     if (res.rows.length === 0) return { db: emptyDB(), hash: null };
     return { db: normalizeDB(res.rows[0].data), hash: res.rows[0].hash as string };
   });
@@ -630,13 +644,13 @@ async function pgCasWrite(hash: string | null, db: DB): Promise<boolean> {
     if (hash === null) {
       // Primeira gravação: cria a linha apenas se ela ainda não existir.
       const ins = await getPool().query(
-        `INSERT INTO ${LEGACY_DOC_TABLE} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`,
+        `INSERT INTO ${legacyDocRelation()} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`,
         [JSON.stringify(db)],
       );
       return ins.rowCount === 1;
     }
     const upd = await getPool().query(
-      `UPDATE ${LEGACY_DOC_TABLE} SET data = $2 WHERE id = 1 AND md5(data::text) = $1`,
+      `UPDATE ${legacyDocRelation()} SET data = $2 WHERE id = 1 AND md5(data::text) = $1`,
       [hash, JSON.stringify(db)],
     );
     return upd.rowCount === 1;
@@ -815,12 +829,12 @@ export async function updateDB<T>(fn: SyncMutation<T>): Promise<T> {
         try {
           await client.query('BEGIN');
           // Inicialização concorrente segura; operações CAS também disputam esta linha.
-          await client.query(`INSERT INTO ${LEGACY_DOC_TABLE} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`, [JSON.stringify(emptyDB())]);
-          const snapshot = await client.query(`SELECT data FROM ${LEGACY_DOC_TABLE} WHERE id = 1 FOR UPDATE`);
+          await client.query(`INSERT INTO ${legacyDocRelation()} (id, data) VALUES (1, $1) ON CONFLICT (id) DO NOTHING`, [JSON.stringify(emptyDB())]);
+          const snapshot = await client.query(`SELECT data FROM ${legacyDocRelation()} WHERE id = 1 FOR UPDATE`);
           const db = normalizeDB(snapshot.rows[0].data);
           const result = runSyncMutation(fn, db);
           prune(db);
-          await client.query(`UPDATE ${LEGACY_DOC_TABLE} SET data = $1 WHERE id = 1`, [JSON.stringify(db)]);
+          await client.query(`UPDATE ${legacyDocRelation()} SET data = $1 WHERE id = 1`, [JSON.stringify(db)]);
           await client.query('COMMIT');
           if (hasDueAutomationWork(db)) maybeRunAutomations();
           return result;
