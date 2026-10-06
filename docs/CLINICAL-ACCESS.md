@@ -1,7 +1,7 @@
 # Clinical Access — continuidade assistencial e histórico longitudinal
 
-> **STATUS: projeções clínicas mínimas/allow-list e fechamento de privacidade implementados e validados** na branch fixa desta sessão `arena/3c022fd4-instalink`. A branch foi avançada por fast-forward de `714e3277` até `5cc1a885` (HEAD remoto da PR #61) antes de aplicar, após revisão semântica, somente o delta do checkpoint `arena/bceef42d-instalink@4c32931`. A PR [#61](https://github.com/HernaniFigueira/instalink/pull/61) continua aberta contra `main`, mas seu HEAD remoto permanece `arena/01a10c9e-instalink` @ `5cc1a885`; o commit desta sessão não foi enviado à branch da PR. Não foi criada outra PR; o corpo da PR foi atualizado apenas para registrar que este patch e suas validações não integram o HEAD remoto. A branch/HEAD da PR não foi alterada e não houve merge. Design System e Agenda UX não foram tocados.
-> Evidência desta branch, em build de produção (`next start`) e fixtures descartáveis: **smoke HTTP 33/33** e **browser QA 20/20 em Chromium 153 real**. Dados reais de produção não foram usados.
+> **STATUS: projeções clínicas mínimas/allow-list e fechamento de privacidade implementados e validados na PR #61.** A branch `arena/01a10c9e-instalink` recebeu por fast-forward o commit `0cdf976a9c1a08746713c433ed6d959e5c417681`, cujo pai direto é `5cc1a885cf227348c78d6251a21c7e339a6c4e6d`. A PR continua aberta contra `main` e **MERGE NÃO está autorizado**. Design System e Agenda UX não foram tocados.
+> Evidência do código em `0cdf976a`, usando build de produção local (`next start`) e fixtures descartáveis: **89/89 testes focados**, **smoke HTTP 33/33**, **browser QA 20/20 em Chromium 153 real**, typecheck/build/diff-check aprovados e suíte completa **3.240/3.245 PASS**; as cinco falhas restantes são baseline já reproduzida (3× `a34-instagram`, 1× `automation-audit-p4`, 1× `pipeline`), sem regressão nova. Dados reais de produção não foram usados.
 
 ## 1. Decisão de domínio
 
