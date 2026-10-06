@@ -127,7 +127,11 @@ describe('contraste ESTRUTURAL (temas claros/escuros) — fg sempre pelo bg real
   });
 
   it('monograma da clínica usa o par accent/contrast (nunca fg fixo)', () => {
-    expect(css).toMatch(/workspace-clinic-head__mark[\s\S]{0,300}background: var\(--accent\); color: var\(--accent-contrast\)/);
+    // MISSÃO UX CLOSURE: o monograma da clínica mudou para `.ws-clinic__mark`
+    // (a IDENTIDADE vive na topbar). O contrato é o MESMO par accent/contrast.
+    expect(css).toMatch(/\.ws-clinic__mark[\s\S]{0,300}background: var\(--accent\); color: var\(--accent-contrast\)/);
+    // e o antigo cabeçalho da sidebar não existe mais (nem no componente, nem no CSS)
+    expect(css).not.toContain('.workspace-clinic-head__mark');
   });
 });
 

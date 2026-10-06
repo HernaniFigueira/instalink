@@ -212,8 +212,12 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     // esconde a grade.
     expect(agenda).toContain('onClick={() => setFocus(today)}');
     expect(agenda).toContain("'Você já está em hoje'");
-    // Só existe UM "Hoje" e ele vive na toolbar (não em card/métrica):
-    expect(agenda.match(/>\s*Hoje\s*</g)?.length).toBe(1);
+    // O rótulo "Hoje" existe na TOOLBAR (ação) e, desde a missão UX Closure,
+    // também como ETIQUETA da coluna do dia atual (`ag-col-today`) — a data de
+    // hoje não depende só de cor para ser reconhecida. Nenhum deles é
+    // card/métrica, e não há uma segunda AÇÃO "Hoje".
+    expect(agenda.match(/>\s*Hoje\s*</g)?.length).toBe(2);
+    expect(agenda).toContain('ag-col-today');
     // A dependência do seletor nativo de data acabou: nenhum `<input
     // type="date">` no código (comentários que o citam não contam).
     const agendaCode = agenda.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');

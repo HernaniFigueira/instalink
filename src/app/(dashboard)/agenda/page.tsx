@@ -184,7 +184,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -193,7 +193,12 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onPressMove: (id: string, e: React.PointerEvent) => void;
   onPressEnd: (id: string, e: React.PointerEvent) => void;
   onPressCancel: () => void;
-  onBlockClick: (id: string) => void;
+  /** `trigger` = o BOTÃO do evento (missão 3A): o resumo vive em portal e
+   *  desmonta quando o mouse sai, então o foco de volta do detalhe precisa do
+   *  evento, não do CTA do card. */
+  onBlockClick: (id: string, trigger?: HTMLElement | null) => void;
+  /** "Reagendar" no resumo do evento: abre o detalhe JÁ no fluxo de mudança. */
+  onBlockReschedule: (id: string, trigger?: HTMLElement | null) => void;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string, point: { x: number; y: number }) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number, point: { x: number; y: number }) => void;
@@ -209,6 +214,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
 }) {
   const selection = useRef<{ origin: number; y: number; originPx: number; moved: boolean } | null>(null);
   const overlay = useRef<HTMLDivElement>(null);
+  // Mapa id → botão do evento: quem devolve o foco ao fechar o detalhe quando o
+  // clique veio do HoverCard (o card é portal e já saiu da tela).
+  const eventRefs = useRef(new Map<string, HTMLButtonElement>());
   const snapY = (e: React.PointerEvent<HTMLDivElement>) => Math.max(startMinute, Math.min(endMinute,
     snapGestureMinute(startMinute + (e.clientY - e.currentTarget.getBoundingClientRect().top) / PX_PER_HOUR * 60),
   ));
@@ -306,13 +314,37 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         </div>
       )}
 
-      {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-[5] inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
+      {/* Sombreamento de indisponibilidade = FUNDO (z-0): a ordem de camadas da
+          grade está em `globals.css` ("ORDEM DE CAMADAS DA GRADE"). Antes este
+          bloco vinha com `z-[5]`, ou seja, pintava POR CIMA dos atendimentos do
+          dia — um agendamento dentro de uma exceção aparecia só como uma faixa
+          fina na borda. Nada muda de semântica: continua sem ação de clique
+          (`pointer-events-none`) e o texto diz a janela do dia especial. */}
+      {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-0 inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
         <span className="block tabular-nums font-medium">{minToTime(r.start)}–{minToTime(r.end)}</span><span className="block">INDISPONÍVEL</span><span className="block">{r.label}</span>
       </div>)}
-      {operationalBlocks.map(({ block, top, height, label, timeLabel, scopeLabel }) => <button key={block.id} type="button"
-        data-schedule-block={block.id} aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`} title={`${timeLabel} · ${label} · ${scopeLabel}`} onClick={() => onOperationalBlock(block)}
-        className="absolute z-10 left-1 right-1 max-w-[380px] border border-dashed border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)] rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
-        style={{ top, height }}><span className="block tabular-nums">{timeLabel}</span><span className="block">BLOQUEIO · {label}</span>{height > 50 && <span className="block font-medium">{scopeLabel}</span>}</button>)}
+      {/* MISSÃO UX CLOSURE · item 4 — BLOQUEIO OPERACIONAL não domina a grade.
+          O tempo bloqueado é dito por HACHURA no próprio lugar (o mesmo
+          vocabulário visual do "indisponível"), com uma ETIQUETA compacta no
+          topo (ícone + horário) enquanto houver altura. O bloqueio continua
+          SEMANTICAMENTE distinto do atendimento: superfície própria, tracejado
+          e âmbar da família de atenção — sem caixa laranja gigante de texto, e
+          sem tooltip nativo: quem abre o detalhe é o clique (que sempre
+          existiu) e a etiqueta carrega o texto acessível completo. */}
+      {operationalBlocks.map(({ block, top, height, label, timeLabel, scopeLabel }) => (
+        <button key={block.id} type="button"
+          data-schedule-block={block.id}
+          aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`}
+          onClick={() => onOperationalBlock(block)}
+          className="ag-block absolute z-10 left-1 right-1 max-w-[380px] overflow-hidden text-left"
+          style={{ top, height }}>
+          <span aria-hidden="true" className="ag-block__hatch" />
+          <span className="ag-block__tag">
+            <Icon n="lock" size={10} aria-hidden="true" />
+            <span className="tabular-nums">{timeLabel}</span>
+          </span>
+          {height >= 52 && <span className="ag-block__label">{label}</span>}
+        </button>))}
       {column.blocks.map((b) => {
         // DS 1.0 · §5 — HOVER CARD (180ms, foco equivalente, sem hover no
         // toque): prévia da MESMA informação do cartão, sem CTA próprio. O
@@ -321,8 +353,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const card = (
         <button
           type="button"
+          ref={(el) => { if (el) eventRefs.current.set(b.id, el); else eventRefs.current.delete(b.id); }}
           aria-label={b.label}
-          title={b.label}
+          /* SEM tooltip nativo: o resumo do evento é o HoverCard (item 3A) —
+             o `title` do navegador era o que aparecia em vez dele. */
           draggable={false}
           onPointerDown={(e) => onPressStart(b.id, e)}
           onPointerMove={(e) => onPressMove(b.id, e)}
@@ -363,7 +397,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             </span>
           )}
           {b.editable && b.height >= 30 && (
-            <span aria-label={`Redimensionar ${b.name}`} title="Arraste para alterar duração"
+            <span data-resize-hint aria-hidden="true" className="ag-event__resize-hint" />
+          )}
+          {b.editable && b.height >= 30 && (
+            <span aria-label={`Redimensionar ${b.name}. Arraste para alterar a duração`}
               className="absolute bottom-0 inset-x-0 h-3 cursor-ns-resize touch-none z-10 border-b-2 border-transparent hover:border-[var(--brand)]"
               onPointerDown={(e) => {
                 e.stopPropagation(); e.preventDefault();
@@ -376,7 +413,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                 const onMove = (ev: PointerEvent) => {
                   const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
                   card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
-                  handle.title = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
+                  // Feedback DURANTE o arraste (não é tooltip de repouso): a
+                  // etiqueta vive no cartão, sem `title` nativo na grade.
+                  const hint = card.querySelector<HTMLElement>('[data-resize-hint]');
+                  if (hint) hint.textContent = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
                 };
                 const onUp = (ev: PointerEvent) => {
                   handle.removeEventListener('pointermove', onMove);
@@ -397,16 +437,16 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               }} />
           )}
           {b.checkedInAt && (
-            <span title="Cliente já fez check-in" aria-hidden="true"
+            <span aria-label="Cliente já fez check-in" aria-hidden="true"
               className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention ? (
-            <span title="Precisa de fechamento" aria-hidden="true"
+            <span aria-label="Precisa de fechamento" aria-hidden="true"
               className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-semibold leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
             </span>
           ) : (
-            <span title={b.statusLabel} aria-hidden="true"
+            <span aria-label={b.statusLabel} aria-hidden="true"
               className={`absolute top-1 right-1 w-[18px] h-[18px] rounded-full text-white flex items-center justify-center ${b.dot}`}>
               <Icon n={b.ico} size={10} />
             </span>
@@ -417,18 +457,33 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           <HoverCard
             key={b.id}
             side="right-start"
+            className="ag-hover"
             content={
-              <div className="w-[248px] space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="tabular-nums text-[12px] font-semibold text-[var(--gd-text-muted)]">{b.timeRange}</span>
+              /* MISSÃO UX CLOSURE · item 3A — RESUMO CONTEXTUAL do evento:
+                 horário, paciente/pet, serviço, profissional e status em um
+                 cartão compacto, colado no atendimento (offset 10px, flip
+                 quando falta espaço). Duas ações explícitas:
+                 "Ver detalhes" (painel lateral) e, quando a REGRA autoriza
+                 remarcar (`editable` = rescheduleDecision), "Reagendar".
+                 Nada de tooltip nativo e nada de card no canto da tela. */
+              <div className="ag-hover__card">
+                <div className="ag-hover__head">
+                  <span className="tabular-nums">{b.timeRange}</span>
                   <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
                 </div>
-                <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">{b.name}</p>
-                {b.service && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.service}</p>}
-                {b.pro && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.pro}</p>}
-                {b.fitIn && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">ENCAIXE · decisão da equipe</p>}
-                {b.attention && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">Precisa de fechamento</p>}
-                <p className="pt-0.5 text-[11px] text-[var(--gd-text-faint)]">Clique para abrir o detalhe</p>
+                <p className="ag-hover__name">{b.name}</p>
+                <dl className="ag-hover__rows">
+                  {b.service && <div><dt>Serviço</dt><dd>{b.service}</dd></div>}
+                  {b.pro && <div><dt>Profissional</dt><dd>{b.pro}</dd></div>}
+                </dl>
+                {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
+                {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
+                <div className="ag-hover__actions">
+                  <Button size="sm" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
+                  {b.editable && (
+                    <Button size="sm" variant="secondary" onClick={() => onBlockReschedule(b.id, eventRefs.current.get(b.id) ?? null)}>Reagendar</Button>
+                  )}
+                </div>
               </div>
             }
           >
@@ -513,6 +568,9 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  /** true = o detalhe abre com o formulário de reagendamento já aberto
+   *  (vem do "Reagendar" do resumo do evento). O clique simples nunca ativa. */
+  const [detailReschedule, setDetailReschedule] = useState(false);
   // DS 1.0 · §5 — QUICK CREATE: popover ancorado no slot clicado/arrastado.
   // O fluxo COMPLETO (`creating`) continua existindo e é o destino de
   // "Mais opções" e do CTA "Novo agendamento".
@@ -580,6 +638,9 @@ export default function AgendaPage() {
   const rafRef = useRef<number | null>(null);
   const dragSeq = useRef(0);
   const lastPointerUpRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
+  /** Botão do evento que abriu o detalhe — recebe o foco de volta no fechamento
+   *  quando o gatilho do clique foi um CTA do HoverCard (que desmonta junto). */
+  const detailTriggerRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
   // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
@@ -1261,14 +1322,29 @@ export default function AgendaPage() {
     endDrag();
   }, [endDrag]);
 
-  const onBlockClick = useCallback((id: string) => {
+  /**
+   * MISSÃO UX CLOSURE · item 3A — ação secundária do resumo do evento.
+   * Abre o MESMO detalhe (BookingDetailSheet) já no fluxo de reagendamento,
+   * que é quem decide entre mover e recriar (`rescheduleDecision`). Nenhuma
+   * regra nova: o resumo só encurta o caminho para a ação já existente.
+   */
+  const onBlockReschedule = useCallback((id: string, trigger?: HTMLElement | null) => {
+    const booking = bookingsRef.current.get(id);
+    if (!booking) return;
+    if (rescheduleDecision(booking.status).kind !== 'move') return; // regra preservada
+    detailTriggerRef.current = trigger ?? null;
+    setDetailReschedule(true);
+    setDetail(booking);
+  }, []);
+
+  const onBlockClick = useCallback((id: string, trigger?: HTMLElement | null) => {
     // O clique que vem logo depois do pointerup já foi tratado (detalhe ou
     // drop). Aqui só interessa o clique de TECLADO (Enter/Espaço), que não
     // gera eventos de ponteiro.
     const last = lastPointerUpRef.current;
     if (last.id === id && Date.now() - last.at < 700) return;
     const booking = bookingsRef.current.get(id);
-    if (booking) setDetail(booking);
+    if (booking) { detailTriggerRef.current = trigger ?? null; setDetail(booking); }
   }, []);
 
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
@@ -1390,6 +1466,17 @@ export default function AgendaPage() {
 
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
+  // Bloqueios do período VISÍVEL (mesma conta que já existia na faixa) + rótulo
+  // compacto do indicador: a contagem sai do dado, nunca de texto solto.
+  const blocksInView = scheduleBlocks.filter((block) => {
+    const dates = view === 'week' ? weekDays : [focus];
+    return dates.some((date) => block.startAt.slice(0, 10) === date
+      || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
+  });
+  const blockCountLabel = blocksInView.length === 1
+    ? '1 bloqueio neste período'
+    : `${blocksInView.length} bloqueios neste período`;
+
   return (
     <div data-agenda-page="true" className="ag-page">
       {/* LINHA 1 — TÍTULO / CONTROLES AUXILIARES (Agenda protagonista):
@@ -1397,7 +1484,7 @@ export default function AgendaPage() {
           São controles AUXILIARES — nada de Dia/Semana/Mês/Lista aqui (eles
           vivem na Linha 2) e nada de card só para o título. A ação principal
           ("Novo agendamento") também saiu daqui: é o CTA da Linha 2. */}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-2">
+      <header className="gd-toolbar justify-between gap-x-4 mb-2">
         <div className="min-w-0 flex items-center gap-3">
           {/* CONTRATO ÚNICO de títulos (refino final): chip 40×40 neutro
               sutil + borda 1px + ícone line na cor do TEMA — igual a todas
@@ -1407,12 +1494,12 @@ export default function AgendaPage() {
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
               contador quando há filtro ativo. Nada de três selects enormes
               fixos acima da grade. */}
           <div className="relative" ref={filterWrapRef}>
-            <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+            <Button variant="secondary" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
               aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros da agenda">
               <Icon n="filter" size={14} />
               {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
@@ -1500,7 +1587,7 @@ export default function AgendaPage() {
               visual de Filtros). Abrir/fechar decide quem opera; a rail lateral
               continua sendo a superfície dela. */}
           {loaded && (
-            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+            <Button variant="secondary" onClick={() => setShowQueue((v) => !v)}
               aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
               <Icon n="users" size={14} />
               Fila
@@ -1612,7 +1699,12 @@ export default function AgendaPage() {
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
+        <div className="gd-toolbar gap-x-4 px-3 py-2.5">
+          {/* MISSÃO UX CLOSURE · item 5 — UMA MÉTRICA: Hoje, setas, data,
+              Dia/Semana/Lista, Filtros, Fila, Bloquear horário e Novo
+              agendamento são todos controles de NÍVEL MD do DS
+              (`--gd-control-h`, 40px; ícone é quadrado na mesma altura).
+              Antes conviviam 34/40/28px na mesma linha. */}
           {/* Navegação no tempo (correção cirúrgica): [◀] [▶] apenas.
               O botão “Hoje” saiu da UI — a data/período continua visível ao
               lado e o seletor nativo de data segue permitindo saltar para
@@ -1623,10 +1715,9 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="gd-toolbar min-w-0">
             <Button
               variant="secondary"
-              size="sm"
               onClick={() => setFocus(today)}
               aria-pressed={focus === today}
               title={focus === today ? 'Você já está em hoje' : 'Ir para hoje'}
@@ -1645,7 +1736,7 @@ export default function AgendaPage() {
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
-          <div className="sm:ml-auto min-w-0 max-w-full flex flex-wrap items-center gap-2">
+          <div className="sm:ml-auto min-w-0 max-w-full gd-toolbar justify-end">
             {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
                 saiu da UI — a lógica do modo mês segue intacta para links
                 diretos com view=month; nada foi destruído). */}
@@ -1658,12 +1749,11 @@ export default function AgendaPage() {
               value={view}
               onChange={(v) => { endDrag(); setView(v); }}
               ariaLabel="Visualização da agenda"
-              size="sm"
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" size="sm" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
-            <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+            <Button variant="secondary" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
+            <Button variant="primary" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
           </div>
@@ -1713,23 +1803,29 @@ export default function AgendaPage() {
       </div>
 
       {blockMode && <div role="status" className="mb-3 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
-      {scheduleBlocks.filter(block => {
-        const dates = view === 'week' ? weekDays : [focus];
-        return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
-      }).length > 0 && <section className="mb-3 border border-dashed border-amber-500 rounded-md bg-amber-50 p-2" aria-label="Bloqueios operacionais">
-        {/* DS 1.0 · §2 — título de seção com a escala do sistema (semibold), e a
-            explicação vira hint: uma frase em CAIXA ALTA não é hierarquia. */}
-        <h2 className="il-type-section font-semibold text-[var(--gd-text)]">Bloqueios operacionais</h2>
-        <p className="il-type-help text-[var(--gd-text-muted)]">Bloqueios não são atendimentos — aparecem separados da agenda do dia.</p>
-        <div className="flex flex-wrap gap-2 mt-1">{scheduleBlocks.filter(block => {
-          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
-          return (view === 'week' ? weekDays : [focus]).includes(date);
-        }).map(block => <button key={block.id} type="button" className="border-l-4 border-amber-700 bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => {
-          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
-          const time = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time;
-          openBlock({ date, time, professionalId: block.professionalId }, block);
-          setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-        }}>■ BLOQUEIO · {block.reason || block.note || 'Operacional'} · {block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</button>)}</div>
+      {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+            de horário/escopo. A explicação vira a dica curta de uma linha, e o
+            clique continua abrindo o MESMO formulário do bloqueio. */}
+        <span className="ag-blocks-bar__label">
+          <Icon n="lock" size={13} aria-hidden="true" />
+          {blockCountLabel}
+        </span>
+        <span className="ag-blocks-bar__hint">Bloqueios não são atendimentos — o período aparece hachurado na grade.</span>
+        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+          }}>
+            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+            <span>{block.reason || block.note || 'Operacional'}</span>
+            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+          </button>
+        ))}</div>
       </section>}
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll ag-list" aria-label="Lista de atendimentos do dia">
@@ -1823,7 +1919,14 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-[13px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                        {/* MISSÃO UX CLOSURE · item 4 — cabeçalho do profissional
+                            legível: nome um passo acima e, no dia de HOJE, uma
+                            etiqueta textual além do tom — a data atual não
+                            depende só de cor para ser reconhecida. */}
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className={`block text-[13.5px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                          {c.isToday && <span className="ag-col-today">Hoje</span>}
+                        </span>
                         {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
                     </div>
@@ -1863,6 +1966,7 @@ export default function AgendaPage() {
                       onPressEnd={onPressEnd}
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
+                      onBlockReschedule={onBlockReschedule}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
@@ -2010,7 +2114,11 @@ export default function AgendaPage() {
         </Drawer>
       )}
 
-      {blockForm && <Drawer open onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      {/* MISSÃO UX CLOSURE · item 5/6 — bloqueio é FORMULÁRIO CURTO: mesmo
+          overlay system (Drawer), geometria de MODAL CENTRAL — a faixa lateral
+          fica reservada para superfícies de trabalho longas. Nada de regra de
+          agenda muda aqui: mesmos campos, mesma validação, mesma API. */}
+      {blockForm && <Drawer open variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
         {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
             canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
             foco e dropdown do resto do sistema. O `<select>` cru e o
@@ -2097,12 +2205,14 @@ export default function AgendaPage() {
       {detail && (
         <BookingDetailSheet
           booking={detail}
+          returnFocus={detailTriggerRef}
+          startRescheduling={detailReschedule}
           timezone={bizTz}
           service={serviceOf(detail.serviceId)}
           resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
-          onClose={() => setDetail(null)}
+          onClose={() => { setDetail(null); setDetailReschedule(false); }}
           /* Mudança estrutural (status/finalizar): atualiza dados, mantém
              sheets abertos — o fechamento é só onClose (ação do usuário). */
           onChanged={() => { void load(); }}

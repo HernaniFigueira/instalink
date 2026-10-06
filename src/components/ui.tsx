@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { isTopOverlay, popOverlay, pushOverlay } from '@/lib/overlay-stack';
 import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from '@/components/dashboard/OverlayDismissGuard';
@@ -20,12 +21,13 @@ export type { HoursChipDay };
 // ═══════════════════════════════════════════════════════════════
 // Componentes existentes são a única fonte de apresentação operacional.
 // A cor primária vem do tema ativo; semânticas ficam reservadas a estados.
-export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning' | 'whatsapp';
+export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'link' | 'success' | 'warning' | 'whatsapp';
 /** Aliases temporários mantidos para compatibilidade de chamadas existentes. */
-export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'soft' | 'quiet' | 'cta';
+export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'danger-soft' | 'soft' | 'quiet' | 'cta';
 
 const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant>> = {
   danger: 'destructive',
+  'danger-soft': 'destructive-soft',
   soft: 'secondary',
   quiet: 'ghost',
   cta: 'primary',
@@ -40,8 +42,14 @@ const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
     'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
+  // SOLID vermelho = SÓ o passo de confirmação destrutiva final (regra do DS
+  // catalogada em /dev/design-system). Em repouso, numa fila de ações, o
+  // destrutivo é `destructive-soft` — senão o vermelho cheio compete com o CTA
+  // primário da própria superfície.
   destructive:
     'bg-[var(--danger)] text-white border border-[var(--danger)] hover:bg-[var(--danger-strong)] hover:border-[var(--danger-strong)]',
+  'destructive-soft':
+    'bg-[var(--danger-bg)] text-[var(--danger-fg)] border border-[var(--danger-border)] hover:bg-[var(--danger)] hover:border-[var(--danger)] hover:text-white',
   link:
     'bg-transparent text-[var(--accent)] border border-transparent underline-offset-4 hover:underline',
   success:
@@ -97,9 +105,14 @@ export function PageBackAction({ href, onClick, label = 'Voltar', className }: {
     : <button type="button" onClick={onClick} className={classes}>{content}</button>;
 }
 
-/** Botão só de ícone (com rótulo acessível obrigatório via aria-label). */
+/** Botão só de ícone (com rótulo acessível obrigatório via aria-label).
+ *
+ *  Métrica canônica: o botão é QUADRADO no nível escolhido, medindo da MESMA
+ *  régua do Button/Select do mesmo nível (`--gd-control-h` / `-sm` / `-xs`).
+ *  A altura/quadratura vive no contrato `.gd-icon-control*` do design system —
+ *  a página nunca define `h-[34px]` nem corrige "por fora". */
 export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon: string; label: string; variant?: ButtonVariant; size?: 'sm' | 'md'; tip?: string;
+  icon: string; label: string; variant?: ButtonVariant; size?: 'sm' | 'md' | 'xs'; tip?: string;
 }) {
   const { icon, label, variant = 'secondary', size = 'md', tip, className, ...rest } = props;
   return (
@@ -108,13 +121,13 @@ export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> 
       title={tip || label}
       className={cn(
         buttonCls(variant, size),
-        'il-icon-button',
-        size === 'sm' ? 'w-8 h-8 p-0' : 'w-9 h-9 p-0',
+        'il-icon-button p-0',
+        size === 'sm' ? 'gd-icon-control--sm' : size === 'xs' ? 'gd-icon-control--xs' : 'gd-icon-control',
         className,
       )}
       {...rest}
     >
-      <Icon n={icon} size={size === 'sm' ? 14 : 16} />
+      <Icon n={icon} size={size === 'sm' ? 15 : size === 'xs' ? 13 : 16} />
     </button>
   );
 }
@@ -495,7 +508,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
   }
   return (
     <div role="tablist" aria-label={ariaLabel}
-      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm scale-95 origin-left', className)}>
+      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm', className)}>
       {items.map((item) => (
         <button key={item.id} type="button" role="tab"
           ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
@@ -695,8 +708,22 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true, variant = 'side', dialogWidth = '672px' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /**
+   * `side` (padrão) = faixa lateral; `dialog` = MODAL CENTRAL.
+   *
+   * MISSÃO UX CLOSURE · item 3C — criação/edição de agendamento é FORMULÁRIO
+   * CURTO: fluxo por etapas, largura confortável e leitura no centro da tela.
+   * A faixa lateral (95% da viewport em telas largas) ficou reservada para
+   * SUPERFÍCIES DE TRABALHO longas (prontuário, ficha do paciente, conversas).
+   * É o MESMO componente e o MESMO overlay system — muda só a geometria, então
+   * guards, foco, Escape, empilhamento com o cadastro aninhado e presets de
+   * largura continuam valendo sem uma segunda implementação.
+   */
+  variant?: 'side' | 'dialog';
+  /** Faixa do modal central (valor CSS). Ignorado no `variant="side"`. */
+  dialogWidth?: string;
   /** Nonmodal workspace editors leave navigation reachable; caller must guard exits. */
   modal?: boolean;
   /** Optional root class for a single, explicitly scoped Drawer surface. */
@@ -751,7 +778,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
   if (!open) return null;
   return (
-    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal={modal || undefined}
+    <dialog ref={dialogRef}
+      className={cn("il-drawer fixed inset-0 z-50", variant === 'dialog' && 'il-drawer--dialog', dialogClassName)}
+      style={variant === 'dialog' ? ({ '--il-dialog-w': dialogWidth } as React.CSSProperties) : undefined}
+      aria-modal={modal || undefined}
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
@@ -767,13 +797,17 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           if (!event.defaultPrevented) { event.preventDefault(); requestClose('escape'); }
         }
       }}>
-      <div className="flex h-full justify-end">
+      <div className={cn('flex h-full', variant === 'dialog' ? 'items-center justify-center' : 'justify-end')}>
         <div aria-hidden="true" onClick={() => requestClose('backdrop')} className="absolute inset-0 bg-transparent" />
         {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
           'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
-          expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`,
+          // No modal central a largura vem do token do dialog (CSS); nos
+          // demais casos continua sendo o preset pedido pela tela.
+          variant === 'dialog'
+            ? (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : 'w-full')
+            : (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`),
         )} data-expanded={expanded ? 'true' : undefined}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre.
@@ -1030,33 +1064,61 @@ export function CloseButton({ onClick, label = 'Fechar', className }: {
 }
 
 // ── camadas flutuantes: uma única engenharia de ancoragem ───────────────
-type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start';
+type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start' | 'left-start';
+
+/**
+ * Retângulo do ANCORADOR. O gatilho real é o CONTEÚDO do wrapper, não o
+ * wrapper: há casos (evento da Agenda) em que o filho é `position: absolute`
+ * dentro da coluna e o wrapper fica 0×0 — medir o wrapper colocaria o card no
+ * canto da coluna em vez de colado ao evento. Regra: se o wrapper tem tamanho,
+ * usa o wrapper (o conteúdo pode ser composto); se não tem, mede o filho.
+ */
+function anchorRectOf(ref: React.RefObject<HTMLElement | null>): DOMRect | null {
+  const el = ref.current;
+  if (!el) return null;
+  const own = el.getBoundingClientRect();
+  if (own.width > 0 && own.height > 0) return own;
+  const child = el.firstElementChild as HTMLElement | null;
+  return child ? child.getBoundingClientRect() : own;
+}
 
 /**
  * Posiciona uma camada em PORTAL a partir do retângulo do gatilho, com
- * clamp na viewport e flip vertical quando não há espaço abaixo. Sem medição
- * por `offsetHeight` no render: lê o rect real a cada abertura/scroll.
+ * clamp na viewport, flip vertical (cima/baixo) e flip horizontal
+ * (direita/esquerda) quando o lado pedido não tem espaço. Sem medição por
+ * `offsetHeight` no render: lê o rect real a cada abertura/scroll.
  */
 function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement | null>, side: LayerSide, offset = 6, layerRef?: React.RefObject<HTMLElement | null>) {
   const [style, setStyle] = useState<React.CSSProperties | null>(null);
   useEffect(() => {
     if (!open) { setStyle(null); return; }
     const place = () => {
-      const a = anchorRef.current?.getBoundingClientRect();
+      const a = anchorRectOf(anchorRef);
       if (!a) return;
       const w = layerRef?.current?.offsetWidth || 0;
       const h = layerRef?.current?.offsetHeight || 0;
+      const margin = 8;
       let top = a.bottom + offset;
       let left = a.left;
       if (side === 'bottom-end') left = a.right - w;
       if (side === 'top-start') top = a.top - h - offset;
-      if (side === 'right-start') { top = a.top; left = a.right + offset; }
+      if (side === 'right-start' || side === 'left-start') {
+        // Preferência declarada primeiro; se não couber (com a camada já
+        // medida), abre do outro lado — nunca "por cima" do evento nem fora
+        // da viewport. A distância do evento continua sendo o mesmo offset.
+        top = a.top;
+        const rightFits = a.right + offset + w <= window.innerWidth - margin;
+        const leftFits = a.left - offset - w >= margin;
+        const preferLeft = side === 'left-start';
+        const openToRight = preferLeft ? !leftFits && rightFits : !rightFits && leftFits;
+        left = openToRight ? a.right + offset : (preferLeft ? a.left - offset - w : (rightFits ? a.right + offset : a.left - offset - w));
+      }
       if (side === 'bottom-start' || side === 'bottom-end') {
         // Sem espaço abaixo (e com espaço acima) → abre para cima.
-        if (h && top + h > window.innerHeight - 8 && a.top - h - offset > 8) top = a.top - h - offset;
+        if (h && top + h > window.innerHeight - margin && a.top - h - offset > margin) top = a.top - h - offset;
       }
-      left = Math.max(8, Math.min(left, window.innerWidth - Math.max(w, 0) - 8));
-      top = Math.max(8, Math.min(top, Math.max(8, window.innerHeight - h - 8)));
+      left = Math.max(margin, Math.min(left, window.innerWidth - Math.max(w, 0) - margin));
+      top = Math.max(margin, Math.min(top, Math.max(margin, window.innerHeight - h - margin)));
       setStyle({ top, left });
     };
     place();
@@ -1162,29 +1224,49 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
   );
 }
 
-/** HoverCard: painel rico em hover/foco com a janela do §15 (150–250ms). */
+/** HoverCard: painel rico em hover/foco com a janela do §15 (150–250ms).
+ *
+ *  Contrato (missão UX Closure, resumo contextual da Agenda):
+ *   • abre ~180ms depois de o ponteiro pousar no alvo;
+ *   • fica ANCORADO ao alvo (8px de distância), com flip automático quando
+ *     falta espaço — nunca no canto da página nem fora da viewport;
+ *   • permanece aberto com o ponteiro no alvo OU na própria camada (o atraso
+ *     de fechamento de `closeDelayMs` evita o flicker do caminho entre os dois);
+ *   • teclado: foco abre igual ao hover; Escape fecha;
+ *   • `closeOnClick`: qualquer clique DENTRO da camada fecha antes de navegar
+ *     (a ação pedida acontece, a prévia não fica pendurada na tela);
+ *   • onde não existe hover real (toque), a prévia não abre por foco de toque. */
 export const HOVER_CARD_OPEN_MS = 180;
-export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS }: {
-  content: React.ReactNode; side?: LayerSide; children: React.ReactNode; openDelayMs?: number;
+export const HOVER_CARD_CLOSE_MS = 140;
+export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS, closeDelayMs = HOVER_CARD_CLOSE_MS, offset = 10, closeOnClick = true, className }: {
+  content: React.ReactNode; side?: LayerSide; children: React.ReactNode;
+  openDelayMs?: number; closeDelayMs?: number; offset?: number; closeOnClick?: boolean; className?: string;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const timer = useRef<number | null>(null);
-  const style = useAnchoredLayer(open, anchorRef, side, 8, layerRef);
-  const clear = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; } };
-  // §5 — MOBILE SEM HOVER: onde não existe hover real (hover: none) a prévia
-  // não abre — nem por hover nem pelo foco de um toque. O caminho do toque é o
-  // clique, que abre o detalhe; nenhuma informação fica dependendo de hover.
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, offset, layerRef);
+  const clear = () => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+  };
   const canHover = () => {
     try { return window.matchMedia('(hover: hover)').matches; } catch { return true; }
   };
+  /** Ponteiro/foco entrou no alvo OU na camada: cancela o fechamento pendente. */
   const enter = () => {
     if (!canHover()) return;
-    clear();
-    timer.current = window.setTimeout(() => setOpen(true), openDelayMs);
+    if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+    if (openTimer.current !== null) return;
+    openTimer.current = window.setTimeout(() => { setOpen(true); openTimer.current = null; }, openDelayMs);
   };
-  const leave = () => { clear(); setOpen(false); };
+  const leave = () => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) return;
+    closeTimer.current = window.setTimeout(() => { setOpen(false); closeTimer.current = null; }, closeDelayMs);
+  };
   useEffect(() => clear, []);
   useDismissOnEscape(open, () => setOpen(false));
   return (
@@ -1195,13 +1277,28 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
         onMouseEnter={enter}
         onMouseLeave={leave}
         onFocus={enter}
-        onBlur={leave}
+        onBlur={(e) => {
+          // EQUIVALÊNCIA TECLADO ↔ HOVER: sair do alvo para dentro da PRÓPRIA
+          // camada (Tab até "Ver detalhes"/"Reagendar") não fecha o resumo.
+          const next = e.relatedTarget as Node | null;
+          if (next && layerRef.current?.contains(next)) return;
+          setOpen(false);
+        }}
       >
         {children}
       </span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-hovercard">
-          <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}>{content}</div>
+        <LayerPortal style={style} className={cn('gd-layer gd-hovercard', className)}>
+          <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}
+            onFocus={enter}
+            onBlur={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && (layerRef.current?.contains(next) || anchorRef.current?.contains(next))) return;
+              setOpen(false);
+            }}
+            onClick={closeOnClick ? () => setOpen(false) : undefined}>
+            {content}
+          </div>
         </LayerPortal>
       )}
     </>
@@ -1363,6 +1460,15 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
   );
 }
 
+/**
+ * Pilha de Dialogs ABERTOS: com um Dialog sobre outro (ex.: "Novo agendamento"
+ * + "Cadastrar novo paciente"), o Escape fecha SÓ o do topo. Sem isso os dois
+ * handlers de janela disparariam juntos e o overlay de baixo fecharia junto.
+ */
+// A hierarquia de overlays vive em lib/overlay-stack.ts (fonte única): o
+// Dialog responde a Escape/Tab só quando é o do TOPO — um sheet do DS aberto
+// por cima (ex.: cadastro de paciente) fecha sozinho, sem derrubar o de baixo.
+
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
 export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
@@ -1386,14 +1492,18 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
     const prev = document.activeElement as HTMLElement | null;
     lockBodyScroll(token.current);
     const node = ref.current;
+    const entry = token.current;
+    pushOverlay(entry);
     const first = node?.querySelector<HTMLElement>('[data-autofocus], button, input, select, textarea, a[href]');
     (first || headingRef.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); requestClose('escape'); }
-      if (e.key === 'Tab' && node) wrapDialogFocus(e, node, headingRef.current);
+      // Só o overlay do TOPO responde ao Escape (o de baixo continua aberto).
+      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestClose('escape'); }
+      if (e.key === 'Tab' && node && isTopOverlay(entry)) wrapDialogFocus(e, node, headingRef.current);
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
+      popOverlay(entry);
       window.removeEventListener('keydown', onKey, true);
       unlockBodyScroll(token.current);
       prev?.focus?.();
@@ -1427,6 +1537,110 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
       {guard.dialog}
     </div>,
     document.body,
+  );
+}
+
+/**
+ * DETAIL PANEL — overlay canônico de DETALHE (missão UX Closure · item 3B).
+ *
+ * Existe porque o produto tinha UMA superfície lateral para dois trabalhos
+ * diferentes: ver um registro e preencher um formulário. Detalhe não é
+ * formulário e não é sheet gigante:
+ *   • backdrop + painel FLUTUANTE que entra pela direita (28px de deslocamento,
+ *     ~200ms — janela 180–220ms declarada em `--gd-motion-overlay`);
+ *   • margem de viewport (`--gd-detail-gap`), cantos arredondados, largura
+ *     CONTROLADA (`--gd-detail-w`, 460px; janela 420–480px) — nada de coluna
+ *     arbitrária de 60% da tela;
+ *   • header curto, corpo por seções, rodapé opcional de ações;
+ *   • Escape fecha, foco entra no título e VOLTA para quem abriu, Tab contido.
+ *
+ * NÃO reutiliza a aparência do WorkspaceSheet (superfície/geometria próprias);
+ * o WorkspaceSheet continua sendo o overlay de FORMULÁRIO lateral.
+ */
+export function DetailPanel({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string;
+  children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
+  /**
+   * Largura PRÓPRIA (raro). Sem valor, vale o token do DS (`--gd-detail-w`,
+   * 460px) — a largura do painel nunca é a do conteúdo. Não passe
+   * `var(--gd-detail-w)` aqui: era exatamente isso que injetava um `var()`
+   * autorreferente (`--gd-detail-w: var(--gd-detail-w)`) e o painel caía para
+   * largura de conteúdo (448–456px, variando com o texto).
+   */
+  width?: string; label?: string;
+  /** Gatilho ALTERNATIVO quando o do clique desmonta (ex.: "Ver detalhes" do
+   *  HoverCard, que sai da tela junto com o card): o foco volta para o evento. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
+  /**
+   * `flush` = corpo SEM recuo próprio: quem recua é cada SEÇÃO (borda cheia de
+   * ponta a ponta, divisórias contínuas). Use só em conteúdo seccionado — é a
+   * mesma família visual, não um segundo padrão (a régua interna segue 16px).
+   */
+  flush?: boolean;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const titleId = useId();
+  const [closing, setClosing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const dismiss = useOverlayDismissGuard();
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
+  const motion = () => {
+    try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 170; } catch { return 170; }
+  };
+  function closeNow() {
+    if (closing) return;
+    setClosing(true);
+    timer.current = setTimeout(() => { setClosing(false); onClose(); }, motion());
+  }
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    lockBodyScroll(dialog);
+    dialog.showModal();
+    pushOverlay(dialog);
+    headingRef.current?.focus({ preventScroll: true });
+    return () => {
+      clearTimeout(timer.current);
+      popOverlay(dialog);
+      dialog.close();
+      unlockBodyScroll(dialog);
+      // Foco de VOLTA: o gatilho do clique quando ele ainda existe; se ele
+      // desmontou (card de hover), o evento dono do detalhe.
+      const fallback = returnFocus?.current ?? null;
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      else if (fallback?.isConnected) fallback.focus({ preventScroll: true });
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <dialog
+      ref={dialogRef}
+      className="gd-detail"
+      data-closing={closing || undefined}
+      aria-labelledby={titleId}
+      aria-label={label}
+      onCancel={(e) => { e.preventDefault(); requestClose('escape'); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
+      onKeyDown={(e) => {
+        wrapDialogFocus(e, e.currentTarget, headingRef.current);
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose('escape'); }
+      }}
+    >
+      <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}>
+        <header className="gd-detail__header">
+          <div className="min-w-0 flex-1">
+            <h2 ref={headingRef} tabIndex={-1} id={titleId}>{title}</h2>
+            {subtitle && <p className="gd-detail__sub">{subtitle}</p>}
+          </div>
+          <CloseButton label={`Fechar ${title}`} onClick={() => requestClose('close-button')} />
+        </header>
+        <div className={cn('gd-detail__body ws-scroll', flush && 'gd-detail__body--flush')}>{children}</div>
+        {footer && <div className="gd-detail__footer">{footer}</div>}
+      </aside>
+      {dismiss.dialog}
+    </dialog>
   );
 }
 

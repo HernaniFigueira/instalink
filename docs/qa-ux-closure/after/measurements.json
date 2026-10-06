@@ -1,0 +1,879 @@
+{
+  "rail-1440": {
+    "width": 60,
+    "visible": true,
+    "topbarWidth": 1440
+  },
+  "identity-1440": {
+    "clinicName": "Andrioni Veterinaria",
+    "clinicNameVisible": true,
+    "clinicNameTruncated": false,
+    "hasLogo": 1,
+    "clinicLeftX": 16,
+    "topbarText": [
+      "AV",
+      "Andrioni Veterinaria",
+      "Ctrl K",
+      "AA"
+    ],
+    "sidebarText": [
+      "Visão geralAgendaConversasPendênciasClientesClínicaAutomaçãoGestãoConfiguraçõesConfiguraçãoAjuda e suporte"
+    ],
+    "sidebarHasClinicName": false,
+    "railCollapseControls": 0
+  },
+  "panel-1440": {
+    "group": "clinica",
+    "railRight": 60,
+    "panelLeft": 60,
+    "gap": 0,
+    "panelWidth": 232,
+    "openWithCursorInside": 1,
+    "swapped": {
+      "label": "Automação",
+      "otherId": "automacao"
+    },
+    "closedAfterLeave": true
+  },
+  "native-title-1440": 0,
+  "toolbar-1440": [
+    {
+      "text": "Filtros",
+      "h": 40,
+      "w": 109.2
+    },
+    {
+      "text": "Fila",
+      "h": 40,
+      "w": 73.5
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Hoje",
+      "h": 40,
+      "w": 59.8
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Quarta, 07/10/2026",
+      "h": 40,
+      "w": 176.2
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Dia",
+      "h": 32,
+      "w": 62.3
+    },
+    {
+      "text": "Semana",
+      "h": 32,
+      "w": 91.5
+    },
+    {
+      "text": "Lista",
+      "h": 32,
+      "w": 71.5
+    },
+    {
+      "text": "Bloquear horário",
+      "h": 40,
+      "w": 138.4
+    },
+    {
+      "text": "Novo agendamento",
+      "h": 40,
+      "w": 178.2
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 28,
+      "w": 311
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 128,
+      "w": 380
+    },
+    {
+      "text": "08:30–09:00Marina Souz",
+      "h": 64,
+      "w": 640
+    },
+    {
+      "text": "09:30–10:00Bruno Alves",
+      "h": 64,
+      "w": 640
+    },
+    {
+      "text": "11:00–11:15Diego Rocha",
+      "h": 32,
+      "w": 640
+    },
+    {
+      "text": "09:00–09:15Rafael Lima",
+      "h": 32,
+      "w": 641
+    },
+    {
+      "text": "10:15–10:45Carla Mende",
+      "h": 64,
+      "w": 641
+    },
+    {
+      "text": "12:30–12:45Ana Prado",
+      "h": 32,
+      "w": 641
+    }
+  ],
+  "hovercard-1440": {
+    "event": {
+      "x": 135,
+      "y": 356,
+      "width": 640,
+      "height": 64
+    },
+    "card": {
+      "x": 785,
+      "y": 356,
+      "width": 278,
+      "height": 179.921875
+    },
+    "gapX": 10,
+    "gapY": 0,
+    "insideViewport": true,
+    "text": [
+      "08:30–09:00",
+      "Pendente",
+      "",
+      "Marina Souza",
+      "",
+      "Serviço",
+      "Consulta veterinária",
+      "Profissional"
+    ]
+  },
+  "detail-1440": {
+    "panel": {
+      "x": 964,
+      "y": 16,
+      "width": 460,
+      "height": 868
+    },
+    "panelWidthCss": "460px",
+    "widthPct": 32,
+    "rightGap": 16,
+    "topGap": 16,
+    "title": "Detalhe do agendamento",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "escClosed": true,
+    "focusBackOnEvent": true
+  },
+  "native-title-events-1440": 0,
+  "native-title-grid-1440": 0,
+  "blocks-1440": {
+    "indicator": {
+      "h": 42,
+      "text": "1 bloqueio neste períodoBloqueios não são atendimentos — o período aparece hachurado na gr"
+    },
+    "gridBlocks": 1,
+    "hatched": true,
+    "bigAmberBox": false
+  },
+  "view-week-1440": {
+    "views": [
+      "week"
+    ],
+    "pressed": [
+      "Semana"
+    ]
+  },
+  "view-list-1440": {
+    "views": [
+      "list"
+    ],
+    "pressed": [
+      "Lista"
+    ]
+  },
+  "new-booking-1440": {
+    "box": {
+      "x": 384,
+      "y": 54,
+      "width": 672,
+      "height": 792
+    },
+    "centered": true,
+    "widthPct": 47
+  },
+  "rail-1366": {
+    "width": 60,
+    "visible": true,
+    "topbarWidth": 1366
+  },
+  "identity-1366": {
+    "clinicName": "Andrioni Veterinaria",
+    "clinicNameVisible": true,
+    "clinicNameTruncated": false,
+    "hasLogo": 1,
+    "clinicLeftX": 16,
+    "topbarText": [
+      "AV",
+      "Andrioni Veterinaria",
+      "Ctrl K",
+      "AA"
+    ],
+    "sidebarText": [
+      "Visão geralAgendaConversasPendênciasClientesClínicaAutomaçãoGestãoConfiguraçõesConfiguraçãoAjuda e suporte"
+    ],
+    "sidebarHasClinicName": false,
+    "railCollapseControls": 0
+  },
+  "panel-1366": {
+    "group": "clinica",
+    "railRight": 60,
+    "panelLeft": 60,
+    "gap": 0,
+    "panelWidth": 232,
+    "openWithCursorInside": 1,
+    "swapped": {
+      "label": "Automação",
+      "otherId": "automacao"
+    },
+    "closedAfterLeave": true
+  },
+  "native-title-1366": 0,
+  "toolbar-1366": [
+    {
+      "text": "Filtros",
+      "h": 40,
+      "w": 109.2
+    },
+    {
+      "text": "Fila",
+      "h": 40,
+      "w": 73.5
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Hoje",
+      "h": 40,
+      "w": 59.8
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Quarta, 07/10/2026",
+      "h": 40,
+      "w": 176.2
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Dia",
+      "h": 32,
+      "w": 62.3
+    },
+    {
+      "text": "Semana",
+      "h": 32,
+      "w": 91.5
+    },
+    {
+      "text": "Lista",
+      "h": 32,
+      "w": 71.5
+    },
+    {
+      "text": "Bloquear horário",
+      "h": 40,
+      "w": 138.4
+    },
+    {
+      "text": "Novo agendamento",
+      "h": 40,
+      "w": 178.2
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 28,
+      "w": 311
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 128,
+      "w": 380
+    },
+    {
+      "text": "08:30–09:00Marina Souz",
+      "h": 64,
+      "w": 603
+    },
+    {
+      "text": "09:30–10:00Bruno Alves",
+      "h": 64,
+      "w": 603
+    },
+    {
+      "text": "11:00–11:15Diego Rocha",
+      "h": 32,
+      "w": 603
+    },
+    {
+      "text": "09:00–09:15Rafael Lima",
+      "h": 32,
+      "w": 604
+    },
+    {
+      "text": "10:15–10:45Carla Mende",
+      "h": 64,
+      "w": 604
+    },
+    {
+      "text": "12:30–12:45Ana Prado",
+      "h": 32,
+      "w": 604
+    }
+  ],
+  "hovercard-1366": {
+    "event": {
+      "x": 135,
+      "y": 356,
+      "width": 603,
+      "height": 64
+    },
+    "card": {
+      "x": 748,
+      "y": 356,
+      "width": 278,
+      "height": 179.921875
+    },
+    "gapX": 10,
+    "gapY": 0,
+    "insideViewport": true,
+    "text": [
+      "08:30–09:00",
+      "Pendente",
+      "",
+      "Marina Souza",
+      "",
+      "Serviço",
+      "Consulta veterinária",
+      "Profissional"
+    ]
+  },
+  "detail-1366": {
+    "panel": {
+      "x": 890,
+      "y": 16,
+      "width": 460,
+      "height": 736
+    },
+    "panelWidthCss": "460px",
+    "widthPct": 34,
+    "rightGap": 16,
+    "topGap": 16,
+    "title": "Detalhe do agendamento",
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    },
+    "escClosed": true,
+    "focusBackOnEvent": true
+  },
+  "native-title-events-1366": 0,
+  "native-title-grid-1366": 0,
+  "blocks-1366": {
+    "indicator": {
+      "h": 42,
+      "text": "1 bloqueio neste períodoBloqueios não são atendimentos — o período aparece hachurado na gr"
+    },
+    "gridBlocks": 1,
+    "hatched": true,
+    "bigAmberBox": false
+  },
+  "view-week-1366": {
+    "views": [
+      "week"
+    ],
+    "pressed": [
+      "Semana"
+    ]
+  },
+  "view-list-1366": {
+    "views": [
+      "list"
+    ],
+    "pressed": [
+      "Lista"
+    ]
+  },
+  "new-booking-1366": {
+    "box": {
+      "x": 347,
+      "y": 46.0859375,
+      "width": 672,
+      "height": 675.828125
+    },
+    "centered": true,
+    "widthPct": 49
+  },
+  "rail-1024": {
+    "width": 60,
+    "visible": true,
+    "topbarWidth": 1024
+  },
+  "identity-1024": {
+    "clinicName": "Andrioni Veterinaria",
+    "clinicNameVisible": true,
+    "clinicNameTruncated": false,
+    "hasLogo": 1,
+    "clinicLeftX": 16,
+    "topbarText": [
+      "AV",
+      "Andrioni Veterinaria",
+      "Ctrl K",
+      "AA"
+    ],
+    "sidebarText": [
+      "Visão geralAgendaConversasPendênciasClientesClínicaAutomaçãoGestãoConfiguraçõesConfiguraçãoAjuda e suporte"
+    ],
+    "sidebarHasClinicName": false,
+    "railCollapseControls": 0
+  },
+  "panel-1024": {
+    "group": "clinica",
+    "railRight": 60,
+    "panelLeft": 60,
+    "gap": 0,
+    "panelWidth": 232,
+    "openWithCursorInside": 1,
+    "swapped": {
+      "label": "Automação",
+      "otherId": "automacao"
+    },
+    "closedAfterLeave": true
+  },
+  "native-title-1024": 0,
+  "toolbar-1024": [
+    {
+      "text": "Filtros",
+      "h": 40,
+      "w": 109.2
+    },
+    {
+      "text": "Fila",
+      "h": 40,
+      "w": 73.5
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Hoje",
+      "h": 40,
+      "w": 59.8
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Quarta, 07/10/2026",
+      "h": 40,
+      "w": 176.2
+    },
+    {
+      "text": "",
+      "h": 40,
+      "w": 40
+    },
+    {
+      "text": "Dia",
+      "h": 32,
+      "w": 62.3
+    },
+    {
+      "text": "Semana",
+      "h": 32,
+      "w": 91.5
+    },
+    {
+      "text": "Lista",
+      "h": 32,
+      "w": 71.5
+    },
+    {
+      "text": "Bloquear horário",
+      "h": 40,
+      "w": 138.4
+    },
+    {
+      "text": "Novo agendamento",
+      "h": 40,
+      "w": 178.2
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 28,
+      "w": 311
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 128,
+      "w": 380
+    },
+    {
+      "text": "08:30–09:00Marina Souz",
+      "h": 64,
+      "w": 440
+    },
+    {
+      "text": "09:30–10:00Bruno Alves",
+      "h": 64,
+      "w": 440
+    },
+    {
+      "text": "11:00–11:15Diego Rocha",
+      "h": 32,
+      "w": 440
+    },
+    {
+      "text": "09:00–09:15Rafael Lima",
+      "h": 32,
+      "w": 441
+    },
+    {
+      "text": "10:15–10:45Carla Mende",
+      "h": 64,
+      "w": 441
+    },
+    {
+      "text": "12:30–12:45Ana Prado",
+      "h": 32,
+      "w": 441
+    }
+  ],
+  "hovercard-1024": {
+    "event": {
+      "x": 127,
+      "y": 348,
+      "width": 440,
+      "height": 64
+    },
+    "card": {
+      "x": 577,
+      "y": 348,
+      "width": 278,
+      "height": 179.921875
+    },
+    "gapX": 10,
+    "gapY": 0,
+    "insideViewport": true,
+    "text": [
+      "08:30–09:00",
+      "Pendente",
+      "",
+      "Marina Souza",
+      "",
+      "Serviço",
+      "Consulta veterinária",
+      "Profissional"
+    ]
+  },
+  "detail-1024": {
+    "panel": {
+      "x": 548,
+      "y": 16,
+      "width": 460,
+      "height": 736
+    },
+    "panelWidthCss": "460px",
+    "widthPct": 45,
+    "rightGap": 16,
+    "topGap": 16,
+    "title": "Detalhe do agendamento",
+    "viewport": {
+      "width": 1024,
+      "height": 768
+    },
+    "escClosed": true,
+    "focusBackOnEvent": true
+  },
+  "native-title-events-1024": 0,
+  "native-title-grid-1024": 0,
+  "blocks-1024": {
+    "indicator": {
+      "h": 42,
+      "text": "1 bloqueio neste períodoBloqueios não são atendimentos — o período aparece hachurado na gr"
+    },
+    "gridBlocks": 1,
+    "hatched": true,
+    "bigAmberBox": false
+  },
+  "view-week-1024": {
+    "views": [
+      "week"
+    ],
+    "pressed": [
+      "Semana"
+    ]
+  },
+  "view-list-1024": {
+    "views": [
+      "list"
+    ],
+    "pressed": [
+      "Lista"
+    ]
+  },
+  "new-booking-1024": {
+    "box": {
+      "x": 176,
+      "y": 46.0859375,
+      "width": 672,
+      "height": 675.828125
+    },
+    "centered": true,
+    "widthPct": 66
+  },
+  "rail-390": {
+    "visible": false,
+    "topbarWidth": 390
+  },
+  "identity-390": {
+    "clinicName": "Andrioni Veterinaria",
+    "clinicNameVisible": true,
+    "clinicNameTruncated": false,
+    "hasLogo": 1,
+    "clinicLeftX": 56,
+    "topbarText": [
+      "AV",
+      "Andrioni Veterinaria",
+      "AA"
+    ],
+    "sidebarText": [
+      "Visão geralAgendaConversasPendênciasClientesClínicaAutomaçãoGestãoConfiguraçõesConfiguraçãoAjuda e suporte"
+    ],
+    "sidebarHasClinicName": false,
+    "railCollapseControls": 0,
+    "drawerText": [
+      "Navegar na clínicaVisão geralAgendaConversasPendênciasClientesMeu perfilClínicaEstruturaAtendimentoDisponibilidadeServiçosEquipeAutomaçãoAssistenteCampanhasAutomaçõesFollow-upExecuçõesGestãoOportunidadesResultadosFinanceiroConfiguraçõesCanais & IntegraçõesRecursosConfiguraçõesSua clínica está 60% prontaComplete a configuração para receber agendamentos.Continuar configuraçãoAjuda e suportepowered by GoDoutor"
+    ],
+    "drawerHasClinicName": false
+  },
+  "toolbar-390": [
+    {
+      "text": "Filtros",
+      "h": 44,
+      "w": 109.2
+    },
+    {
+      "text": "Fila",
+      "h": 44,
+      "w": 73.5
+    },
+    {
+      "text": "",
+      "h": 44,
+      "w": 44
+    },
+    {
+      "text": "Hoje",
+      "h": 44,
+      "w": 59.8
+    },
+    {
+      "text": "",
+      "h": 44,
+      "w": 44
+    },
+    {
+      "text": "Quarta, 07/10/2026",
+      "h": 40,
+      "w": 194.4
+    },
+    {
+      "text": "",
+      "h": 44,
+      "w": 44
+    },
+    {
+      "text": "Dia",
+      "h": 32,
+      "w": 38.3
+    },
+    {
+      "text": "Semana",
+      "h": 32,
+      "w": 67.5
+    },
+    {
+      "text": "Lista",
+      "h": 32,
+      "w": 47.5
+    },
+    {
+      "text": "Bloquear horário",
+      "h": 44,
+      "w": 138.4
+    },
+    {
+      "text": "Novo agendamento",
+      "h": 44,
+      "w": 178.2
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 28,
+      "w": 311
+    },
+    {
+      "text": "12:00–13:00Almoço da e",
+      "h": 128,
+      "w": 149
+    },
+    {
+      "text": "08:30–09:00Marina Souz",
+      "h": 64,
+      "w": 153
+    },
+    {
+      "text": "09:30–10:00Bruno Alves",
+      "h": 64,
+      "w": 153
+    },
+    {
+      "text": "11:00–11:15Diego Rocha",
+      "h": 32,
+      "w": 153
+    },
+    {
+      "text": "09:00–09:15Rafael Lima",
+      "h": 32,
+      "w": 154
+    },
+    {
+      "text": "10:15–10:45Carla Mende",
+      "h": 64,
+      "w": 154
+    },
+    {
+      "text": "12:30–12:45Ana Prado",
+      "h": 32,
+      "w": 154
+    }
+  ],
+  "hovercard-390": {
+    "event": {
+      "x": 67,
+      "y": 538,
+      "width": 153,
+      "height": 64
+    },
+    "card": {
+      "x": 8,
+      "y": 538,
+      "width": 278,
+      "height": 179.921875
+    },
+    "gapX": -212,
+    "gapY": 0,
+    "insideViewport": true,
+    "text": [
+      "08:30–09:00",
+      "Pendente",
+      "",
+      "Marina Souza",
+      "",
+      "Serviço",
+      "Consulta veterinária",
+      "Profissional"
+    ]
+  },
+  "detail-390": {
+    "panel": {
+      "x": 8,
+      "y": 8,
+      "width": 374,
+      "height": 828
+    },
+    "panelWidthCss": "374px",
+    "widthPct": 96,
+    "rightGap": 8,
+    "topGap": 8,
+    "title": "Detalhe do agendamento",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "escClosed": true,
+    "focusBackOnEvent": true
+  },
+  "native-title-events-390": 0,
+  "native-title-grid-390": 0,
+  "blocks-390": {
+    "indicator": {
+      "h": 68,
+      "text": "1 bloqueio neste períodoBloqueios não são atendimentos — o período aparece hachurado na gr"
+    },
+    "gridBlocks": 1,
+    "hatched": true,
+    "bigAmberBox": false
+  },
+  "view-week-390": {
+    "views": [
+      "week"
+    ],
+    "pressed": [
+      "Semana"
+    ]
+  },
+  "view-list-390": {
+    "views": [
+      "list"
+    ],
+    "pressed": [
+      "Lista"
+    ]
+  },
+  "new-booking-390": {
+    "box": {
+      "x": 12,
+      "y": 12,
+      "width": 366,
+      "height": 820
+    },
+    "centered": true,
+    "widthPct": 94
+  },
+  "consoleErrors": []
+}

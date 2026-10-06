@@ -61,8 +61,8 @@ describe('regra única (pura)', () => {
 });
 
 describe('WorkspaceNavigation — mini-card de setup', () => {
-  const mount = (role: (typeof ROLES)[number]) => render(
-    <WorkspaceNavigation nav={navFor(role)} activePath="/agenda" unit={unit} collapsed={false} onCollapse={() => {}} />,
+  const mount = (role: (typeof ROLES)[number], mobileOpen = false) => render(
+    <WorkspaceNavigation nav={navFor(role)} activePath="/agenda" unit={unit} mobileOpen={mobileOpen} onMobileOpen={() => {}} />,
   );
   it('Recepção: zero chamadas a /api/overview e nenhum card de setup', async () => {
     const { container } = mount('SECRETARIA');
@@ -72,13 +72,20 @@ describe('WorkspaceNavigation — mini-card de setup', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
     expect(overviewCalls).toEqual([]);
     expect(container.textContent).not.toContain('Continuar configuração');
+    expect(container.querySelector('.ws-setup-ring')).toBeNull();
     expect(container.querySelector('[data-nav-item="/agenda"]')).toBeTruthy(); // navegação segue íntegra
   });
-  it.each(['OWNER', 'ADMIN', 'PROFISSIONAL'] as const)('%s: Overview continua carregando e o card aparece', async (role) => {
-    const { container } = mount(role);
+  it.each(['OWNER', 'ADMIN', 'PROFISSIONAL'] as const)('%s: Overview continua carregando e o setup aparece', async (role) => {
+    // MISSÃO UX CLOSURE — no rail de 60px a pendência vira ANEL de progresso
+    // (com o próximo passo do checklist); o cartão em texto vive no drawer.
+    const rail = mount(role);
     await waitFor(() => expect(overviewCalls.length).toBeGreaterThan(0));
-    await waitFor(() => expect(container.textContent).toContain('Continuar configuração'));
+    await waitFor(() => expect(rail.container.querySelector('.ws-setup-ring')).toBeTruthy());
+    expect(rail.container.querySelector('.ws-setup-ring')?.getAttribute('aria-label')).toMatch(/^Configuração da clínica: \d+% concluída$/);
     expect(overviewCalls[0]).toContain('/api/overview?businessId=biz-1');
+    cleanup();
+    const drawer = mount(role, true);
+    await waitFor(() => expect(drawer.container.textContent).toContain('Continuar configuração'));
   });
 });
 

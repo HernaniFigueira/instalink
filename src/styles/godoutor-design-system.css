@@ -191,18 +191,36 @@
   --gd-shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
   --gd-shadow-overlay: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
 
-  /* ── CONTROL HEIGHT (uma régua para botão, input, select, chip) ───────── */
+  /* ── CONTROL HEIGHT (uma régua para botão, input, select, chip) ─────────
+     REGRA DA CASA (missão UX Closure): controle do MESMO nível tem a MESMA
+     altura, o MESMO raio, a MESMA borda e a MESMA tipografia. Nenhuma página
+     escolhe altura: ela escolhe `md` ou `sm` e o componente lê daqui.
+       md → --gd-control-h    (ação principal de linha, toolbar, topbar)
+       sm → --gd-control-h-sm (ação secundária densa)
+       xs → --gd-control-h-xs (chip/atalho dentro de card)
+     Vale para Button, IconButton, Input, Select, DatePicker, Combobox,
+     Segmented e Tabs: todos medem da MESMA régua. */
   --gd-control-h: 40px;
   --gd-control-h-sm: 34px;
   --gd-control-h-xs: 28px;
   --gd-control-h-touch: 44px;
   --gd-control-h-icon: var(--gd-control-h);
 
+  /* ── SETS DE INTERAÇÃO (o que NÃO pode ser inventado por página) ───────
+     Overlay de detalhe × overlay de formulário × popover: três elevações com
+     três comportamentos declarados. A página escolhe um componente. */
+  --gd-booking-modal-w: 672px;  /* faixa do modal de criação de agendamento */
+  --gd-detail-w: 460px;          /* largura do detail panel (janela 420–480) */
+  --gd-detail-gap: var(--gd-space-4);   /* margem da viewport */
+  --gd-motion-overlay: 200ms;    /* entrada de overlay (janela 180–220ms) */
+  --gd-motion-overlay-out: 170ms;
+  --gd-nav-panel-attach: 0px;    /* o painel de grupo nasce COLADO no rail */
+
   /* ── LAYOUT DO APP SHELL ──────────────────────────────────────────────── */
   --gd-topbar-h: 56px;           /* top bar full-width, acima da sidebar */
   --gd-rail-w: 60px;             /* rail recolhida (ícones) */
   --gd-sidebar-w: 248px;         /* navegação fixada (pin) */
-  --gd-nav-panel-w: 216px;       /* painel lateral temporário (hover/focus) */
+  --gd-nav-panel-w: 232px;       /* extensão do grupo (hover/focus) — ligada ao rail */
   --gd-z-base: 1;
   --gd-z-sticky: 20;
   --gd-z-topbar: 45;
@@ -382,6 +400,101 @@
 .gd-calendar__day[data-today='true'] { box-shadow: inset 0 0 0 1px var(--gd-border-strong); }
 .gd-calendar__day[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
 .gd-calendar__day--empty { visibility: hidden; }
+
+/* ═══════════════════════════════════════════════════════════════
+   CONTRATO DE ALTURA — controle do mesmo nível, mesma métrica
+   ═══════════════════════════════════════════════════════════════
+   Estas classes são o ÚNICO lugar que decide altura/raio de controle. O
+   componente escolhe o nível (`md`/`sm`/`xs`); a página não sobrescreve com
+   `h-[37px]`, `px-[13px]` nem `!important`. Vale para ação, campo, seletor de
+   modo e ícone — é isso que faz "Hoje", setas, data, Dia/Semana/Lista e CTAs
+   da Agenda terem exatamente a mesma altura. */
+.gd-control { min-height: var(--gd-control-h); }
+.gd-control--sm { min-height: var(--gd-control-h-sm); }
+.gd-control--xs { min-height: var(--gd-control-h-xs); }
+/* Ícone é QUADRADO no nível escolhido — nunca "34 de alto e 40 de largo". */
+.gd-icon-control {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--gd-control-h); height: var(--gd-control-h); min-width: var(--gd-control-h);
+}
+.gd-icon-control--sm {
+  width: var(--gd-control-h-sm); height: var(--gd-control-h-sm); min-width: var(--gd-control-h-sm);
+}
+.gd-icon-control--xs {
+  width: var(--gd-control-h-xs); height: var(--gd-control-h-xs); min-width: var(--gd-control-h-xs);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DETAIL PANEL — overlay de DETALHE (direita, flutuante, 420–480px)
+   ═══════════════════════════════════════════════════════════════
+   Padrão canônico para "ver o registro": backdrop suave, painel flutuante que
+   entra pela direita, margem de viewport, cantos arredondados e largura
+   controlada. Este é o overlay de LEITURA — não o de criação (que é o
+   `.gd-dialog` central) nem o formulário longo (`.ws-sheet`). */
+.gd-detail-backdrop { background: var(--gd-overlay); }
+.gd-detail {
+  position: fixed; inset: 0; z-index: var(--gd-z-modal);
+  margin: 0 !important; padding: 0; border: 0;
+  width: auto; height: auto; max-width: none; max-height: none;
+  background: transparent; color: inherit; overflow: hidden;
+}
+.gd-detail:not([open]) { display: none; }
+.gd-detail::backdrop { background: var(--gd-overlay); animation: gd-fade-in var(--gd-motion-base) var(--gd-ease); }
+.gd-detail__panel {
+  position: absolute;
+  top: var(--gd-detail-gap); right: var(--gd-detail-gap); bottom: var(--gd-detail-gap);
+  display: flex; flex-direction: column; min-height: 0;
+  /* Largura SEMPRE do token. Os fallbacks repetem os valores de `--gd-detail-w`
+     / `--gd-detail-gap` de propósito: protegem o painel de um `var()` que não
+     resolve (autorreferente ou token ausente), caso em que `width` cairia para
+     `auto` e o painel passaria a ter a largura do CONTEÚDO — que foi o defeito
+     medido na auditoria (448–456px variando com o texto, em vez de 460px). */
+  width: min(var(--gd-detail-w, 460px), calc(100vw - (2 * var(--gd-detail-gap, 16px))));
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border);
+  border-radius: var(--gd-radius-lg);
+  box-shadow: var(--gd-shadow-overlay);
+  overflow: hidden;
+}
+.gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-overlay) var(--gd-ease); }
+.gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-overlay-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes gd-detail-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes gd-detail-out { to { opacity: 0; transform: translateX(28px); } }
+.gd-detail__header {
+  display: flex; align-items: flex-start; gap: var(--gd-space-2);
+  padding: var(--gd-space-4); flex-shrink: 0;
+  border-bottom: 1px solid var(--gd-border-soft);
+}
+.gd-detail__header h2 {
+  margin: 0; font-size: var(--gd-font-size-section); font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-strong); outline: none;
+}
+.gd-detail__sub { margin: 2px 0 0; font-size: var(--gd-font-size-secondary); color: var(--gd-text-muted); }
+.gd-detail__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--gd-space-4); }
+/* Conteúdo SECCIONADO (detalhe de agendamento): cada seção recua e desenha a
+   própria divisória de ponta a ponta — o corpo não soma recuo nenhum. */
+.gd-detail__body--flush { padding: 0; }
+.gd-detail__footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--gd-space-2);
+  padding: var(--gd-space-3) var(--gd-space-4); flex-shrink: 0;
+  border-top: 1px solid var(--gd-border-soft); background: var(--gd-bg-surface);
+}
+@media (max-width: 479px) {
+  /* Mobile: o detalhe ocupa a largura útil com margem mínima — nunca uma
+     coluna estreita perdida no meio da tela. */
+  .gd-detail__panel { top: var(--gd-space-2); right: var(--gd-space-2); bottom: var(--gd-space-2); width: calc(100vw - 2 * var(--gd-space-2)); }
+  .gd-detail__body { padding: var(--gd-space-4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gd-detail[open] .gd-detail__panel, .gd-detail[data-closing] .gd-detail__panel { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOOLBAR — uma linha, uma métrica
+   ═══════════════════════════════════════════════════════════════
+   Barra de controles de página (Agenda e afins): os filhos de mesmo nível
+   nascem alinhados ao centro e herdam a MESMA altura. O gap vem do token. */
+.gd-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gd-toolbar-gap); }
 
 /* Tabela e paginação canônicas. */
 .gd-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--gd-font-size-secondary); }

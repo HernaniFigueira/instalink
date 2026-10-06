@@ -99,7 +99,9 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   });
 
   it('offers canonical button anatomy with explicit semantic success and warning', () => {
-    expect(ui).toContain("'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning'");
+    // MISSÃO UX CLOSURE · item 6: a família destrutiva tem DOIS níveis canônicos —
+    // repouso (soft) e confirmação final (solid). O contrato protege os dois.
+    expect(ui).toContain("'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'link' | 'success' | 'warning'");
     expect(ui).toMatch(/  success:\n[\s\S]*?var\(--success\)/);
     expect(ui).toMatch(/  warning:\n[\s\S]*?var\(--warning-bg\)/);
     for (const alias of ["danger: 'destructive'", "soft: 'secondary'", "quiet: 'ghost'", "cta: 'primary'"]) {

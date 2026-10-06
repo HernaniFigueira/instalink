@@ -32,7 +32,10 @@ describe('P0-1 · autosave não fecha EncounterSheet/BookingDetailSheet', () => 
   });
 
   it('BookingDetailSheet continua contextual; o atendimento abre em rota completa protegida', () => {
-    expect(BOOKING_DETAIL).toContain('WorkspaceSheet');
+    // MISSÃO UX CLOSURE · item 3B — o detalhe usa o painel lateral canônico
+    // (DetailPanel); continua contextual (não vira página) e mantém o autosave
+    // do atendimento fora daqui.
+    expect(BOOKING_DETAIL).toContain('DetailPanel');
     expect(BOOKING_DETAIL).toContain('encounterWorkspaceHref');
     expect(BOOKING_DETAIL).toMatch(/bookingId: booking\.id/);
     expect(BOOKING_DETAIL).not.toContain('<EncounterSheet');

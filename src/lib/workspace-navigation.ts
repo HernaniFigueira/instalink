@@ -72,17 +72,23 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // recepção resolve pendências o dia todo). `/perfil` continua fora da
     // linha (menu da conta), mas ter dono evita a rede de segurança "Mais"
     // que fazia o breadcrumb mentir ("Visão geral > Mais > Pendências").
-    // Atendimento clínico é uma porta contextual da operação, mas sidebar:false
-    // mantém a página fora da linha de navegação.
-    routes: ['/dashboard', '/agenda', '/atendimento', '/conversas', '/clientes', '/tarefas', '/perfil'],
+    routes: ['/dashboard', '/agenda', '/conversas', '/clientes', '/tarefas', '/perfil'],
   },
   {
     // Quem a clínica é por dentro: o que oferece, quem atende, quando atende e
     // quem entra no sistema. Perguntas que se respondem UMA vez (e se ajustam
     // de vez em quando) — por isso vivem atrás de uma porta, não soltas no
     // menu. `/produtos` e `/pedidos` só existem quando o módulo está ativo.
+    //
+    // MISSÃO UX CLOSURE · P0 — `/atendimento` (registro clínico) veio para
+    // cá: ele é destino CLÍNICO autorizado por permissão própria
+    // (`atendimento`), e antes ficava fora da coluna E fora de todo grupo, o
+    // que o deixava alcançável apenas por URL. `sidebar: false` continua
+    // valendo (não ocupa linha no rail — a régua é frequência), mas o painel
+    // do grupo agora o apresenta. Nenhuma permissão nova é inventada: quem
+    // não tem `atendimento` simplesmente não o vê.
     id: 'clinica', label: 'Clínica', icon: 'grid', color: 'var(--brand)',
-    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos', '/pedidos'],
+    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/atendimento', '/equipe', '/produtos', '/pedidos'],
   },
   {
     id: 'presenca', label: 'Página', icon: 'link', color: 'var(--brand)',
@@ -180,6 +186,43 @@ export const WORKSPACE_SECTIONS: WorkspaceSectionDef[] = [
     entries: [{ area: 'automacao' }, { area: 'gestao' }, { area: 'ajustes' }],
   },
 ];
+
+// ── O QUE APARECE ONDE (regra única, nunca repetida na tela) ────
+//   • COLUNA (rail): só destinos com `sidebar !== false` — a régua é
+//     FREQUÊNCIA de uso, não importância;
+//   • PAINEL DO GRUPO: TODOS os destinos autorizados do grupo, inclusive os
+//     de `sidebar: false`, porque o painel é a superfície de atalho
+//     contextual. É isto que garante o P0 da missão: nenhuma rota autorizada
+//     desaparece por causa da arquitetura visual;
+//   • ALIAS DE COMPATIBILIDADE (`compatOnly`) nunca aparece — duas portas
+//     para a mesma tela é ruído, e a rota segue viva por URL;
+//   • a Página legada segue fora das duas superfícies quando
+//     `GODOUTOR_LEGACY_PAGES` está desligada (decisão de PRODUTO, não de
+//     menu) — a rota continua acessível por URL e por deep link.
+export interface MenuProjectionOptions {
+  legacyPages?: boolean;
+  /** Hrefs que a tela precisa esconder por decisão de produto (GDP legado). */
+  hidden?: (route: PanelRouteDef) => boolean;
+}
+
+/** Itens que ocupam linha na coluna de navegação. */
+export function workspaceRailItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
+  return area.items.filter((item) => item.sidebar !== false && !item.compatOnly && !isHidden(item, opts));
+}
+
+/** Itens que o PAINEL do grupo apresenta (inclui destino contextual). */
+export function workspacePanelItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
+  return area.items.filter((item) => !item.compatOnly && !isHidden(item, opts));
+}
+
+function isHidden(route: PanelRouteDef, opts: MenuProjectionOptions): boolean {
+  if (opts.hidden?.(route)) return true;
+  // Só a Página legada é decisão de PRODUTO (a rota segue viva por URL).
+  // Módulos (`features`) e permissões já foram filtrados ANTES, em
+  // `panelNavigation` — a apresentação nunca esconde destino por conta própria.
+  const legacyPages = opts.legacyPages ?? isLegacyPagesEnabled();
+  return !legacyPages && route.href === '/pagina';
+}
 
 export interface WorkspaceSection extends WorkspaceSectionDef {
   /** Entradas já resolvidas contra os destinos autorizados. */

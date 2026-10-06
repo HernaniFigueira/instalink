@@ -35,7 +35,11 @@ describe('bug 1 — Agenda NÃO tem background próprio (pixel = --workspace-bg)
 
 describe('bug 2 — sidebar sem sombra projetada na divisa', () => {
   it('workspace-sidebar: sem box-shadow (só border-right 1px)', () => {
-    const s = css.slice(css.indexOf('.il-platform .workspace-sidebar {'), css.indexOf('.il-platform .workspace-sidebar.is-collapsed'));
+    // MISSÃO UX CLOSURE: não existe mais modo recolhido/expandido, então o
+    // recorte usa o fim da PRÓPRIA regra (chave de fechamento), não a regra
+    // seguinte — o contrato verificado é o mesmo.
+    const start = css.indexOf('.il-platform .workspace-sidebar {');
+    const s = css.slice(start, css.indexOf('}', start) + 1);
     expect(s).not.toContain('box-shadow');
     expect(s).toContain('border-right: 1px solid var(--il-nav-border)');
   });

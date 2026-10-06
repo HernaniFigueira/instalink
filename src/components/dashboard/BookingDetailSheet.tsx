@@ -31,7 +31,7 @@ import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking, ScheduleResource } from '@/lib/types';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { DetailPanel } from '@/components/ui';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
 import { useOverlayDismissGuard } from './OverlayDismissGuard';
@@ -52,8 +52,17 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus }: {
   booking: Booking;
+  /**
+   * MISSÃO UX CLOSURE · item 3A — o resumo do evento pode abrir o detalhe
+   * DIRETO no fluxo de reagendamento. O detalhe continua sendo o mesmo; a
+   * decisão entre mover e recriar continua sendo da REGRA (`rescheduleDecision`).
+   */
+  startRescheduling?: boolean;
+  /** Evento que abriu o detalhe: recebe o foco de volta quando o gatilho do
+   *  clique foi um CTA do HoverCard (que desmonta). Repassado ao DetailPanel. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   resources?: ScheduleResource[];
@@ -75,7 +84,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
   const [pet360Open, setPet360Open] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduling, setRescheduling] = useState(startRescheduling);
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeEnd, setResizeEnd] = useState('');
   const rescheduleDismiss = useOverlayDismissGuard();
@@ -229,7 +238,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
-  // WorkspaceSheet recebe o foco e fecha em ESC (como qualquer painel).
+  // O DetailPanel recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
 
   function showHistory() {
     setHistoryOpen(true);
@@ -243,16 +252,19 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
     : '';
 
   return (
-    <WorkspaceSheet
+    <DetailPanel
       open
       onClose={onClose}
+      returnFocus={returnFocus}
       dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}
       title="Detalhe do agendamento"
-      icon="calendar"
-      width="max-w-[620px]"
+      subtitle="Resumo, ações e histórico do atendimento"
+      flush
       >
-        {/* ── Cabeçalho denso ── */}
-        <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
+        {/* ── Sumário do atendimento (1ª seção do detalhe) ──
+            Sem divisória própria: quem separa do cabeçalho do painel é a borda
+            dele — duas linhas empilhadas viravam degrau sem função. */}
+        <header className="px-4 pt-3 pb-2.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
@@ -343,7 +355,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   </Button>
                 )}
                 {can('cancel') && (
-                  <Button size="sm" variant="danger" onClick={() => act('cancelled')} disabled={!!acting}>
+                  <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
                     {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
                   </Button>
                 )}
@@ -570,6 +582,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             </div>
           )}
         {rescheduleDismiss.dialog}
-        </WorkspaceSheet>
+    </DetailPanel>
   );
 }

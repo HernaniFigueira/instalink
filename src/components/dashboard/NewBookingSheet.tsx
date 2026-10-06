@@ -388,6 +388,14 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   return (
     <Drawer
       open
+      /* MISSÃO UX CLOSURE · item 3C — NOVO/EDITAR AGENDAMENTO = MODAL CENTRAL.
+         Antes: faixa lateral de até 95% da viewport (um formulário curto
+         esticado contra a borda direita). Agora: modal central do DS, largura
+         confortável (672px; criação rápida vinda do slot fica mais compacta) e
+         o par 50/50 preservado quando o cadastro de paciente abre no MESMO
+         overlay. Regras de agenda, guardas de descarte e presets: intactos. */
+      variant="dialog"
+      dialogWidth={quick && !advanced ? '560px' : '672px'}
       dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}

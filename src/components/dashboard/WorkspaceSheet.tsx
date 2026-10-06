@@ -27,6 +27,7 @@ import { Icon } from '@/components/icons';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
+import { isTopOverlay, popOverlay, pushOverlay } from '@/lib/overlay-stack';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from './OverlayDismissGuard';
 import { CloseButton } from '@/components/ui';
 
@@ -91,6 +92,9 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
     // Lock compartilhado: sheets empilhados NÃO guardam overflow próprio.
     lockBodyScroll(element);
     element.showModal();
+    // Pilha compartilhada: um sheet SOBRE outro (cadastro por cima do
+    // agendamento) é o do TOPO; o de baixo não responde a Escape/Tab.
+    pushOverlay(element);
     heading.current?.focus({ preventScroll: true });
 
     // Conteúdo assíncrono pode remover o controle focado do DOM: o foco volta
@@ -108,6 +112,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
       observer.disconnect();
       document.removeEventListener('focusin', contain);
       clearTimeout(timer.current);
+      popOverlay(element);
       element.close();
       unlockBodyScroll(element);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
@@ -138,7 +143,12 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
       style={{ '--sheet-w': sheetWidthValue(width) } as React.CSSProperties}
       aria-modal="true"
       aria-labelledby={titleId}
-      onCancel={(e) => { e.preventDefault(); requestClose('escape'); }}
+      onCancel={(e) => {
+        e.preventDefault();
+        // O <dialog> nativo só manda cancel para o de CIMA; a pilha garante o
+        // mesmo contrato quando a camada de baixo tem handler próprio.
+        if (isTopOverlay(e.currentTarget)) requestClose('escape');
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
       onKeyDown={(e) => {
         wrapDialogFocus(e, e.currentTarget, heading.current);

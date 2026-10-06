@@ -43,9 +43,15 @@ export interface SidebarPeekState {
    *   • fechado → abre e trava (fica mesmo com mouseleave);
    *   • aberto solto (hover) → trava;
    *   • aberto e travado → fecha.
-   * NUNCA expande/recolhe a navegação — o único controle persistente é o pin.
+   * NUNCA expande/recolhe a navegação — o rail não tem pin.
    */
   togglePeek: (id: string) => void;
+  /**
+   * Teclado: abre e TRAVA o painel do grupo (↑/↓/Enter no botão do grupo).
+   * O foco entra nos destinos, então o painel não pode fechar ao sair do
+   * botão — quem fecha é Escape/← ou a troca de rota.
+   */
+  pinPeek: (id: string) => void;
 }
 
 export function useSidebarPeek(): SidebarPeekState {
@@ -104,9 +110,15 @@ export function useSidebarPeek(): SidebarPeekState {
     });
   }, [clear]);
 
+  const pinPeek = useCallback((id: string) => {
+    clear();
+    setPeek({ id, pinned: true });
+  }, [clear]);
+
   return {
     peekId: peek?.id ?? null,
     togglePeek,
+    pinPeek,
     onGroupEnter,
     onGroupLeave: scheduleClose,
     onPeekEnter: clear,

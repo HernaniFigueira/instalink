@@ -24,16 +24,20 @@ const shell = read('src/components/DashboardShell.tsx');
 const agenda = read('src/app/(dashboard)/agenda/page.tsx');
 const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
 
-describe('critério 1 — flyout da sidebar recolhida: sem sombra pesada', () => {
-  it('usa sombra mínima + borda 1px + radius (nada de cartão flutuante pesado)', () => {
+describe('critério 1 — extensão de grupo do rail: sem sombra, sem card flutuante', () => {
+  it('superfície CONTÍNUA ligada ao rail: borda 1px só na divisa, sem raio, sem sombra', () => {
     const peek = css.slice(css.indexOf('.ws-peek {'), css.indexOf('@keyframes ws-peek-in'));
-    // borda sutil 1px + radius do DS + fundo branco de superfície
-    expect(peek).toMatch(/border:\s*1px solid var\(--gd-nav-border\)/);
-    expect(peek).toMatch(/border-radius:\s*var\(--radius-md\)/);
+    // MISSÃO UX CLOSURE · item 1 — a extensão é a MESMA superfície do rail:
+    // nasce na borda dele (`left: var(--gd-rail-w)`), sem gap, sem raio e sem
+    // sombra; a única linha é a divisória de 1px do rail.
+    expect(peek).toMatch(/left:\s*var\(--gd-rail-w\)/);
     expect(peek).toMatch(/background:\s*var\(--gd-nav-panel-bg\)/);
-    // altura útil: começa abaixo da top bar e não vaza a tela (§15)
+    expect(peek).toMatch(/border-right:\s*1px solid var\(--gd-nav-border\)/);
+    expect(peek).toMatch(/border-left:\s*0/);
+    expect(peek).toMatch(/border-radius:\s*0/);
+    // altura útil: começa abaixo da top bar e vai até o rodapé (§15)
     expect(peek).toMatch(/top: var\(--gd-topbar-h\)/);
-    expect(peek).toMatch(/max-height: calc\(100dvh - var\(--gd-topbar-h\)/);
+    expect(peek).toMatch(/bottom:\s*0/);
     // ZERO sombra — separação só por borda + contraste (refino final)
     expect(peek).toMatch(/box-shadow:\s*none/);
     expect(peek).not.toContain('--shadow-lg');

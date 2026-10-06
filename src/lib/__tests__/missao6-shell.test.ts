@@ -53,18 +53,24 @@ describe('missão 6 · 2 — radius controlado (menos bolha)', () => {
 });
 
 describe('missão 6 · 3 → DS 1.0 §15/§18 — grupo abre PAINEL LATERAL (sem acordeão)', () => {
-  it('o grupo NÃO empurra filhos: abre o painel com borda/raio/superfície do DS', () => {
+  it('o grupo NÃO empurra filhos: abre a EXTENSÃO ligada ao rail (superfície do DS)', () => {
     // o acordeão que empurrava o resto da lista saiu do CSS e do componente
     expect(css).not.toContain('.workspace-submenu');
     expect(nav).not.toContain('workspace-submenu');
     expect(nav).not.toContain('setOpened');
     const peek = css.slice(css.indexOf('.ws-peek {'), css.indexOf('@keyframes ws-peek-in'));
-    expect(peek).toMatch(/border: 1px solid var\(--gd-nav-border\)/);
-    expect(peek).toMatch(/border-radius: var\(--radius-md\)/);
-    expect(peek).toMatch(/background: var\(--gd-nav-panel-bg\)/);
-    // painel começa ABAIXO da top bar e tem altura útil (não vaza a tela)
+    // MISSÃO UX CLOSURE · item 1: a extensão é FISICAMENTE ligada ao rail —
+    // nasce na borda dele (mesmo left, sem gap), encosta na topbar, vai até o
+    // rodapé, superfície branca, UMA divisória de 1px, SEM raio e SEM sombra
+    // (nada de card flutuante, nada de cara de modal).
+    expect(peek).toMatch(/left: var\(--gd-rail-w\)/);
     expect(peek).toMatch(/top: var\(--gd-topbar-h\)/);
-    expect(peek).toMatch(/max-height: calc\(100dvh - var\(--gd-topbar-h\)/);
+    expect(peek).toMatch(/bottom: 0/);
+    expect(peek).toMatch(/background: var\(--gd-nav-panel-bg\)/);
+    expect(peek).toMatch(/border-right: 1px solid var\(--gd-nav-border\)/);
+    expect(peek).toMatch(/border-left: 0/);
+    expect(peek).toMatch(/border-radius: 0/);
+    expect(peek).toMatch(/box-shadow: none/);
     // subitem (recuo) preservado para o drawer móvel
     expect(css).toContain('.workspace-link--sub { min-height: 34px; font-size: 13px; padding-left: 14px; border-radius: var(--radius-sm); }');
   });
@@ -142,7 +148,11 @@ describe('missão 6 · 5 — personalização da sidebar em Configurações (nã
 describe('missão 6 · 6 — encaixe sidebar × painel principal', () => {
   it('divisa sidebar × painel SEM sombra projetada; ações da topbar no contrato comum', () => {
     // Refino final: a separação é só borda 1px + diferença de fundo.
-    const side = css.slice(css.indexOf('.il-platform .workspace-sidebar {'), css.indexOf('.il-platform .workspace-sidebar.is-collapsed'));
+    // MISSÃO UX CLOSURE: não existe mais modo recolhido/expandido, então o
+    // recorte usa o fim da PRÓPRIA regra (chave de fechamento), não a regra
+    // seguinte — o contrato verificado é o mesmo.
+    const start = css.indexOf('.il-platform .workspace-sidebar {');
+    const side = css.slice(start, css.indexOf('}', start) + 1);
     expect(side).not.toContain('box-shadow');
     expect(side).toContain('border-right: 1px solid var(--il-nav-border)');
     // quick create = ação da topbar (mesmo contrato do sino: repouso limpo)
