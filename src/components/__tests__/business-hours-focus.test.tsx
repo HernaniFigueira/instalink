@@ -35,7 +35,9 @@ describe('BusinessHoursPanel — deep link e horário próprio', () => {
     render(<BusinessHoursPanel businessId="b1" professionals={[pro('orl', 'Orlando', false)]} rules={[...clinic, rule('orl', 1, '09:00', '12:00')]} onChanged={() => {}} />);
     expect(screen.getByText('Personalizado')).toBeTruthy();
     fireEvent.click(screen.getByText('Seguir a clínica'));
-    const dlg = screen.getByRole('dialog', { name: /Voltar a seguir/ });
+    // DS 1.0 · §4 — a confirmação usa o Dialog canônico: o nome acessível vem
+    // do TÍTULO do diálogo (antes era um aria-label próprio do modal artesanal).
+    const dlg = screen.getByRole('dialog', { name: /Seguir o horário da clínica/ });
     expect(dlg.textContent).toMatch(/fica guardado/);
     fireEvent.click(within(dlg).getByText('Seguir horário da clínica'));
     await vi.waitFor(() => expect(apiSend).toHaveBeenCalled());

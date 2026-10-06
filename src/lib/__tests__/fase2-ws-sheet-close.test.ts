@@ -12,25 +12,30 @@ const read = (p: string) => readFileSync(p, 'utf8');
 describe('WorkspaceSheet · X padrão de fechar (sem linguinha)', () => {
   const ws = read('src/components/dashboard/WorkspaceSheet.tsx');
 
-  it('X no canto superior direito do cabeçalho; linguinha removida', () => {
+  it('DS 1.0 · close no canto superior direito, agora com o CloseButton canônico', () => {
     expect(ws).not.toContain('ws-sheet__tab');
     expect(ws).toContain('ws-sheet__close');
-    expect(ws).toContain('aria-label={`Fechar ${title}`}');
-    expect(ws).toContain('title="Fechar"');
+    // §4 — UM CloseButton em todo o sistema: o sheet NÃO desenha o próprio X.
+    expect(ws).toContain("from '@/components/ui'");
+    expect(ws).toContain('<CloseButton');
+    expect(ws).toContain('label={`Fechar ${title}`}');
     expect(ws).toContain("requestClose('close-button')");
     // X fica no header actions (topo à direita), não como aba externa
     expect(ws).toMatch(/ws-sheet__actions[\s\S]*ws-sheet__close/);
   });
 
-  it('CSS: circular, fundo suave, vermelho acolhedor, hover, foco visível', () => {
+  it('DS 1.0 · §4 — fechar é NEUTRO (o X vermelho foi proibido e removido)', () => {
     const css = read('src/app/globals.css');
+    const ui = read('src/components/ui.tsx');
     expect(css).toContain('.ws-sheet__close');
     expect(css).not.toContain('.ws-sheet__tab');
-    expect(css).toMatch(/\.ws-sheet__close \{[^}]*border-radius: 999px/);
-    expect(css).toMatch(/\.ws-sheet__close \{[^}]*width: 34px/);
-    expect(css).toMatch(/\.ws-sheet__close:hover/);
-    expect(css).toMatch(/\.ws-sheet__close:focus-visible/);
-    expect(css).toMatch(/color-mix\(in srgb, var\(--danger\)/);
+    // A regra antiga (danger 75% no ícone + fundo/borda avermelhados) NÃO pode
+    // voltar: fechar não é ação destrutiva e não compete com o Danger real.
+    const closeRule = css.slice(css.indexOf('.ws-sheet__close {'), css.indexOf('}', css.indexOf('.ws-sheet__close {')));
+    expect(closeRule).not.toMatch(/danger|red|#(e|d|c)[0-9a-f]{5}/i);
+    expect(css).toMatch(/\.ws-sheet__close:hover \{[^}]*--gd-bg-hover/);
+    // O neutro vem do canônico (mesmo componente usado por Dialog/Drawer).
+    expect(ui).toMatch(/export function CloseButton[\s\S]*?gd-text-muted/);
     // regras inválidas/nested do mobile não voltam
     expect(css).not.toMatch(/dialog\.ws-sheet \{\s*\.ws-sheet__/);
   });

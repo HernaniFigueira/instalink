@@ -1,0 +1,424 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   GODOUTOR DESIGN SYSTEM 1.0 — FONTE ÚNICA DE TOKENS
+   ═══════════════════════════════════════════════════════════════════════════
+   Este arquivo é a AUTORIDADE de tokens do produto. Nenhuma página decide cor,
+   tipografia, raio, sombra, altura de controle, espaçamento estrutural, foco,
+   hover ou estado: a página escolhe um COMPONENTE SEMÂNTICO e o componente lê
+   daqui.
+
+   Ordem de carregamento: este arquivo entra ANTES de `globals.css` no
+   `app/layout.tsx`. Os nomes históricos (`--text`, `--surface`, `--border`,
+   `--radius-*`, `--space-*`, `--shadow-*`, `--control-h*`, `--il-nav*`…) NÃO
+   são uma segunda fonte: em `globals.css` eles são APENAS aliases que apontam
+   para `--gd-*`. Mexeu aqui, mudou o produto inteiro.
+
+   Regras do contrato (docs/GODOUTOR-DESIGN-SYSTEM.md):
+   • token é SEMÂNTICO, nunca específico de página (`--gd-danger`, não
+     `--agenda-red`);
+   • uma cor de accent (`--gd-accent*`) + semânticas com significado real;
+   • nenhum gradiente decorativo, nenhuma sombra fora de overlay;
+   • `*-fg` sempre ≥ 4.5:1 sobre o seu próprio `*-soft`; estado nunca depende
+     só de cor.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* ── COLOR · superfícies neutras ───────────────────────────────────────── */
+  --gd-bg-app: #f4f6f8;          /* fundo do app (sólido, sem gradiente) */
+  --gd-bg-surface: #ffffff;      /* superfície primária (painel, card, sheet) */
+  --gd-bg-surface-2: #fbfcff;    /* superfície sobre superfície (leve) */
+  --gd-bg-subtle: #f1f4f9;       /* área rebaixada / faixa de apoio */
+  --gd-bg-hover: #f2f5fc;        /* hover neutro de linha/superfície */
+  --gd-bg-inset: #f4f6fc;        /* inset (inputs desabilitados, poços) */
+
+  /* ── COLOR · texto (escala INK: near-black quente, contraste altos) ────── */
+  --gd-text: #1c1815;            /* corpo (INK homologado do painel) */
+  --gd-text-strong: #14100d;     /* título */
+  --gd-text-secondary: #3d3833;  /* texto de apoio forte */
+  --gd-text-muted: #524c46;      /* metadado (AA) */
+  --gd-text-soft: #665f59;       /* metadado leve (AA) */
+  --gd-text-faint: #6f6862;      /* último degrau que ainda passa AA */
+  --gd-text-disabled: #a8a29c;   /* desabilitado (não é conteúdo) */
+  --gd-text-on-accent: #ffffff;
+
+  /* ── COLOR · bordas ───────────────────────────────────────────────────── */
+  --gd-border: #e2e8f0;          /* borda estrutural/divisória sutil */
+  --gd-border-soft: #eef2f6;     /* divisória interna */
+  --gd-border-2: #dbe3ec;        /* degrau intermediário */
+  --gd-border-strong: #7d8ca3;   /* borda de CONTROLE (input/botão) — 3:1 */
+
+  /* ── COLOR · accent (identidade pessoal/preset: UMA cor) ───────────────
+     Default de instalação = preset `azul-profundo`. O preset troca SOMENTE
+     estes tokens (`--gd-accent*`); estrutura, texto e semânticas são fixos. */
+  --gd-accent: #2563eb;
+  --gd-accent-hover: #1d4ed8;
+  --gd-accent-fg: #1d4ed8;       /* texto/ícone sobre soft */
+  --gd-accent-soft: #eff6ff;     /* fundo suave (item ativo, chip) */
+  --gd-accent-border: #bfdbfe;
+  --gd-accent-contrast: #ffffff; /* texto sobre accent sólido */
+
+  /* ── COLOR · semânticas (significado real, nunca decoração) ───────────── */
+  --gd-success: #15803d;
+  --gd-success-strong: #166534;
+  --gd-success-soft: #e6f7ef;
+  --gd-success-soft-hover: #d7f2e6;
+  --gd-success-border: #bbf7d0;
+  --gd-success-fg: #166534;
+
+  --gd-info: #2563eb;
+  --gd-info-strong: #1d4ed8;
+  --gd-info-soft: #e6f5fb;
+  --gd-info-border: #bfdbfe;
+  --gd-info-fg: #1d4ed8;
+
+  --gd-warning: #b45309;
+  --gd-warning-strong: #92400e;
+  --gd-warning-soft: #fff4e0;
+  --gd-warning-soft-hover: #ffe9c4;
+  --gd-warning-border: #fde68a;
+  --gd-warning-fg: #92400e;
+
+  --gd-danger: #dc2626;
+  --gd-danger-strong: #b91c1c;
+  --gd-danger-soft: #fdedef;
+  --gd-danger-border: #fecaca;
+  --gd-danger-fg: #b91c1c;
+  --gd-danger-contrast: #ffffff;
+
+  /* ── COLOR · estados da AGENDA (rótulo sempre acompanha a cor) ─────────── */
+  --gd-status-scheduled-soft: var(--gd-info-soft);
+  --gd-status-scheduled-fg: var(--gd-info-fg);
+  --gd-status-scheduled-border: var(--gd-info-border);
+  --gd-status-confirmed-soft: var(--gd-accent-soft);
+  --gd-status-confirmed-fg: var(--gd-accent-fg);
+  --gd-status-confirmed-border: var(--gd-accent-border);
+  --gd-status-waiting-soft: var(--gd-warning-soft);
+  --gd-status-waiting-fg: var(--gd-warning-fg);
+  --gd-status-waiting-border: var(--gd-warning-border);
+  --gd-status-in-care-soft: #e8eafb;
+  --gd-status-in-care-fg: #3f3fa8;
+  --gd-status-in-care-border: #c9cdf3;
+  --gd-status-done-soft: var(--gd-success-soft);
+  --gd-status-done-fg: var(--gd-success-fg);
+  --gd-status-done-border: var(--gd-success-border);
+  --gd-status-rescheduled-soft: var(--gd-bg-inset);
+  --gd-status-rescheduled-fg: var(--gd-text-muted);
+  --gd-status-rescheduled-border: var(--gd-border-2);
+  --gd-status-no-show-soft: var(--gd-danger-soft);
+  --gd-status-no-show-fg: var(--gd-danger-fg);
+  --gd-status-no-show-border: var(--gd-danger-border);
+  --gd-status-cancelled-soft: var(--gd-danger-soft);
+  --gd-status-cancelled-fg: var(--gd-danger-fg);
+  --gd-status-cancelled-border: var(--gd-danger-border);
+
+  /* ── COLOR · overlays e código ────────────────────────────────────────── */
+  --gd-overlay: rgba(13, 18, 32, 0.42);
+  --gd-code-bg: #16181d;
+  --gd-code-fg: #e6e8ee;
+
+  /* ── NAVEGAÇÃO (estrutura FIXA: sidebar branca, rail compacta) ─────────
+     Não é tema: nenhum preset nem cor de empresa altera estes tokens. */
+  --gd-nav-bg: #ffffff;
+  --gd-nav-fg: #1f2328;
+  --gd-nav-muted: #5b636e;
+  --gd-nav-icon: #5b636e;
+  --gd-nav-hover: #f4f6f8;
+  --gd-nav-active-bg: var(--gd-accent-soft);
+  --gd-nav-active-fg: var(--gd-accent-fg);
+  --gd-nav-border: var(--gd-border-soft);
+  --gd-nav-panel-bg: #ffffff;
+  --gd-nav-panel-shadow: 0 10px 24px -18px rgba(19, 26, 54, 0.28);
+  --gd-nav-cta: var(--gd-accent);
+
+  /* ── TYPOGRAPHY (uma família, três pesos, escala fechada) ──────────────── */
+  --gd-font-sans: var(--font-geist-sans), Geist, 'Geist Sans', ui-sans-serif, system-ui,
+    -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --gd-font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --gd-weight-regular: 400;
+  --gd-weight-medium: 500;
+  --gd-weight-semibold: 600;
+  --gd-weight-bold: 700;         /* só título de página/marca */
+
+  --gd-font-size-page-title: 20px;   /* título de página */
+  --gd-font-size-section: 15px;      /* título de seção/registro */
+  --gd-font-size-body: 13.5px;       /* corpo */
+  --gd-font-size-secondary: 12.5px;  /* apoio/label */
+  --gd-font-size-metadata: 12px;     /* metadado */
+  --gd-font-size-caption: 11px;      /* legenda/eyebrow */
+  --gd-leading-tight: 1.25;
+  --gd-leading-normal: 1.45;
+
+  /* ── SPACING (escala oficial — nada de 17px/13px/27px) ────────────────── */
+  --gd-space-1: 4px;
+  --gd-space-2: 8px;
+  --gd-space-3: 12px;
+  --gd-space-4: 16px;
+  --gd-space-5: 20px;
+  --gd-space-6: 24px;
+  --gd-space-8: 32px;
+  --gd-space-10: 40px;
+  --gd-space-12: 48px;
+  --gd-page-pad-x: var(--gd-space-5);      /* padding lateral de página */
+  --gd-page-pad-y: var(--gd-space-5);
+  --gd-section-gap: var(--gd-space-5);     /* entre seções */
+  --gd-control-gap: var(--gd-space-2);     /* entre controles irmãos */
+  --gd-field-gap: var(--gd-space-3);       /* label → campo → ajuda */
+  --gd-card-pad: var(--gd-space-4);
+  --gd-drawer-pad: var(--gd-space-5);
+  --gd-modal-pad: var(--gd-space-5);
+  --gd-toolbar-gap: var(--gd-space-2);
+
+  /* ── RADIUS (compacto e único) ────────────────────────────────────────── */
+  --gd-radius-xs: 4px;
+  --gd-radius-sm: 6px;
+  --gd-radius-md: 8px;
+  --gd-radius-lg: 8px;
+  --gd-radius-xl: 8px;
+  --gd-radius-2xl: 8px;
+  --gd-radius-pill: 999px;
+
+  /* ── BORDER ───────────────────────────────────────────────────────────── */
+  --gd-border-w: 1px;
+  --gd-border-control: 1px solid var(--gd-border-strong);
+  --gd-border-surface: 1px solid var(--gd-border);
+
+  /* ── SHADOW (só overlay/elevação real) ────────────────────────────────── */
+  --gd-shadow-none: none;
+  --gd-shadow-xs: none;
+  --gd-shadow-sm: none;
+  --gd-shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
+  --gd-shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
+  --gd-shadow-overlay: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
+
+  /* ── CONTROL HEIGHT (uma régua para botão, input, select, chip) ───────── */
+  --gd-control-h: 40px;
+  --gd-control-h-sm: 34px;
+  --gd-control-h-xs: 28px;
+  --gd-control-h-touch: 44px;
+  --gd-control-h-icon: var(--gd-control-h);
+
+  /* ── LAYOUT DO APP SHELL ──────────────────────────────────────────────── */
+  --gd-topbar-h: 56px;           /* top bar full-width, acima da sidebar */
+  --gd-rail-w: 60px;             /* rail recolhida (ícones) */
+  --gd-sidebar-w: 248px;         /* navegação fixada (pin) */
+  --gd-nav-panel-w: 216px;       /* painel lateral temporário (hover/focus) */
+  --gd-z-base: 1;
+  --gd-z-sticky: 20;
+  --gd-z-topbar: 45;
+  --gd-z-nav-panel: 60;
+  --gd-z-drawer: 80;
+  --gd-z-modal: 90;
+  --gd-z-popover: 100;
+  --gd-z-tooltip: 110;
+  --gd-z-toast: 120;
+
+  /* ── MOTION (curto, calmo, sem bounce) ────────────────────────────────── */
+  --gd-motion-fast: 140ms;
+  --gd-motion-base: 160ms;
+  --gd-motion-slow: 180ms;
+  --gd-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ── FOCUS (um único anel acessível) ──────────────────────────────────── */
+  --gd-focus-ring: 0 0 0 3px color-mix(in srgb, var(--gd-accent) 30%, transparent);
+  --gd-focus-outline: 2px solid var(--gd-accent);
+
+  /* ── TIPOGRAFIA PROTAGONISTA: números tabulares quando alinha melhor ──── */
+  --gd-num-tabular: tabular-nums;
+  /* ── tokens de estado de tempo real (linha de agora) ───────────── */
+  --gd-now: #ef4444;
+  --gd-now-dot: #ef4444;
+  /* ── sombra de folha/drawer (overlay real) ──────────────────────── */
+  --gd-shadow-xl: 0 18px 36px -12px rgba(15, 23, 42, 0.18), 0 40px 72px -28px rgba(15, 23, 42, 0.24);
+  --gd-shadow-inset: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* O workspace autenticado é a superfície canônica: fundo sólido, sem gradiente
+   e sem cor de seção. `.gd-app` é aplicado pelo App Shell. */
+.gd-app {
+  background: var(--gd-bg-app);
+  color: var(--gd-text);
+  font-family: var(--gd-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Acessibilidade: movimento é decoração. Quem pediu menos, recebe menos. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --gd-motion-fast: 0ms;
+    --gd-motion-base: 0ms;
+    --gd-motion-slow: 0ms;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PRIMITIVES CANÔNICOS — camadas flutuantes e controles do DS 1.0
+   ═══════════════════════════════════════════════════════════════
+   Tudo aqui consome os mesmos tokens do resto do sistema. Nenhuma regra
+   depende de página: as classes `.gd-*` são as SUPERFÍCIES dos componentes
+   oficiais (Tooltip, Popover, HoverCard, DropdownMenu, Dialog, Toast…). */
+
+/* Base comum das camadas flutuantes (posicionadas por portal + coordenadas). */
+.gd-layer {
+  position: fixed;
+  z-index: var(--gd-z-popover);
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border);
+  border-radius: var(--gd-radius-md);
+  box-shadow: var(--gd-shadow-md);
+  animation: gd-layer-in var(--gd-motion-fast) var(--gd-ease);
+}
+@keyframes gd-layer-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+
+/* Tooltip: superfície escura, texto claro, sem sombra pesada. */
+.gd-tooltip {
+  position: fixed;
+  z-index: var(--gd-z-tooltip);
+  max-width: 260px;
+  padding: var(--gd-space-1) var(--gd-space-2);
+  border-radius: var(--gd-radius-sm);
+  background: #242424;
+  color: #ffffff;
+  font-size: var(--gd-font-size-caption);
+  font-weight: var(--gd-weight-medium);
+  line-height: var(--gd-leading-normal);
+  pointer-events: none;
+  animation: gd-layer-in var(--gd-motion-fast) var(--gd-ease);
+}
+
+/* Popover / HoverCard / DropdownMenu: painel branco do sistema. */
+.gd-popover { max-width: min(360px, calc(100vw - 24px)); padding: var(--gd-space-3); }
+.gd-hovercard { max-width: min(320px, calc(100vw - 24px)); padding: var(--gd-space-3); }
+.gd-menu { min-width: 190px; padding: var(--gd-space-1); }
+.gd-menu__item {
+  display: flex; align-items: center; gap: var(--gd-space-2);
+  width: 100%; min-height: 32px; padding: 6px var(--gd-space-2);
+  border: 0; border-radius: var(--gd-radius-sm); background: transparent;
+  color: var(--gd-text); font: inherit; font-size: var(--gd-font-size-secondary);
+  font-weight: var(--gd-weight-medium); text-align: left; cursor: pointer;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease);
+}
+.gd-menu__item:hover, .gd-menu__item[data-active='true'] { background: var(--gd-bg-hover); }
+.gd-menu__item:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+.gd-menu__item[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
+.gd-menu__item--danger { color: var(--gd-danger-fg); }
+.gd-menu__separator { height: 1px; margin: var(--gd-space-1) 0; background: var(--gd-border-soft); }
+.gd-layer__label {
+  margin: 0 0 var(--gd-space-2);
+  font-size: var(--gd-font-size-caption); font-weight: var(--gd-weight-semibold);
+  letter-spacing: 0.02em; text-transform: none; color: var(--gd-text-muted);
+}
+
+/* Dialog: overlay real (única situação em que a elevação é alta). */
+.gd-dialog-backdrop {
+  position: fixed; inset: 0; z-index: var(--gd-z-modal);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--gd-space-4);
+  background: var(--gd-overlay);
+  animation: gd-fade-in var(--gd-motion-base) var(--gd-ease);
+}
+@keyframes gd-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.gd-dialog {
+  /* A faixa do Dialog é ajustável por instância (`--gd-dialog-w`) sem criar
+     classe por tela: confirmação simples fica curta, revisão clínica abre mais
+     larga. O default mantém 520px. */
+  width: 100%; max-width: var(--gd-dialog-w, 520px); max-height: calc(100dvh - 2 * var(--gd-space-4));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border);
+  border-radius: var(--gd-radius-lg);
+  box-shadow: var(--gd-shadow-overlay);
+}
+.gd-dialog__header, .gd-dialog__footer {
+  display: flex; align-items: center; gap: var(--gd-space-2);
+  padding: var(--gd-space-4); flex-shrink: 0;
+}
+.gd-dialog__header { border-bottom: 1px solid var(--gd-border-soft); }
+.gd-dialog__footer { border-top: 1px solid var(--gd-border-soft); justify-content: flex-end; }
+.gd-dialog__body { padding: var(--gd-space-4); overflow-y: auto; }
+
+/* Toast: informa sem interromper; nunca modal, nunca no meio da tela. */
+.gd-toast-viewport {
+  position: fixed; right: var(--gd-space-4); bottom: var(--gd-space-4);
+  z-index: var(--gd-z-toast);
+  display: flex; flex-direction: column; gap: var(--gd-space-2);
+  max-width: min(380px, calc(100vw - 2 * var(--gd-space-4)));
+}
+.gd-toast {
+  display: flex; align-items: flex-start; gap: var(--gd-space-2);
+  padding: var(--gd-space-3);
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border);
+  border-left-width: 3px;
+  border-radius: var(--gd-radius-md);
+  box-shadow: var(--gd-shadow-md);
+  animation: gd-layer-in var(--gd-motion-base) var(--gd-ease);
+}
+.gd-toast--success { border-left-color: var(--gd-success); }
+.gd-toast--info { border-left-color: var(--gd-info); }
+.gd-toast--warning { border-left-color: var(--gd-warning); }
+.gd-toast--danger { border-left-color: var(--gd-danger); }
+
+/* Calendário do DatePicker (dentro de Popover) — grade estável, sem “pular”. */
+.gd-calendar { width: 280px; }
+.gd-calendar__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--gd-space-2); }
+.gd-calendar__title { font-size: var(--gd-font-size-secondary); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
+.gd-calendar__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.gd-calendar__dow {
+  display: flex; align-items: center; justify-content: center;
+  height: 26px; font-size: var(--gd-font-size-caption); font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-muted);
+}
+.gd-calendar__day {
+  display: flex; align-items: center; justify-content: center;
+  height: 32px; border: 0; border-radius: var(--gd-radius-sm);
+  background: transparent; color: var(--gd-text);
+  font: inherit; font-size: var(--gd-font-size-secondary); font-variant-numeric: tabular-nums;
+  cursor: pointer; transition: background-color var(--gd-motion-fast) var(--gd-ease);
+}
+.gd-calendar__day:hover { background: var(--gd-bg-hover); }
+.gd-calendar__day:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+.gd-calendar__day[aria-selected='true'] { background: var(--gd-accent-soft); color: var(--gd-accent-fg); font-weight: var(--gd-weight-semibold); }
+.gd-calendar__day[data-today='true'] { box-shadow: inset 0 0 0 1px var(--gd-border-strong); }
+.gd-calendar__day[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
+.gd-calendar__day--empty { visibility: hidden; }
+
+/* Tabela e paginação canônicas. */
+.gd-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--gd-font-size-secondary); }
+.gd-table th {
+  text-align: left; padding: var(--gd-space-2) var(--gd-space-3);
+  font-size: var(--gd-font-size-caption); font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-muted); background: var(--gd-bg-subtle);
+  border-bottom: 1px solid var(--gd-border);
+  white-space: nowrap;
+}
+.gd-table td {
+  padding: var(--gd-space-2) var(--gd-space-3);
+  color: var(--gd-text); border-bottom: 1px solid var(--gd-border-soft);
+  vertical-align: middle;
+}
+.gd-table tbody tr:hover td { background: var(--gd-bg-hover); }
+.gd-table__num { font-variant-numeric: tabular-nums; text-align: right; }
+.gd-pagination { display: flex; align-items: center; gap: var(--gd-space-2); flex-wrap: wrap; }
+.gd-pagination__pages { display: flex; align-items: center; gap: 2px; }
+
+/* Ações de página/seção: texto à esquerda, ação à direita, com respiro. */
+.gd-action-section {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--gd-space-4); flex-wrap: wrap;
+  padding: var(--gd-section-gap) 0;
+  border-top: 1px solid var(--gd-border-soft);
+}
+.gd-action-section:first-child { border-top: 0; }
+.gd-page-action-bar {
+  position: sticky; bottom: 0; z-index: var(--gd-z-sticky);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--gd-space-3); flex-wrap: wrap;
+  padding: var(--gd-space-3) var(--gd-space-4);
+  background: var(--gd-bg-surface);
+  border-top: 1px solid var(--gd-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gd-layer, .gd-tooltip, .gd-dialog-backdrop, .gd-toast { animation: none; }
+}

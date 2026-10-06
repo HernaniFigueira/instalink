@@ -3,8 +3,10 @@
 // ═══════════════════════════════════════════════════════════════
 // CONTRATO UNIVERSAL DE COR (4 CATEGORIAS — docs/GODOUTOR-UI-CONTRACT.md):
 //   A) TEXTO        sempre near-black — o tema NUNCA muda o texto;
-//   B) TEMA         (esta paleta) controla: sidebar, topbar suave, ícone e
-//                   acento do page header, item ativo e CTAs PRINCIPAIS;
+//   B) TEMA         (esta paleta) controla: COR DE ACENTO (item ativo da
+//                   navegação, CTA principal, acentos de header). A ESTRUTURA
+//                   é FIXA desde o DS 1.0 (§13): sidebar branca, topbar
+//                   neutra — o tema NÃO pinta superfície estrutural;
 //   C) SEMÂNTICAS   verde=ok, vermelho=erro, âmbar=atenção — independentes;
 //   D) FUNDO        do workspace é neutro universal — não acompanha o tema.
 //
@@ -13,11 +15,14 @@
 // profundo · Violeta suave, atual, profundo · Amarelo suave, Âmbar, Dourado ·
 // Rosé, Vinho, Bordô · Ônix.
 //
-// Cada preset traz DOIS grupos de tokens (nunca misturados com --text):
-//   --il-nav*   → sidebar (fundo, texto do nav, hover, item ativo);
-//   --accent*   → CTAs PRINCIPAIS + acentos de header (accent, hover, soft,
-//                 border, contrast). O contraste do accent é calculado na
-//                 carga (preto ou branco, nunca "no olho").
+// Cada preset deriva, do MESMO tom de acento, os tokens de acento (nunca
+// misturados com --text):
+//   --accent*      → CTAs PRINCIPAIS + acentos de header (accent, hover, soft,
+//                    border, contrast). O contraste do accent é calculado na
+//                    carga (preto ou branco, nunca "no olho").
+//   --il-nav-active*/--il-nav-cta → APENAS o estado ATIVO da navegação herda o
+//                    acento (fundo suave + texto do acento). Fundo, hover,
+//                    borda e textos da sidebar são neutros e fixos.
 //
 // A personalização mora em Configurações → Aparência (nunca no shell) e
 // NÃO afeta a página pública. Persistência local (localStorage).
@@ -86,64 +91,34 @@ function preset(
   id: string,
   family: NavAccentFamily,
   label: string,
-  nav: string,
   accent: string,
-  opts: {
-    navFg?: string; navMuted?: string; navIcon?: string; navHover?: string;
-    navActive?: string; navActiveFg?: string;
-  } = {},
 ): NavAccent {
-  const navFg = opts.navFg || contrastOn(nav);
   const accentSoft = lighten(accent, 0.86);
+  // Texto do acento sobre o fundo suave do acento: escurece em passos
+  // determinísticos até AA (≥ 4.5:1). Nunca "no olho".
   let accentFg = accent;
   for (let guard = 0; guard < 12 && contrastRatio(accentFg, accentSoft) < 4.5; guard++) {
     accentFg = darken(accentFg, 0.08);
-  }
-  // ── Estado ativo com AA GARANTIDO (regra estrutural): parte do tom ativo
-  // base e ajusta (escurece/clareia) até o melhor fg chegar a ≥ 4.5:1.
-  // Vale para os 21 presets sem override por tema. ──
-  let navActive = navFg === '#18181b' ? darken(nav, 0.18) : lighten(nav, 0.14);
-  for (let guard = 0; guard < 12 && contrastRatio(bestFgOn(navActive), navActive) < 4.5; guard++) {
-    navActive = bestFgOn(navActive) === '#ffffff' ? darken(navActive, 0.07) : lighten(navActive, 0.07);
-  }
-  const computedNavActiveFg = bestFgOn(navActive);
-  const resolvedNavActive = opts.navActive || navActive;
-  const navActiveFg = opts.navActiveFg || (opts.navActive ? bestFgOn(resolvedNavActive) : computedNavActiveFg);
-  // Ícone inativo: caminho moderado até o melhor fg, com piso de contraste
-  // 3.5:1 sobre o nav (o chip do ícone soma 12% de branco por cima — o piso
-  // real no navegador fica ~3.1:1: legível, nunca lavado; força ≤ ~82%).
-  let iconAmt = 0.72;
-  let navIcon = mix(nav, bestFgOn(nav), iconAmt);
-  for (let guard = 0; guard < 6 && contrastRatio(navIcon, nav) < 3.5; guard++) {
-    iconAmt = Math.min(0.84, iconAmt + 0.06);
-    navIcon = mix(nav, bestFgOn(nav), iconAmt);
   }
   return {
     id,
     family,
     label,
-    swatch: nav,
+    // Amostra do seletor = a COR DE ACENTO (a estrutura da navegação é branca
+    // e não muda com o tema — DS 1.0 §13).
+    swatch: accent,
     vars: {
-      // ── Sidebar (B: tema) ──
-      '--il-nav': nav,
-      '--il-nav-fg': navFg === '#18181b' ? '#18181b' : '#ffffff',
-      '--il-nav-muted': opts.navMuted || (navFg === '#18181b' ? mix(nav, '#18181b', 0.42) : mix(nav, '#ffffff', 0.34)),
-      // Ícones INATIVOS: força visual moderada (60–75%) — legíveis, nunca
-      // lavados; derivado do fg do tema e ajustado até ≥ 3.2:1 sobre o nav
-      // (navs médios ganham mais mistura; nada de glifo transparente).
-      '--il-nav-icon': opts.navIcon || navIcon,
-      '--il-nav-hover': opts.navHover || darken(nav, 0.12),
-      '--il-nav-active': resolvedNavActive,
-      // fg do ATIVO calculado do bg ATIVO real (regra estrutural) — nunca cor
-      // fixa: fundo escuro → letra clara; fundo claro → letra near-black.
-      '--il-nav-active-fg': navActiveFg,
-      // ── CTAs principais + acentos (B: tema) ──
+      // ── Acento (B: tema) ──
       '--accent': accent,
       '--accent-hover': darken(accent, 0.14),
       '--accent-soft': accentSoft,
       '--accent-fg': accentFg,
       '--accent-border': mix(accent, '#ffffff', 0.55),
       '--accent-contrast': contrastOn(accent),
+      // ── Navegação: SÓ o estado ativo herda o acento ──
+      '--il-nav-active': accentSoft,
+      '--il-nav-active-fg': accentFg,
+      '--il-nav-cta': accent,
     },
   };
 }
@@ -153,37 +128,34 @@ function preset(
 // ═══════════════════════════════════════════════════════════════
 export const NAV_ACCENTS: NavAccent[] = [
   // ── Neutro / Branco ──
-  preset('branco', 'neutro', 'Branco', '#eef1f6', '#4b5563', { navFg: '#18181b' }),
-  preset('neutro', 'neutro', 'Neutro', '#d8dde6', '#3f4652', { navFg: '#18181b' }),
+  preset('branco', 'neutro', 'Branco', '#4b5563'),
+  preset('neutro', 'neutro', 'Neutro', '#3f4652'),
   // ── Azul ──
-  preset('azul-clinico', 'azul', 'Azul clínico', '#3f37c9', '#3f37c9'),
-  preset('azul-amigavel', 'azul', 'Azul amigável', '#2563eb', '#2563eb'),
-  preset('azul-profundo', 'azul', 'Azul profundo', '#071a33', '#2563eb', {
-    navFg: '#f8fafc', navMuted: '#9aaec8', navIcon: '#9aaec8',
-    navHover: '#102d52', navActive: '#123b68', navActiveFg: '#93c5fd',
-  }),
+  preset('azul-clinico', 'azul', 'Azul clínico', '#3f37c9'),
+  preset('azul-amigavel', 'azul', 'Azul amigável', '#2563eb'),
+  preset('azul-profundo', 'azul', 'Azul profundo', '#2563eb'),
   // ── Verde ──
-  preset('verde-salvia', 'verde', 'Verde sálvia', '#4d7c5f', '#4d7c5f'),
-  preset('verde-equilibrado', 'verde', 'Verde equilibrado', '#15803d', '#15803d'),
-  preset('verde-profundo', 'verde', 'Verde profundo', '#14532d', '#166534'),
+  preset('verde-salvia', 'verde', 'Verde sálvia', '#4d7c5f'),
+  preset('verde-equilibrado', 'verde', 'Verde equilibrado', '#15803d'),
+  preset('verde-profundo', 'verde', 'Verde profundo', '#166534'),
   // ── Teal ──
-  preset('teal-claro', 'teal', 'Teal claro', '#0b7d74', '#0b7d74'),
-  preset('teal', 'teal', 'Teal médio', '#0f766e', '#0f766e'),
-  preset('teal-profundo', 'teal', 'Teal profundo', '#134e4a', '#115e59'),
+  preset('teal-claro', 'teal', 'Teal claro', '#0b7d74'),
+  preset('teal', 'teal', 'Teal médio', '#0f766e'),
+  preset('teal-profundo', 'teal', 'Teal profundo', '#115e59'),
   // ── Violeta ──
-  preset('violeta-suave', 'violeta', 'Violeta suave', '#6d5fd8', '#6d5fd8'),
-  preset('violeta', 'violeta', 'Violeta', '#6d28d9', '#6d28d9'),
-  preset('violeta-profundo', 'violeta', 'Violeta profundo', '#4c1d95', '#5b21b6'),
+  preset('violeta-suave', 'violeta', 'Violeta suave', '#6d5fd8'),
+  preset('violeta', 'violeta', 'Violeta', '#6d28d9'),
+  preset('violeta-profundo', 'violeta', 'Violeta profundo', '#5b21b6'),
   // ── Amarelo / Âmbar (texto sobre accent é near-black — contrato A) ──
-  preset('amarelo-suave', 'amarelo', 'Amarelo suave', '#e8c96a', '#b45309', { navFg: '#18181b' }),
-  preset('ambar', 'amarelo', 'Âmbar', '#b45309', '#b45309'),
-  preset('dourado', 'amarelo', 'Dourado', '#a16207', '#a16207'),
+  preset('amarelo-suave', 'amarelo', 'Amarelo suave', '#b45309'),
+  preset('ambar', 'amarelo', 'Âmbar', '#b45309'),
+  preset('dourado', 'amarelo', 'Dourado', '#a16207'),
   // ── Rosé / Vinho / Bordô ──
-  preset('rose', 'rosé', 'Rosé', '#ad4d64', '#ad4d64'),
-  preset('vinho', 'rosé', 'Vinho', '#7f1d3f', '#861e45'),
-  preset('bordo', 'rosé', 'Bordô', '#5f1230', '#6b1435'),
+  preset('rose', 'rosé', 'Rosé', '#ad4d64'),
+  preset('vinho', 'rosé', 'Vinho', '#861e45'),
+  preset('bordo', 'rosé', 'Bordô', '#6b1435'),
   // ── Ônix ──
-  preset('onix', 'onix', 'Ônix', '#18181b', '#27272a'),
+  preset('onix', 'onix', 'Ônix', '#18181b'),
 ];
 
 /** Resolução por id, com aliases das missões anteriores (localStorage legado). */
@@ -196,8 +168,8 @@ export function findAccent(id: string): NavAccent | undefined {
   return NAV_ACCENTS.find((a) => a.id === resolved);
 }
 
-// TEMA PADRÃO = DEEP BLUE. A escolha explícita válida no localStorage tem
-// precedência e nunca é regravada ao atualizar o default do produto.
+// TEMA PADRÃO = AZUL PROFUNDO (acento azul do DS). A escolha explícita válida
+// no localStorage tem precedência e nunca é regravada ao atualizar o default.
 export const DEFAULT_ACCENT_ID = 'azul-profundo';
 // Chave LEGADA (missão 6) — preserva a preferência já persistida do usuário.
 export const NAV_ACCENT_STORAGE_KEY = 'godoutor.nav-accent';

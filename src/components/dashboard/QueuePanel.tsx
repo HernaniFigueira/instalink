@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { Avatar, Badge, Button, EmptyState, Field, IconButton, Input, Notice } from '@/components/ui';
+import { Avatar, Badge, Button, EmptyState, Field, IconButton, Input, Notice, Select } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
 import { eligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
@@ -315,20 +315,19 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Serviço">
-              <select value={form.serviceId} onChange={(e) => chooseService(e.target.value)}
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]">
+              {/* DS 1.0 · §6 — controle canônico (era `<select>` cru com estilo próprio). */}
+              <Select value={form.serviceId} onChange={(e) => chooseService(e.target.value)} aria-label="Serviço">
                 <option value="">A definir</option>
                 {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              </Select>
             </Field>
             <Field label="Profissional" hint={mode === 'selected' && eligiblePros.length > 1
               ? 'Só quem atende este serviço'
               : undefined}>
-              <select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })}
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]">
+              <Select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })} aria-label="Profissional">
                 <option value="">Quem estiver livre</option>
                 {eligiblePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </Select>
             </Field>
           </div>
           {mode === 'selected' && eligiblePros.length === 0 && (

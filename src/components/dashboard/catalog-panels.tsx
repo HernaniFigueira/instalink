@@ -16,7 +16,7 @@ import { cn, parseMoneyToCents, centsToBR } from '@/lib/utils';
 import { apiSend } from '@/lib/api-client';
 import type { Availability, AvailabilityException, ScheduleResource, Category, Professional, Service } from '@/lib/types';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Drawer } from '@/components/ui';
+import { Avatar, Badge, Button, Drawer, Select } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { followsBusinessHours } from '@/lib/schedule';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
@@ -151,7 +151,7 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
           <p className="text-xs text-zinc-500 mb-2">Escolha na biblioteca veterinária ou digite livremente.</p>
           <input id="clinical-service-name" role="combobox" aria-expanded={showSug && sugList.length > 0} aria-controls="clinical-service-suggestions" aria-activedescendant={showSug && suggestionIndex >= 0 ? `clinical-suggestion-${sugList[suggestionIndex]?.id}` : undefined} onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setShowSug(true); setSuggestionIndex(i => Math.max(0, Math.min(sugList.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))); } else if (e.key === 'Enter' && showSug && suggestionIndex >= 0 && sugList[suggestionIndex]) { e.preventDefault(); chooseSuggestion(sugList[suggestionIndex]); } else if (e.key === 'Escape' && showSug) { e.preventDefault(); e.stopPropagation(); setShowSug(false); } }} aria-autocomplete="list" autoComplete="off" aria-label="Serviço / procedimento" value={name} onChange={(e) => { setName(e.target.value); setShowSug(true); setSuggestionIndex(-1); }} onFocus={()=>setShowSug(true)}  className={input} placeholder="Buscar procedimento ou digitar novo…" autoFocus />
           {showSug && sugList.length > 0 && (
-            <div id="clinical-service-suggestions" role="listbox" aria-label="Biblioteca veterinária" className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-md shadow-lg max-h-48 overflow-auto">
+            <div id="clinical-service-suggestions" role="listbox" aria-label="Biblioteca veterinária" className="absolute z-10 mt-1 w-full bg-[var(--gd-bg-surface)] border border-[var(--border)] rounded-md shadow-md max-h-48 overflow-auto">
               <p className="px-3 py-1 text-[11px] font-semibold tracking-wide uppercase text-zinc-500 border-b">Sugestões clínicas (biblioteca) — toque para preencher</p>
               {sugList.map(s => (
                 <button key={s.id} id={`clinical-suggestion-${s.id}`} role="option" aria-selected={suggestionIndex >= 0 && sugList[suggestionIndex]?.id === s.id} type="button" onMouseDown={(e)=>e.preventDefault()} onClick={() => chooseSuggestion(s)} className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex items-center justify-between gap-2">
@@ -174,11 +174,12 @@ export function ServiceForm({ businessId, service, cats, pros, resources = [], o
             <span className="text-[11px] text-zinc-500">Duração padrão para novos agendamentos — não trava encaixe, ordem de chegada ou cirurgia longa.</span></label>
         </div>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">GRUPO</span>
-          <select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className={input + ' mt-1'}>
+          {/* DS 1.0 · §6 — Select canônico (mesma altura/raio/foco/seta do painel). */}
+          <Select value={categoryId || (suggestedGroupName ? '__suggested' : '')} onChange={(e) => { setCategoryId(e.target.value === '__suggested' ? '' : e.target.value); if (e.target.value !== '__suggested') setSuggestedGroupName(''); }} className="mt-1" aria-label="Grupo do serviço">
             <option value="">Sem grupo (opcional)</option>
             {suggestedGroupName && <option value="__suggested">{suggestedGroupName} (sugerido)</option>}
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </Select>
           {suggestedGroupName && <p className="text-[11px] text-amber-700 mt-1">Grupo sugerido: {suggestedGroupName} — Será criado automaticamente ao salvar</p>}
           <span className="text-[11px] text-zinc-500">Usado para organizar os serviços da clínica.</span></label>
 
@@ -415,10 +416,10 @@ export function ExceptionsManager({ exceptions, onSave, onDelete }: {
         <label className="block"><span className="text-xs font-semibold text-zinc-500">DATA</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1" /></label>
         <label className="block"><span className="text-xs font-semibold text-zinc-500">TIPO</span>
-          <select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="block rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1">
+          <Select value={closed ? 'closed' : 'special'} onChange={(e) => setClosed(e.target.value === 'closed')} className="mt-1" aria-label="Tipo de dia especial">
             <option value="closed">Fechado o dia todo</option>
             <option value="special">Horário especial</option>
-          </select></label>
+          </Select></label>
         {!closed && (
           <>
             <label className="block"><span className="text-xs font-semibold text-zinc-500">DAS</span>

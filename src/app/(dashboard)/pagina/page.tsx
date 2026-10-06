@@ -10,7 +10,7 @@ import { THEME_PRESETS, CLINIC_THEME_PRESETS, clinicPresetId, matchingPreset, pr
 import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
-import { PageSkeleton, Tabs } from '@/components/ui';
+import { PageSkeleton, Select, Tabs } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { canLoadOverview } from '@/lib/overview';
@@ -958,14 +958,15 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
       {block.type === 'cta' && (
         <label className="block">
           <span className="text-xs font-semibold text-zinc-500">DESTINO DO BOTÃO</span>
-          <select value={s.target || 'auto'} onChange={(e) => set('target', e.target.value === 'auto' ? '' : e.target.value)}
-            className={input + ' mt-1'}>
+          {/* DS 1.0 · §6 — o editor legado de Página também usa o Select canônico. */}
+          <Select value={s.target || 'auto'} onChange={(e) => set('target', e.target.value === 'auto' ? '' : e.target.value)}
+            className="mt-1" aria-label="Destino do botão">
             <option value="auto">Automático (pelo texto)</option>
             <option value="booking">Agendamento</option>
             <option value="products">Vitrine de produtos</option>
             {quoteLegacy && <option value="quote">Orçamento</option>}
             <option value="whatsapp">WhatsApp</option>
-          </select>
+          </Select>
           {!s.target && !bookingsOn && !productsOn && (
             <span className="block text-[11px] text-zinc-500 mt-1">Com “Automático”, o botão escolhe o melhor destino entre os módulos ativos.</span>
           )}
@@ -1099,8 +1100,8 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
               <div className="grid grid-cols-[1fr_auto] gap-2">
                 <input value={it.title || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
                   className={input} placeholder="Título (ex: Atendimento no mesmo dia)" maxLength={80} />
-                <select value={it.icon || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, icon: e.target.value } : x)))}
-                  className="rounded-md border border-zinc-300 px-2 py-2 text-sm bg-white" aria-label="Ícone do diferencial">
+                <Select value={it.icon || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, icon: e.target.value } : x)))}
+                  className="w-auto" aria-label="Ícone do diferencial">
                   <option value="">✓</option>
                   <option value="star">★ Estrela</option>
                   <option value="heart">♥ Coração</option>
@@ -1108,7 +1109,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
                   <option value="check">✓ Certo</option>
                   <option value="shield">🛡 Escudo</option>
                   <option value="spark">✨ Brilho</option>
-                </select>
+                </Select>
               </div>
               <input value={it.text || ''} onChange={(e) => set('items', arr.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
                 className={input} placeholder="Descrição curta (opcional)" maxLength={140} />
@@ -1502,17 +1503,17 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
             </label>
             <label className="block">
               <span className="text-xs font-semibold text-zinc-500">TIPOGRAFIA</span>
-              <select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
+              <Select value={theme.font} onChange={(e) => set('font', e.target.value)} className="mt-1" aria-label="Tipografia da página">
                 {fonts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="block">
               <span className="text-xs font-semibold text-zinc-500">BOTÕES</span>
-              <select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-2 text-sm">
+              <Select value={theme.buttonStyle} onChange={(e) => set('buttonStyle', e.target.value)} className="mt-1" aria-label="Estilo dos botões">
                 <option value="solid">Cheio</option>
                 <option value="soft">Suave</option>
                 <option value="outline">Contorno</option>
-              </select>
+              </Select>
             </label>
           </div>
           <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">

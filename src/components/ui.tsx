@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
@@ -996,6 +997,857 @@ export function FinanceSkeleton() {
     <div className="space-y-4" aria-label="Carregando financeiro">
       <KpiSkeleton count={6} />
       <Skeleton className="h-48 w-full" />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DS 1.0 — PRIMITIVES CANÔNICOS (segunda parte da MESMA biblioteca)
+// ═══════════════════════════════════════════════════════════════
+// Nada aqui cria uma segunda linguagem: superfícies, alturas, raio, foco,
+// motion e tipografia vêm dos tokens `--gd-*`. O contrato está em
+// docs/GODOUTOR-DESIGN-SYSTEM.md e o catálogo vivo em /dev/design-system.
+
+/** Fecha SEMPRE assim: um único botão neutro, no canto, com rótulo acessível. */
+export function CloseButton({ onClick, label = 'Fechar', className }: {
+  onClick: () => void; label?: string; className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'lds-close inline-flex items-center justify-center rounded-[var(--gd-radius-sm)]',
+        'w-8 h-8 text-[var(--gd-text-muted)] hover:text-[var(--gd-text)] hover:bg-[var(--gd-bg-hover)]',
+        'focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)]',
+        className,
+      )}
+    >
+      <Icon n="x" size={16} />
+    </button>
+  );
+}
+
+// ── camadas flutuantes: uma única engenharia de ancoragem ───────────────
+type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start';
+
+/**
+ * Posiciona uma camada em PORTAL a partir do retângulo do gatilho, com
+ * clamp na viewport e flip vertical quando não há espaço abaixo. Sem medição
+ * por `offsetHeight` no render: lê o rect real a cada abertura/scroll.
+ */
+function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement | null>, side: LayerSide, offset = 6, layerRef?: React.RefObject<HTMLElement | null>) {
+  const [style, setStyle] = useState<React.CSSProperties | null>(null);
+  useEffect(() => {
+    if (!open) { setStyle(null); return; }
+    const place = () => {
+      const a = anchorRef.current?.getBoundingClientRect();
+      if (!a) return;
+      const w = layerRef?.current?.offsetWidth || 0;
+      const h = layerRef?.current?.offsetHeight || 0;
+      let top = a.bottom + offset;
+      let left = a.left;
+      if (side === 'bottom-end') left = a.right - w;
+      if (side === 'top-start') top = a.top - h - offset;
+      if (side === 'right-start') { top = a.top; left = a.right + offset; }
+      if (side === 'bottom-start' || side === 'bottom-end') {
+        // Sem espaço abaixo (e com espaço acima) → abre para cima.
+        if (h && top + h > window.innerHeight - 8 && a.top - h - offset > 8) top = a.top - h - offset;
+      }
+      left = Math.max(8, Math.min(left, window.innerWidth - Math.max(w, 0) - 8));
+      top = Math.max(8, Math.min(top, Math.max(8, window.innerHeight - h - 8)));
+      setStyle({ top, left });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, anchorRef, side, offset, layerRef]);
+  return style;
+}
+
+// Sequência global de camadas: uma camada aberta DEPOIS de outra é, por
+// construção, um overlay descendente (calendário de um DatePicker dentro de um
+// Popover, lista de um Combobox, submenu…). O outside-click usa essa ordem para
+// não tratar o clique num descendente como "fora" (B1).
+let LAYER_SEQ = 0;
+
+function LayerPortal({ children, style, className, role, label, id }: {
+  children: React.ReactNode; style: React.CSSProperties | null; className?: string;
+  role?: string; label?: string; id?: string;
+}) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div
+      id={id}
+      role={role}
+      aria-label={label}
+      className={className}
+      style={style || undefined}
+      data-layer=""
+      ref={(el) => { if (el && !el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ); }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+/** Verdadeiro se o alvo está dentro de uma camada aberta DEPOIS da camada própria. */
+function withinLaterLayer(target: Node, ownLayer: HTMLElement | null): boolean {
+  const own = ownLayer?.closest('[data-layer-order]');
+  const ownOrder = own ? Number((own as HTMLElement).dataset.layerOrder || 0) : 0;
+  const layers = document.querySelectorAll<HTMLElement>('[data-layer-order]');
+  for (const el of Array.from(layers)) {
+    if (Number(el.dataset.layerOrder) > ownOrder && el.contains(target)) return true;
+  }
+  return false;
+}
+
+// Pilha de Escape: com camadas aninhadas (Popover do quick create + Popover do
+// DatePicker), o Escape deve fechar SÓ a camada do topo (B1).
+const ESC_STACK: object[] = [];
+
+function useDismissOnEscape(open: boolean, onClose: () => void) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const entry = {};
+    ESC_STACK.push(entry);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && ESC_STACK[ESC_STACK.length - 1] === entry) closeRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      const i = ESC_STACK.indexOf(entry);
+      if (i >= 0) ESC_STACK.splice(i, 1);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+}
+
+/** Tooltip: informação curta. Aparece no hover E no foco; nunca é só decoração. */
+export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
+  label: string; side?: LayerSide; children: React.ReactNode; disabled?: boolean;
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const style = useAnchoredLayer(open && !disabled, anchorRef, side, 8, layerRef);
+  const show = () => { if (!disabled) setOpen(true); };
+  const hide = () => setOpen(false);
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        className="lds-tip-anchor inline-flex"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+      >
+        {children}
+      </span>
+      {open && !disabled && (
+        <LayerPortal style={style} className="gd-tooltip">
+          <div ref={layerRef} role="tooltip">{label}</div>
+        </LayerPortal>
+      )}
+    </>
+  );
+}
+
+/** HoverCard: painel rico em hover/foco com a janela do §15 (150–250ms). */
+export const HOVER_CARD_OPEN_MS = 180;
+export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS }: {
+  content: React.ReactNode; side?: LayerSide; children: React.ReactNode; openDelayMs?: number;
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<number | null>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, 8, layerRef);
+  const clear = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; } };
+  // §5 — MOBILE SEM HOVER: onde não existe hover real (hover: none) a prévia
+  // não abre — nem por hover nem pelo foco de um toque. O caminho do toque é o
+  // clique, que abre o detalhe; nenhuma informação fica dependendo de hover.
+  const canHover = () => {
+    try { return window.matchMedia('(hover: hover)').matches; } catch { return true; }
+  };
+  const enter = () => {
+    if (!canHover()) return;
+    clear();
+    timer.current = window.setTimeout(() => setOpen(true), openDelayMs);
+  };
+  const leave = () => { clear(); setOpen(false); };
+  useEffect(() => clear, []);
+  useDismissOnEscape(open, () => setOpen(false));
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        className="lds-hovercard-anchor inline-flex"
+        onMouseEnter={enter}
+        onMouseLeave={leave}
+        onFocus={enter}
+        onBlur={leave}
+      >
+        {children}
+      </span>
+      {open && (
+        <LayerPortal style={style} className="gd-layer gd-hovercard">
+          <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}>{content}</div>
+        </LayerPortal>
+      )}
+    </>
+  );
+}
+
+/** Popover: painel ancorado controlado (usado pelo quick create e filtros). */
+export function Popover({ open, onClose, trigger, children, side = 'bottom-start', label, className, anchorStyle }: {
+  open: boolean; onClose: () => void; trigger: React.ReactNode; children: React.ReactNode;
+  side?: LayerSide; label?: string; className?: string;
+  /**
+   * Posiciona o ÂNCORA (não a camada). Serve para ancorar a um PONTO do
+   * documento — ex.: o slot clicado na grade da Agenda — sem criar um
+   * elemento fantasma no meio do fluxo.
+   */
+  anchorStyle?: React.CSSProperties;
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, 6, layerRef);
+  useDismissOnEscape(open, onClose);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (layerRef.current?.contains(t) || anchorRef.current?.contains(t)) return;
+      // B1: o calendário do DatePicker / lista de Combobox vivem em portais
+      // descendentes — clicar neles NÃO é "fora" (não desmonta o pai).
+      if (withinLaterLayer(t, layerRef.current)) return;
+      onClose();
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open, onClose]);
+  return (
+    <>
+      <span ref={anchorRef} style={anchorStyle} className={cn('lds-popover-anchor inline-flex', className)}>{trigger}</span>
+      {open && (
+        <LayerPortal style={style} className="gd-layer gd-popover" role="dialog" label={label}>
+          <div ref={layerRef}>{children}</div>
+        </LayerPortal>
+      )}
+    </>
+  );
+}
+
+export type MenuItem = {
+  id: string; label: string; icon?: string; onSelect?: () => void;
+  danger?: boolean; disabled?: boolean; href?: string; separatorBefore?: boolean;
+};
+
+/** DropdownMenu canônico: teclado completo, roving focus e Escape. */
+export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom-end', align = 'end' }: {
+  items: MenuItem[]; trigger: React.ReactNode; label?: string; side?: LayerSide; align?: 'start' | 'end';
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  const restoreRef = useRef<HTMLElement | null>(null);
+  const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, listRef);
+  useDismissOnEscape(open, () => setOpen(false));
+  const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!listRef.current?.contains(t) && !anchorRef.current?.contains(t)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+  useEffect(() => {
+    if (open) setActive(enabled[0] ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // B3: ao abrir, guarda o gatilho; ao fechar, devolve o foco a ele.
+  useEffect(() => {
+    if (open) restoreRef.current = (document.activeElement as HTMLElement) || null;
+    else if (restoreRef.current) { restoreRef.current.focus?.(); restoreRef.current = null; }
+  }, [open]);
+  // B3: roving focus — o foco REAL segue o item ativo (navegação por teclado).
+  useEffect(() => { if (open) itemRefs.current[active]?.focus(); }, [open, active]);
+  const move = (dir: 1 | -1) => {
+    if (!enabled.length) return;
+    const pos = enabled.indexOf(active);
+    const next = enabled[(pos + dir + enabled.length) % enabled.length];
+    setActive(next);
+  };
+  const run = (item: MenuItem) => {
+    if (item.disabled) return;
+    setOpen(false);
+    item.onSelect?.();
+  };
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        className="lds-menu-anchor inline-flex"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true); }
+        }}
+      >
+        <span onClick={() => setOpen((v) => !v)}>{trigger}</span>
+      </span>
+      {open && (
+        <LayerPortal style={style} className="gd-layer gd-menu" role="menu" label={label}>
+          <div
+            ref={listRef}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+              else if (e.key === 'Enter') { e.preventDefault(); run(items[active]); }
+              else if (e.key === ' ') { e.preventDefault(); run(items[active]); }
+              else if (e.key === 'Tab') setOpen(false);
+            }}
+          >
+            {items.map((item, idx) => (
+              <div key={item.id}>
+                {item.separatorBefore && <div className="gd-menu__separator" role="separator" />}
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    ref={(el) => { itemRefs.current[idx] = el; }}
+                    role="menuitem"
+                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+                    data-active={idx === active}
+                    onMouseEnter={() => setActive(idx)}
+                    tabIndex={-1}
+                  >
+                    {item.icon && <Icon n={item.icon} size={15} />}
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    ref={(el) => { itemRefs.current[idx] = el; }}
+                    role="menuitem"
+                    disabled={item.disabled}
+                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+                    data-active={idx === active}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={() => run(item)}
+                    tabIndex={-1}
+                  >
+                    {item.icon && <Icon n={item.icon} size={15} />}
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </LayerPortal>
+      )}
+    </>
+  );
+}
+
+/** Dialog: overlay central com foco preso, Escape e devolução de foco. */
+export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px' }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string;
+  children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
+  /**
+   * Faixa do diálogo em unidade de CSS (ex.: '672px'). Confirmações simples
+   * ficam curtas; revisões pedem mais. Vai como `--gd-dialog-w` (token local)
+   * porque o `max-width` do próprio `.gd-dialog` venceria uma classe utilitária.
+   */
+  width?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // O MESMO guarda de descarte dos overlays do produto (dirty/saving): um
+  // Dialog do DS não pode ser a porta de fuga de um formulário sujo.
+  const guard = useOverlayDismissGuard();
+  const token = useRef({});
+  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, onClose);
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.activeElement as HTMLElement | null;
+    lockBodyScroll(token.current);
+    const node = ref.current;
+    const first = node?.querySelector<HTMLElement>('[data-autofocus], button, input, select, textarea, a[href]');
+    (first || headingRef.current)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); requestClose('escape'); }
+      if (e.key === 'Tab' && node) wrapDialogFocus(e, node, headingRef.current);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      unlockBodyScroll(token.current);
+      prev?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!open) return null;
+  return createPortal(
+    <div
+      className="gd-dialog-backdrop"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
+    >
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label || title}
+        className="gd-dialog"
+        style={width ? ({ '--gd-dialog-w': width } as React.CSSProperties) : undefined}
+      >
+        <div className="gd-dialog__header">
+          <div className="min-w-0">
+            <h2 ref={headingRef} tabIndex={-1} className="il-type-section truncate font-semibold text-[var(--gd-text)]">{title}</h2>
+            {subtitle && <p className="il-type-help truncate text-[var(--gd-text-muted)]">{subtitle}</p>}
+          </div>
+          <div className="ml-auto"><CloseButton onClick={() => requestClose('close-button')} /></div>
+        </div>
+        <div className="gd-dialog__body">{children}</div>
+        {footer && <div className="gd-dialog__footer">{footer}</div>}
+      </div>
+      {guard.dialog}
+    </div>,
+    document.body,
+  );
+}
+
+/** Sheet: apelido semântico do Drawer (mesma implementação, mesmo contrato). */
+export function Sheet(props: Parameters<typeof Drawer>[0]) {
+  return <Drawer {...props} />;
+}
+
+/** Radio: mesma anatomia do Checkbox, um por grupo. */
+export function Radio({ label, hint, name, value, checked, onChange, disabled }: {
+  label: React.ReactNode; hint?: string; name?: string; value?: string;
+  checked: boolean; onChange: (v: string) => void; disabled?: boolean;
+}) {
+  return (
+    <label className={cn('flex items-start gap-2.5 cursor-pointer select-none', disabled && 'opacity-60 cursor-not-allowed')}>
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        disabled={disabled}
+        onChange={() => onChange(value || '')}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--gd-accent)] focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)]"
+      />
+      <span className="min-w-0">
+        <span className="il-type-body block font-medium text-[var(--gd-text)]">{label}</span>
+        {hint && <span className="il-type-help block text-[var(--gd-text-muted)]">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+/** SearchField: o campo de busca do sistema (ícone + limpar + atalho opcional). */
+export function SearchField({ value, onChange, placeholder = 'Buscar', label = 'Buscar', kbd, className, ...rest }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; label?: string;
+  kbd?: string; className?: string;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  return (
+    <div className={cn('relative flex items-center', className)}>
+      <span className="pointer-events-none absolute left-2.5 text-[var(--gd-text-muted)]"><Icon n="search" size={15} /></span>
+      <input
+        type="search"
+        aria-label={label}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(FIELD_CLS, 'pl-8 pr-8')}
+        {...rest}
+      />
+      {value ? (
+        <span className="absolute right-1.5">
+          <CloseButton label="Limpar busca" onClick={() => onChange('')} className="h-6 w-6" />
+        </span>
+      ) : kbd ? (
+        <span className="pointer-events-none absolute right-2 rounded border border-[var(--gd-border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--gd-text-muted)]">{kbd}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Table: grade canônica (cabeçalho, hover, números tabulares). */
+export function Table({ className, children, ...rest }: React.TableHTMLAttributes<HTMLTableElement>) {
+  return (
+    <div className="w-full overflow-x-auto">
+      <table className={cn('gd-table', className)} {...rest}>{children}</table>
+    </div>
+  );
+}
+export function TableHead({ children, ...rest }: React.HTMLAttributes<HTMLTableSectionElement>) {
+  return <thead {...rest}>{children}</thead>;
+}
+export function TableBody({ children, ...rest }: React.HTMLAttributes<HTMLTableSectionElement>) {
+  return <tbody {...rest}>{children}</tbody>;
+}
+export function TableRow({ children, ...rest }: React.HTMLAttributes<HTMLTableRowElement>) {
+  return <tr {...rest}>{children}</tr>;
+}
+export function TableCell({ numeric, children, ...rest }: React.TdHTMLAttributes<HTMLTableCellElement> & { numeric?: boolean }) {
+  return <td className={cn(numeric && 'gd-table__num')} {...rest}>{children}</td>;
+}
+
+/** Pagination: contagem + páginas. Sem "..." enigmático: sempre 1 · atual · última. */
+export function Pagination({ page, pageCount, onPage, total, perPage, label = 'Paginação' }: {
+  page: number; pageCount: number; onPage: (p: number) => void;
+  total?: number; perPage?: number; label?: string;
+}) {
+  const pages = Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
+    const start = Math.max(1, Math.min(page - 2, pageCount - 4));
+    return start + i;
+  }).filter((p) => p >= 1 && p <= pageCount);
+  return (
+    <nav className="gd-pagination" aria-label={label}>
+      <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Página anterior">
+        <Icon n="chevronLeft" size={14} />
+      </Button>
+      <span className="gd-pagination__pages">
+        {pages.map((p) => (
+          <button
+            key={p}
+            type="button"
+            aria-current={p === page ? 'page' : undefined}
+            onClick={() => onPage(p)}
+            className={cn(
+              'h-8 min-w-8 rounded-[var(--gd-radius-sm)] px-2 text-xs font-semibold',
+              p === page
+                ? 'bg-[var(--gd-accent-soft)] text-[var(--gd-accent-fg)]'
+                : 'text-[var(--gd-text-muted)] hover:bg-[var(--gd-bg-hover)]',
+            )}
+          >{p}</button>
+        ))}
+      </span>
+      <Button variant="secondary" size="sm" disabled={page >= pageCount} onClick={() => onPage(page + 1)} aria-label="Próxima página">
+        <Icon n="chevronRight" size={14} />
+      </Button>
+      {typeof total === 'number' && (
+        <span className="il-type-help text-[var(--gd-text-muted)]">
+          {total} {total === 1 ? 'registro' : 'registros'}{perPage ? ` · ${perPage} por página` : ''}
+        </span>
+      )}
+    </nav>
+  );
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────
+export type ToastTone = 'info' | 'success' | 'warning' | 'danger';
+export interface ToastItem { id: string; title: string; message?: string; tone?: ToastTone; }
+
+export function useToasts() {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const dismiss = useCallback((id: string) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+  const push = useCallback((item: Omit<ToastItem, 'id'>) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((t) => [...t, { ...item, id }]);
+    return id;
+  }, []);
+  return { toasts, push, dismiss };
+}
+
+export function ToastViewport({ toasts, onDismiss, autoDismissMs = 5000 }: {
+  toasts: ToastItem[]; onDismiss: (id: string) => void; autoDismissMs?: number;
+}) {
+  return (
+    <div className="gd-toast-viewport" role="region" aria-label="Notificações" aria-live="polite">
+      {toasts.map((t) => <Toast key={t.id} item={t} onDismiss={onDismiss} autoDismissMs={autoDismissMs} />)}
+    </div>
+  );
+}
+
+export function Toast({ item, onDismiss, autoDismissMs = 5000 }: {
+  item: ToastItem; onDismiss: (id: string) => void; autoDismissMs?: number;
+}) {
+  useEffect(() => {
+    if (!autoDismissMs) return;
+    const id = window.setTimeout(() => onDismiss(item.id), autoDismissMs);
+    return () => window.clearTimeout(id);
+  }, [item.id, autoDismissMs, onDismiss]);
+  return (
+    <div className={cn('gd-toast', `gd-toast--${item.tone || 'info'}`)} role="status">
+      <div className="min-w-0">
+        <p className="il-type-body font-semibold text-[var(--gd-text)]">{item.title}</p>
+        {item.message && <p className="il-type-help text-[var(--gd-text-muted)]">{item.message}</p>}
+      </div>
+      <CloseButton onClick={() => onDismiss(item.id)} className="ml-auto shrink-0" />
+    </div>
+  );
+}
+
+// ── Calendário / DatePicker ─────────────────────────────────────────────
+const WEEKDAYS_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const MONTHS_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/** Data local em ISO (nunca UTC: o dia é do usuário, não do fuso do servidor). */
+export function toISODate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+export function fromISODate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+export function formatDateBR(iso: string): string {
+  const d = fromISODate(iso);
+  return d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` : '';
+}
+
+export function Calendar({ value, onSelect, month, onMonthChange, min, max, label = 'Calendário' }: {
+  value?: string; onSelect: (iso: string) => void; month?: Date; onMonthChange?: (d: Date) => void;
+  min?: string; max?: string; label?: string;
+}) {
+  const [cursor, setCursor] = useState<Date>(() => fromISODate(value || '') || new Date());
+  const view = month || cursor;
+  const setView = (d: Date) => { setCursor(d); onMonthChange?.(d); };
+  const year = view.getFullYear();
+  const monthIdx = view.getMonth();
+  const first = new Date(year, monthIdx, 1);
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  const todayIso = toISODate(new Date());
+  const cells: Array<number | null> = [
+    ...Array.from({ length: first.getDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  const shift = (delta: number) => setView(new Date(year, monthIdx + delta, 1));
+  return (
+    <div className="gd-calendar" role="group" aria-label={label}>
+      <div className="gd-calendar__head">
+        <IconButton icon="chevronLeft" label="Mês anterior" size="sm" variant="secondary" onClick={() => shift(-1)} />
+        <span className="gd-calendar__title" aria-live="polite">{MONTHS_PT[monthIdx]} de {year}</span>
+        <IconButton icon="chevronRight" label="Próximo mês" size="sm" variant="secondary" onClick={() => shift(1)} />
+      </div>
+      <div className="gd-calendar__grid">
+        {WEEKDAYS_PT.map((d, i) => <span key={`${d}-${i}`} className="gd-calendar__dow" aria-hidden="true">{d}</span>)}
+        {cells.map((day, i) => {
+          if (day === null) return <span key={`e-${i}`} className="gd-calendar__day gd-calendar__day--empty" aria-hidden="true" />;
+          const iso = toISODate(new Date(year, monthIdx, day));
+          const disabled = (!!min && iso < min) || (!!max && iso > max);
+          return (
+            <button
+              key={iso}
+              type="button"
+              className="gd-calendar__day"
+              aria-selected={value === iso}
+              data-today={iso === todayIso}
+              disabled={disabled}
+              onClick={() => onSelect(iso)}
+            >{day}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** DatePicker canônico: o input `date` nativo não é mais usado no produto. */
+export function DatePicker({ value, onChange, label = 'Data', placeholder = 'Selecionar data', min, max, disabled, className, formatValue }: {
+  value: string; onChange: (iso: string) => void; label?: string;
+  placeholder?: string; min?: string; max?: string; disabled?: boolean; className?: string;
+  /** Rótulo do gatilho. Padrão: data em pt-BR. A Agenda usa o rótulo do período. */
+  formatValue?: (iso: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      label={label}
+      className={className}
+      trigger={
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className={cn(FIELD_CLS, 'inline-flex items-center justify-between gap-2 text-left disabled:opacity-60')}
+        >
+          <span className={cn('truncate', !value && 'text-[var(--gd-text-muted)]')}>
+            {value ? (formatValue ? formatValue(value) : formatDateBR(value)) : placeholder}
+          </span>
+          <Icon n="calendar" size={15} />
+        </button>
+      }
+    >
+      <Calendar
+        value={value}
+        min={min}
+        max={max}
+        label={label}
+        onSelect={(iso) => { onChange(iso); setOpen(false); }}
+      />
+    </Popover>
+  );
+}
+
+// ── Combobox / Autocomplete / MultiSelect (uma implementação) ────────────
+export interface ComboOption { value: string; label: string; hint?: string; disabled?: boolean; }
+
+/**
+ * Combobox canônico. `mode`:
+ *   • `select`      — escolhe uma opção (mesmo contrato do Select, com busca);
+ *   • `autocomplete`— texto livre + sugestões;
+ *   • `multiple`    — várias opções, com chips e remoção por teclado.
+ */
+export function Combobox({ options, value, onChange, mode = 'select', label = 'Selecionar', placeholder = 'Buscar…', emptyLabel = 'Nenhum resultado', disabled, className }: {
+  options: ComboOption[];
+  value: string | string[];
+  onChange: (v: string | string[]) => void;
+  mode?: 'select' | 'autocomplete' | 'multiple';
+  label?: string; placeholder?: string; emptyLabel?: string; disabled?: boolean; className?: string;
+}) {
+  const listId = useId();
+  const multi = mode === 'multiple';
+  const selected = multi ? (Array.isArray(value) ? value : []) : [String(value || '')];
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, layerRef);
+  const known = options.filter((o) => selected.includes(o.value));
+  const displayLabel = multi ? query : (query || known[0]?.label || String(value || ''));
+  const filtered = options.filter((o) => {
+    if (multi && selected.includes(o.value)) return false;
+    const q = query.trim().toLowerCase();
+    return !q || o.label.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q);
+  });
+  useEffect(() => { setActive(0); }, [query, open]);
+  useDismissOnEscape(open, () => setOpen(false));
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!layerRef.current?.contains(t) && !anchorRef.current?.contains(t)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const pick = (opt: ComboOption) => {
+    if (opt.disabled) return;
+    if (multi) onChange([...selected.filter((v) => v), opt.value].filter((v) => options.some((o) => o.value === v)));
+    else onChange(opt.value);
+    setQuery('');
+    if (!multi) setOpen(false);
+  };
+
+  return (
+    <div className={cn('relative', className)} ref={anchorRef}>
+      {multi && known.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-1.5">
+          {known.map((o) => (
+            <span key={o.value} className="inline-flex items-center gap-1 rounded-[var(--gd-radius-pill)] border border-[var(--gd-border)] bg-[var(--gd-bg-subtle)] px-2 py-0.5 text-[var(--gd-font-size-caption)] font-medium text-[var(--gd-text)]">
+              {o.label}
+              <button
+                type="button"
+                aria-label={`Remover ${o.label}`}
+                className="text-[var(--gd-text-muted)] hover:text-[var(--gd-text)]"
+                onClick={() => onChange(selected.filter((v) => v !== o.value))}
+              ><Icon n="x" size={12} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        type="text"
+        role="combobox"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        disabled={disabled}
+        placeholder={placeholder}
+        value={displayLabel}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+          else if (e.key === 'Enter' && open && filtered[active]) { e.preventDefault(); pick(filtered[active]); }
+          else if (e.key === 'Backspace' && multi && !query && selected.length) {
+            onChange(selected.slice(0, -1));
+          }
+        }}
+        className={cn(FIELD_CLS, 'disabled:opacity-60')}
+      />
+      {open && (
+        <LayerPortal style={style} className="gd-layer gd-menu" role="listbox" label={label}>
+          <div id={listId} ref={layerRef} className="max-h-[260px] overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="il-type-help px-2 py-3 text-center text-[var(--gd-text-muted)]">{emptyLabel}</p>
+            ) : filtered.map((o, idx) => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={idx === active}
+                disabled={o.disabled}
+                data-active={idx === active}
+                onMouseEnter={() => setActive(idx)}
+                onClick={() => pick(o)}
+                className="gd-menu__item"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{o.label}</span>
+                  {o.hint && <span className="il-type-help block truncate text-[var(--gd-text-muted)]">{o.hint}</span>}
+                </span>
+                {selected.includes(o.value) && <Icon n="check" size={14} />}
+              </button>
+            ))}
+          </div>
+        </LayerPortal>
+      )}
+    </div>
+  );
+}
+
+// ── Ações de seção/página ───────────────────────────────────────────────
+/** ActionSection: texto à esquerda, ação à direita, com respiro (§41–43). */
+export function ActionSection({ title, hint, children, className }: {
+  title: string; hint?: string; children?: React.ReactNode; className?: string;
+}) {
+  return (
+    <section className={cn('gd-action-section', className)} aria-label={title}>
+      <div className="min-w-0">
+        <h3 className="il-type-section font-semibold text-[var(--gd-text)]">{title}</h3>
+        {hint && <p className="il-type-help mt-0.5 text-[var(--gd-text-muted)]">{hint}</p>}
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+    </section>
+  );
+}
+
+/** PageActionBar: barra de ações de rodapé (uma PRIMARY por barra). */
+export function PageActionBar({ children, hint, className }: {
+  children: React.ReactNode; hint?: string; className?: string;
+}) {
+  return (
+    <div className={cn('gd-page-action-bar', className)}>
+      <p className="il-type-help min-w-0 text-[var(--gd-text-muted)]">{hint}</p>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
 }

@@ -424,7 +424,7 @@ export default function DashboardPage() {
         {/* MISSÃO 5 — título no padrão único do produto (chip de ícone + título
             + subtítulo): mesma linguagem de Agenda, Clientes, Pendências… */}
         <div className="flex items-start gap-3 min-w-0">
-          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-3)] text-[var(--brand-fg)]">
+          <span className="il-page-header__icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--accent)]">
             <Icon n="home" size={19} />
           </span>
           <div className="min-w-0">
@@ -441,7 +441,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="dsh-card flex items-center gap-2.5 px-3.5 py-2.5" title="Data de hoje">
-          <Icon n="calendar" size={16} className="text-[var(--brand-fg)]" />
+          <Icon n="calendar" size={16} className="text-[var(--accent)]" />
           <span className="text-[12.5px] font-semibold text-[var(--text)]">
             Hoje, {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>

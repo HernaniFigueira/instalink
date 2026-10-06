@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs';
 describe('Polish — curated themes, shared visual primitives and bounded dashboard',()=>{
  it.each(['azul-profundo','verde-equilibrado','teal-profundo','vinho','onix'])('curated %s remains AA', id=>{
   const t=navAccentById(id);expect(t.id).toBe(id);
-  expect(contrastRatio(t.vars['--il-nav-fg'],t.vars['--il-nav'])).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(t.vars['--il-nav-active-fg'],t.vars['--il-nav-active'])).toBeGreaterThanOrEqual(4.5);
   expect(contrastRatio(t.vars['--accent-fg'],t.vars['--accent-soft'])).toBeGreaterThanOrEqual(4.5);
  });
  it('retains all legacy presets, while confirmation has no decorative icon',()=>{

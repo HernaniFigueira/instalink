@@ -38,7 +38,12 @@ describe('F1C · transições publicam a autoridade canônica', () => {
     send.mockResolvedValue({ ok: true, status: 200, data: { encounter: finalized }, message: '', denied: null, flow: 'stay', networkError: false } as any);
     render(<EncounterFinalizationPanel businessId="b1" row={initial} canFinalize flush={flush} authority={auth} revisions={[]} addenda={[]} reopenEvents={[]} canReopen={false} canAddendum={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Revisar e finalizar' }));
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Revisar e finalizar' }));
+    // DS 1.0 · §43 — a revisão é o Dialog CANÔNICO do produto: o foco é
+    // CONTIDO no diálogo (o diálogo foca o primeiro acionável; o cabeçalho é o
+    // alvo quando não há nenhum). O contrato auditável é a contenção do foco no
+    // overlay — não uma classe/modal específico desta tela.
+    const reviewDialog = screen.getByRole('dialog', { name: 'Revisar e finalizar' });
+    expect(reviewDialog.contains(document.activeElement)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar atendimento' }));
     await waitFor(() => expect(send).toHaveBeenCalled());
     expect(send.mock.calls[0][2]).toMatchObject({ expectedVersion: 11, action: 'finalize' });
@@ -52,9 +57,11 @@ describe('F1C · transições publicam a autoridade canônica', () => {
     const updated = row({ status: 'finalized', version: 13, finalizedAt: finalized.finalizedAt, addenda: [{ id: 'a1', businessId: 'b1', encounterId: 'e-f1c', revisionId: 'r1', authorUserId: 'u', authorProfessionalId: 'pro', text: 'Resultado complementar', createdAt: '2026-10-05T10:02:00Z' }] });
     send.mockResolvedValue({ ok: true, status: 200, data: { encounter: updated }, message: '', denied: null, flow: 'stay', networkError: false } as any);
     const view = render(<EncounterFinalizationPanel businessId="b1" row={finalized} canFinalize={false} flush={vi.fn(async () => true)} authority={auth} revisions={[]} addenda={[]} reopenEvents={[]} canReopen={false} canAddendum />);
-    expect(screen.getByRole('button', { name: 'Adicionar nota complementar' })).toBeTruthy();
+    // DS 1.0 · §43 — a nota complementar é um ActionSection: o TÍTULO anuncia a
+    // seção ("Adicionar nota complementar") e a ação à direita é "Adicionar nota".
+    expect(screen.getByRole('heading', { name: 'Adicionar nota complementar' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Nota complementar'), { target: { value: 'Resultado complementar' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar nota complementar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar nota' }));
     await waitFor(() => expect(send).toHaveBeenCalledWith('/api/encounters', 'PATCH', expect.objectContaining({ action: 'addendum', text: 'Resultado complementar' }), expect.anything()));
     expect(published?.version).toBe(13);
     view.rerender(<EncounterFinalizationPanel businessId="b1" row={updated} canFinalize={false} flush={vi.fn(async () => true)} authority={auth} revisions={[]} addenda={updated.addenda || []} reopenEvents={[]} canReopen={false} canAddendum />);

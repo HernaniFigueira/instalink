@@ -35,13 +35,15 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
   FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
+  bookingStatusDef, bookingBlockCls, bookingDotCls,
 } from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
+import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
@@ -120,6 +122,8 @@ const DROP_TOLERANCE_MIN = 75;
 // ── Modelo de visualização (pré-calculado: a coluna memoizada não faz conta) ──
 interface BlockVM {
   id: string;
+  /** Status cru do agendamento (mesma fonte do rótulo/cor: BOOKING_STATUS). */
+  status: BookingStatus;
   top: number;
   height: number;
   leftPct: number;
@@ -191,8 +195,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onPressCancel: () => void;
   onBlockClick: (id: string) => void;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
-  onEmptyPress: (columnKey: string, time: string) => void;
-  onRangeSelect: (columnKey: string, time: string, durationMin: number) => void;
+  onEmptyPress: (columnKey: string, time: string, point: { x: number; y: number }) => void;
+  onRangeSelect: (columnKey: string, time: string, durationMin: number, point: { x: number; y: number }) => void;
   selectedRange: { time: string; durationMin: number } | null;
   onResize: (id: string, end: string) => void;
   unavailableRanges: Array<{ start: number; end: number; label: string }>;
@@ -247,7 +251,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         lastGridPressAt = Date.now();
         const from = Math.min(active.origin, active.y);
         const to = Math.max(active.origin, active.y);
-        if (to > from) onRangeSelect(column.key, minToTime(from), to - from);
+        // DS 1.0 · §5 — o arraste abre o quick create ANCORADO no ponto solto,
+        // com a duração que o gesto desenhou (o snap continua sendo o mesmo).
+        if (to > from) onRangeSelect(column.key, minToTime(from), to - from, { x: e.clientX, y: e.clientY });
       }}
       onPointerCancel={() => { selection.current = null; if (overlay.current) overlay.current.style.display = 'none'; }}
       onClick={(e) => {
@@ -259,7 +265,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         if (Date.now() - lastGridPressAt < 500) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
-        onEmptyPress(column.key, minToTime(minutes));
+        onEmptyPress(column.key, minToTime(minutes), { x: e.clientX, y: e.clientY });
       }}>
       <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
       {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
@@ -307,9 +313,13 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         data-schedule-block={block.id} aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`} title={`${timeLabel} · ${label} · ${scopeLabel}`} onClick={() => onOperationalBlock(block)}
         className="absolute z-10 left-1 right-1 max-w-[380px] border border-dashed border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)] rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
         style={{ top, height }}><span className="block tabular-nums">{timeLabel}</span><span className="block">BLOQUEIO · {label}</span>{height > 50 && <span className="block font-medium">{scopeLabel}</span>}</button>)}
-      {column.blocks.map((b) => (
+      {column.blocks.map((b) => {
+        // DS 1.0 · §5 — HOVER CARD (180ms, foco equivalente, sem hover no
+        // toque): prévia da MESMA informação do cartão, sem CTA próprio. O
+        // clique continua abrindo o detalhe e o arraste é o MESMO elemento —
+        // o botão não é remontado, então o pointer capture segue intacto.
+        const card = (
         <button
-          key={b.id}
           type="button"
           aria-label={b.label}
           title={b.label}
@@ -402,7 +412,30 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             </span>
           )}
         </button>
-      ))}
+        );
+        return (
+          <HoverCard
+            key={b.id}
+            side="right-start"
+            content={
+              <div className="w-[248px] space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="tabular-nums text-[12px] font-semibold text-[var(--gd-text-muted)]">{b.timeRange}</span>
+                  <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
+                </div>
+                <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">{b.name}</p>
+                {b.service && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.service}</p>}
+                {b.pro && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.pro}</p>}
+                {b.fitIn && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">ENCAIXE · decisão da equipe</p>}
+                {b.attention && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">Precisa de fechamento</p>}
+                <p className="pt-0.5 text-[11px] text-[var(--gd-text-faint)]">Clique para abrir o detalhe</p>
+              </div>
+            }
+          >
+            {card}
+          </HoverCard>
+        );
+      })}
       {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
         <>
           <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
@@ -480,6 +513,10 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  // DS 1.0 · §5 — QUICK CREATE: popover ancorado no slot clicado/arrastado.
+  // O fluxo COMPLETO (`creating`) continua existindo e é o destino de
+  // "Mais opções" e do CTA "Novo agendamento".
+  const [quickCreate, setQuickCreate] = useState<QuickBookingAnchor | null>(null);
   const [creating, setCreating] = useState<{
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
@@ -797,9 +834,10 @@ export default function AgendaPage() {
         const endMin = timeToMin(b.time) + dur;
         const endHM = minToTime(endMin % (24 * 60));
         const attention = needsClosure(b, dur, today, nowHM(new Date(), bizTz));
-        const statusLabel = BOOKING_STATUS[b.status]?.panel || b.status;
+        const statusLabel = bookingStatusDef(b.status).panel;
         return {
           id: b.id,
+          status: b.status,
           top: l.top,
           height: l.height,
           leftPct: l.leftPct,
@@ -811,9 +849,9 @@ export default function AgendaPage() {
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
           editable: rescheduleDecision(b.status).kind === 'move',
-          cls: BOOKING_BLOCK[b.status],
+          cls: bookingBlockCls(b.status),
           pro: pro || '',
-          dot: BOOKING_DOT[b.status],
+          dot: bookingDotCls(b.status),
           ico: b.status === 'pending' ? 'clock' : b.status === 'cancelled' || b.status === 'no_show' ? 'x' : 'check',
           attention,
           fitIn: b.bookingKind === 'fit_in',
@@ -1067,15 +1105,21 @@ export default function AgendaPage() {
   }, [computeHover]);
 
   // ── Handlers de ponteiro (estáveis: as colunas memoizadas não remontam) ──
-  /** A3.4: clique em horário vago abre o sheet JÁ naquele dia/horário/quem. */
-  const onRangeSelect = useCallback((columnKey: string, time: string, selectedDurationMin: number) => {
+    /**
+   * DS 1.0 · §5 — clique/arraste em horário vago abre o QUICK CREATE ancorado
+   * naquele ponto (Popover canônico): Paciente · Serviço · Profissional · Data ·
+   * Hora · Duração, com "Mais opções" para o fluxo completo. O gesto NÃO grava
+   * nada — gravação só na confirmação, e o servidor continua autoridade.
+   */
+  const onRangeSelect = useCallback((columnKey: string, time: string, selectedDurationMin: number, point: { x: number; y: number }) => {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
     const seed = { date: col.date, time, professionalId: col.professionalId, selectedDurationMin };
     setSelectedRange({ columnKey, time, durationMin: selectedDurationMin });
-    if (blockMode) openBlock(seed);
-    else setCreating({ ...seed, quick: true });
+    // Bloquear horário continua sendo o fluxo de BLOQUEIO (não cria atendimento).
+    if (blockMode) { openBlock(seed); return; }
+    setQuickCreate({ x: point.x, y: point.y, date: col.date, time, professionalId: col.professionalId, durationMin: selectedDurationMin });
   }, [blockMode]);
 
   function openBlock(seed: { date: string; time: string; professionalId: string; selectedDurationMin?: number }, existing?: ScheduleBlock) {
@@ -1118,12 +1162,17 @@ export default function AgendaPage() {
     setResizeAsk({ booking, end });
   }, []);
 
-  const onEmptyPress = useCallback((columnKey: string, time: string) => {
+  const onEmptyPress = useCallback((columnKey: string, time: string, point: { x: number; y: number }) => {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
     if (blockMode) { setSelectedRange({ columnKey, time, durationMin: 60 }); openBlock(newBookingSeedFromAgendaCell(col, time)); }
-    else { setSelectedRange({ columnKey, time, durationMin: 30 }); setCreating({ ...newBookingSeedFromAgendaCell(col, time), quick: true }); }
+    else {
+      setSelectedRange({ columnKey, time, durationMin: 30 });
+      // DS 1.0 · §5 — quick create ancorado no slot; o fluxo completo fica a
+      // um clique ("Mais opções") com o MESMO preenchimento.
+      setQuickCreate({ x: point.x, y: point.y, date: col.date, time, professionalId: col.professionalId });
+    }
   }, [blockMode]);
 
   const onPressStart = useCallback((id: string, e: React.PointerEvent) => {
@@ -1568,20 +1617,33 @@ export default function AgendaPage() {
               O botão “Hoje” saiu da UI — a data/período continua visível ao
               lado e o seletor nativo de data segue permitindo saltar para
               qualquer dia. */}
+          {/* DS 1.0 · §5 — TOOLBAR CANÔNICA: `Hoje · ‹ data ›`.
+              "Hoje" volta como ação de uma linha; as setas andam um passo do
+              modo atual; a data é o DatePicker CANÔNICO (Popover + Calendar do
+              design system). Nada de `<input type="date">` — a dependência do
+              seletor nativo do navegador acabou; o rótulo rico do período
+              continua sendo a leitura principal. */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex rounded-md border border-[var(--border-strong)] bg-[var(--surface)] shadow-xs overflow-hidden">
-              <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="ghost" onClick={() => move(-1)}
-                className="w-9 h-9 rounded-none text-[var(--text-muted)] border-r border-[var(--border)]" />
-              <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="ghost" onClick={() => move(1)}
-                className="w-9 h-9 rounded-none text-[var(--text-muted)]" />
-            </span>
-            <label className="relative inline-flex items-center gap-1.5 h-9 min-w-0 max-w-[min(26rem,calc(100vw-9rem))] cursor-pointer rounded-md px-2 -mx-2 hover:bg-[var(--surface-hover)] focus-within:shadow-focus"
-              title={`${focusRange} · clique para escolher a data`}>
-              <Icon n="calendar" size={13} className="shrink-0 text-[var(--text-muted)]" />
-              <span className="text-[15px] font-semibold leading-tight text-[var(--text)] capitalize truncate" aria-live="polite">{focusLabel}</span>
-              <input type="date" value={focus} max="2100-12-31" onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFocus(e.target.value); }}
-                aria-label={`Escolher data (${focusRange})`} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-            </label>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setFocus(today)}
+              aria-pressed={focus === today}
+              title={focus === today ? 'Você já está em hoje' : 'Ir para hoje'}
+            >
+              Hoje
+            </Button>
+            <IconButton icon="chevL" label={navLabel(-1)} tip={navLabel(-1)} variant="secondary" onClick={() => move(-1)} />
+            <DatePicker
+              value={focus}
+              onChange={(iso) => { if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) setFocus(iso); }}
+              label={`Escolher data (${focusRange})`}
+              formatValue={() => focusLabel}
+              max="2100-12-31"
+              className="min-w-0 max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
+            />
+            <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
+            <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
           <div className="sm:ml-auto min-w-0 max-w-full flex flex-wrap items-center gap-2">
             {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
@@ -1655,7 +1717,10 @@ export default function AgendaPage() {
         const dates = view === 'week' ? weekDays : [focus];
         return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
       }).length > 0 && <section className="mb-3 border border-dashed border-amber-500 rounded-md bg-amber-50 p-2" aria-label="Bloqueios operacionais">
-        <h2 className="text-xs font-bold uppercase">Bloqueios operacionais · não são atendimentos</h2>
+        {/* DS 1.0 · §2 — título de seção com a escala do sistema (semibold), e a
+            explicação vira hint: uma frase em CAIXA ALTA não é hierarquia. */}
+        <h2 className="il-type-section font-semibold text-[var(--gd-text)]">Bloqueios operacionais</h2>
+        <p className="il-type-help text-[var(--gd-text-muted)]">Bloqueios não são atendimentos — aparecem separados da agenda do dia.</p>
         <div className="flex flex-wrap gap-2 mt-1">{scheduleBlocks.filter(block => {
           const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
           return (view === 'week' ? weekDays : [focus]).includes(date);
@@ -1667,10 +1732,17 @@ export default function AgendaPage() {
         }}>■ BLOQUEIO · {block.reason || block.note || 'Operacional'} · {block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</button>)}</div>
       </section>}
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
-        <section className="ag-mode-scroll space-y-3" aria-label="Lista de atendimentos do dia">
-          <p className="text-sm text-[var(--text-muted)]">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
-          {columns.flatMap(c => c.blocks).length === 0 && <div className="p-8 bg-[var(--surface)] border border-[var(--border)] rounded-lg"><h2 className="font-semibold">Nenhum atendimento nesta seleção</h2><p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p></div>}
-          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="w-full flex gap-4 items-start text-left p-4 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
+        <section className="ag-mode-scroll ag-list" aria-label="Lista de atendimentos do dia">
+          <p className="ag-list__hint">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
+          {/* DS 1.0 · §5/§10 — a Lista é uma LISTA, não uma pilha de cards:
+              linhas com fio de 1px, alvo de toque confortável e hover neutro. */}
+          {columns.flatMap(c => c.blocks).length === 0 && (
+            <div className="ag-list__empty">
+              <h2 className="font-semibold">Nenhum atendimento nesta seleção</h2>
+              <p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p>
+            </div>
+          )}
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="ag-list__row w-full flex gap-4 items-start text-left">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
             <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
@@ -1700,7 +1772,7 @@ export default function AgendaPage() {
                   {list.length > 0 && (
                     <>
                       <span className="block text-[10px] font-medium text-zinc-600 mt-1">{list.length} · {list.slice(0, 2).map((b) => b.time).join(', ')}</span>
-                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${BOOKING_DOT[b.status]}`} />)}</span>
+                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${bookingDotCls(b.status)}`} />)}</span>
                     </>
                   )}
                 </button>
@@ -1939,23 +2011,89 @@ export default function AgendaPage() {
       )}
 
       {blockForm && <Drawer open onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
-        <div className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Indisponibilidade temporária</h3>
-          <p className="text-sm text-[var(--text-muted)]">Use para períodos em que normalmente haveria atendimento, mas a clínica, um profissional ou um recurso ficará indisponível.</p>
-          <p className="text-xs text-[var(--text-muted)]">Exemplos: Reunião · Almoço · Ausência · Procedimento interno · Sala em manutenção · Equipamento indisponível.</p>
-          <label className="block text-xs">Data<input type="date" value={blockDate} onChange={e => setBlockDate(e.target.value)} className="w-full border rounded-md p-2" /></label>
-          <div className="flex gap-2"><label className="flex-1 text-xs">Início<input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} className="w-full border rounded-md p-2" /></label><label className="flex-1 text-xs">Fim<input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} className="w-full border rounded-md p-2" /></label></div>
-          <label className="block text-xs">Escopo<select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)} className="w-full border rounded-md p-2"><option value="business">Clínica</option><option value="professional">Profissional</option><option value="resource">Sala ou equipamento</option></select></label>
-          <p className="text-sm text-[var(--text-muted)]">{blockScope === 'business' ? 'Impede novos agendamentos para toda a clínica neste período.' : blockScope === 'professional' ? 'Bloqueia apenas a agenda do profissional selecionado.' : 'Impede que esse recurso seja reservado por outro atendimento.'}</p>
-          {blockScope === 'professional' && <label className="block text-xs">Profissional<select value={blockPro} onChange={e => setBlockPro(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
-          {blockScope === 'resource' && <label className="block text-xs">Recurso<select value={blockResource} onChange={e => setBlockResource(e.target.value)} className="w-full border rounded-md p-2"><option value="">Selecione</option>{scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
-          <label className="block text-xs">Motivo (opcional)<input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
-          <label className="block text-xs">Observação (opcional)<input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" className="w-full border rounded-md p-2" /></label>
-          {blockError && <p role="alert" className="text-red-700 text-sm">{blockError}</p>}
-          <div className="flex gap-2"><Button variant="secondary" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button><Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
-            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}</div>
+        {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
+            canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
+            foco e dropdown do resto do sistema. O `<select>` cru e o
+            `<input type="date">` saíram daqui — nenhuma tela desenha controle
+            próprio. Regras de negócio intactas: mesmos campos, mesma validação,
+            mesma chamada de API. */}
+        <div className="p-4 space-y-4">
+          <div>
+            <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Indisponibilidade temporária</h3>
+            <p className="mt-1 text-[var(--gd-font-size-body)] text-[var(--gd-text-muted)]">Use para períodos em que normalmente haveria atendimento, mas a clínica, um profissional ou um recurso ficará indisponível.</p>
+          </div>
+          <DatePicker value={blockDate} onChange={setBlockDate} label="Data do bloqueio" max="2100-12-31" />
+          <div className="flex gap-2">
+            <div className="flex-1"><Field label="Início">
+              <Input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} />
+            </Field></div>
+            <div className="flex-1"><Field label="Fim">
+              <Input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} />
+            </Field></div>
+          </div>
+          <Field label="Escopo" hint={blockScope === 'business' ? 'Impede novos agendamentos para toda a clínica neste período.' : blockScope === 'professional' ? 'Bloqueia apenas a agenda do profissional selecionado.' : 'Impede que esse recurso seja reservado por outro atendimento.'}>
+            <Select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)}>
+              <option value="business">Clínica</option>
+              <option value="professional">Profissional</option>
+              <option value="resource">Sala ou equipamento</option>
+            </Select>
+          </Field>
+          {blockScope === 'professional' && (
+            <Field label="Profissional">
+              <Select value={blockPro} onChange={e => setBlockPro(e.target.value)}>
+                <option value="">Selecione</option>
+                {pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+            </Field>
+          )}
+          {blockScope === 'resource' && (
+            <Field label="Recurso">
+              <Select value={blockResource} onChange={e => setBlockResource(e.target.value)}>
+                <option value="">Selecione</option>
+                {scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </Select>
+            </Field>
+          )}
+          <Field label="Motivo" hint="Opcional · aparece na grade e no histórico">
+            <Input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" />
+          </Field>
+          <Field label="Observação">
+            <Input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" />
+          </Field>
+          {blockError && <Notice tone="error" title="Não foi possível salvar">{blockError}</Notice>}
+          <PageActionBar hint="O bloqueio não cria atendimento — só reserva o período.">
+            <Button variant="ghost" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button>
+            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}
+            <Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+          </PageActionBar>
         </div>
       </Drawer>}
+      {quickCreate && (
+        <QuickBookingPopover
+          anchor={quickCreate}
+          businessId={businessId || ''}
+          services={services}
+          pros={pros}
+          timezone={bizTz}
+          onClose={() => setQuickCreate(null)}
+          onCreated={() => { setQuickCreate(null); setSelectedRange(null); void load(); }}
+          onMore={(seed) => {
+            // "Mais opções" = fluxo COMPLETO com o mesmo preenchimento: nada do
+            // que já foi escolhido se perde ao trocar de superfície.
+            setQuickCreate(null);
+            setCreating({
+              date: seed.date || quickCreate.date,
+              time: seed.time || quickCreate.time,
+              professionalId: seed.professionalId || quickCreate.professionalId,
+              selectedDurationMin: seed.durationMin,
+              serviceId: seed.serviceId,
+              contactId: seed.contactId,
+              name: seed.customerName,
+              phone: seed.customerPhone,
+            });
+          }}
+        />
+      )}
       {detail && (
         <BookingDetailSheet
           booking={detail}

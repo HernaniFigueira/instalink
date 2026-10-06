@@ -10,7 +10,7 @@ import { money } from '@/lib/utils';
 import type { OrganizationOverview } from '@/lib/organization-overview';
 import type { PeriodSpec, PeriodKey } from '@/lib/periods';
 import { DeleteEntityDialog, type DeleteTarget } from '@/components/dashboard/DeleteEntityDialog';
-import { Button, Field, Input } from '@/components/ui';
+import { Button, Field, Input, Select } from '@/components/ui';
 
 type Response = {organizations:OrganizationOverview[];period:PeriodSpec;referenceTimezone:string};
 export default function OrganizationPage() {
@@ -51,7 +51,9 @@ export default function OrganizationPage() {
       <p className="text-sm text-[var(--text-muted)]">Somente as {org.units.length} filiais que você pode consultar. Escolha uma filial antes de agendar ou atender.</p></div>
       {org.canManage&&<Button onClick={()=>setAdding(!adding)}>Adicionar filial</Button>}
     </header>
-    {data.organizations.length>1&&<select className="il-field-control" aria-label="Selecionar organização" value={org.id} onChange={e=>changeOrganization(e.target.value)}>{data.organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select>}
+    {/* DS 1.0 · §6 — o seletor de filial usa o Select canônico (mesma altura,
+        raio, borda, foco e seta do resto do painel). */}
+    {data.organizations.length>1&&<Select aria-label="Selecionar organização" value={org.id} onChange={e=>changeOrganization(e.target.value)} className="w-auto">{data.organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select>}
     {adding&&org.canManage&&<form onSubmit={addUnit} className="bg-white border rounded-lg p-4 space-y-3"><Field label="Nome da filial"><Input required value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Endereço"><Input value={address} onChange={e=>setAddress(e.target.value)}/></Field>{saveError&&<p role="alert">{saveError}</p>}<Button disabled={saving}>{saving?'Criando…':'Criar filial'}</Button></form>}
     <PeriodPicker value={data.period} onChange={changePeriod}/>
     <p className="text-sm text-[var(--text-muted)]">{data.period.from||'Desde o início'} até {data.period.to}. Mesmas datas civis em todas as filiais; agendamentos pela data local, cadastros convertidos ao fuso indicado em cada filial. Referência de “Hoje”: {data.referenceTimezone}.</p>

@@ -19,6 +19,7 @@
  *     explícita).
  */
 import { describe, expect, it } from 'vitest';
+import { color, rawToken } from './helpers/ds-tokens';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -46,19 +47,23 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // e leitura firme, sem parecer mortos.
     expect(css).toMatch(/--brand:\s*#1c1917/); // missão 7: preto premium no estado normal
     expect(css).toMatch(/--brand-strong:\s*#0c0a09/);
-    expect(css).toMatch(/--brand-fg:\s*#262220/);
+    // O fg da ação é o INK near-black quente — valor na fonte única, alias aqui.
+    expect(rawToken('--brand-fg')).toBe('var(--gd-text)');
+    expect(color('--brand-fg')).toBe('#1c1815');
     // escala INK de tipografia (near-black quente, AA checado em
     // design-360-tokens)
-    expect(css).toMatch(/--text-primary:\s*#1c1815/);
-    expect(css).toMatch(/--text-muted:\s*#524c46/);
-    expect(css).toMatch(/--text-faint:\s*#6f6862/);
+    expect(rawToken('--text-primary')).toBe('var(--gd-text)');
+    expect(color('--text-primary')).toBe('#1c1815');
+    expect(color('--text-muted')).toBe('#524c46');
+    expect(color('--text-faint')).toBe('#6f6862');
   });
 
   it('identidade do logo intacta; sidebar padrão = Deep Blue', () => {
     expect(css).toMatch(/--brand-600:\s*#4f46e5/);
     expect(css).toMatch(/--brand-700:\s*#4338ca/);
-    expect(css).toMatch(/--il-nav:\s*#071a33/); // default = azul-profundo
-    expect(css).toMatch(/--accent:\s*#2563eb/);
+    // DS 1.0 §13 — a sidebar é BRANCA e fixa (o tema não pinta estrutura).
+    expect(css).toMatch(/--il-nav:\s*var\(--gd-nav-bg\)/);
+    expect(css).toMatch(/--accent:\s*var\(--gd-accent\)/);
   });
 
   it('botões seguem token-driven: primary segue o TEMA (accent), secondary contornado', () => {

@@ -18,7 +18,7 @@
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/icons';
-import { Avatar, Button, HoursChips, IconButton, Notice, buttonCls } from '@/components/ui';
+import { Avatar, Button, Dialog, HoursChips, IconButton, Notice, Select, buttonCls } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { PermissionNotice } from './AccessNotice';
 import {
@@ -134,9 +134,13 @@ export function DayHoursList({ initial, onSubmit, saving, submitLabel, footer }:
                     <input type="time" value={p.start} onChange={(e) => setPeriod(i, j, { start: e.target.value })} className={inputCls} aria-label={`${label} início`} />
                     <span className="text-[var(--text-faint)] text-xs">até</span>
                     <input type="time" value={p.end} onChange={(e) => setPeriod(i, j, { end: e.target.value })} className={inputCls} aria-label={`${label} fim`} />
-                    <select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} className={inputCls} aria-label={`${label} intervalo`}>
-                      {SLOT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    {/* DS 1.0 · §6 — Select canônico, na mesma linha dos inputs de
+                        hora (largura pelo wrapper, não pelo controle). */}
+                    <span className="w-[132px]">
+                      <Select value={p.slotMin} onChange={(e) => setPeriod(i, j, { slotMin: Number(e.target.value) })} aria-label={`${label} intervalo`}>
+                        {SLOT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
+                    </span>
                     {days[i].length > 1 && (
                       <button type="button" onClick={() => removePeriod(i, j)} className="text-[var(--text-faint)] hover:text-[var(--danger)] px-1" aria-label={`Remover período de ${label}`}>
                         <Icon n="x" size={14} />
@@ -404,23 +408,26 @@ export function BusinessHoursPanel({ businessId, professionals, rules, onChanged
         </section>
       )}
 
-      {inheritAsk && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Voltar a seguir o horário da clínica">
-          <div className="absolute inset-0 bg-[var(--overlay)]" onClick={() => busy !== `follow-${inheritAsk.id}` && setInheritAsk(null)} />
-          <div className="relative w-full sm:max-w-sm bg-[var(--surface)] rounded-lg border border-[var(--border)] p-5 shadow-xl">
-            <p className="font-semibold text-sm">{inheritAsk.name} vai seguir o horário da clínica?</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5">
-              O horário personalizado dele fica guardado (sem uso enquanto seguir a clínica) e ele passa a atender no horário geral ({hoursSummaryLine(general)}), incluindo as próximas alterações que você fizer lá.
-            </p>
-            <div className="flex gap-2 mt-4">
-              <button type="button" onClick={() => followBusiness(inheritAsk)} disabled={busy === `follow-${inheritAsk.id}`} className={cn(btnDark, 'flex-1')}>
-                {busy === `follow-${inheritAsk.id}` ? 'Salvando…' : 'Seguir horário da clínica'}
-              </button>
-              <button type="button" onClick={() => setInheritAsk(null)} className={btnGhost} disabled={busy === `follow-${inheritAsk.id}`}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* DS 1.0 · §4 — confirmação no Dialog CANÔNICO (foco contido, Escape,
+          scroll lock, botões da mesma família). Antes era um modal artesanal
+          com botão próprio (`btnDark`) dentro de Configurações → Horários. */}
+      <Dialog
+        open={!!inheritAsk}
+        onClose={() => { if (busy !== `follow-${inheritAsk?.id}`) setInheritAsk(null); }}
+        title="Seguir o horário da clínica?"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setInheritAsk(null)} disabled={busy === `follow-${inheritAsk?.id}`}>Cancelar</Button>
+            <Button type="button" onClick={() => { if (inheritAsk) void followBusiness(inheritAsk); }} disabled={busy === `follow-${inheritAsk?.id}`}>
+              {busy === `follow-${inheritAsk?.id}` ? 'Salvando…' : 'Seguir horário da clínica'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[var(--gd-font-size-body)] text-[var(--gd-text-muted)]">
+          {inheritAsk ? `${inheritAsk.name} vai seguir o horário da clínica.` : ''} O horário personalizado fica guardado (sem uso enquanto seguir a clínica) e ele passa a atender no horário geral ({hoursSummaryLine(general)}), incluindo as próximas alterações que você fizer lá.
+        </p>
+      </Dialog>
     </div>
   );
 }

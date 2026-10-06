@@ -156,6 +156,43 @@ export const BOOKING_DOT: Record<BookingStatus, string> = {
   no_show: 'bg-[var(--text-faint)]',
 };
 
+// ── Robustez de apresentação (B4) ─────────────────────────────────────────
+// A Agenda pode receber etapas do WORKFLOW canônico (scheduled|arrived|in_care|
+// finalized|cancelled|no_show) no campo `status` — ex.: QA de Clinical Access com
+// `status='arrived'`. Isso NÃO é um estado de domínio novo: são as mesmas etapas
+// derivadas já declaradas em `types.ts` (`workflow.state`). Aqui só mapeamos a
+// APRESENTAÇÃO delas, com fallback neutro, para que status desconhecido/legado
+// NUNCA derrube a grade (`BOOKING_STATUS[x].tone` sem guarda era o crash).
+export const WORKFLOW_STAGE_DEF: Record<string, StatusDef> = {
+  scheduled: { consumer: 'Agendado', panel: 'Agendado', desc: 'Agendado — está na agenda.', tone: 'emerald' },
+  arrived: { consumer: 'Chegou', panel: 'Chegou', desc: 'Cliente chegou / presente.', tone: 'blue' },
+  in_care: { consumer: 'Em atendimento', panel: 'Em atendimento', desc: 'Em atendimento.', tone: 'purple' },
+  finalized: { consumer: 'Finalizado', panel: 'Finalizado', desc: 'Atendimento finalizado.', tone: 'blue' },
+};
+
+const FALLBACK_DEF: StatusDef = { consumer: '—', panel: '—', desc: 'Status não reconhecido.', tone: 'zinc' };
+
+/** StatusDef seguro para qualquer status de booking (CRM ou etapa de workflow). */
+export function bookingStatusDef(status: string): StatusDef {
+  return (BOOKING_STATUS as Record<string, StatusDef>)[status]
+    || WORKFLOW_STAGE_DEF[status]
+    || { ...FALLBACK_DEF, consumer: status || '—', panel: status || '—' };
+}
+
+/** Classe de bloco da grade segura (nunca `undefined`). */
+export function bookingBlockCls(status: string): string {
+  return (BOOKING_BLOCK as Record<string, string>)[status]
+    || { scheduled: BOOKING_BLOCK.confirmed, arrived: BOOKING_BLOCK.completed, in_care: BOOKING_BLOCK.completed, finalized: BOOKING_BLOCK.completed }[status]
+    || BOOKING_BLOCK.no_show;
+}
+
+/** Ponto de cor seguro (nunca `undefined`). */
+export function bookingDotCls(status: string): string {
+  return (BOOKING_DOT as Record<string, string>)[status]
+    || { scheduled: BOOKING_DOT.confirmed, arrived: BOOKING_DOT.completed, in_care: BOOKING_DOT.completed, finalized: BOOKING_DOT.completed }[status]
+    || BOOKING_DOT.no_show;
+}
+
 // ── Atenção operacional (pendência de fechamento — NÃO é um status) ──
 // Atendimento em aberto com horário já passado: o sistema nunca muda o
 // status sozinho, então o bloco ganha o marcador de atenção pedindo decisão.

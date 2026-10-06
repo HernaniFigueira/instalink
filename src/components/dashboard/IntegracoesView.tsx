@@ -6,7 +6,7 @@ import { apiGet, apiSend } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { ApiKey, SafeWebhookConfig, WebhookDelivery, WebhookEvent } from '@/lib/types';
 import { VALID_WEBHOOK_EVENTS } from '@/lib/types';
-import { Notice } from '@/components/ui';
+import { Button, Dialog, Field, Notice, Select } from '@/components/ui';
 
 function formatDateTime(iso: string): string {
   if (!iso) return '';
@@ -295,16 +295,16 @@ export function IntegracoesView() {
                   Conecte seu site externo, formulário ou sistema próprio diretamente ao GoDoutor com segurança isolada por negócio.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={() => {
                   setGeneratedSecret(null);
                   setShowNewKeyModal(true);
                 }}
-                data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand transition"
               >
-                + Gerar Nova Chave
-              </button>
+                Gerar nova chave
+              </Button>
             </div>
 
             {keysLoading ? (
@@ -337,13 +337,9 @@ export function IntegracoesView() {
                     </div>
 
                     {!k.revokedAt && (
-                      <button
-                        type="button"
-                        onClick={() => handleRevokeKey(k.id)}
-                        className="text-xs text-red-600 font-semibold hover:underline border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50"
-                      >
-                        Revogar Chave
-                      </button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => handleRevokeKey(k.id)}>
+                        Revogar chave
+                      </Button>
                     )}
                   </div>
                 ))}
@@ -450,20 +446,16 @@ print(res.json())`}</pre>
                   Receba notificações em tempo real assinadas com HMAC-SHA256 sempre que um lead for criado ou agendamento confirmado.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowNewWebhookModal(true)}
-                data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand transition"
-              >
-                + Adicionar Webhook
-              </button>
+              <Button type="button" size="sm" onClick={() => setShowNewWebhookModal(true)}>
+                Adicionar webhook
+              </Button>
             </div>
 
             {webhooksLoading ? (
               <p className="text-xs text-zinc-400 py-4">Carregando webhooks…</p>
             ) : webhooks.length === 0 ? (
               <div className="py-8 text-center text-zinc-400 text-xs border border-dashed border-zinc-200 rounded-xl">
-                Nenhum endpoint configurado. Clique em "+ Adicionar Webhook" para receber eventos em tempo real.
+                Nenhum endpoint configurado. Use “Adicionar webhook” para receber eventos em tempo real.
               </div>
             ) : (
               <div className="space-y-3">
@@ -490,13 +482,13 @@ print(res.json())`}</pre>
                         >
                           {testingWebhookId === hook.id ? 'Testando…' : 'Testar Envio'}
                         </button>
-                        <button
+                        <Button
                           type="button"
                           onClick={() => handleDeleteWebhook(hook.id)}
                           className="text-xs text-red-600 font-semibold px-2 py-1.5 hover:underline"
                         >
                           Excluir
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
@@ -556,33 +548,23 @@ print(res.json())`}</pre>
 
             {/* Filtros para gerar código pré-selecionado */}
             <div className="grid sm:grid-cols-2 gap-3 bg-zinc-50 p-3.5 rounded-xl border border-zinc-200">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Pré-selecionar Serviço</label>
-                <select
-                  value={previewServiceId}
-                  onChange={(e) => setPreviewServiceId(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-zinc-300 bg-white"
-                >
+              <Field label="Pré-selecionar serviço">
+                <Select value={previewServiceId} onChange={(e) => setPreviewServiceId(e.target.value)} aria-label="Pré-selecionar serviço">
                   <option value="">Nenhum (cliente escolhe na tela)</option>
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Pré-selecionar Profissional</label>
-                <select
-                  value={previewProId}
-                  onChange={(e) => setPreviewProId(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-zinc-300 bg-white"
-                >
+              <Field label="Pré-selecionar profissional">
+                <Select value={previewProId} onChange={(e) => setPreviewProId(e.target.value)} aria-label="Pré-selecionar profissional">
                   <option value="">Qualquer profissional</option>
                   {pros.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
 
             {/* 1. Link Direto */}
@@ -596,16 +578,16 @@ print(res.json())`}</pre>
                   value={deepLinkUrl}
                   className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-xs font-mono bg-zinc-50 text-zinc-700"
                 />
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     navigator.clipboard?.writeText(deepLinkUrl);
                     alert('Link copiado!');
                   }}
-                  data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand whitespace-nowrap"
+                  data-primary-cta="1" className="whitespace-nowrap"
                 >
                   Copiar Link
-                </button>
+                </Button>
                 <a
                   href={deepLinkUrl}
                   target="_blank"
@@ -628,7 +610,7 @@ print(res.json())`}</pre>
                   value={iframeSnippet}
                   className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-xs font-mono bg-[var(--code-bg)] text-[var(--code-fg)]"
                 />
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     navigator.clipboard?.writeText(iframeSnippet);
@@ -638,7 +620,7 @@ print(res.json())`}</pre>
                   className="absolute right-2 top-2 px-2.5 py-1 bg-white text-zinc-900 text-[11px] font-semibold rounded shadow"
                 >
                   {embedCopied ? 'Copiado!' : 'Copiar Iframe'}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -657,24 +639,14 @@ print(res.json())`}</pre>
         </div>
       )}
 
-      {/* ── Modal Gerar Nova Chave ── */}
-      {showNewKeyModal && (
-        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
-            <div className="flex items-start justify-between border-b pb-3">
-              <h2 className="text-base font-semibold text-zinc-900">Gerar Chave de Integração</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewKeyModal(false);
-                  setGeneratedSecret(null);
-                }}
-                className="w-7 h-7 rounded-full border border-zinc-200 text-zinc-500 flex items-center justify-center hover:bg-zinc-100"
-              >
-                ✕
-              </button>
-            </div>
-
+      {/* DS 1.0 · §4/§43 — gerar chave é o Dialog CANÔNICO (X neutro, foco
+          contido, Escape/backdrop com guarda de descarte). */}
+      <Dialog
+        open={showNewKeyModal}
+        onClose={() => { setShowNewKeyModal(false); setGeneratedSecret(null); }}
+        title="Gerar chave de integração"
+      >
+        <div className="space-y-4">
             {generatedSecret ? (
               <div className="space-y-4">
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1">
@@ -691,29 +663,27 @@ print(res.json())`}</pre>
                       value={generatedSecret}
                       className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-xs font-mono bg-zinc-50 font-semibold"
                     />
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         navigator.clipboard?.writeText(generatedSecret);
                         alert('Chave copiada para a área de transferência!');
                       }}
-                      data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                     >
                       Copiar
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     setShowNewKeyModal(false);
                     setGeneratedSecret(null);
                   }}
-                  data-primary-cta="1" className="w-full py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
                 >
                   Entendi, já guardei a chave
-                </button>
+                </Button>
               </div>
             ) : (
               <form onSubmit={handleCreateKey} className="space-y-4">
@@ -733,36 +703,22 @@ print(res.json())`}</pre>
                 <button
                   type="submit"
                   disabled={generatingKey || !newKeyName.trim()}
-                  data-primary-cta="1" className="w-full py-2.5 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand disabled:opacity-50 transition"
                 >
                   {generatingKey ? 'Gerando…' : 'Gerar Chave'}
                 </button>
               </form>
             )}
-          </div>
         </div>
-      )}
+      </Dialog>
 
-      {/* ── Modal Adicionar Webhook ── */}
-      {showNewWebhookModal && (
-        <div className="fixed inset-0 bg-[var(--overlay)] z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl animate-scaleUp">
-            <div className="flex items-start justify-between border-b pb-3">
-              <h2 className="text-base font-semibold text-zinc-900">
-                {generatedWebhookSecret ? 'Segredo do Webhook Gerado' : 'Novo Webhook de Saída'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewWebhookModal(false);
-                  setGeneratedWebhookSecret(null);
-                }}
-                className="w-7 h-7 rounded-full border border-zinc-200 text-zinc-500 flex items-center justify-center hover:bg-zinc-100"
-              >
-                ✕
-              </button>
-            </div>
-
+      {/* DS 1.0 · §43 — Dialog canônico (o corpo tem dois estados: formulário e
+          segredo gerado). */}
+      <Dialog
+        open={showNewWebhookModal}
+        onClose={() => { setShowNewWebhookModal(false); setGeneratedWebhookSecret(null); }}
+        title={generatedWebhookSecret ? 'Segredo do webhook gerado' : 'Novo webhook de saída'}
+      >
+        <div className="space-y-4">
             {generatedWebhookSecret ? (
               <div className="space-y-4">
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs">
@@ -778,29 +734,29 @@ print(res.json())`}</pre>
                       value={generatedWebhookSecret}
                       className="flex-1 text-xs font-mono p-2.5 rounded-lg border border-zinc-300 bg-zinc-50 select-all"
                     />
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         navigator.clipboard?.writeText(generatedWebhookSecret);
                         alert('Segredo copiado para a área de transferência!');
                       }}
-                      data-primary-cta="1" className="px-3.5 py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
+                      data-primary-cta="1" className="whitespace-nowrap"
                     >
                       Copiar
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     setShowNewWebhookModal(false);
                     setGeneratedWebhookSecret(null);
                   }}
-                  data-primary-cta="1" className="w-full py-2 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand"
+                  data-primary-cta="1" className="w-full"
                 >
                   Entendi, já guardei o segredo
-                </button>
+                </Button>
               </div>
             ) : (
               <form onSubmit={handleSaveWebhook} className="space-y-4">
@@ -842,15 +798,13 @@ print(res.json())`}</pre>
                 <button
                   type="submit"
                   disabled={savingWebhook || !webhookUrl.trim() || webhookEvents.length === 0}
-                  data-primary-cta="1" className="w-full py-2.5 bg-[var(--brand)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--brand-strong)] shadow-brand disabled:opacity-50 transition"
                 >
                   {savingWebhook ? 'Salvando…' : 'Salvar Webhook'}
                 </button>
               </form>
             )}
-          </div>
         </div>
-      )}
+      </Dialog>
     </div>
   );
 }

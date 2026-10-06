@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BookingConfig, Business, ScheduleResource } from '@/lib/types';
 import { defaultBookingConfig } from '@/lib/types';
-import { Button, buttonCls, PageHeader, PageSkeleton, Tabs } from '@/components/ui';
+import { Button, buttonCls, PageHeader, PageSkeleton, Select, Tabs } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
@@ -140,7 +140,11 @@ function BookingRules({ businessId, initial, onSaved }: {
               <button type="button" className={buttonCls('secondary', 'sm')} disabled={resourceBusy} onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
           </div>)}
           <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala cirúrgica 1 ou Ultrassom 01" className="border rounded-md px-2 py-2 text-sm flex-1 min-w-36" />
-            <select aria-label="Tipo do recurso" value={resourceKind} onChange={e => setResourceKind(e.target.value as 'room' | 'equipment')} className="border rounded-md px-2 py-2 text-sm"><option value="room">Sala</option><option value="equipment">Equipamento</option></select>
+            {/* DS 1.0 · §6 — controle canônico (o `<select>` cru era exceção). */}
+            <Select aria-label="Tipo do recurso" value={resourceKind} onChange={e => setResourceKind(e.target.value as 'room' | 'equipment')} className="w-auto">
+              <option value="room">Sala</option>
+              <option value="equipment">Equipamento</option>
+            </Select>
             <button type="button" className={buttonCls('secondary', 'sm')} disabled={resourceBusy} onClick={() => void saveResource({ action: 'resource.save', id: editingResource?.id, name: resourceName, kind: resourceKind, active: editingResource?.active ?? true })}>{resourceBusy ? (editingResource ? 'Salvando…' : 'Criando…') : editingResource ? 'Salvar recurso' : 'Adicionar recurso'}</button>
             {editingResource && <button type="button" className={buttonCls('ghost', 'sm')} onClick={() => { setEditingResource(null); setResourceName(''); }}>Cancelar</button>}
           </div>

@@ -27,10 +27,13 @@ const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
 describe('critério 1 — flyout da sidebar recolhida: sem sombra pesada', () => {
   it('usa sombra mínima + borda 1px + radius (nada de cartão flutuante pesado)', () => {
     const peek = css.slice(css.indexOf('.ws-peek {'), css.indexOf('@keyframes ws-peek-in'));
-    // borda sutil 1px + radius elegante + fundo sólido
-    expect(peek).toMatch(/border:\s*1px solid var\(--border\)/);
+    // borda sutil 1px + radius do DS + fundo branco de superfície
+    expect(peek).toMatch(/border:\s*1px solid var\(--gd-nav-border\)/);
     expect(peek).toMatch(/border-radius:\s*var\(--radius-md\)/);
-    expect(peek).toMatch(/background:\s*var\(--surface\)/);
+    expect(peek).toMatch(/background:\s*var\(--gd-nav-panel-bg\)/);
+    // altura útil: começa abaixo da top bar e não vaza a tela (§15)
+    expect(peek).toMatch(/top: var\(--gd-topbar-h\)/);
+    expect(peek).toMatch(/max-height: calc\(100dvh - var\(--gd-topbar-h\)/);
     // ZERO sombra — separação só por borda + contraste (refino final)
     expect(peek).toMatch(/box-shadow:\s*none/);
     expect(peek).not.toContain('--shadow-lg');
@@ -51,15 +54,15 @@ describe('critérios 2–4 — sidebar recolhida: flyout sem expandir', () => {
   it('clique trava o flyout (sobrevive a mouseleave) e o segundo clique fecha', () => {
     vi.useFakeTimers();
     const Probe = () => {
-      const ctl = useSidebarPeek(true);
+      const ctl = useSidebarPeek();
       return (
         <div>
           <button
             data-testid="grupo"
             aria-expanded={ctl.peekId === 'clinica'}
-            onMouseEnter={() => ctl.onGroupEnter('clinica', 10)}
+            onMouseEnter={() => ctl.onGroupEnter('clinica')}
             onMouseLeave={() => ctl.onGroupLeave()}
-            onClick={() => ctl.togglePeek('clinica', 10)}
+            onClick={() => ctl.togglePeek('clinica')}
           >
             Clínica
           </button>
@@ -168,8 +171,10 @@ describe('critérios 8–11 — Agenda/CTA/tema/fundo', () => {
   });
 
   it('11: fundo universal do workspace (sem identidade por tela)', () => {
-    expect(css).toMatch(/--bg-top:\s*#f4f6f8/);
-    expect(css).toMatch(/--bg-bottom:\s*#f8f9fb/);
+    // DS 1.0 §10 — fundo neutro sólido, sem par de gradiente decorativo.
+    expect(css).not.toContain('--bg-top:');
+    expect(css).not.toContain('--bg-bottom:');
+    expect(css).toContain('--bg-gradient: none');
     expect(agenda).not.toMatch(/bg-\[#(?!fff)/i); // Agenda sem hex de fundo próprio
   });
 
