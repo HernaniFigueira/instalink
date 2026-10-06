@@ -2,13 +2,14 @@
 
 ## Base e limites
 
-- 2026-10-05. Branch de sessão `arena/01a10c9e-instalink`, **empilhada** sobre o topo da
-  PR #61 (`5cc1a88`, `OPEN`) por autorização explícita do responsável — sem merge, sem PR
-  paralela, sem tocar `main`.
+- Estado final em 2026-10-06: branch `arena/e767db2b-instalink` sobre a `main`
+  pós-PR #61 (`b4462d0`), com PR #62 aberta. O trabalho originalmente preservado em
+  `backup/pr61-ds-head-edb0613` foi re-aplicado semanticamente sobre a nova base, sem
+  conflito e sem perda do Clinical Access. **MERGE NÃO AUTORIZADO**.
 - Regra de negócio, autoridade, tenant, permissões, Clinical Access, Encounter F1,
   booking authority, finalização/revisão/addendum/reabertura: **intocados**. O que mudou é
   apresentação (tokens, componentes canônicos, shell, navegação e as superfícies abaixo).
-- Nenhum merge. Nenhum acesso a produção, banco remoto, dados reais ou exclusão de dados.
+- Nenhum merge da PR #62. Nenhum acesso a produção, banco remoto, dados reais ou exclusão de dados.
 
 ## Entrega
 
@@ -104,7 +105,7 @@ LD_LIBRARY_PATH=/tmp/al2023/lib node tests/design-system/surfaces-qa.mjs
 Fixture descartável (`.cache/design-system/qa.json`, ignorada no Git) — clínica
 `andrioni-vet-qa`, Andrioni Veterinária QA; profissionais Orlando/Michelle/Hernani (Michele
 com horário **personalizado**, para exercitar a confirmação “seguir a clínica”); 1 tutora
-Ana Tutora QA + pet Thor QA; 3 agendamentos em 05/10/2026; **1 atendimento em andamento
+Ana Tutora QA + pet Thor QA; 3 agendamentos datados dinamicamente em **hoje** (fuso `America/Sao_Paulo`); **1 atendimento em andamento
 (draft do profissional responsável) e 1 finalizado**; 4 oportunidades (uma por etapa);
 serviços consulta/vacinação/cirurgia; expediente 09–18. Usuários fictícios
 (`owner.qa@godoutor.local`, `recepcao.qa@godoutor.local`, `orlando.qa@godoutor.local`),
