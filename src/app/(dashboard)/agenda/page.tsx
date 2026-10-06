@@ -40,6 +40,7 @@ import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
   FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
+  bookingStatusDef, bookingBlockCls, bookingDotCls,
 } from '@/lib/status';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
@@ -420,7 +421,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               <div className="w-[248px] space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="tabular-nums text-[12px] font-semibold text-[var(--gd-text-muted)]">{b.timeRange}</span>
-                  <StatusBadge tone={BOOKING_STATUS[b.status].tone}>{b.statusLabel}</StatusBadge>
+                  <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
                 </div>
                 <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">{b.name}</p>
                 {b.service && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.service}</p>}
@@ -833,7 +834,7 @@ export default function AgendaPage() {
         const endMin = timeToMin(b.time) + dur;
         const endHM = minToTime(endMin % (24 * 60));
         const attention = needsClosure(b, dur, today, nowHM(new Date(), bizTz));
-        const statusLabel = BOOKING_STATUS[b.status]?.panel || b.status;
+        const statusLabel = bookingStatusDef(b.status).panel;
         return {
           id: b.id,
           status: b.status,
@@ -848,9 +849,9 @@ export default function AgendaPage() {
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
           editable: rescheduleDecision(b.status).kind === 'move',
-          cls: BOOKING_BLOCK[b.status],
+          cls: bookingBlockCls(b.status),
           pro: pro || '',
-          dot: BOOKING_DOT[b.status],
+          dot: bookingDotCls(b.status),
           ico: b.status === 'pending' ? 'clock' : b.status === 'cancelled' || b.status === 'no_show' ? 'x' : 'check',
           attention,
           fitIn: b.bookingKind === 'fit_in',
@@ -1771,7 +1772,7 @@ export default function AgendaPage() {
                   {list.length > 0 && (
                     <>
                       <span className="block text-[10px] font-medium text-zinc-600 mt-1">{list.length} · {list.slice(0, 2).map((b) => b.time).join(', ')}</span>
-                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${BOOKING_DOT[b.status]}`} />)}</span>
+                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${bookingDotCls(b.status)}`} />)}</span>
                     </>
                   )}
                 </button>

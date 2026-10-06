@@ -1070,26 +1070,65 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
   return style;
 }
 
+// Sequência global de camadas: uma camada aberta DEPOIS de outra é, por
+// construção, um overlay descendente (calendário de um DatePicker dentro de um
+// Popover, lista de um Combobox, submenu…). O outside-click usa essa ordem para
+// não tratar o clique num descendente como "fora" (B1).
+let LAYER_SEQ = 0;
+
 function LayerPortal({ children, style, className, role, label, id }: {
   children: React.ReactNode; style: React.CSSProperties | null; className?: string;
   role?: string; label?: string; id?: string;
 }) {
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div id={id} role={role} aria-label={label} className={className} style={style || undefined} data-layer="">
+    <div
+      id={id}
+      role={role}
+      aria-label={label}
+      className={className}
+      style={style || undefined}
+      data-layer=""
+      ref={(el) => { if (el && !el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ); }}
+    >
       {children}
     </div>,
     document.body,
   );
 }
 
+/** Verdadeiro se o alvo está dentro de uma camada aberta DEPOIS da camada própria. */
+function withinLaterLayer(target: Node, ownLayer: HTMLElement | null): boolean {
+  const own = ownLayer?.closest('[data-layer-order]');
+  const ownOrder = own ? Number((own as HTMLElement).dataset.layerOrder || 0) : 0;
+  const layers = document.querySelectorAll<HTMLElement>('[data-layer-order]');
+  for (const el of Array.from(layers)) {
+    if (Number(el.dataset.layerOrder) > ownOrder && el.contains(target)) return true;
+  }
+  return false;
+}
+
+// Pilha de Escape: com camadas aninhadas (Popover do quick create + Popover do
+// DatePicker), o Escape deve fechar SÓ a camada do topo (B1).
+const ESC_STACK: object[] = [];
+
 function useDismissOnEscape(open: boolean, onClose: () => void) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const entry = {};
+    ESC_STACK.push(entry);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && ESC_STACK[ESC_STACK.length - 1] === entry) closeRef.current();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      const i = ESC_STACK.indexOf(entry);
+      if (i >= 0) ESC_STACK.splice(i, 1);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 }
 
 /** Tooltip: informação curta. Aparece no hover E no foco; nunca é só decoração. */
@@ -1189,6 +1228,9 @@ export function Popover({ open, onClose, trigger, children, side = 'bottom-start
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node;
       if (layerRef.current?.contains(t) || anchorRef.current?.contains(t)) return;
+      // B1: o calendário do DatePicker / lista de Combobox vivem em portais
+      // descendentes — clicar neles NÃO é "fora" (não desmonta o pai).
+      if (withinLaterLayer(t, layerRef.current)) return;
       onClose();
     };
     window.addEventListener('mousedown', onDown);
@@ -1219,6 +1261,8 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
   const listRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  const restoreRef = useRef<HTMLElement | null>(null);
   const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, listRef);
   useDismissOnEscape(open, () => setOpen(false));
   const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
@@ -1235,6 +1279,13 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
     if (open) setActive(enabled[0] ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  // B3: ao abrir, guarda o gatilho; ao fechar, devolve o foco a ele.
+  useEffect(() => {
+    if (open) restoreRef.current = (document.activeElement as HTMLElement) || null;
+    else if (restoreRef.current) { restoreRef.current.focus?.(); restoreRef.current = null; }
+  }, [open]);
+  // B3: roving focus — o foco REAL segue o item ativo (navegação por teclado).
+  useEffect(() => { if (open) itemRefs.current[active]?.focus(); }, [open, active]);
   const move = (dir: 1 | -1) => {
     if (!enabled.length) return;
     const pos = enabled.indexOf(active);
@@ -1267,6 +1318,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
               if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
               else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
               else if (e.key === 'Enter') { e.preventDefault(); run(items[active]); }
+              else if (e.key === ' ') { e.preventDefault(); run(items[active]); }
               else if (e.key === 'Tab') setOpen(false);
             }}
           >
@@ -1276,6 +1328,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
                 {item.href ? (
                   <Link
                     href={item.href}
+                    ref={(el) => { itemRefs.current[idx] = el; }}
                     role="menuitem"
                     className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
                     data-active={idx === active}
@@ -1288,6 +1341,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
                 ) : (
                   <button
                     type="button"
+                    ref={(el) => { itemRefs.current[idx] = el; }}
                     role="menuitem"
                     disabled={item.disabled}
                     className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
@@ -1310,7 +1364,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
 }
 
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
-export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = 'max-w-[560px]' }: {
+export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
   /**

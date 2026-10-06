@@ -25,7 +25,13 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const files = walk(SRC).map((f) => ({ path: f, rel: path.relative(SRC, f) }));
+// B5 · portabilidade: no Windows `path.relative` devolve separadores `\`, o que
+// quebraria as comparações com a allow-list (`components/public/` etc.).
+// Normaliza o relativo para `/` ANTES de qualquer comparação — sem afrouxar a
+// allow-list e sem remover expectativas.
+const toPosix = (p: string) => p.split('\\').join('/');
+
+const files = walk(SRC).map((f) => ({ path: f, rel: toPosix(path.relative(SRC, f)) }));
 
 // Marcadores montados por concatenação: o teste fala de comentários sem
 // precisar de escapes frágeis em literal de regex.
