@@ -1,6 +1,6 @@
 # GoDoutor Design System 1.0
 
-> **Status:** em implementação (fase “GoDoutor Design System 1.0 — App Shell e Agenda UX”).
+> **Status:** CONCLUÍDO / PR #62 ABERTA / MERGE NÃO AUTORIZADO (2026-10-06).
 > **Fonte única de verdade visual:** `src/styles/godoutor-design-system.css` (tokens `--gd-*`).
 > **Contrato:** este documento. `docs/GODOUTOR-UI-CONTRACT.md` (missões anteriores) fica
 > como histórico: onde conflitar, **este documento vence**.
