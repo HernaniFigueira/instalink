@@ -29,23 +29,62 @@
     "gap": 0,
     "panelWidth": 232,
     "openWithCursorInside": 1,
-    "swapped": {
+    "automacao": {
       "label": "Automação",
-      "otherId": "automacao"
+      "groupId": "automacao",
+      "panelLeft": 60,
+      "gap": 0
     },
-    "closedAfterLeave": true
+    "gestao": {
+      "label": "Gestão",
+      "groupId": "gestao",
+      "panelLeft": 60,
+      "gap": 0
+    },
+    "closedAfterLeave": true,
+    "keyboard": {
+      "openedByArrow": true,
+      "focusInPanel": true,
+      "closedByEscape": true,
+      "focusBackOnGroup": true
+    }
   },
   "native-title-1440": 0,
+  "toolbar-row1-heights-1440": {
+    "alturas": {
+      "hoje": 40,
+      "anterior": 40,
+      "proximo": 40,
+      "data": 40,
+      "dia": 40,
+      "semana": 40,
+      "lista": 40,
+      "filtros": 40,
+      "fila": 40,
+      "bloquear": 40,
+      "novo": 40
+    },
+    "distintos": [
+      40
+    ],
+    "identical": true,
+    "opcoesInternas": {
+      "dia": 32,
+      "semana": 32,
+      "lista": 32
+    },
+    "iconButtonsQuadrados": true
+  },
   "toolbar-1440": [
     {
       "text": "Filtros",
       "h": 40,
-      "w": 109.2
+      "w": 110
     },
     {
       "text": "Fila",
       "h": 40,
-      "w": 73.5
+      "w": 74
     },
     {
       "text": "",
@@ -55,7 +94,7 @@
     {
       "text": "Hoje",
       "h": 40,
-      "w": 59.8
+      "w": 60
     },
     {
       "text": "",
@@ -65,7 +104,7 @@
     {
       "text": "Quarta, 07/10/2026",
       "h": 40,
-      "w": 176.2
+      "w": 175
     },
     {
       "text": "",
@@ -75,32 +114,32 @@
     {
       "text": "Dia",
       "h": 32,
-      "w": 62.3
+      "w": 63
     },
     {
       "text": "Semana",
       "h": 32,
-      "w": 91.5
+      "w": 92
     },
     {
       "text": "Lista",
       "h": 32,
-      "w": 71.5
+      "w": 71
     },
     {
       "text": "Bloquear horário",
       "h": 40,
-      "w": 138.4
+      "w": 141
     },
     {
       "text": "Novo agendamento",
       "h": 40,
-      "w": 178.2
+      "w": 179
     },
     {
       "text": "12:00–13:00Almoço da e",
       "h": 28,
-      "w": 311
+      "w": 317
     },
     {
       "text": "12:00–13:00Almoço da e",
@@ -163,7 +202,8 @@
       "Serviço",
       "Consulta veterinária",
       "Profissional"
-    ]
+    ],
+    "openWithCursorInside": true
   },
   "detail-1440": {
     "panel": {
@@ -184,6 +224,65 @@
     "escClosed": true,
     "focusBackOnEvent": true
   },
+  "hovercard-placement-1440": {
+    "total": 6,
+    "sides": [
+      "right",
+      "right",
+      "right",
+      "left",
+      "left",
+      "left"
+    ],
+    "gapsOk": true,
+    "allInsideViewport": true,
+    "noOverlap": true,
+    "details": [
+      {
+        "i": 0,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l785,t356,w278,h180"
+      },
+      {
+        "i": 1,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l785,t484,w278,h180"
+      },
+      {
+        "i": 2,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l785,t676,w278,h180"
+      },
+      {
+        "i": 3,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l492,t420,w278,h180",
+        "shot": true
+      },
+      {
+        "i": 4,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l492,t580,w278,h180"
+      },
+      {
+        "i": 5,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l492,t712,w278,h180"
+      }
+    ]
+  },
   "native-title-events-1440": 0,
   "native-title-grid-1440": 0,
   "blocks-1440": {
@@ -194,6 +293,175 @@
     "gridBlocks": 1,
     "hatched": true,
     "bigAmberBox": false
+  },
+  "controls-global-1440": {
+    "/dashboard": {
+      "total": 18,
+      "distinct": [
+        17,
+        28,
+        38,
+        40
+      ],
+      "foraDaEscala": 2,
+      "nested": 1,
+      "link": 1,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agenda": {
+      "total": 23,
+      "distinct": [
+        32,
+        38,
+        40
+      ],
+      "foraDaEscala": 4,
+      "nested": 4,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/clientes": {
+      "total": 49,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        42
+      ],
+      "foraDaEscala": 7,
+      "nested": 1,
+      "link": 6,
+      "row": 0,
+      "violacoes": []
+    },
+    "/configuracoes": {
+      "total": 34,
+      "distinct": [
+        34,
+        38,
+        40,
+        76
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/equipe": {
+      "total": 15,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/servicos": {
+      "total": 17,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pagina": {
+      "total": 37,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        98
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/campanhas": {
+      "total": 12,
+      "distinct": [
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/produtos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pedidos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/recursos": {
+      "total": 20,
+      "distinct": [
+        24,
+        38,
+        40
+      ],
+      "foraDaEscala": 10,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agente": {
+      "total": 33,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        76,
+        84,
+        105
+      ],
+      "foraDaEscala": 6,
+      "nested": 6,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    }
   },
   "view-week-1440": {
     "views": [
@@ -210,6 +478,31 @@
     "pressed": [
       "Lista"
     ]
+  },
+  "slot-point-1440": {
+    "x": 456,
+    "y": 338
+  },
+  "slot-popover-1440": {
+    "box": {
+      "x": 456,
+      "y": 344,
+      "width": 338,
+      "height": 485.75
+    },
+    "width": 338,
+    "height": 485.75,
+    "hasMoreOptions": true
+  },
+  "slot-more-modal-1440": {
+    "box": {
+      "x": 384,
+      "y": 54,
+      "width": 672,
+      "height": 792
+    },
+    "widthPct": 47,
+    "isCentralDialog": true
   },
   "new-booking-1440": {
     "box": {
@@ -251,23 +544,62 @@
     "gap": 0,
     "panelWidth": 232,
     "openWithCursorInside": 1,
-    "swapped": {
+    "automacao": {
       "label": "Automação",
-      "otherId": "automacao"
+      "groupId": "automacao",
+      "panelLeft": 60,
+      "gap": 0
     },
-    "closedAfterLeave": true
+    "gestao": {
+      "label": "Gestão",
+      "groupId": "gestao",
+      "panelLeft": 60,
+      "gap": 0
+    },
+    "closedAfterLeave": true,
+    "keyboard": {
+      "openedByArrow": true,
+      "focusInPanel": true,
+      "closedByEscape": true,
+      "focusBackOnGroup": true
+    }
   },
   "native-title-1366": 0,
+  "toolbar-row1-heights-1366": {
+    "alturas": {
+      "hoje": 40,
+      "anterior": 40,
+      "proximo": 40,
+      "data": 40,
+      "dia": 40,
+      "semana": 40,
+      "lista": 40,
+      "filtros": 40,
+      "fila": 40,
+      "bloquear": 40,
+      "novo": 40
+    },
+    "distintos": [
+      40
+    ],
+    "identical": true,
+    "opcoesInternas": {
+      "dia": 32,
+      "semana": 32,
+      "lista": 32
+    },
+    "iconButtonsQuadrados": true
+  },
   "toolbar-1366": [
     {
       "text": "Filtros",
       "h": 40,
-      "w": 109.2
+      "w": 110
     },
     {
       "text": "Fila",
       "h": 40,
-      "w": 73.5
+      "w": 74
     },
     {
       "text": "",
@@ -277,7 +609,7 @@
     {
       "text": "Hoje",
       "h": 40,
-      "w": 59.8
+      "w": 60
     },
     {
       "text": "",
@@ -287,7 +619,7 @@
     {
       "text": "Quarta, 07/10/2026",
       "h": 40,
-      "w": 176.2
+      "w": 175
     },
     {
       "text": "",
@@ -297,32 +629,32 @@
     {
       "text": "Dia",
       "h": 32,
-      "w": 62.3
+      "w": 63
     },
     {
       "text": "Semana",
       "h": 32,
-      "w": 91.5
+      "w": 92
     },
     {
       "text": "Lista",
       "h": 32,
-      "w": 71.5
+      "w": 71
     },
     {
       "text": "Bloquear horário",
       "h": 40,
-      "w": 138.4
+      "w": 141
     },
     {
       "text": "Novo agendamento",
       "h": 40,
-      "w": 178.2
+      "w": 179
     },
     {
       "text": "12:00–13:00Almoço da e",
       "h": 28,
-      "w": 311
+      "w": 317
     },
     {
       "text": "12:00–13:00Almoço da e",
@@ -385,7 +717,8 @@
       "Serviço",
       "Consulta veterinária",
       "Profissional"
-    ]
+    ],
+    "openWithCursorInside": true
   },
   "detail-1366": {
     "panel": {
@@ -406,6 +739,65 @@
     "escClosed": true,
     "focusBackOnEvent": true
   },
+  "hovercard-placement-1366": {
+    "total": 6,
+    "sides": [
+      "right",
+      "right",
+      "right",
+      "left",
+      "left",
+      "left"
+    ],
+    "gapsOk": true,
+    "allInsideViewport": true,
+    "noOverlap": true,
+    "details": [
+      {
+        "i": 0,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l748,t356,w278,h180"
+      },
+      {
+        "i": 1,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l748,t484,w278,h180"
+      },
+      {
+        "i": 2,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l748,t580,w278,h180"
+      },
+      {
+        "i": 3,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l455,t420,w278,h180",
+        "shot": true
+      },
+      {
+        "i": 4,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l455,t580,w278,h180"
+      },
+      {
+        "i": 5,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l455,t509,w278,h180"
+      }
+    ]
+  },
   "native-title-events-1366": 0,
   "native-title-grid-1366": 0,
   "blocks-1366": {
@@ -416,6 +808,175 @@
     "gridBlocks": 1,
     "hatched": true,
     "bigAmberBox": false
+  },
+  "controls-global-1366": {
+    "/dashboard": {
+      "total": 18,
+      "distinct": [
+        17,
+        28,
+        38,
+        40
+      ],
+      "foraDaEscala": 2,
+      "nested": 1,
+      "link": 1,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agenda": {
+      "total": 23,
+      "distinct": [
+        32,
+        38,
+        40
+      ],
+      "foraDaEscala": 4,
+      "nested": 4,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/clientes": {
+      "total": 49,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        42
+      ],
+      "foraDaEscala": 7,
+      "nested": 1,
+      "link": 6,
+      "row": 0,
+      "violacoes": []
+    },
+    "/configuracoes": {
+      "total": 34,
+      "distinct": [
+        34,
+        38,
+        40,
+        76
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/equipe": {
+      "total": 15,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/servicos": {
+      "total": 17,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pagina": {
+      "total": 37,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        98
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/campanhas": {
+      "total": 12,
+      "distinct": [
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/produtos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pedidos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/recursos": {
+      "total": 20,
+      "distinct": [
+        24,
+        38,
+        40
+      ],
+      "foraDaEscala": 10,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agente": {
+      "total": 33,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        76,
+        84,
+        105
+      ],
+      "foraDaEscala": 6,
+      "nested": 6,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    }
   },
   "view-week-1366": {
     "views": [
@@ -432,6 +993,31 @@
     "pressed": [
       "Lista"
     ]
+  },
+  "slot-point-1366": {
+    "x": 437,
+    "y": 338
+  },
+  "slot-popover-1366": {
+    "box": {
+      "x": 437,
+      "y": 274,
+      "width": 338,
+      "height": 485.75
+    },
+    "width": 338,
+    "height": 485.75,
+    "hasMoreOptions": true
+  },
+  "slot-more-modal-1366": {
+    "box": {
+      "x": 347,
+      "y": 46.0859375,
+      "width": 672,
+      "height": 675.828125
+    },
+    "widthPct": 49,
+    "isCentralDialog": true
   },
   "new-booking-1366": {
     "box": {
@@ -473,23 +1059,62 @@
     "gap": 0,
     "panelWidth": 232,
     "openWithCursorInside": 1,
-    "swapped": {
+    "automacao": {
       "label": "Automação",
-      "otherId": "automacao"
+      "groupId": "automacao",
+      "panelLeft": 60,
+      "gap": 0
     },
-    "closedAfterLeave": true
+    "gestao": {
+      "label": "Gestão",
+      "groupId": "gestao",
+      "panelLeft": 60,
+      "gap": 0
+    },
+    "closedAfterLeave": true,
+    "keyboard": {
+      "openedByArrow": true,
+      "focusInPanel": true,
+      "closedByEscape": true,
+      "focusBackOnGroup": true
+    }
   },
   "native-title-1024": 0,
+  "toolbar-row1-heights-1024": {
+    "alturas": {
+      "hoje": 40,
+      "anterior": 40,
+      "proximo": 40,
+      "data": 40,
+      "dia": 40,
+      "semana": 40,
+      "lista": 40,
+      "filtros": 40,
+      "fila": 40,
+      "bloquear": 40,
+      "novo": 40
+    },
+    "distintos": [
+      40
+    ],
+    "identical": true,
+    "opcoesInternas": {
+      "dia": 32,
+      "semana": 32,
+      "lista": 32
+    },
+    "iconButtonsQuadrados": true
+  },
   "toolbar-1024": [
     {
       "text": "Filtros",
       "h": 40,
-      "w": 109.2
+      "w": 110
     },
     {
       "text": "Fila",
       "h": 40,
-      "w": 73.5
+      "w": 74
     },
     {
       "text": "",
@@ -499,7 +1124,7 @@
     {
       "text": "Hoje",
       "h": 40,
-      "w": 59.8
+      "w": 60
     },
     {
       "text": "",
@@ -509,7 +1134,7 @@
     {
       "text": "Quarta, 07/10/2026",
       "h": 40,
-      "w": 176.2
+      "w": 175
     },
     {
       "text": "",
@@ -519,32 +1144,32 @@
     {
       "text": "Dia",
       "h": 32,
-      "w": 62.3
+      "w": 63
     },
     {
       "text": "Semana",
       "h": 32,
-      "w": 91.5
+      "w": 92
     },
     {
       "text": "Lista",
       "h": 32,
-      "w": 71.5
+      "w": 71
     },
     {
       "text": "Bloquear horário",
       "h": 40,
-      "w": 138.4
+      "w": 141
     },
     {
       "text": "Novo agendamento",
       "h": 40,
-      "w": 178.2
+      "w": 179
     },
     {
       "text": "12:00–13:00Almoço da e",
       "h": 28,
-      "w": 311
+      "w": 317
     },
     {
       "text": "12:00–13:00Almoço da e",
@@ -607,7 +1232,8 @@
       "Serviço",
       "Consulta veterinária",
       "Profissional"
-    ]
+    ],
+    "openWithCursorInside": true
   },
   "detail-1024": {
     "panel": {
@@ -628,6 +1254,65 @@
     "escClosed": true,
     "focusBackOnEvent": true
   },
+  "hovercard-placement-1024": {
+    "total": 6,
+    "sides": [
+      "right",
+      "right",
+      "right",
+      "left",
+      "left",
+      "left"
+    ],
+    "gapsOk": true,
+    "allInsideViewport": true,
+    "noOverlap": true,
+    "details": [
+      {
+        "i": 0,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l577,t348,w278,h180"
+      },
+      {
+        "i": 1,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l577,t476,w278,h180"
+      },
+      {
+        "i": 2,
+        "side": "right",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l577,t580,w278,h180"
+      },
+      {
+        "i": 3,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l284,t412,w278,h180",
+        "shot": true
+      },
+      {
+        "i": 4,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l284,t572,w278,h180"
+      },
+      {
+        "i": 5,
+        "side": "left",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l284,t509,w278,h180"
+      }
+    ]
+  },
   "native-title-events-1024": 0,
   "native-title-grid-1024": 0,
   "blocks-1024": {
@@ -638,6 +1323,176 @@
     "gridBlocks": 1,
     "hatched": true,
     "bigAmberBox": false
+  },
+  "controls-global-1024": {
+    "/dashboard": {
+      "total": 18,
+      "distinct": [
+        17,
+        28,
+        38,
+        40,
+        58
+      ],
+      "foraDaEscala": 3,
+      "nested": 1,
+      "link": 1,
+      "row": 1,
+      "violacoes": []
+    },
+    "/agenda": {
+      "total": 23,
+      "distinct": [
+        32,
+        38,
+        40
+      ],
+      "foraDaEscala": 4,
+      "nested": 4,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/clientes": {
+      "total": 49,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        42
+      ],
+      "foraDaEscala": 7,
+      "nested": 1,
+      "link": 6,
+      "row": 0,
+      "violacoes": []
+    },
+    "/configuracoes": {
+      "total": 34,
+      "distinct": [
+        34,
+        38,
+        40,
+        76
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/equipe": {
+      "total": 15,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/servicos": {
+      "total": 17,
+      "distinct": [
+        28,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pagina": {
+      "total": 35,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        98
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/campanhas": {
+      "total": 12,
+      "distinct": [
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/produtos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pedidos": {
+      "total": 12,
+      "distinct": [
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/recursos": {
+      "total": 20,
+      "distinct": [
+        24,
+        38,
+        40
+      ],
+      "foraDaEscala": 10,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agente": {
+      "total": 33,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        76,
+        84,
+        105
+      ],
+      "foraDaEscala": 6,
+      "nested": 6,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    }
   },
   "view-week-1024": {
     "views": [
@@ -654,6 +1509,31 @@
     "pressed": [
       "Lista"
     ]
+  },
+  "slot-point-1024": {
+    "x": 348,
+    "y": 330
+  },
+  "slot-popover-1024": {
+    "box": {
+      "x": 348,
+      "y": 274,
+      "width": 338,
+      "height": 485.75
+    },
+    "width": 338,
+    "height": 485.75,
+    "hasMoreOptions": true
+  },
+  "slot-more-modal-1024": {
+    "box": {
+      "x": 176,
+      "y": 46.0859375,
+      "width": 672,
+      "height": 675.828125
+    },
+    "widthPct": 66,
+    "isCentralDialog": true
   },
   "new-booking-1024": {
     "box": {
@@ -690,16 +1570,41 @@
     ],
     "drawerHasClinicName": false
   },
+  "toolbar-row1-heights-390": {
+    "alturas": {
+      "hoje": 44,
+      "anterior": 44,
+      "proximo": 44,
+      "data": 44,
+      "dia": 44,
+      "semana": 44,
+      "lista": 44,
+      "filtros": 44,
+      "fila": 44,
+      "bloquear": 44,
+      "novo": 44
+    },
+    "distintos": [
+      44
+    ],
+    "identical": true,
+    "opcoesInternas": {
+      "dia": 36,
+      "semana": 36,
+      "lista": 36
+    },
+    "iconButtonsQuadrados": true
+  },
   "toolbar-390": [
     {
       "text": "Filtros",
       "h": 44,
-      "w": 109.2
+      "w": 110
     },
     {
       "text": "Fila",
       "h": 44,
-      "w": 73.5
+      "w": 74
     },
     {
       "text": "",
@@ -709,7 +1614,7 @@
     {
       "text": "Hoje",
       "h": 44,
-      "w": 59.8
+      "w": 60
     },
     {
       "text": "",
@@ -718,8 +1623,8 @@
     },
     {
       "text": "Quarta, 07/10/2026",
-      "h": 40,
-      "w": 194.4
+      "h": 44,
+      "w": 195
     },
     {
       "text": "",
@@ -728,33 +1633,33 @@
     },
     {
       "text": "Dia",
-      "h": 32,
-      "w": 38.3
+      "h": 36,
+      "w": 39
     },
     {
       "text": "Semana",
-      "h": 32,
-      "w": 67.5
+      "h": 36,
+      "w": 68
     },
     {
       "text": "Lista",
-      "h": 32,
-      "w": 47.5
+      "h": 36,
+      "w": 47
     },
     {
       "text": "Bloquear horário",
       "h": 44,
-      "w": 138.4
+      "w": 141
     },
     {
       "text": "Novo agendamento",
       "h": 44,
-      "w": 178.2
+      "w": 179
     },
     {
       "text": "12:00–13:00Almoço da e",
       "h": 28,
-      "w": 311
+      "w": 317
     },
     {
       "text": "12:00–13:00Almoço da e",
@@ -800,13 +1705,13 @@
       "height": 64
     },
     "card": {
-      "x": 8,
-      "y": 538,
+      "x": 67,
+      "y": 612,
       "width": 278,
       "height": 179.921875
     },
-    "gapX": -212,
-    "gapY": 0,
+    "gapX": -153,
+    "gapY": 74,
     "insideViewport": true,
     "text": [
       "08:30–09:00",
@@ -817,7 +1722,8 @@
       "Serviço",
       "Consulta veterinária",
       "Profissional"
-    ]
+    ],
+    "openWithCursorInside": true
   },
   "detail-390": {
     "panel": {
@@ -838,6 +1744,64 @@
     "escClosed": true,
     "focusBackOnEvent": true
   },
+  "hovercard-placement-390": {
+    "total": 6,
+    "sides": [
+      "stacked",
+      "stacked",
+      "stacked",
+      "stacked",
+      "stacked",
+      "stacked"
+    ],
+    "gapsOk": true,
+    "allInsideViewport": true,
+    "noOverlap": true,
+    "details": [
+      {
+        "i": 0,
+        "side": "stacked",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l67,t612,w278,h180"
+      },
+      {
+        "i": 1,
+        "side": "stacked",
+        "gap": 10.1,
+        "insideViewport": true,
+        "place": "l67,t476,w278,h180"
+      },
+      {
+        "i": 2,
+        "side": "stacked",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l67,t598,w278,h180"
+      },
+      {
+        "i": 3,
+        "side": "stacked",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l104,t342,w278,h180"
+      },
+      {
+        "i": 4,
+        "side": "stacked",
+        "gap": 10,
+        "insideViewport": true,
+        "place": "l104,t534,w278,h180"
+      },
+      {
+        "i": 5,
+        "side": "stacked",
+        "gap": 10.1,
+        "insideViewport": true,
+        "place": "l104,t558,w278,h180"
+      }
+    ]
+  },
   "native-title-events-390": 0,
   "native-title-grid-390": 0,
   "blocks-390": {
@@ -848,6 +1812,186 @@
     "gridBlocks": 1,
     "hatched": true,
     "bigAmberBox": false
+  },
+  "controls-global-390": {
+    "/dashboard": {
+      "total": 12,
+      "distinct": [
+        17,
+        28,
+        34,
+        38,
+        40,
+        58
+      ],
+      "foraDaEscala": 3,
+      "nested": 1,
+      "link": 1,
+      "row": 1,
+      "violacoes": []
+    },
+    "/agenda": {
+      "total": 17,
+      "distinct": [
+        34,
+        36,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 4,
+      "nested": 4,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/clientes": {
+      "total": 43,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        58
+      ],
+      "foraDaEscala": 7,
+      "nested": 1,
+      "link": 6,
+      "row": 0,
+      "violacoes": []
+    },
+    "/configuracoes": {
+      "total": 28,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        76
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/equipe": {
+      "total": 9,
+      "distinct": [
+        34,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/servicos": {
+      "total": 11,
+      "distinct": [
+        34,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pagina": {
+      "total": 29,
+      "distinct": [
+        28,
+        34,
+        38,
+        40,
+        44,
+        98
+      ],
+      "foraDaEscala": 2,
+      "nested": 2,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/campanhas": {
+      "total": 6,
+      "distinct": [
+        34,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/produtos": {
+      "total": 6,
+      "distinct": [
+        34,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/pedidos": {
+      "total": 6,
+      "distinct": [
+        34,
+        38,
+        40,
+        44
+      ],
+      "foraDaEscala": 1,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/recursos": {
+      "total": 14,
+      "distinct": [
+        24,
+        34,
+        38,
+        40
+      ],
+      "foraDaEscala": 10,
+      "nested": 1,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    },
+    "/agente": {
+      "total": 27,
+      "distinct": [
+        34,
+        38,
+        40,
+        44,
+        76,
+        96,
+        120
+      ],
+      "foraDaEscala": 6,
+      "nested": 6,
+      "link": 0,
+      "row": 0,
+      "violacoes": []
+    }
   },
   "view-week-390": {
     "views": [
@@ -865,6 +2009,31 @@
       "Lista"
     ]
   },
+  "slot-point-390": {
+    "x": 144,
+    "y": 520
+  },
+  "slot-popover-390": {
+    "box": {
+      "x": 44,
+      "y": 28,
+      "width": 338,
+      "height": 485.75
+    },
+    "width": 338,
+    "height": 485.75,
+    "hasMoreOptions": true
+  },
+  "slot-more-modal-390": {
+    "box": {
+      "x": 12,
+      "y": 12,
+      "width": 366,
+      "height": 820
+    },
+    "widthPct": 94,
+    "isCentralDialog": true
+  },
   "new-booking-390": {
     "box": {
       "x": 12,
@@ -875,5 +2044,11 @@
     "centered": true,
     "widthPct": 94
   },
-  "consoleErrors": []
+  "consoleErrors": [],
+  "consoleRuidoConhecido": [
+    "Failed to load resource: net::ERR_CONNECTION_CLOSED",
+    "Failed to load resource: net::ERR_CONNECTION_CLOSED",
+    "Failed to load resource: net::ERR_CONNECTION_CLOSED",
+    "Failed to load resource: net::ERR_CONNECTION_CLOSED"
+  ]
 }

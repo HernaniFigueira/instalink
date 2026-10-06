@@ -15,6 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { ensureBrowser, CHROMIUM_ARGS } from './browser.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const phase = process.argv[2] || 'after';
@@ -24,16 +25,26 @@ const base = process.env.DESIGN_TEST_BASE_URL || fixture.base;
 await fs.mkdir(outDir, { recursive: true });
 
 const measurements = {};
+// Navegador garantido na hora: o ambiente pode não trazer Chromium (/tmp e
+// node_modules não sobrevivem entre execuções). Ver `browser.mjs`.
+const runtime = await ensureBrowser();
 const browser = await chromium.launch({
-  executablePath: process.env.D1A_BROWSER_EXECUTABLE || '/tmp/chromium',
-  args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-software-rasterizer', '--no-zygote', '--font-render-hinting=none'],
-  env: { ...process.env, LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH || '/tmp/nssstub:/tmp/ch-al2023/lib' },
+  executablePath: process.env.QA_BROWSER || runtime.executablePath,
+  args: CHROMIUM_ARGS,
+  env: { ...process.env, LD_LIBRARY_PATH: process.env.QA_BROWSER_LD || runtime.LD_LIBRARY_PATH },
 });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
 const page = await context.newPage();
 const consoleErrors = [];
-page.on('pageerror', (e) => consoleErrors.push(String(e.message)));
-page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+const consoleRuido = [];
+/** Ruído conhecido e NÃO-aplicacional: o prefetch RSC abortado pelo próprio
+ *  roteador e o 401 esperado de `/api/auth/me` no estado deslogado. Sem esta
+ *  separação, "erro de página" misturava aborrecimento de roteador com defeito
+ *  real — e o relatório ficava ambíguo. */
+const ruidoConhecido = (texto) => /ERR_CONNECTION_CLOSED|ERR_ABORTED|401 \(Unauthorized\)|session=expired/.test(texto);
+const registrar = (texto) => (ruidoConhecido(texto) ? consoleRuido : consoleErrors).push(texto);
+page.on('pageerror', (e) => registrar(String(e.message)));
+page.on('console', (m) => { if (m.type() === 'error') registrar(m.text()); });
 
 async function login() {
   await page.goto(`${base}/login`);
@@ -130,21 +141,49 @@ async function shellEvidence(width, height, tag) {
     await page.waitForTimeout(350);
     measurements[`panel-${tag}`].openWithCursorInside = await panel.count();
     await shot(`shell-${tag}-group-cursor-inside`);
-    // Troca de grupo sem fechar/reabrir
+    // Troca de grupo sem fechar/reabrir — Automação e depois GESTÃO (a troca
+    // Clínica→Gestão é item explícito da homologação).
     const groups = await page.locator('[data-peek-group]').all();
-    if (groups.length > 1) {
-      const otherId = await groups[1].getAttribute('data-peek-group');
-      await groups[1].hover();
-      await page.waitForTimeout(300);
+    const swapTo = async (index, name) => {
+      if (groups.length <= index) return;
+      const otherId = await groups[index].getAttribute('data-peek-group');
+      await groups[index].hover();
+      await page.waitForTimeout(320);
       const panelNow = page.locator('#ws-nav-panel');
-      measurements[`panel-${tag}`].swapped = (await panelNow.count())
-        ? { label: await panelNow.getAttribute('aria-label'), otherId } : null;
-      await shot(`shell-${tag}-group-swap`);
-    }
+      const stillOpen = await panelNow.count();
+      // O swap troca o CONTEÚDO sem desmontar o painel: mesma posição na tela.
+      const boxNow = stillOpen ? await panelNow.boundingBox() : null;
+      measurements[`panel-${tag}`][name] = stillOpen
+        ? { label: await panelNow.getAttribute('aria-label'), groupId: otherId, panelLeft: boxNow?.x, gap: rb && boxNow ? boxNow.x - (rb.x + rb.width) : null }
+        : null;
+      await shot(`shell-${tag}-group-swap-${name}`);
+    };
+    await swapTo(1, 'automacao');
+    await swapTo(2, 'gestao');
+
+    // EQUIVALENTE POR TECLADO (item 1): foco no grupo + ArrowRight abre e TRAVA
+    // o painel; o foco entra nos destinos; Escape fecha e devolve o foco.
     await page.mouse.move(width - 4, height - 4);
     await page.waitForTimeout(700);
     measurements[`panel-${tag}`].closedAfterLeave = (await page.locator('#ws-nav-panel').count()) === 0;
     await shot(`shell-${tag}-group-closed`);
+    await group.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(320);
+    const kbPanel = page.locator('#ws-nav-panel');
+    const kbOpen = await kbPanel.count();
+    measurements[`panel-${tag}`].keyboard = { openedByArrow: kbOpen > 0 };
+    if (kbOpen) {
+      await page.keyboard.press('ArrowDown');
+      measurements[`panel-${tag}`].keyboard.focusInPanel = await page.evaluate(() =>
+        (document.activeElement?.getAttribute('role') || '') === 'menuitem');
+      await shot(`shell-${tag}-group-keyboard`);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(260);
+      measurements[`panel-${tag}`].keyboard.closedByEscape = (await page.locator('#ws-nav-panel').count()) === 0;
+      measurements[`panel-${tag}`].keyboard.focusBackOnGroup = await page.evaluate(() =>
+        document.activeElement?.getAttribute('data-peek-group') !== null);
+    }
   }
   // Tooltip nativo no rail?
   measurements[`native-title-${tag}`] = await page.evaluate(() =>
@@ -158,6 +197,46 @@ async function agendaEvidence(width, height, tag) {
   await page.waitForSelector('[data-agenda-page]');
   await page.waitForTimeout(900);
   await shot(`agenda-day-${tag}`);
+
+  // Igualdade exata pedida pela missão: Hoje e as SETAS são o mesmo controle.
+  // ITEM 5 — "UMA métrica": não basta o Hoje e as setas; TODOS os controles da
+  // linha 1 são medidos individualmente e a igualdade é AFIRMADA por um booleano
+  // (`identical`). Antes a medição só olhava o Hoje e as setas e passava mesmo
+  // com um `h-[37px]` em qualquer outro controle.
+  measurements[`toolbar-row1-heights-${tag}`] = await page.evaluate(() => {
+    const page1 = document.querySelector('[data-agenda-page]');
+    const byLabel = (re) => Array.from(page1.querySelectorAll('button, .il-field-control, [role="combobox"]'))
+      .find((b) => re.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+    const ctrl = {
+      hoje: byLabel(/^Hoje$/),
+      anterior: page1.querySelector('[aria-label*="Anterior" i], [aria-label*="anterior" i]'),
+      proximo: page1.querySelector('[aria-label*="Próximo" i], [aria-label*="proximo" i], [aria-label*="Próxim" i]'),
+      data: byLabel(/^(Escolher|Data|Hoje,)/) || page1.querySelector('[aria-label*="ata" i]'),
+      dia: byLabel(/^Dia$/), semana: byLabel(/^Semana$/), lista: byLabel(/^Lista$/),
+      filtros: byLabel(/^Filtros?$/), fila: byLabel(/^Fila$/),
+      bloquear: byLabel(/^Bloquear/), novo: byLabel(/^Novo agendamento$/),
+    };
+    // A régua é a do CONTROLE: no `Segmented` (Dia/Semana/Lista) a superfície
+    // medida é o TRILHO (`role=tablist`), não a opção interna — o contrato do
+    // DS é que o trilho tenha a altura do Button do nível e a opção seja um
+    // recorte interno. Sem isso, a opção (32) pareceria divergir de 40.
+    const h = {};
+    const opcoes = {};
+    for (const [k, el] of Object.entries(ctrl)) {
+      if (!el) continue;
+      const trilho = el.closest('.il-segmented');
+      h[k] = Math.round((trilho || el).getBoundingClientRect().height);
+      if (trilho) opcoes[k] = Math.round(el.getBoundingClientRect().height);
+    }
+    const icones = ['anterior', 'proximo'].filter((k) => h[k] != null);
+    const quadrados = icones.every((k) => {
+      const r = ctrl[k].getBoundingClientRect();
+      return Math.abs(r.width - r.height) <= 1;
+    });
+    const presentes = Object.keys(h);
+    const valores = [...new Set(Object.values(h))];
+    return { alturas: h, distintos: valores, identical: valores.length === 1, opcoesInternas: opcoes, iconButtonsQuadrados: quadrados };
+  });
 
   measurements[`toolbar-${tag}`] = await page.evaluate(() => {
     const nodes = Array.from(document.querySelectorAll('[data-agenda-page] button, [data-agenda-page] [role="group"] button, [data-agenda-page] .il-field-control'));
@@ -212,6 +291,58 @@ async function agendaEvidence(width, height, tag) {
         measurements[`detail-${tag}`].focusBackOnEvent = await page.evaluate(() =>
           !!document.activeElement?.classList?.contains('ag-event'));
       }
+      // Mantém-se aberto com o cursor DENTRO do card (não é um tooltip fugitivo).
+      await card.hover();
+      await page.waitForTimeout(320);
+      measurements[`hovercard-${tag}`].openWithCursorInside = (await card.count()) > 0;
+      await shot(`agenda-hover-cursor-inside-${tag}`);
+      await page.mouse.move(Math.round(width / 2), Math.round(height - 8));
+      await page.waitForTimeout(420);
+
+      // POSICIONAMENTO em TODOS os atendimentos da grade (item 3A): o resumo
+      // sai à direita quando cabe, FLIPA à esquerda quando o evento está na
+      // coluna da direita e, quando a tela não comporta nenhum dos lados (toque),
+      // empilha fora do evento. Sempre a 8–12px e dentro da viewport.
+      const allEvents = page.locator('[data-agenda-column] button.ag-event');
+      const count = await allEvents.count();
+      const placements = [];
+      for (let i = 0; i < count; i += 1) {
+        const ev = allEvents.nth(i);
+        await ev.scrollIntoViewIfNeeded().catch(() => {});
+        const box = await ev.boundingBox();
+        if (!box) continue;
+        await ev.hover();
+        await page.waitForTimeout(330);
+        const c = page.locator('.gd-hovercard');
+        if (!(await c.count())) { placements.push({ i, absent: true }); continue; }
+        const cb = await c.boundingBox();
+        const right = box.x + box.width, cRight = cb.x + cb.width;
+        const stacked = cb.y >= box.y + box.height - 1 || cb.y + cb.height <= box.y + 1;
+        const side = cRight <= box.x + 1 ? 'left' : cb.x >= right - 1 ? 'right' : (stacked ? 'stacked' : 'overlap');
+        const gap = cRight <= box.x ? +(box.x - cRight).toFixed(1)
+          : cb.x >= right ? +(cb.x - right).toFixed(1)
+          : cb.y >= box.y + box.height ? +(cb.y - (box.y + box.height)).toFixed(1)
+          : +(box.y - (cb.y + cb.height)).toFixed(1);
+        placements.push({
+          i, side, gap,
+          insideViewport: cb.x >= 0 && cRight <= width && cb.y >= 0 && cb.y + cb.height <= height,
+          place: await c.getAttribute('data-place'),
+        });
+        if (side === 'left' && !placements.some((p) => p.side === 'left' && p.shot)) {
+          placements[placements.length - 1].shot = true;
+          await shot(`agenda-hover-flip-${tag}`);
+        }
+        await page.mouse.move(Math.round(width / 2), Math.round(height - 8));
+        await page.waitForTimeout(380);
+      }
+      measurements[`hovercard-placement-${tag}`] = {
+        total: placements.length,
+        sides: placements.map((p) => p.side),
+        gapsOk: placements.every((p) => p.gap != null && p.gap >= 8 && p.gap <= 12),
+        allInsideViewport: placements.every((p) => p.insideViewport !== false),
+        noOverlap: placements.every((p) => p.side !== 'overlap'),
+        details: placements,
+      };
     } else {
       measurements[`hovercard-${tag}`] = { present: false };
     }
@@ -235,6 +366,60 @@ async function agendaEvidence(width, height, tag) {
     };
   });
 
+  // CONSISTÊNCIA GLOBAL (item 6): fora da Agenda também — botões, inputs,
+  // selects e date pickers das telas principais têm de cair na MESMA escala de
+  // controle do DS (28/34/40/44). Qualquer altura fora da escala é reportada.
+  const CONTROL_SCALE = [28, 34, 40, 44];
+  // A varredura do item 6 é GLOBAL: as quatro páginas da homologação mais as
+  // outras superfícies do shell, para que a sobra (se houver) seja MEDIDA em
+  // cada uma — nunca afirmada de memória.
+  const auditPages = ['/dashboard', '/agenda', '/clientes', '/configuracoes',
+    '/equipe', '/servicos', '/pagina', '/campanhas', '/produtos', '/pedidos', '/recursos', '/agente'];
+  const audit = {};
+  for (const path of auditPages) {
+    await page.goto(`${base}${path}?b=${fixture.b}`);
+    await page.waitForSelector('[data-agenda-page], main, .workspace-content', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    audit[path] = await page.evaluate((scale) => {
+      // A régua é do CONTROLE, então cada altura fora da escala é CLASSIFICADA
+      // antes de virar violação:
+      //   • nested → elemento interno de um controle (o input dentro do campo de
+      //     40px, o chip dentro do trilho do Segmented): a métrica do controle
+      //     é a do conjunto, não a do filho;
+      //   • link   → sem caixa (sem borda e sem fundo): é link, não controle;
+      //   • row    → superfície de linha/card (lista), não um botão de ação.
+      const klass = (n) => {
+        const cs = getComputedStyle(n);
+        // textarea é MULTILINHA por contrato (min-height 76): a régua de altura
+        // de controle não se aplica — o que se cobra é o mínimo canônico.
+        if (n.tagName === 'TEXTAREA') return n.getBoundingClientRect().height >= 76 ? 'nested' : 'violacao';
+        // Interruptor (switch) tem trilho próprio — o alvo é maior que o trilho.
+        if (n.getAttribute('role') === 'switch' || n.closest('[role="switch"]') || /\bh-6\b/.test(String(n.className))) return 'switch';
+        if (n.parentElement?.closest('.il-segmented, .global-search__field, .il-field-control, .il-control, .gd-control')) return 'nested';
+        if (cs.borderTopWidth === '0px' && (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent')) return 'link';
+        if (n.closest('li, tr, [role="row"], .dsh-card')) return 'row';
+        return 'violacao';
+      };
+      const heights = Array.from(document.querySelectorAll('button, input, select, .il-field-control, .il-control'))
+        .map((n) => ({ el: n, h: Math.round(n.getBoundingClientRect().height),
+          label: (n.getAttribute('aria-label') || n.textContent || '').trim().slice(0, 24) }))
+        .filter((x) => x.h > 0);
+      const off = heights.filter((x) => !scale.includes(x.h));
+      const byClass = {};
+      for (const x of off) { const k = klass(x.el); (byClass[k] ||= []).push({ label: x.label, h: x.h }); }
+      return {
+        total: heights.length,
+        distinct: [...new Set(heights.map((x) => x.h))].sort((a, b) => a - b),
+        foraDaEscala: off.length,
+        nested: (byClass.nested || []).length,
+        link: (byClass.link || []).length,
+        row: (byClass.row || []).length,
+        violacoes: byClass.violacao || [],
+      };
+    }, CONTROL_SCALE);
+  }
+  measurements[`controls-global-${tag}`] = audit;
+
   for (const view of ['week', 'list']) {
     await page.goto(agendaUrl('', view));
     await page.waitForSelector('[data-agenda-page]');
@@ -251,10 +436,51 @@ async function agendaEvidence(width, height, tag) {
     measurements[`view-${view}-${tag}`] = modes;
   }
 
-  // Novo agendamento (modal central?)
+  // De volta à visão DIA (o loop acima termina em Lista): é aqui que o slot
+  // vazio existe para o teste de criação rápida.
   await page.goto(agendaUrl());
   await page.waitForSelector('[data-agenda-page]');
   await page.waitForTimeout(700);
+
+  // SLOT VAZIO → popover CURTO (criação rápida) com "Mais opções", que abre o
+  // MESMO modal central já pré-preenchido (item 3C). Aqui a evidência é a
+  // geometria: popover pequeno no slot vs. modal central de 672px.
+  // A grade é mais alta que a dobra: `boundingBox()` devolve coordenadas de
+  // PÁGINA, e clicar em 75% da altura caía fora da viewport (o clique nunca
+  // chegava na coluna). O ponto é escolhido DENTRO da dobra, numa área vazia
+  // no topo da grade.
+  const slotColumn = page.locator('[data-agenda-column]').first();
+  const slotBox = await slotColumn.boundingBox();
+  const slotPoint = { x: Math.round(slotBox.x + slotBox.width / 2), y: Math.max(90, Math.round(slotBox.y) + 46) };
+  await page.mouse.move(slotPoint.x, slotPoint.y);
+  await page.mouse.down();
+  await page.waitForTimeout(60);
+  await page.mouse.up();
+  await page.waitForTimeout(700);
+  const quick = page.locator('.gd-popover').first();
+  if (await quick.count()) {
+    measurements[`slot-point-${tag}`] = slotPoint;
+    const qb = await quick.boundingBox();
+    measurements[`slot-popover-${tag}`] = { box: qb, width: qb?.width, height: qb?.height,
+      hasMoreOptions: await quick.getByRole('button', { name: /Mais opções/i }).count() > 0 };
+    await shot(`agenda-slot-popover-${tag}`);
+    const more = quick.getByRole('button', { name: /Mais opções/i });
+    if (await more.count()) {
+      await more.click();
+      await page.waitForTimeout(700);
+      const dlg = page.getByRole('dialog').first();
+      const db = await dlg.boundingBox().catch(() => null);
+      measurements[`slot-more-modal-${tag}`] = { box: db, widthPct: db ? Math.round((db.width / width) * 100) : null,
+        isCentralDialog: await page.locator('dialog.il-drawer--dialog').count() > 0 };
+      await shot(`agenda-slot-more-modal-${tag}`);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+    }
+  } else {
+    measurements[`slot-popover-${tag}`] = { present: false };
+  }
+
+  // Novo agendamento (modal central?)
   await page.getByRole('button', { name: /Novo agendamento/i }).first().click();
   await page.waitForTimeout(700);
   await shot(`agenda-new-booking-${tag}`);
@@ -292,7 +518,9 @@ await agendaEvidence(390, 844, '390');
 }
 
 measurements.consoleErrors = consoleErrors.slice(0, 20);
+measurements.consoleRuidoConhecido = consoleRuido.slice(0, 20);
 await fs.writeFile(path.join(outDir, 'measurements.json'), JSON.stringify(measurements, null, 2));
 console.log(`Evidências ${phase} em`, outDir);
 console.log('Erros de página:', consoleErrors.length ? consoleErrors.slice(0, 5) : 'nenhum');
+console.log('Ruído conhecido (prefetch abortado / 401 deslogado):', consoleRuido.length, consoleRuido.slice(0, 2));
 await browser.close();

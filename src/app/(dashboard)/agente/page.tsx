@@ -27,7 +27,9 @@ interface Preview {
   moduleEnabled: boolean; canBook: boolean; whatsapp: boolean; whatsappStatus: string;
 }
 
-const input = 'il-field-control w-full rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:shadow-focus';
+// DS 1.0 · §6 — a MÉTRICA é do controle canônico: o `py-2.5` local somava 2px
+// à régua e fazia o campo medir 42px (a auditoria global pegou em /agente).
+const input = 'il-field-control bg-[var(--surface)] placeholder:text-[var(--text-faint)]';
 const money = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function AgentePage() {

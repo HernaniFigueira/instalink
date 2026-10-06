@@ -72,6 +72,41 @@ describe('3A · resumo contextual do evento (HoverCard)', () => {
   });
 });
 
+describe('3A · posicionamento do resumo (flip e clamp) — regressão medida', () => {
+  it('mede o elemento POSICIONADO, não um filho interno com padding', () => {
+    const ui = read('src/components/ui.tsx');
+    // O wrapper do portal é quem recebe `left/top`; medir o conteúdo interno
+    // (com padding do card) dava 252px em vez de 278px e o flip/clampe era
+    // calculado com retângulo errado — o resumo encostava 16px SOBRE o evento.
+    // `MutableRefObject` (e não `RefObject`): o portal ESCREVE em
+    // `current`; com o tipo imutável o `next build` falhava.
+    expect(ui).toMatch(/positionRef\?: React\.MutableRefObject<HTMLDivElement \| null>/);
+    expect(ui).toContain('if (positionRef) positionRef.current = el;');
+    expect(ui).toMatch(/useAnchoredLayer\(open, anchorRef, side, offset, posRef\)/);
+  });
+
+  it('flip horizontal: preferência declarada, depois o outro lado, depois abaixo', () => {
+    const ui = read('src/components/ui.tsx');
+    const block = ui.slice(ui.indexOf("if (side === 'right-start' || side === 'left-start')"));
+    const face = block.slice(0, block.indexOf('bottom-start'));
+    // Cabe no lado preferido → vai para ele.
+    expect(face).toMatch(/if \(preferLeft \? fitsLeft : fitsRight\) left = preferLeft \? toLeft : toRight;/);
+    // Não cabe → FLIPA para o outro lado (mesma distância).
+    expect(face).toMatch(/else if \(preferLeft \? fitsRight : fitsLeft\) left = preferLeft \? toRight : toLeft;/);
+    // Não cabe em nenhum → empilha fora do evento (nunca em cima dele).
+    expect(face).toContain('else {');
+    expect(face).toContain('top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;');
+  });
+
+  it('re-mede quando a camada muda de tamanho (conteúdo assentando)', () => {
+    const ui = read('src/components/ui.tsx');
+    expect(ui).toContain('new ResizeObserver(place)');
+    expect(ui).toContain('ro.observe(layer);');
+    // Gancho de homologação: a medição fica legível no DOM (`data-place`).
+    expect(ui).toContain('posNode.dataset.place');
+  });
+});
+
 describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
   it('BookingDetailSheet usa DetailPanel (nunca o sheet de 620px)', () => {
     const detail = read('src/components/dashboard/BookingDetailSheet.tsx');
@@ -226,5 +261,58 @@ describe('6 · hierarquia de overlays (fonte única)', () => {
     const ui = read('src/components/ui.tsx');
     expect(ui).toMatch(/variant = 'side', dialogWidth = '672px'/);
     expect(ui).toContain("variant === 'dialog' && 'il-drawer--dialog'");
+  });
+});
+
+describe('6 · métricas canônicas (a régua é do controle, não da página)', () => {
+  it('o campo canônico tem a régua MD FORA do escopo .il-platform', () => {
+    const css = read('src/app/globals.css');
+    const base = css.indexOf('.il-field-control { min-height: var(--control-h); }');
+    const platform = css.indexOf('.il-platform .il-field-control { min-height: var(--control-h); }');
+    // A regra sem escopo precisa existir ANTES da de plataforma: sem ela, as
+    // páginas fora do platform herdavam o `py-2` do FIELD_CLS e mediam 38px.
+    expect(base).toBeGreaterThan(-1);
+    expect(platform).toBeGreaterThan(base);
+  });
+
+  it('no toque, TODA a família sobe para 44 — inclusive campo e seletor de modo', () => {
+    const css = read('src/app/globals.css');
+    const touch = css.slice(css.indexOf('@media (pointer: coarse), (max-width: 767px)'));
+    const bloco = touch.slice(0, touch.indexOf('prefers-reduced-motion'));
+    expect(bloco).toContain('.il-platform .il-field-control { min-height: var(--control-h-touch); }');
+    expect(bloco).toContain('.il-segmented { min-height: var(--control-h-touch); }');
+    expect(bloco).toContain('.il-segmented__item { height: calc(var(--control-h-touch) - 8px); }');
+  });
+
+  it('nenhum nível de ação fora da escala: lg tem régua explícita (44)', () => {
+    const css = read('src/app/globals.css');
+    expect(css).toContain('.il-platform .il-control--lg { min-height: var(--control-h-touch); }');
+    // O chip de opção default media 36 (nível inexistente) → nível denso do DS.
+    expect(css).toContain('display:inline-flex; min-height:var(--control-h-sm); align-items:center; justify-content:center; gap:6px;');
+  });
+
+  it('a seta do grupo fica DENTRO do rail (não vaza e não é cortada)', () => {
+    const css = read('src/app/globals.css');
+    const regra = css.slice(css.indexOf('.workspace-sidebar .workspace-link--group .workspace-link__chevron'));
+    expect(regra).toContain('position: absolute;');
+    expect(regra).toContain('width: 9px; height: 9px;');
+    // A largura útil do item no rail é ~37px: ícone 24 + gap 10 + seta 15 vazava.
+    expect(css).not.toMatch(/\.workspace-sidebar .workspace-link__chevron \{[^}]*margin-left: auto/);
+  });
+
+  it('as páginas auditadas não recriam a métrica do controle por conta própria', () => {
+    const paginas = [
+      'src/app/(dashboard)/agenda/page.tsx',
+      'src/app/(dashboard)/clientes/page.tsx',
+      'src/app/(dashboard)/configuracoes/page.tsx',
+      'src/app/(dashboard)/pagina/page.tsx',
+      'src/app/(dashboard)/campanhas/page.tsx',
+      'src/app/(dashboard)/agente/page.tsx',
+    ];
+    for (const pagina of paginas) {
+      const src = read(pagina);
+      expect(src).not.toMatch(/className="[^"]*rounded-md border[^"]*px-[0-9.]+ py-[0-9.]+ text-sm/);
+      expect(src).not.toMatch(/const (input|num) = 'w-full rounded-md border/);
+    }
   });
 });

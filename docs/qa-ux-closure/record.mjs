@@ -18,6 +18,7 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
+import { ensureBrowser, CHROMIUM_ARGS } from './browser.mjs';
 
 /** Caminho de um binário no PATH (sem depender de shell). */
 function which(bin) {
@@ -31,16 +32,17 @@ function which(bin) {
 const fixture = JSON.parse(await fs.readFile(process.env.QA_UX_FIXTURE || '/home/user/.cache/qa-ux/fixture.json', 'utf8'));
 const outDir = process.argv[2] || 'docs/qa-ux-closure/after';
 const frames = '/tmp/qa-ux-closure-frames';
-const executablePath = process.env.QA_BROWSER || '/tmp/chromium';
-const LD_LIBRARY_PATH = process.env.QA_BROWSER_LD || '/tmp/nssstub:/tmp/ch-al2023/lib';
 await fs.rm(frames, { recursive: true, force: true });
 await fs.mkdir(path.join(frames, 'shell'), { recursive: true });
 await fs.mkdir(path.join(frames, 'agenda'), { recursive: true });
 
+// Navegador garantido na hora: o ambiente pode não trazer Chromium (/tmp e
+// node_modules não sobrevivem entre execuções). Ver `browser.mjs`.
+const runtime = await ensureBrowser();
 const browser = await chromium.launch({
-  executablePath,
-  args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-software-rasterizer', '--no-zygote'],
-  env: { ...process.env, LD_LIBRARY_PATH },
+  executablePath: process.env.QA_BROWSER || runtime.executablePath,
+  args: CHROMIUM_ARGS,
+  env: { ...process.env, LD_LIBRARY_PATH: process.env.QA_BROWSER_LD || runtime.LD_LIBRARY_PATH },
 });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(`${fixture.base}/login`);

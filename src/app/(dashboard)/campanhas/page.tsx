@@ -43,7 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
   draft: 'Rascunho', ready: 'Pronta', sending: 'Enviando', sent: 'Enviada',
   partial: 'Parcial', failed: 'Falhou', cancelled: 'Cancelada',
 };
-const input = 'w-full rounded-md border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+const input = 'il-field-control';
 
 export default function CampanhasPage() {
   const params = useSearchParams();

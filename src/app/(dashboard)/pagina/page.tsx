@@ -10,7 +10,7 @@ import { THEME_PRESETS, CLINIC_THEME_PRESETS, clinicPresetId, matchingPreset, pr
 import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
-import { PageSkeleton, Select, Tabs } from '@/components/ui';
+import { Button, Input, PageSkeleton, Select, Tabs, Textarea } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { canLoadOverview } from '@/lib/overview';
@@ -166,8 +166,7 @@ export default function PaginaPage() {
       <div className="bg-white border border-zinc-200 rounded-lg px-4 py-10 text-center" role="alert">
         <span className="mx-auto w-10 h-10 rounded-md bg-red-50 border border-red-200 text-red-600 flex items-center justify-center"><Icon n="alert" size={18} /></span>
         <p className="text-sm font-medium text-zinc-700 mt-3">{failed}</p>
-        <button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }}
-          className="mt-4 text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Tentar de novo</button>
+        <Button onClick={() => { setBusiness(null); setPage(null); setReloadTick((t) => t + 1); }} variant="primary" size="sm" className="mt-4">Tentar de novo</Button>
       </div>
     );
   }
@@ -744,10 +743,9 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
         )}
 
         <div className="flex flex-wrap gap-2 mt-3">
-          <button disabled={!dirty} onClick={async () => { if (await onSaveNav(draft || []) !== false) setDraft(null); }}
-            className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md disabled:opacity-40">
+          <Button disabled={!dirty} onClick={async () => { if (await onSaveNav(draft || []) !== false) setDraft(null); }} variant="primary">
             Salvar menu
-          </button>
+          </Button>
           {!auto && (
             <button onClick={() => setDraft([])} className="text-sm font-semibold bg-zinc-100 px-4 py-2.5 rounded-md hover:bg-zinc-200">
               Voltar ao automático
@@ -768,10 +766,10 @@ function PageNavTab({ business, businessId, blocks, services, products, professi
           </button>
         </div>
         <p className="text-xs text-zinc-500 -mt-1">Aparece na página logo abaixo do Perfil, quando ativado e com conteúdo.</p>
-        <input aria-label="Título sobre a clínica" value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" placeholder="Título (ex: Sobre a clínica)" />
-        <textarea aria-label="Texto sobre a clínica" value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
+        <input aria-label="Título sobre a clínica" value={aboutDraft.title} onChange={(e) => setAboutDraft({ ...aboutDraft, title: e.target.value })} className="il-field-control" placeholder="Título (ex: Sobre a clínica)" />
+        <textarea aria-label="Texto sobre a clínica" value={aboutDraft.text} onChange={(e) => setAboutDraft({ ...aboutDraft, text: e.target.value })} className="il-field-control" rows={3} placeholder="Ex: Somos uma clínica especializada em…" />
         <ImageUpload label="IMAGEM (OPCIONAL)" value={aboutDraft.image} onChange={(url) => setAboutDraft({ ...aboutDraft, image: url })} businessId={businessId} />
-        <button onClick={() => onAbout(aboutDraft)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar “Sobre”</button>
+        <Button onClick={() => onAbout(aboutDraft)} variant="primary">Salvar “Sobre”</Button>
       </section>
     </div>
   );
@@ -794,21 +792,16 @@ function AboutSectionEditor({ about, businessId, onSave, onChange }: {
     <div className="space-y-3">
       <div>
         <span className="text-xs font-semibold text-zinc-500">TÍTULO</span>
-        <input aria-label="Título sobre a clínica" value={draft.title} onChange={(e) => set('title', e.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="Ex: Sobre a clínica" maxLength={80} />
+        <Input aria-label="Título sobre a clínica" value={draft.title} onChange={(e) => set('title', e.target.value)}
+          className="mt-1" placeholder="Ex: Sobre a clínica" maxLength={80} />
       </div>
       <div>
         <span className="text-xs font-semibold text-zinc-500">TEXTO</span>
-        <textarea aria-label="Texto sobre a clínica" value={draft.text} onChange={(e) => set('text', e.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
+        <Textarea aria-label="Texto sobre a clínica" value={draft.text} onChange={(e) => set('text', e.target.value)}
+          className="mt-1" rows={4} placeholder="Ex: Somos uma clínica especializada em…" maxLength={1200} />
       </div>
       <ImageUpload label="IMAGEM (OPCIONAL)" value={draft.image} onChange={(url) => set('image', url)} businessId={businessId} />
-      <button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })}
-        className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">
-        Salvar “Sobre”
-      </button>
+      <Button onClick={() => onSave({ ...draft, enabled: !!draft.enabled })} variant="primary">Salvar “Sobre”</Button>
     </div>
   );
 }
@@ -872,21 +865,18 @@ function LocationAddressEditor({ business, businessId, onSave }: {
       </div>
       <label className="block">
         <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Endereço completo</span>
-        <input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="Rua, número, bairro, cidade" />
+        <Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+          className="mt-1" placeholder="Rua, número, bairro, cidade" />
       </label>
       <label className="block">
         <span className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Link do Google Maps</span>
-        <input value={draft.mapsUrl} onChange={(e) => setDraft({ ...draft, mapsUrl: e.target.value })}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="https://maps.app.goo.gl/…" />
+        <Input value={draft.mapsUrl} onChange={(e) => setDraft({ ...draft, mapsUrl: e.target.value })}
+          className="mt-1" placeholder="https://maps.app.goo.gl/…" />
       </label>
       <div className="flex items-center gap-3">
-        <button type="button" onClick={save} disabled={saving}
-          className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md disabled:opacity-60">
+        <Button type="button" onClick={save} disabled={saving} variant="primary">
           {saving ? 'Salvando…' : 'Salvar endereço'}
-        </button>
+        </Button>
         {saved && <span className="text-xs font-semibold text-[var(--success)]">Salvo ✓</span>}
       </div>
     </div>
@@ -904,7 +894,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
 }) {
   const s = block.settings || {};
   const set = (k: string, v: any) => onChange({ ...s, [k]: v });
-  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const input = 'il-field-control';
   const [activating, setActivating] = useState('');
   const [activateError, setActivateError] = useState('');
 
@@ -1139,7 +1129,7 @@ function BlockSettings({ block, businessId, business, onChange, onSave, onRefres
           </p>
         </div>
       )}
-      <button onClick={onSave} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2 rounded-md">Salvar bloco</button>
+      <Button onClick={onSave} variant="primary">Salvar bloco</Button>
     </div>
   );
 }
@@ -1220,7 +1210,7 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');
-  const input = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const input = 'il-field-control';
 
   function load() {
     fetch(`/api/reviews?businessId=${businessId}&manage=1`)
@@ -1366,10 +1356,9 @@ function ReviewsEditor({ businessId }: { businessId: string }) {
             className={input} placeholder={google.hasKey ? 'Chave salva (trocar?)' : 'Chave Places API'} />
         </div>
         <div className="flex gap-2">
-          <button disabled={acting === 'google'} onClick={saveGoogle}
-            className="text-xs font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-3 py-2 rounded-lg disabled:opacity-50">
+          <Button disabled={acting === 'google'} onClick={saveGoogle} variant="primary" size="sm">
             Salvar Google
-          </button>
+          </Button>
           <button disabled={acting === 'import'} onClick={importGoogle}
             className="text-xs font-semibold bg-zinc-100 px-3 py-2 rounded-lg hover:bg-zinc-200 disabled:opacity-50">
             {acting === 'import' ? 'Importando…' : 'Importar do Google'}
@@ -1516,9 +1505,9 @@ function ThemeEditor({ theme, presetId, onChange, onSave, saving }: {
               </Select>
             </label>
           </div>
-          <button onClick={onSave} disabled={saving} className="mt-4 text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-5 py-2.5 rounded-md disabled:opacity-50">
+          <Button onClick={onSave} disabled={saving} variant="primary" size="lg" className="mt-4">
             {saving ? 'Salvando…' : 'Salvar visual'}
-          </button>
+          </Button>
         </details>
         <div className="rounded-lg p-5" style={{ background: theme.background, color: theme.text }}>
           <p className="text-xs font-semibold opacity-60 mb-3">Prévia</p>
@@ -1557,9 +1546,9 @@ function PublishTab({ business, onSlug, onPublish }: { business: Business; busin
         <div>
           <p className="font-semibold text-sm">Endereço</p>
           <div className="mt-1.5 flex gap-2">
-            <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
-              className="flex-1 rounded-md border border-zinc-300 px-3 py-2.5 text-sm font-mono" />
-            <button onClick={() => onSlug(slug)} className="text-sm font-semibold bg-[var(--brand)] text-white shadow-brand hover:bg-[var(--brand-strong)] px-4 py-2.5 rounded-md">Salvar</button>
+            <Input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
+              className="flex-1 font-mono" />
+            <Button onClick={() => onSlug(slug)} variant="primary">Salvar</Button>
           </div>
           <p className="text-xs text-zinc-500 mt-1">godoutor.app/{slug}</p>
         </div>

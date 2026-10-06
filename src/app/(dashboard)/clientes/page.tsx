@@ -352,7 +352,7 @@ export default function ClientesPage() {
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={clinicalView ? 'Buscar por nome ou telefone…' : 'Buscar por nome, telefone, e-mail ou CPF…'}
                   aria-label={clinicalView ? 'Buscar paciente' : 'Buscar cliente'}
-                  className="w-full bg-[var(--surface-3)] border border-[var(--border)] rounded-md pl-9 pr-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:shadow-focus focus:border-[var(--brand)] focus:bg-white"
+                  className="il-field-control bg-[var(--surface-3)] pl-9 pr-3 focus:bg-white"
                 />
               </div>
               <span className="text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">

@@ -1103,15 +1103,34 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
       if (side === 'bottom-end') left = a.right - w;
       if (side === 'top-start') top = a.top - h - offset;
       if (side === 'right-start' || side === 'left-start') {
-        // Preferência declarada primeiro; se não couber (com a camada já
-        // medida), abre do outro lado — nunca "por cima" do evento nem fora
-        // da viewport. A distância do evento continua sendo o mesmo offset.
-        top = a.top;
-        const rightFits = a.right + offset + w <= window.innerWidth - margin;
-        const leftFits = a.left - offset - w >= margin;
+        // LATERAIS — preferência declarada primeiro e FLIP quando ela não cabe.
+        // Antes a expressão estava invertida no caso "preferir direita": com o
+        // evento encostado na borda, o card era posicionado à direita de
+        // qualquer forma e o clamp o empurrava POR CIMA do próprio evento (e
+        // fora da viewport). Agora:
+        //   1. cabe no lado preferido?  → vai para ele, a `offset` de distância;
+        //   2. não cabe?               → FLIPA para o outro lado, mesmo `offset`;
+        //   3. não cabe em NENHUM lado (tela estreita) → sai de cima do evento:
+        //      abre abaixo (ou acima, se não houver espaço) alinhado à esquerda
+        //      dele, sempre dentro da viewport.
+        const gap = offset;
+        const toLeft = a.left - gap - w;
+        const toRight = a.right + gap;
+        const fitsLeft = toLeft >= margin;
+        const fitsRight = toRight + w <= window.innerWidth - margin;
         const preferLeft = side === 'left-start';
-        const openToRight = preferLeft ? !leftFits && rightFits : !rightFits && leftFits;
-        left = openToRight ? a.right + offset : (preferLeft ? a.left - offset - w : (rightFits ? a.right + offset : a.left - offset - w));
+        top = a.top;
+        if (preferLeft ? fitsLeft : fitsRight) left = preferLeft ? toLeft : toRight;
+        else if (preferLeft ? fitsRight : fitsLeft) left = preferLeft ? toRight : toLeft;
+        else {
+          // Nenhum lado comporta a largura: empilha verticalmente (fora do
+          // evento) em vez de cobri-lo. `left` alinha com o evento e o clamp
+          // final mantém tudo dentro da tela.
+          left = preferLeft ? a.right : a.left;
+          const below = a.bottom + gap;
+          const above = a.top - h - gap;
+          top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;
+        }
       }
       if (side === 'bottom-start' || side === 'bottom-end') {
         // Sem espaço abaixo (e com espaço acima) → abre para cima.
@@ -1119,12 +1138,27 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
       }
       left = Math.max(margin, Math.min(left, window.innerWidth - Math.max(w, 0) - margin));
       top = Math.max(margin, Math.min(top, Math.max(margin, window.innerHeight - h - margin)));
+      // GANCHO DE HOMOLOGAÇÃO (leitura apenas): registra a última medição no
+      // próprio elemento posicionado. Sem isso, a única forma de conferir a
+      // geometria num teste é re-medir por fora — que foi justamente como o
+      // defeito do flip/stale passou. Não muda layout: é atributo de dado.
+      const posNode = layerRef?.current;
+      if (posNode) posNode.dataset.place = `l${Math.round(left)},t${Math.round(top)},w${Math.round(w)},h${Math.round(h)}`;
       setStyle({ top, left });
     };
     place();
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
+    // RE-MEDE quando a PRÓPRIA camada muda de tamanho. Sem isto, a primeira
+    // medição acontecia com o conteúdo ainda sem a largura/altura finais
+    // (tipografia, quebra de linha): o flip e o clamp eram calculados com um
+    // retângulo menor e o card acabava 16px POR CIMA do evento e podia vazar a
+    // viewport. Posição não altera tamanho, então não há laço de observação.
+    const layer = layerRef?.current;
+    const ro = typeof ResizeObserver !== 'undefined' && layer ? new ResizeObserver(place) : null;
+    if (ro && layer) ro.observe(layer);
     return () => {
+      ro?.disconnect();
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
     };
@@ -1138,9 +1172,16 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
 // não tratar o clique num descendente como "fora" (B1).
 let LAYER_SEQ = 0;
 
-function LayerPortal({ children, style, className, role, label, id }: {
+function LayerPortal({ children, style, className, role, label, id, positionRef }: {
   children: React.ReactNode; style: React.CSSProperties | null; className?: string;
   role?: string; label?: string; id?: string;
+  /**
+   * Ref do elemento POSICIONADO (o próprio wrapper do portal). É ele que o
+   * posicionamento precisa MEDIR: medir um filho interno dava largura/altura
+   * menores que a caixa real (padding do card) e o flip/clamp era calculado com
+   * um retângulo errado — o resumo encostava 16px POR CIMA do evento.
+   */
+  positionRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   if (typeof document === 'undefined') return null;
   return createPortal(
@@ -1151,7 +1192,11 @@ function LayerPortal({ children, style, className, role, label, id }: {
       className={className}
       style={style || undefined}
       data-layer=""
-      ref={(el) => { if (el && !el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ); }}
+      ref={(el) => {
+        if (!el) return;
+        if (positionRef) positionRef.current = el;
+        if (!el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ);
+      }}
     >
       {children}
     </div>,
@@ -1200,7 +1245,9 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const style = useAnchoredLayer(open && !disabled, anchorRef, side, 8, layerRef);
+  // Mede o elemento POSICIONADO (wrapper do portal), não o conteúdo interno.
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open && !disabled, anchorRef, side, 8, posRef);
   const show = () => { if (!disabled) setOpen(true); };
   const hide = () => setOpen(false);
   return (
@@ -1216,7 +1263,7 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
         {children}
       </span>
       {open && !disabled && (
-        <LayerPortal style={style} className="gd-tooltip">
+        <LayerPortal style={style} className="gd-tooltip" positionRef={posRef}>
           <div ref={layerRef} role="tooltip">{label}</div>
         </LayerPortal>
       )}
@@ -1247,7 +1294,8 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
   const [open, setOpen] = useState(false);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
-  const style = useAnchoredLayer(open, anchorRef, side, offset, layerRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, offset, posRef);
   const clear = () => {
     if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
     if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
@@ -1288,7 +1336,7 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
         {children}
       </span>
       {open && (
-        <LayerPortal style={style} className={cn('gd-layer gd-hovercard', className)}>
+        <LayerPortal style={style} className={cn('gd-layer gd-hovercard', className)} positionRef={posRef}>
           <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}
             onFocus={enter}
             onBlur={(e) => {
@@ -1318,7 +1366,8 @@ export function Popover({ open, onClose, trigger, children, side = 'bottom-start
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredLayer(open, anchorRef, side, 6, layerRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, 6, posRef);
   useDismissOnEscape(open, onClose);
   useEffect(() => {
     if (!open) return;
@@ -1337,7 +1386,7 @@ export function Popover({ open, onClose, trigger, children, side = 'bottom-start
     <>
       <span ref={anchorRef} style={anchorStyle} className={cn('lds-popover-anchor inline-flex', className)}>{trigger}</span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-popover" role="dialog" label={label}>
+        <LayerPortal style={style} className="gd-layer gd-popover" role="dialog" label={label} positionRef={posRef}>
           <div ref={layerRef}>{children}</div>
         </LayerPortal>
       )}
@@ -1360,7 +1409,8 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
   const [active, setActive] = useState(0);
   const itemRefs = useRef<Array<HTMLElement | null>>([]);
   const restoreRef = useRef<HTMLElement | null>(null);
-  const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, listRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, posRef);
   useDismissOnEscape(open, () => setOpen(false));
   const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
   useEffect(() => {
@@ -1408,7 +1458,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
         <span onClick={() => setOpen((v) => !v)}>{trigger}</span>
       </span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-menu" role="menu" label={label}>
+        <LayerPortal style={style} className="gd-layer gd-menu" role="menu" label={label} positionRef={posRef}>
           <div
             ref={listRef}
             onKeyDown={(e) => {
@@ -1940,7 +1990,8 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
   const [active, setActive] = useState(0);
   const anchorRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, layerRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, posRef);
   const known = options.filter((o) => selected.includes(o.value));
   const displayLabel = multi ? query : (query || known[0]?.label || String(value || ''));
   const filtered = options.filter((o) => {
@@ -2008,7 +2059,7 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         className={cn(FIELD_CLS, 'disabled:opacity-60')}
       />
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-menu" role="listbox" label={label}>
+        <LayerPortal style={style} className="gd-layer gd-menu" role="listbox" label={label} positionRef={posRef}>
           <div id={listId} ref={layerRef} className="max-h-[260px] overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="il-type-help px-2 py-3 text-center text-[var(--gd-text-muted)]">{emptyLabel}</p>

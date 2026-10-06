@@ -972,7 +972,10 @@ input[type='color'] { @apply cursor-pointer; }
 /* Option chips / escolhas múltiplas — selecionado por contorno e foreground,
    não preenchimento principal. Tabs, badges e CTAs têm contratos separados. */
 .il-platform .il-option-choice {
-  display:inline-flex; min-height:36px; align-items:center; justify-content:center; gap:6px;
+  /* DS 1.0 · §6 — 36px não é nível do DS. O chip de opção usa o nível DENSO da
+     escala (`--control-h-sm`, 34px), o mesmo das ações densas; o `--compact`
+     continua em 28. Nada de altura inventada por componente. */
+  display:inline-flex; min-height:var(--control-h-sm); align-items:center; justify-content:center; gap:6px;
   padding:0 12px; border:1px solid var(--border-strong); border-radius:var(--radius-pill);
   background:var(--surface); color:var(--text-muted); font:inherit; font-size:12.5px; font-weight:600;
   line-height:1.25; cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease;
@@ -988,7 +991,9 @@ input[type='color'] { @apply cursor-pointer; }
   border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
 }
 .il-platform .il-option-choice:disabled { opacity:1; cursor:not-allowed; }
-.il-platform .il-option-choice--compact { min-height:30px; padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
+/* Variante COMPACTA (chips de período em card): o nível vem do DS
+   (`--gd-control-h-xs`), não de um 30px solto — mesma escala de todo controle. */
+.il-platform .il-option-choice--compact { min-height:var(--gd-control-h-xs); padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
 .il-platform .il-selectable-card {
   border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface);
   color:var(--text); transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease;
@@ -1006,6 +1011,16 @@ input[type='color'] { @apply cursor-pointer; }
 .il-platform .il-control { min-height: var(--control-h); }
 .il-platform .il-control--sm { min-height: var(--control-h-sm); }
 .il-platform .il-control--xs { min-height: var(--control-h-xs); }
+/* O nível LG existia sem régua: a altura saía do `py-2.5` + texto e media 42px
+   — um 5º nível acidental, 2px fora da escala (a auditoria global pegou o CTA
+   "Salvar agente"). LG é o nível de AÇÃO GRANDE do DS: 44 (`--control-h-touch`). */
+.il-platform .il-control--lg { min-height: var(--control-h-touch); }
+/* O campo canônico tem a métrica MD em QUALQUER página — não só dentro de
+   `.il-platform`. Antes disso, páginas fora do escopo do platform herdavam o
+   `py-2` do `FIELD_CLS` e mediam 38px, a 2px da régua (o defeito que a auditoria
+   global pegou em /configuracoes e /clientes). A régua é do controle, então a
+   regra é do controle — não de um `h-[38px]` de página. */
+.il-field-control { min-height: var(--control-h); }
 .il-platform .il-field-control { min-height: var(--control-h); }
 .il-platform textarea.il-field-control { min-height: 76px; }
 /* Tabs: o nível vem do tamanho pedido (md = régua de ação, sm = régua densa).
@@ -1019,7 +1034,18 @@ input[type='color'] { @apply cursor-pointer; }
   .il-platform .il-control,
   .il-platform .il-tab { min-height: var(--control-h-touch); }
   .il-platform .il-icon-button { min-width: var(--control-h-touch); min-height: var(--control-h-touch); }
+  /* MISSÃO UX CLOSURE · itens 5 e 6 — no toque a régua é UMA só, e ela vale
+     para TODO controle da mesma linha. O `il-field-control` (inclusive quando é
+     o gatilho do DatePicker) e o `il-segmented` ficavam em 40 ao lado de
+     botões de 44 na MESMA linha da toolbar (medido a 390px). O campo é o
+     canônico: a régua sobe no canônico, não num `min-h-[44px]` de página. */
+  /* Especificidade: dentro de `.il-platform` quem manda é a regra de dois
+     seletores — a régua de toque precisa da MESMA especificidade para vencer. */
+  .il-field-control,
+  .il-platform .il-field-control { min-height: var(--control-h-touch); }
   .il-platform .il-field-control { font-size: 16px; }
+  .il-segmented { min-height: var(--control-h-touch); }
+  .il-segmented__item { height: calc(var(--control-h-touch) - 8px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .il-platform, .il-platform *, .il-platform *::before, .il-platform *::after {
@@ -1728,6 +1754,16 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   transition: transform var(--motion-base) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
 }
+/* MISSÃO UX CLOSURE · item 1 — NO RAIL a seta não cabe no fluxo: a largura útil
+   do item é 37px (padding do container + gutter da scrollbar) e `ícone 24 +
+   gap 10 + seta 15` empurrava a seta 14px para fora do rail, onde era CORTADA
+   pela divisa (defeito visível no badge/seta do grupo). No rail a seta vira um
+   sinalizador de 9px ancorado no canto do PRÓPRIO item — a caixa do item de
+   grupo continua exatamente a do item direto (37×40) e nada vaza. */
+.workspace-sidebar .workspace-link--group .workspace-link__chevron {
+  position: absolute; top: 5px; right: 3px;
+  width: 9px; height: 9px; margin: 0; opacity: .7;
+}
 .workspace-link--group[aria-expanded='true'] .workspace-link__chevron { transform: rotate(90deg); }
 /* O rail/traço vertical do item ativo foi REMOVIDO (GoDoutor 2.0): o estado
    ativo é fundo suave + texto/cor de marca + `aria-current`. O elemento segue
@@ -1785,8 +1821,13 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
 .workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
+  /* MISSÃO UX CLOSURE · item 6 — o rodapé do rail é feito de CONTROLES
+     (ícone + rótulo). Antes tinham 36px, um nível que não existe na escala do
+     DS: no rail de 60px isso ainda transbordava o eixo. Agora usam o mesmo
+     nível MD dos outros controles (`--gd-control-h`, 40px) — a métrica vem do
+     token, não de um número inventado aqui. */
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
+  min-height: var(--gd-control-h); padding: 0 10px; border-radius: var(--radius-md);
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
 .workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
@@ -1797,7 +1838,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-foot__brand strong { font-weight: 700; color: var(--il-nav-fg); }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
-  min-height: 36px; min-width: 36px; padding: 0 10px;
+  min-height: var(--gd-control-h); min-width: var(--gd-control-h); padding: 0 10px;
   font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
 .workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
@@ -1893,7 +1934,7 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 }
 .ws-peek__item:hover { background: var(--gd-nav-hover); }
 .ws-peek__item[aria-current='page'] { background: var(--gd-nav-active-bg); color: var(--gd-nav-active-fg); font-weight: var(--gd-weight-semibold); }
-/* A entrada nasce do rail: a superfície desliza de trás dele (6px) com fade
+/* A entrada nasce do rail: a superfície desliza de trás dele (8px) com fade
    curto em 180ms — dentro da janela 140–180ms pedida pela missão. */
 @keyframes ws-peek-in {
   from { opacity: 0; transform: translateX(-8px); }
@@ -2412,7 +2453,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .pe-device--desktop { width: 100%; border-width: 8px; border-radius: 18px; }
 .pe-device--desktop::before { display: none; }
 .pe-nav { position: sticky; top: calc(var(--topbar-h) + 14px); display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); }
-.pe-nav__item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-align: left; transition: background-color .15s ease, color .15s ease; }
+/* DS 1.0 · §6 — item de navegação do editor de página: a altura vem do nível
+   DENSO da escala (`--control-h-sm`), não de `8px + texto` = 34,75px. */
+.pe-nav__item { display: flex; align-items: center; gap: 9px; min-height: var(--control-h-sm); padding: 0 10px; border-radius: var(--radius-md); font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-align: left; transition: background-color .15s ease, color .15s ease; }
 .pe-nav__item:hover { background: var(--surface-hover); color: var(--text); }
 .pe-nav__item[aria-current="page"] { background: var(--brand-soft); color: var(--brand-fg); box-shadow: inset 2px 0 0 var(--brand); }
 .pe-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); overflow: hidden; }
@@ -2827,7 +2870,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .overlay-confirm__copy h2 { margin: 1px 0 0; color: var(--text); font-size: 18px; font-weight: 600; line-height: 1.35; }
 .overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
-.overlay-confirm__action { min-height: 42px; padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.overlay-confirm__action { min-height: var(--control-h); padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
 .overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: transparent; color: var(--brand-fg); }
 .overlay-confirm .il-control--secondary:hover { background: var(--brand-soft); }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
@@ -3297,9 +3340,9 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .conversation-ai-takeover-note { margin:0 0 7px; color:var(--text-muted); font-size:10px; line-height:1.35; }
 .conversation-ai-takeover-note::before { display:inline-block; width:6px; height:6px; margin:0 6px 1px 1px; border-radius:50%; background:var(--accent); content:""; }
 .conversation-composer__form { display:flex; align-items:center; gap:8px; }
-.conversation-composer__form input { flex:1; min-width:0; min-height:42px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 12px; background:var(--surface); color:var(--text); font-size:12px; }
+.conversation-composer__form input { flex:1; min-width:0; min-height:var(--control-h); border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 12px; background:var(--surface); color:var(--text); font-size:12px; }
 .conversation-composer__form input:focus { outline:0; border-color:var(--accent); box-shadow:var(--shadow-focus); }
-.conversation-composer__form button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:80px; min-height:42px; padding:0 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:11px; font-weight:700; cursor:pointer; }
+.conversation-composer__form button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:80px; min-height:var(--control-h); padding:0 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:11px; font-weight:700; cursor:pointer; }
 .conversation-composer__form button:hover { background:var(--accent-hover); }
 .conversation-composer__form button:disabled { opacity:.58; cursor:not-allowed; }
 .conversation-byte-count { margin:0 0 6px; color:var(--text-muted); font-size:10px; text-align:right; }
