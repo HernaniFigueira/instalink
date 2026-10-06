@@ -373,6 +373,10 @@ export default function DashboardPage() {
   // também não conta pedido para "existe atividade" com a flag desligada.
   const hasActivity = recent.bookings.length + recent.leads.length + (legacyPagesEnabled ? recent.orders.length : 0) > 0;
   const canalConnected = whatsapp?.status === 'connected';
+  // CLINICAL ACCESS: acesso clínico não concede Conversas. Sem a permissão
+  // `whatsapp`, o card de Conversas e tarefas mostra APENAS as pendências do
+  // profissional (o servidor também não envia o bloco `whatsapp`).
+  const canWhats = permsReady && panelPerms.whatsapp === true;
   const orderDef = (s: string): StatusDef => (ORDER_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
   const bookDef = (s: string): StatusDef => (BOOKING_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
   const leadDef = (s: string): StatusDef => (LEAD_STATUS as Record<string, StatusDef>)[s] || { panel: s, tone: 'zinc' } as StatusDef;
@@ -796,7 +800,7 @@ export default function DashboardPage() {
             {links.conversas === true && <Link href={`/conversas${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Abrir →</Link>}
           </div>
           <div className="dsh-card__body pt-2 space-y-1.5">
-            {whatsapp ? (
+            {canWhats && (whatsapp ? (
               <ListRow allowed={links.conversas === true} href={`/conversas${q}`}
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon n="chat" size={15} /></span>
@@ -805,8 +809,8 @@ export default function DashboardPage() {
               </ListRow>
             ) : (
               <p className="text-[12.5px] text-[var(--text-muted)] rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2">Canal de conversas não conectado.</p>
-            )}
-            {whatsapp && totals.leads > 0 && (
+            ))}
+            {canWhats && whatsapp && totals.leads > 0 && (
               <ListRow allowed={links.funil === true} href={`/funil${q}`}
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--warning-bg)', color: 'var(--warning-fg)' }}><Icon n="clock" size={15} /></span>
@@ -814,7 +818,7 @@ export default function DashboardPage() {
                 <span className="text-[13px] font-semibold tabular-nums text-[var(--text)]">{totals.leads}</span>
               </ListRow>
             )}
-            {canalConnected && (
+            {canWhats && canalConnected && (
               <div className="flex items-center gap-2.5 rounded-lg border border-[var(--success-border)] bg-[var(--success-bg)] px-2.5 py-2">
                 <span className="dsh-kpi__icon !w-7 !h-7" style={{ background: 'var(--success)', color: '#fff' }}><Icon n="chat" size={15} /></span>
                 <span className="flex-1 text-[11.5px] font-semibold text-[var(--success-fg)]">Envie mensagens para seus pacientes</span>

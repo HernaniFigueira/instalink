@@ -32,7 +32,7 @@ import {
   type WorkflowFacts, type WorkflowState,
 } from '../appointment-workflow';
 import {
-  canAccessContact, canAccessPet, scopeContacts, scopePets, scopedDbView,
+  canAccessContact, canAccessPet, isLinkedContact, isLinkedPet, scopeContacts, scopePets, scopedDbView,
 } from '../data-scope';
 import type { DB } from '../types';
 
@@ -222,40 +222,60 @@ describe('Workflow · etapa canônica derivada (sem 4ª máquina persistida)', (
 // ═══════════════════════════════════════════════════════════════
 // 2 · Escopo de dados (puro)
 // ═══════════════════════════════════════════════════════════════
-describe('Escopo de dados · relações reais, nunca nome', () => {
-  it('só enxerga o que tem vínculo (agendamento/atendimento/fila) com o profissional', async () => {
+describe('Escopo de dados · acesso clínico × vínculo operacional', () => {
+  it('LEITURA clínica: o Professional vinculado alcança os pacientes da UNIDADE', async () => {
     const db = await dbNow();
     const ctx = { professionalScope: 'pro-orlando' };
     const ids = (list: Array<{ id: string }>) => list.map((x) => x.id).sort();
-    expect(ids(scopeContacts(db, ctx, db.contacts.filter((c) => c.businessId === B)))).toEqual(['ct-a']); // bk-x tem telefone sem cadastro
-    expect(ids(scopePets(db, ctx, db.pets))).toEqual(['pet-a']);
+    // CLINICAL ACCESS: todos os pacientes clínicos da unidade (o paciente da
+    // clínica não é carteira particular do profissional).
+    expect(ids(scopeContacts(db, ctx, db.contacts.filter((c) => c.businessId === B)))).toEqual(['ct-a', 'ct-b', 'ct-c']);
+    expect(ids(scopePets(db, ctx, db.pets))).toEqual(['pet-a', 'pet-b', 'pet-c']);
     const ctxB = { professionalScope: 'pro-segundo' };
-    expect(ids(scopeContacts(db, ctxB, db.contacts.filter((c) => c.businessId === B)))).toEqual(['ct-b']);
-    // Sem recorte: tudo da unidade.
+    expect(ids(scopeContacts(db, ctxB, db.contacts.filter((c) => c.businessId === B)))).toEqual(['ct-a', 'ct-b', 'ct-c']);
+    // Sem recorte: tudo da unidade (comportamento preservado).
     expect(scopeContacts(db, { professionalScope: '' }, db.contacts)).toHaveLength(db.contacts.length);
-    // Pet C nunca é vinculado, mesmo tutor sendo "conhecido".
-    expect(canAccessPet(db, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(false);
+    // O pet de outro profissional é PACIENTE da unidade: lê-se; o que continua
+    // preso ao vínculo é a ESCRITA/CRM (isLinkedPet), não a leitura clínica.
+    expect(canAccessPet(db, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(true);
+    expect(isLinkedPet(db, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(false);
   });
   it('um homônimo NÃO herda acesso: a chave é telefone/conta/contato, não o nome', async () => {
     const db = await dbNow();
     db.contacts.push({ ...db.contacts.find((c) => c.id === 'ct-a')!, id: 'ct-homonimo', phone: '11900009999' } as any);
+    // Sem pegada clínica (pet/agendamento/atendimento) o contato não é paciente
+    // da unidade — e o homônimo por NOME nunca herda o vínculo de outro.
     expect(canAccessContact(db, { professionalScope: 'pro-orlando' }, db.contacts.find((c) => c.id === 'ct-homonimo')!)).toBe(false);
+    expect(canAccessPet(db, { professionalScope: 'pro-orlando' }, db.pets.find((p) => p.id === 'pet-b')!)).toBe(true);
+    expect(isLinkedPet(db, { professionalScope: 'pro-orlando' }, db.pets.find((p) => p.id === 'pet-b')!)).toBe(false);
   });
-  it('encontro e fila ampliam o vínculo; papel sem vínculo não vê nada', async () => {
+  it('papel de atendimento SEM vínculo fecha por padrão; a visão OPERACIONAL segue recortada', async () => {
     const db = await dbNow();
-    db.encounters.push({ id: 'e1', businessId: B, bookingId: '', queueId: '', serviceId: 's1', professionalId: 'pro-orlando', customerId: '', contactId: 'ct-c', petId: 'pet-c', status: 'draft' } as any);
     const ctx = { professionalScope: 'pro-orlando' };
-    const db2 = { ...db };
-    expect(canAccessContact(db2, ctx, db.contacts.find((c) => c.id === 'ct-c')!)).toBe(true);
-    expect(canAccessPet(db2, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(true);
-    expect(scopedDbView(db2, B, { professionalScope: '__nenhum__' }).contacts.filter((c) => c.businessId === B)).toHaveLength(0);
-    expect(scopedDbView(db2, B, { professionalScope: '__nenhum__' }).bookings.filter((c) => c.businessId === B)).toHaveLength(0);
+    const unlinked = { professionalScope: '__nenhum__' };
+    // Sem vínculo Professional: nenhuma leitura clínica nem visão de unidade.
+    expect(canAccessContact(db, unlinked, db.contacts.find((c) => c.id === 'ct-c')!)).toBe(false);
+    expect(canAccessPet(db, unlinked, db.pets.find((p) => p.id === 'pet-c')!)).toBe(false);
+    expect(scopedDbView(db, B, unlinked).contacts.filter((c) => c.businessId === B)).toHaveLength(0);
+    expect(scopedDbView(db, B, unlinked).bookings.filter((c) => c.businessId === B)).toHaveLength(0);
+    // A LEITURA clínica do Orlando alcança o paciente do colega, mas o CRM
+    // (visão operacional) continua preso ao vínculo real.
+    expect(canAccessContact(db, ctx, db.contacts.find((c) => c.id === 'ct-c')!)).toBe(true);
+    expect(canAccessPet(db, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(true);
+    expect(isLinkedContact(db, ctx, db.contacts.find((c) => c.id === 'ct-c')!)).toBe(false);
+    expect(isLinkedPet(db, ctx, db.pets.find((p) => p.id === 'pet-c')!)).toBe(false);
+    expect(scopedDbView(db, B, ctx).contacts.filter((c) => c.businessId === B).map((c) => c.id)).toEqual(['ct-a']);
   });
-  it('tenant primeiro: vínculos de outra unidade não contam', async () => {
+  it('tenant primeiro: vínculos e escopo de outra unidade não contam', async () => {
     const db = await dbNow();
     db.bookings.push(booking('bk-leak', { businessId: OUT, professionalId: 'pro-orlando', customerPhone: '11933330003' }));
     const db2 = { ...db };
-    expect(canAccessContact(db2, { professionalScope: 'pro-orlando' }, db.contacts.find((c) => c.id === 'ct-c')!)).toBe(false);
+    // O MESMO id de escopo NÃO vale em outro tenant (o profissional não existe lá).
+    const ctx = { professionalScope: 'pro-orlando' };
+    expect(canAccessContact(db2, ctx, { ...db2.contacts.find((c) => c.id === 'ct-c')!, businessId: OUT })).toBe(false);
+    expect(canAccessPet(db2, ctx, { ...db2.pets.find((p) => p.id === 'pet-c')!, businessId: OUT })).toBe(false);
+    // E a leitura do paciente da unidade continua funcionando normalmente.
+    expect(canAccessContact(db2, ctx, db2.contacts.find((c) => c.id === 'ct-c')!)).toBe(true);
   });
 });
 
@@ -460,11 +480,15 @@ describe('Workflow · ações por papel e etapa (o servidor entrega o que a tela
 // 4 · Escopo de dados pelas rotas reais
 // ═══════════════════════════════════════════════════════════════
 describe('Profissional · só o que tem vínculo (Clientes, Pets, 360, busca)', () => {
-  it('Contatos: lista filtrada, edição por id recusada (404), cadastro livre bloqueado', async () => {
+  it('Contatos: LEITURA clínica de toda a unidade, ESCRITA/CRM presos ao vínculo, cadastro bloqueado', async () => {
+    // CLINICAL ACCESS: o Professional localiza os pacientes da unidade — é a
+    // porta para abrir a ficha e o histórico longitudinal.
     const own = await j(await contactsGET(req('GET', `/api/contacts?businessId=${B}&limit=50`, T.orlando)));
-    expect(own.contacts.map((c: any) => c.id)).toEqual(['ct-a']);
+    expect(own.contacts.map((c: any) => c.id).sort()).toEqual(['ct-a', 'ct-b', 'ct-c']);
     const probe = await j(await contactsGET(req('GET', `/api/contacts?businessId=${B}&q=beta`, T.orlando)));
-    expect(probe.contacts).toEqual([]);
+    expect(probe.contacts.map((c: any) => c.id)).toEqual(['ct-b']);
+    // ESCRITA administrativa do CRM continua fora do escopo: observar/editar o
+    // tutor de outro profissional é 404 (o acesso clínico não é admin do CRM).
     expect((await contactsPATCH(req('PATCH', '/api/contacts', T.orlando, { businessId: B, id: 'ct-b', note: 'x' }))).status).toBe(404);
     expect((await contactsPATCH(req('PATCH', '/api/contacts', T.orlando, { businessId: B, id: 'ct-b', addNote: { text: 'x' } }))).status).toBe(404);
     expect((await contactsPATCH(req('PATCH', '/api/contacts', T.orlando, { businessId: B, id: 'ct-a', note: 'ok' }))).status).toBe(200);
@@ -482,48 +506,65 @@ describe('Profissional · só o que tem vínculo (Clientes, Pets, 360, busca)', 
     const p = await petsPOST(req('POST', '/api/pets', T.maria, { businessId: B, action: 'create', tutorId: id, pet: { name: 'Thor', species: 'cachorro' } }));
     expect(p.status).toBe(200);
   });
-  it('People 360: só o próprio paciente/tutor, sem pedidos, oportunidades e conversas', async () => {
+  it('People 360: pacientes da unidade visíveis, sem pedidos, oportunidades e conversas', async () => {
     const own = await j(await p360GET(req('GET', `/api/people360?businessId=${B}`, T.orlando)));
     const names = (own.people || own.persons || own.items || []).map((p: any) => p.name);
-    expect(names).toContain('Tutor Alfa');
-    expect(names).not.toContain('Tutor Beta');
-    expect(names).not.toContain('Tutor Gama');
+    // CLINICAL ACCESS: os pacientes da clínica (dos colegas inclusive) entram.
+    expect(names).toEqual(expect.arrayContaining(['Tutor Alfa', 'Tutor Beta', 'Tutor Gama']));
     const alfa = (own.people || own.persons || own.items).find((p: any) => p.name === 'Tutor Alfa');
-    expect(alfa.leads).toEqual([]);
-    expect(alfa.conversations).toEqual([]);
-    expect(alfa.orders).toBe(0);
-    // Dos agendamentos do tutor, só os DELE.
-    expect(alfa.bookings.every((b: any) => b.professionalId === 'pro-orlando')).toBe(true);
-    const full = await j(await p360GET(req('GET', `/api/people360?businessId=${B}`, T.owner)));
-    const fullNames = (full.people || full.persons || full.items).map((p: any) => p.name);
-    expect(fullNames).toEqual(expect.arrayContaining(['Tutor Alfa', 'Tutor Beta', 'Tutor Gama']));
-    // Abrir o 360 do outro por chave (URL/ID): não existe para o Orlando.
-    const betaKey = (full.people || full.persons || full.items).find((p: any) => p.name === 'Tutor Beta').key;
-    const byKey = await p360GET(req('GET', `/api/people360?businessId=${B}&key=${encodeURIComponent(betaKey)}`, T.orlando));
-    const kb = await j(byKey);
-    expect(JSON.stringify(kb)).not.toContain('Tutor Beta');
+    // O histórico COMERCIAL não faz parte da projeção clínica (chaves ausentes).
+    for (const field of ['leads', 'conversations', 'orders', 'spent', 'notes', 'email', 'customerId', 'profile', 'tags']) {
+      expect(alfa).not.toHaveProperty(field);
+    }
+    // O próprio agendamento de outro profissional aparece como CONTEXTO do
+    // paciente (continuidade), mas a AGENDA do Orlando continua só dele.
+    const beta = (own.people || own.persons || own.items).find((p: any) => p.name === 'Tutor Beta');
+    expect(beta.bookings.map((b: any) => b.professionalId)).toContain('pro-segundo');
+    const orlandoAgenda = await manage(T.orlando);
+    expect(Object.keys(orlandoAgenda)).not.toContain('bk-b');
+    // A ficha por chave abre para o Orlando (ela é paciente da unidade).
+    const betaKey = beta.key;
+    const kb = await j(await p360GET(req('GET', `/api/people360?businessId=${B}&key=${encodeURIComponent(betaKey)}`, T.orlando)));
+    expect(kb.people.map((p: any) => p.name)).toEqual(['Tutor Beta']);
   });
-  it('Pets: lista, tutor, edição e criação seguem o vínculo (404/403 em objeto alheio)', async () => {
+  it('Pets: LEITURA de todos os pacientes da unidade; ESCRITA presa ao vínculo (404/403)', async () => {
     const own = await j(await petsGET(req('GET', `/api/pets?businessId=${B}`, T.orlando)));
-    expect(own.pets.map((p: any) => p.id)).toEqual(['pet-a']);
+    expect(own.pets.map((p: any) => p.id).sort()).toEqual(['pet-a', 'pet-b', 'pet-c']);
     const byTutor = await j(await petsGET(req('GET', `/api/pets?businessId=${B}&tutorId=ct-b`, T.orlando)));
-    expect(byTutor.pets).toEqual([]);
+    expect(byTutor.pets.map((p: any) => p.id)).toEqual(['pet-b']);
     const upd = (id: string, tutorId: string) => petsPOST(req('POST', '/api/pets', T.orlando, { businessId: B, action: 'update', tutorId, pet: { id, name: 'Renomeado', species: 'cachorro' } }));
+    // O pet do colega é legível, mas não editável por quem não o atende.
     expect((await upd('pet-b', 'ct-b')).status).toBe(404);
     expect((await upd('pet-b', 'ct-a')).status).toBe(404); // não "adota" o pet alheio
-    expect((await upd('pet-a', 'ct-a')).status).toBe(200);
+    const ownPetUpdate = await upd('pet-a', 'ct-a');
+    expect(ownPetUpdate.status).toBe(200);
+    const ownPetBody = await j(ownPetUpdate);
+    expect(Object.keys(ownPetBody.pet).sort()).toEqual([
+      'active', 'birthDate', 'breed', 'id', 'name', 'notes', 'photo', 'sex', 'species', 'tutorId', 'weightKg',
+    ]);
     expect((await petsPOST(req('POST', '/api/pets', T.orlando, { businessId: B, action: 'create', tutorId: 'ct-a', pet: { name: 'Novo', species: 'gato' } }))).status).toBe(403);
     expect((await petsPOST(req('POST', '/api/pets', T.orlando, { businessId: B, action: 'delete', id: 'pet-a' }))).status).toBe(403);
     for (const t of [T.owner, T.admin, T.maria]) {
-      expect((await j(await petsGET(req('GET', `/api/pets?businessId=${B}`, t)))).pets).toHaveLength(3);
+      const broad = await j(await petsGET(req('GET', `/api/pets?businessId=${B}`, t)));
+      expect(broad.pets).toHaveLength(3);
+      expect(broad.pets[0]).toMatchObject({ businessId: B, tutorId: 'ct-a' });
+      expect(broad.pets[0]).toHaveProperty('createdAt');
+      expect(broad.pets[0]).toHaveProperty('updatedAt');
     }
   });
-  it('Busca global usa o MESMO escopo: nome do outro paciente/tutor/conversa não aparece', async () => {
+  it('Busca global: pacientes da unidade aparecem; conversas/agendamentos alheios não', async () => {
     const hits = async (t: string, q: string) => (await j(await searchGET(req('GET', `/api/search?businessId=${B}&q=${q}`, t)))).groups as Array<{ group: string; title: string }>;
-    expect((await hits(T.orlando, 'Beta')).filter((h) => h.group !== 'agendamentos')).toEqual([]);
-    expect((await hits(T.orlando, 'Mia')).length).toBe(0);
+    // CLINICAL ACCESS: pacote clínico (pessoas + pets) alcança a unidade.
+    expect((await hits(T.orlando, 'Beta')).map((h) => h.group)).toEqual(expect.arrayContaining(['pessoas', 'pets']));
+    expect((await hits(T.orlando, 'Mia')).map((h) => h.group)).toContain('pets');
+    // Conversas continuam presas ao vínculo OPERACIONAL (nada de WhatsApp de
+    // paciente que só o colega atende).
+    const betaHits = await hits(T.orlando, 'Beta');
+    expect(betaHits.filter((h) => h.group === 'conversas')).toEqual([]);
     expect((await hits(T.orlando, 'Alfa')).map((h) => h.group)).toEqual(expect.arrayContaining(['pessoas', 'conversas']));
     expect((await hits(T.orlando, 'Rex')).map((h) => h.group)).toContain('pets');
+    // O agendamento do colega não entra na busca do profissional.
+    expect(betaHits.filter((h) => h.group === 'agendamentos')).toEqual([]);
     const maria = await hits(T.maria, 'Beta');
     expect(maria.map((h) => h.group)).toEqual(expect.arrayContaining(['pessoas', 'conversas']));
   });

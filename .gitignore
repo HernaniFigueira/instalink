@@ -33,3 +33,6 @@ tsconfig.tsbuildinfo
 
 # Logs de gate do F1B2 (build/vitest/QA — descartáveis)
 .cache/f1b2/
+
+# Fixture/QA descartável do Clinical Access (contém credenciais locais — nunca versionar)
+.cache/clinical-access/

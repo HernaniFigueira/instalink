@@ -381,12 +381,19 @@ describe('F1A · isolamento multi-tenant e permissões', () => {
     // assumir o atendimento da Michelle não passa.
     const theirs = await start({ businessId: BIZ, bookingId: 'bk-mel' }, profBToken);
     expect(theirs.res.status).toBe(403);
+    // CLINICAL ACCESS: o OUTRO profissional do MESMO tenant LÊ o registro
+    // (continuidade assistencial), porém em READ-ONLY — a autoria clínica
+    // continua exclusiva de quem atendeu.
     const read = await getById(mine.body.encounterId, BIZ, profBToken);
-    expect(read.res.status).toBe(403);
-    // E o profissional dono do agendamento lê normalmente.
+    expect(read.res.status).toBe(200);
+    expect(read.body.encounter.professionalId).toBe('pro-a');
+    expect(read.body.encounter.access.canEditCore).toBe(false);
+    expect(read.body.encounter.canAddendum).toBe(false);
+    // E o profissional dono do agendamento lê e edita normalmente.
     const own = await getById(mine.body.encounterId, BIZ, profToken);
     expect(own.res.status).toBe(200);
     expect(own.body.encounter.professionalId).toBe('pro-a');
+    expect(own.body.encounter.access.canEditCore).toBe(true);
   });
 
   it('profissional inicia o PRÓPRIO atendimento (escopo não bloqueia quem atende)', async () => {

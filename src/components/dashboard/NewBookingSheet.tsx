@@ -30,9 +30,9 @@ interface Contact {
   id: string;
   name: string;
   phone: string;
-  email: string;
-  registered: boolean;
-  lastInteraction: string;
+  // Campos opcionais no DTO clínico: ambos só existem na projeção administrativa.
+  email?: string;
+  registered?: boolean;
 }
 
 export function NewBookingSheet({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated }: {

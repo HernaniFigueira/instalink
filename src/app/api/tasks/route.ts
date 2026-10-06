@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readDB, updateDB } from '@/lib/db';
 import { requireBusiness } from '@/lib/access';
 import { canAccessBooking } from '@/lib/access-core';
-import { canAccessContact, canAccessLead, canAccessTask, isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
+import { canAccessLead, canAccessTask, isLinkedContact, isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import {
   createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions, taskDueLabel,
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         const cid = String(body.customerId || body.contactId || '');
         if (cid) {
           const c = d.contacts.find((x) => (x.id === cid || x.customerId === cid) && x.businessId === businessId);
-          if (!c || !canAccessContact(d, guard.ctx, c)) throw deny();
+          if (!c || !isLinkedContact(d, guard.ctx, c)) throw deny();
         }
       }
       // O responsável precisa ser da equipe desta unidade (a mesma regra que a

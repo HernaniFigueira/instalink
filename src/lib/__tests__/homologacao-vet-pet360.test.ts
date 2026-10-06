@@ -116,11 +116,16 @@ describe('P1 · raças em autocomplete (sempre digitar outra)', () => {
 });
 
 describe('P1 · Pet 360 retorna só dados do pet', () => {
-  it('componente existe e filtra encounters/bookings/responses por petId', () => {
+  it('componente existe e isola encounters/bookings/responses do pet', () => {
     const c = read('src/components/dashboard/Pet360Sheet.tsx');
     expect(c).toContain('data-pet360');
+    // CLINICAL ACCESS: o histórico de atendimentos do pet é CLÍNICO (todos os
+    // profissionais da unidade) e continua filtrado por petId no componente;
+    // a agenda do paciente vem do read model escopado no SERVIDOR
+    // (`mode=patient&petId=`), sem varrer a agenda da unidade.
     expect(c).toContain('e.petId === pet.id');
-    expect(c).toContain('b.petId === pet.id');
+    expect(c).toContain('mode=patient&petId=');
+    expect(c).not.toContain('mode=manage&from=2000-01-01');
     expect(c).toContain('Responsável financeiro');
     // não duplica financeiro do tutor no pet
     expect(c).not.toMatch(/\/api\/finance\?/);

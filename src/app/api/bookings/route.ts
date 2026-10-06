@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { readDB, updateDB } from '@/lib/db';
 import { canAccessBooking, requireBusiness, scopeBookings, scopeInfo } from '@/lib/access';
+import { canReadClinicalRecords, phoneIdentity } from '@/lib/data-scope';
 import { customerFromRequest } from '@/lib/customer-auth';
 import { isFeatureEnabled, canBook as canBookModule } from '@/lib/features';
 import {
@@ -36,18 +37,59 @@ function err(message: string, status: number): Error {
 // GET ?businessId=&serviceId=&from=&to= — mapa de dias (público)
 // GET ?businessId=&mode=slots-admin&serviceId=&date= — slots da equipe, exige agenda
 // GET ?businessId=&mode=manage[&from=&to=&page=&limit=] — gestão (dono)
+// GET ?businessId=&mode=patient[&petId=|&contactId=|&customerId=|&phone=] —
+//     contexto CLÍNICO do paciente (Pet 360): os agendamentos DO PACIENTE na
+//     unidade, para continuidade assistencial. Não é agenda de terceiros.
 export async function GET(req: NextRequest) {
   try {
     const q = req.nextUrl.searchParams;
     const businessId = q.get('businessId') || '';
     const mode = q.get('mode');
-    const staffGuard = mode === 'slots-admin' || mode === 'manage'
-      ? await requireBusiness(req, businessId, 'agenda')
+    // `mode=patient` é leitura CLÍNICA do paciente: mesma porta de leitura da
+    // agenda/clientes, com o guard reutilizado (uma leitura de DB por request).
+    const staffGuard = mode === 'slots-admin' || mode === 'manage' || mode === 'patient'
+      ? await requireBusiness(req, businessId, mode === 'patient' ? ['agenda', 'clientes', 'atendimento'] : 'agenda')
       : null;
     if (staffGuard && !staffGuard.ok) return staffGuard.res;
     const db = staffGuard?.ok ? staffGuard.db : await readDB();
     const business = db.businesses.find((b) => b.id === businessId);
     if (!business) return NextResponse.json({ error: 'Negócio não encontrado.' }, { status: 404 });
+
+    if (mode === 'patient') {
+      // CLINICAL ACCESS — o paciente é o protagonista. A leitura exige vínculo
+      // clínico (`canReadClinicalRecords`) e devolve SOMENTE os agendamentos
+      // daquele paciente nesta unidade — nunca uma listagem por profissional,
+      // período ou unidade.
+      const guard = staffGuard!;
+      if (!canReadClinicalRecords(guard.ctx)) {
+        return NextResponse.json({ error: 'Seu acesso não tem vínculo clínico nesta unidade.' }, { status: 403 });
+      }
+      const petId = String(q.get('petId') || '');
+      const contactId = String(q.get('contactId') || '');
+      const customerId = String(q.get('customerId') || '');
+      const phone = phoneIdentity(String(q.get('phone') || ''));
+      if (!petId && !contactId && !customerId && !phone) {
+        return NextResponse.json({ error: 'Informe o paciente (pet, contato, conta ou telefone).' }, { status: 400 });
+      }
+      const contact = contactId
+        ? guard.db.contacts.find((c) => c.id === contactId && c.businessId === businessId)
+        : undefined;
+      const contactCustomerId = contact?.customerId || '';
+      const contactPhone = contact?.phone ? phoneIdentity(contact.phone) : '';
+      const rows = guard.db.bookings
+        .filter((b) => b.businessId === businessId && (
+          (!!petId && b.petId === petId)
+          || (!!customerId && b.customerId === customerId)
+          || (!!phone && phoneIdentity(b.customerPhone) === phone)
+          || (!!contact && (
+            (!!contactCustomerId && b.customerId === contactCustomerId)
+            || (!!contactPhone && phoneIdentity(b.customerPhone) === contactPhone)
+          ))
+        ))
+        .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1))
+        .slice(0, 200);
+      return NextResponse.json({ bookings: rows, total: rows.length, patientScoped: true });
+    }
 
     if (mode === 'manage') {
       // The mode was authorized above; reuse its snapshot for the response.

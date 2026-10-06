@@ -45,8 +45,10 @@ describe('PR53 final polish — Agenda, ShellAppearance, ClientProfileDrawer', (
   it('ClientProfileDrawer drops unreachable access/consent handlers, not identity fields or live controls', () => {
     const source = readFileSync('src/components/dashboard/ClientProfileDrawer.tsx', 'utf8');
     expect(source).not.toMatch(/createAccess|setConsent|accessSaving|setAccessSaving|notice\.password|temporaryPassword/);
-    expect(source).toContain("accountStatus: 'none' | 'active'");
-    expect(source).toContain('marketingOptIn: boolean');
+    // Esses campos permanecem no DTO administrativo, mas são opcionais no
+    // tipo compartilhado porque a projeção clínica os omite completamente.
+    expect(source).toContain("accountStatus?: 'none' | 'active'");
+    expect(source).toContain('marketingOptIn?: boolean');
     expect(source).toContain('<Switch checked={draft.guardian.isMinor}');
     expect(source).toContain("apiSend<any>('/api/contacts', 'PATCH'");
   });

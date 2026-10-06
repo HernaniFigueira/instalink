@@ -286,8 +286,11 @@ export async function GET(req: NextRequest) {
   };
 
   // ── WhatsApp: estado honesto (nunca "conectado" de mentira) ──
+  // CLINICAL ACCESS: acesso clínico NÃO concede Conversas. Sem a permissão
+  // `whatsapp`, o bloco de conversas não é calculado nem enviado — o painel
+  // do Professional mostra só as pendências que são dele.
   const conversations = db.conversations.filter((c) => c.businessId === bId);
-  const whatsapp = m.whatsapp || m.agent
+  const whatsapp = (m.whatsapp || m.agent) && can(guard.ctx, 'whatsapp')
     ? {
       status: integrationStatus(business, true).status,
       open: conversations.filter((c) => c.status === 'open').length,

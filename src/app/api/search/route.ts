@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireBusiness } from '@/lib/access';
-import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
+import { canAccessConversation, isProfessionalScoped, scopeReadableContacts, scopeReadablePets } from '@/lib/data-scope';
 import { scopeBookings } from '@/lib/access-core';
 import { buildPeople360IdentityIndex, people360Phone, type People360Identity } from '@/lib/people360-identity';
+import { clinicalPeople360Key } from '@/lib/clinical-people360-key';
 import { entityMatches } from '@/lib/entity-search';
 
 // GET ?businessId=&q= — BUSCA GLOBAL AGRUPADA (GODOUTOR final · FASE C).
@@ -29,9 +30,12 @@ export async function GET(req: NextRequest) {
   const guard = await requireBusiness(req, businessId);
   if (!guard.ok) return guard.res;
   const { ctx } = guard;
-  // ESCOPO DE DADOS (mesmo das rotas): quem atende só encontra pessoas, pets e
-  // conversas com vínculo real — `clientes=true` não abre a base inteira.
-  const db = isProfessionalScoped(ctx) ? scopedDbView(guard.db, businessId, ctx) : guard.db;
+  const clinicalProjection = isProfessionalScoped(ctx);
+  // CLINICAL ACCESS: quem atende ENCONTRA os pacientes da unidade (pessoas e
+  // pets com pegada clínica) — é a porta para abrir a ficha e o histórico.
+  // Agendamentos, conversas e o resto do CRM continuam no vínculo OPERACIONAL:
+  // busca não é atalho para a agenda/conversas de outro profissional.
+  const db = guard.db;
   const canClients = ctx.permissions.clientes === true;
   const canAgenda = ctx.permissions.agenda === true;
   const canWhats = ctx.permissions.whatsapp === true;
@@ -43,10 +47,11 @@ export async function GET(req: NextRequest) {
 
   // ── Pessoas + Pacientes (pets) ────────────────────────────────
   if (canClients) {
+    const readableContacts = scopeReadableContacts(db, ctx, db.contacts.filter((c) => c.businessId === businessId));
+    const readablePets = scopeReadablePets(db, ctx, db.pets.filter((p) => p.businessId === businessId && p.active !== false));
     // Mesma chave estável do /api/people360: o resultado abre a ficha 360
     // REAL da pessoa, não uma URL que 404aria.
-    const identityRecords: People360Identity[] = db.contacts
-      .filter((c) => c.businessId === businessId)
+    const identityRecords: People360Identity[] = readableContacts
       .map((c) => ({ customerId: c.customerId, phone: c.phone, contactId: c.id }));
     for (const b of db.bookings.filter((x) => x.businessId === businessId)) {
       identityRecords.push({ customerId: b.customerId, phone: b.customerPhone });
@@ -55,33 +60,38 @@ export async function GET(req: NextRequest) {
     const keyOf = (customerId: string, phone: string, name: string, contactId = '') =>
       identity.key({ customerId, phone: people360Phone(phone), contactId }, name);
 
-    const contacts = db.contacts.filter((c) => c.businessId === businessId);
+    const contacts = readableContacts;
     const phoneOf = (c: { phone: string }) => c.phone.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3');
     for (const c of contacts) {
-      if (!entityMatches(query, { name: c.name, phone: c.phone, email: c.email })) continue;
-      const key = keyOf(c.customerId, c.phone, c.name, c.id);
-      if (!key) continue;
+      const matches = clinicalProjection
+        ? entityMatches(query, { name: c.name, phone: c.phone })
+        : entityMatches(query, { name: c.name, phone: c.phone, email: c.email });
+      if (!matches) continue;
+      const identityKey = keyOf(c.customerId, c.phone, c.name, c.id);
+      const routeKey = clinicalProjection ? clinicalPeople360Key(identityKey) : identityKey;
+      if (!routeKey) continue;
       hits.push({
-        id: `pessoa:${key}`, group: 'pessoas', icon: 'users',
+        id: `pessoa:${routeKey}`, group: 'pessoas', icon: 'users',
         title: c.name || phoneOf(c),
-        subtitle: [phoneOf(c), c.email].filter(Boolean).join(' · ') || 'Contato',
-        href: `/clientes/${encodeURIComponent(key)}${unitQuery}`,
+        subtitle: [phoneOf(c), ...(clinicalProjection ? [] : [c.email])].filter(Boolean).join(' · ') || 'Contato',
+        href: `/clientes/${encodeURIComponent(routeKey)}${unitQuery}`,
       });
     }
 
     // Pets (clínicas veterinárias): o resultado é o PACIENTE, o destino é a
     // ficha do tutor (Responsável ≠ Paciente).
     const tutorById = new Map(contacts.map((c) => [c.id, c]));
-    for (const pet of db.pets.filter((p) => p.businessId === businessId && p.active !== false)) {
+    for (const pet of readablePets) {
       if (!entityMatches(query, { name: pet.name, extra: [pet.species, pet.breed].filter(Boolean).join(' ') })) continue;
       const tutor = tutorById.get(pet.tutorId);
-      const key = tutor ? keyOf(tutor.customerId, tutor.phone, tutor.name, tutor.id) : '';
-      if (!key) continue;
+      const identityKey = tutor ? keyOf(tutor.customerId, tutor.phone, tutor.name, tutor.id) : '';
+      const routeKey = identityKey && clinicalProjection ? clinicalPeople360Key(identityKey) : identityKey;
+      if (!routeKey) continue;
       hits.push({
         id: `pet:${pet.id}`, group: 'pets', icon: 'paw',
         title: pet.name || 'Paciente',
         subtitle: [pet.species, tutor?.name ? `tutor: ${tutor.name}` : ''].filter(Boolean).join(' · '),
-        href: `/clientes/${encodeURIComponent(key)}${unitQuery}`,
+        href: `/clientes/${encodeURIComponent(routeKey)}${unitQuery}`,
       });
     }
   }
@@ -106,7 +116,10 @@ export async function GET(req: NextRequest) {
 
   // ── Conversas ────────────────────────────────────────────────
   if (canWhats) {
-    for (const c of db.conversations.filter((c) => c.businessId === businessId)) {
+    const conversations = isProfessionalScoped(ctx)
+      ? db.conversations.filter((c) => c.businessId === businessId && canAccessConversation(db, ctx, c))
+      : db.conversations.filter((c) => c.businessId === businessId);
+    for (const c of conversations) {
       if (!entityMatches(query, { name: c.name, phone: c.phone, extra: c.channelUsername })) continue;
       hits.push({
         id: `conversation:${c.id}`, group: 'conversas', icon: 'chat',

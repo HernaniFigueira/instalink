@@ -9,8 +9,10 @@
 // `record`, a permissão `atendimento` e a área — sem duplicar rota nem criar
 // segundo registro de navegação.
 //
-// O ID NÃO concede acesso: o servidor valida tenant, permissão e escopo
-// profissional em `/api/encounters?id=`; o workspace só desenha a resposta.
+// O ID NÃO concede acesso: o servidor valida tenant, permissão de Atendimento
+// e ACESSO CLÍNICO em `/api/encounters?id=`; o workspace só desenha a resposta
+// (e a desenha READ-ONLY quando o registro é de outro profissional — a escrita
+// continua exclusiva do responsável, contrato F1).
 import { useParams, useSearchParams } from 'next/navigation';
 import { EncounterWorkspace } from '@/components/dashboard/EncounterWorkspace';
 import { AccessDenied } from '@/components/dashboard/AccessNotice';

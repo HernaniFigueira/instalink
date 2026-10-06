@@ -9,6 +9,13 @@
 // Ao abrir uma pessoa, a ficha completa (carteirinha + dados cadastrais +
 // histórico 360) vive em components/dashboard/ClientProfileDrawer — o mesmo
 // componente para quem chega da lista, do agendamento ou da conversa.
+//
+// CLINICAL ACCESS: a ROTA continua /clientes (schema e URL não mudam), mas o
+// rótulo é contextual. Para o Professional vinculado esta tela é a lista de
+// PACIENTES da unidade — o read model clínico do /api/people360 entrega os
+// pacientes do tenant (nome, telefone do tutor, carteirinha e agendamentos)
+// SEM histórico comercial (conversas, oportunidades, gasto/pedidos e dados de
+// conta). Não existe segunda tela: mesma rota, mesma ficha, outro recorte.
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -102,6 +109,9 @@ export default function ClientesPage() {
   // vale com escopo da unidade (a mesma regra que o servidor aplica).
   const workspace = useWorkspace();
   const unitScope = !workspace.agendaScope || workspace.agendaScope === 'all';
+  // Quem atende vê a lista como "Pacientes" (linguagem de cuidado); quem opera
+  // a unidade continua vendo "Clientes" (CRM).
+  const clinicalView = workspace.agendaScope === 'own' || workspace.agendaScope === 'none';
   const [pendingClientOpen, setPendingClientOpen] = useState('');
   const [createdClientId, setCreatedClientId] = useState('');
   const [services, setServices] = useState<any[]>([]);
@@ -113,6 +123,9 @@ export default function ClientesPage() {
   // aparece para quem tem a permissão 'leads' (a mesma que /funil exige).
   const { permissions, ready: permsReady } = usePanelPermissions();
   const canFunil = permsReady && permissions.leads === true;
+  // WhatsApp é módulo próprio: quem atende só ganha o atalho se tiver a
+  // permissão (o acesso clínico NÃO concede Conversas).
+  const canWhats = permsReady && permissions.whatsapp === true;
   const canExportBase = permsReady && unitScope && permissions.clientes_exportar === true;
   const canImportBase = permsReady && unitScope && permissions.clientes_importar === true;
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
@@ -281,7 +294,7 @@ export default function ClientesPage() {
     <>
       <PageHeader
         icon="users"
-        title="Clientes"
+        title={clinicalView ? 'Pacientes' : 'Clientes'}
         action={
           <>
             {/* OPORTUNIDADES (§6): o kanban deixou de ser a identidade do
@@ -337,27 +350,31 @@ export default function ClientesPage() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por nome, WhatsApp, e-mail ou CPF…"
-                  aria-label="Buscar cliente"
+                  placeholder={clinicalView ? 'Buscar por nome ou telefone…' : 'Buscar por nome, telefone, e-mail ou CPF…'}
+                  aria-label={clinicalView ? 'Buscar paciente' : 'Buscar cliente'}
                   className="w-full bg-[var(--surface-3)] border border-[var(--border)] rounded-md pl-9 pr-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none focus:shadow-focus focus:border-[var(--brand)] focus:bg-white"
                 />
               </div>
               <span className="text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">
-                {total} {total === 1 ? 'pessoa' : 'pessoas'} · pág {page}/{pages}
+                {total} {total === 1 ? (clinicalView ? 'paciente' : 'pessoa') : (clinicalView ? 'pacientes' : 'pessoas')} · pág {page}/{pages}
               </span>
             </div>
-            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel="Filtrar clientes" size="sm" />
+            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
           </div>
 
           {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (
             <div className="ws-panel">
               <EmptyState
                 icon={search ? 'search' : 'users'}
-                title={search || filter !== 'all' ? 'Ninguém encontrado' : 'Nenhum cliente ainda'}
+                title={search || filter !== 'all' ? 'Ninguém encontrado' : (clinicalView ? 'Nenhum paciente ainda' : 'Nenhum cliente ainda')}
                 hint={search || filter !== 'all'
-                  ? 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na clínica e conversas criam o perfil automaticamente.'
-                  : 'Assim que alguém agendar, for cadastrado na clínica ou conversar pelo WhatsApp, o perfil aparece aqui.'}
-                action={<Button variant="primary" onClick={() => setNewClientOpen(true)}><Icon n="plus" size={15} strokeWidth={2.6} /> Cadastrar cliente</Button>}
+                  ? clinicalView
+                    ? 'Tente outro nome ou telefone ou volte para “Todos”.'
+                    : 'Tente outro termo ou volte para “Todos”. Agendamentos, cadastros na clínica e conversas criam o perfil automaticamente.'
+                  : clinicalView
+                    ? 'Assim que um paciente for cadastrado ou agendado na clínica, ele aparece aqui — inclusive os atendidos por outro profissional.'
+                    : 'Assim que alguém agendar, for cadastrado na clínica ou conversar pelo WhatsApp, o perfil aparece aqui.'}
+                action={clinicalView ? undefined : <Button variant="primary" onClick={() => setNewClientOpen(true)}><Icon n="plus" size={15} strokeWidth={2.6} /> Cadastrar cliente</Button>}
               />
             </div>
           ) : (
@@ -376,7 +393,7 @@ export default function ClientesPage() {
                         type="button"
                         onClick={() => openFullProfile(p.key)}
                         className="flex items-center gap-3 min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:shadow-focus rounded-md"
-                        aria-label={`Abrir perfil de ${p.name || 'cliente'}`}
+                        aria-label={`Abrir perfil de ${p.name || (clinicalView ? 'paciente' : 'cliente')}`}
                       >
                         <Avatar name={p.name} src={p.avatar || undefined} size={42} />
                         <span className="min-w-0 flex-1">
@@ -390,14 +407,14 @@ export default function ClientesPage() {
                           </span>
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--text-muted)]">
                             <span className="inline-flex items-center gap-1"><Icon n="phone" size={11} /> {p.phone ? formatPhoneBR(p.phone) : 'sem telefone'}</span>
-                            <span className="inline-flex items-center gap-1"><Icon n="history" size={11} /> {p.lastSeen ? humanDay(p.lastSeen.slice(0, 10)) : 'sem contato'}</span>
+                            {!clinicalView && <span className="inline-flex items-center gap-1"><Icon n="history" size={11} /> {p.lastSeen ? humanDay(p.lastSeen.slice(0, 10)) : 'sem contato'}</span>}
                             {p.bookings.length > 0 && (
                               <span className="inline-flex items-center gap-1"><Icon n="calendar" size={11} /> {p.bookings.length} agend.</span>
                             )}
-                            {p.leads.length > 0 && (
-                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {p.leads.length} em oportunidades</span>
+                            {!clinicalView && (p.leads || []).length > 0 && (
+                              <span className="inline-flex items-center gap-1"><Icon n="funnel" size={11} /> {(p.leads || []).length} em oportunidades</span>
                             )}
-                            {p.orders > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent)}</span>}
+                            {!clinicalView && (p.orders || 0) > 0 && <span className="font-semibold text-[var(--text)] tabular-nums">{money(p.spent || 0)}</span>}
                           </span>
                         </span>
                       </button>
@@ -411,7 +428,7 @@ export default function ClientesPage() {
                         <Button size="sm" variant="secondary" onClick={() => openBooking(p)} title="Novo agendamento para esta pessoa">
                           <Icon n="calendarPlus" size={14} /> <span className="hidden md:inline">Agendar</span>
                         </Button>
-                        {p.phone && (
+                        {p.phone && canWhats && (
                           <a href={waLink(p.phone, `Olá, ${(p.name || '').split(' ')[0]}!`)} target="_blank" rel="noreferrer"
                             className={buttonCls('whatsapp', 'xs')}
                             title="Abrir WhatsApp">
@@ -428,7 +445,7 @@ export default function ClientesPage() {
                   <Button size="sm" variant="secondary" onClick={() => setPage((x) => Math.max(1, x - 1))} disabled={page <= 1}>
                     <Icon n="chevL" size={13} /> Anterior
                   </Button>
-                  <span className="text-[var(--text-muted)] font-semibold tabular-nums">{page} de {pages} · {total} pessoas</span>
+                  <span className="text-[var(--text-muted)] font-semibold tabular-nums">{page} de {pages} · {total} {clinicalView ? 'pacientes' : 'pessoas'}</span>
                   <Button size="sm" variant="secondary" onClick={() => setPage((x) => Math.min(pages, x + 1))} disabled={page >= pages}>
                     Próxima <Icon n="chevR" size={13} />
                   </Button>
