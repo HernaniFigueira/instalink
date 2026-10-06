@@ -1,8 +1,9 @@
 # Clinical Access — continuidade assistencial e histórico longitudinal
 
 > **STATUS: projeções clínicas implementadas neste worktree local**, branch da sessão
-> `arena/bceef42d-instalink`, baseado em `main` @ `714e3277`. O worktree contém
-> alterações locais ainda não commitadas/enviadas. A PR [#61](https://github.com/HernaniFigueira/instalink/pull/61)
+> `arena/bceef42d-instalink`, baseado em `main` @ `714e3277`. O snapshot integral
+> local foi preservado no checkpoint `387a222` e enviado somente à branch de
+> sessão, não à branch da PR. A PR [#61](https://github.com/HernaniFigueira/instalink/pull/61)
 > continua aberta contra `main`, mas o head remoto é `arena/01a10c9e-instalink` @
 > `5cc1a885` — diferente do checkout desta sessão. Portanto, estas alterações e
 > evidências **ainda não correspondem ao head da PR**. Não foi criada outra PR,
