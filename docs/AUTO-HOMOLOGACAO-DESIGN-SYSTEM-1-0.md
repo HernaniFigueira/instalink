@@ -187,3 +187,38 @@ camada artesanal nem controle fora do sistema). A PR entrega o Design System 1.0
 com App Shell e Agenda como primeira superfície, propaga os primitives canônicos para as
 superfícies tocadas nesta rodada e **documenta** o que ainda está na fila — sem ampliar
 autoridade, sem tocar domínio e sem declarar homologação que não tenha sido renderizada.
+
+---
+
+## Recuperação sobre a main pós-PR#61 (2026-10-06)
+
+A PR #61 (Clinical Access) foi **mergeada** em `main` (`b4462d0`). O trabalho desta fase,
+preservado em `backup/pr61-ds-head-edb0613` (`edb0613`) e empilhado sobre o antigo topo da
+PR #61 (`5cc1a88`), foi **re-aplicado sobre a main pós-merge**. Não houve cherry-pick cego:
+os únicos quatro arquivos sobrepostos (`ClientProfileDrawer.tsx`,
+`clinical-ux-closure.test.ts`, `GODOUTOR-HISTORY.md`, `GODOUTOR-MASTER-PLAN.md`) foram
+verificados como **união exata de três vias** (as mudanças do DS preservadas *e* as mudanças
+da PR #61 preservadas, em ambas as direções). O fechamento de privacidade da PR #61
+(allow-lists em `/api/contacts`, `people360`, `search`, `pets`, `encounters`) está **intacto e
+idêntico à main**.
+
+Revalidação nesta sessão (Chromium real 153 headless contra build de produção local, banco
+descartável, login pelo formulário real):
+
+| Suíte | Resultado |
+| --- | --- |
+| `tsc --noEmit` | 0 erros |
+| `npm run build` | ✓ |
+| `npx vitest run` | 3251 PASS / 5 FAIL (baseline de domínio: 3× `a34-instagram`, 1× `automation-audit-p4`, 1× `pipeline` — mesmas 5 no base `b4462d0`, zero regressão) |
+| `shell-qa.mjs` | 22/22 |
+| `agenda-qa.mjs` | 23/23 (com o fixture re-datado para hoje) |
+| `surfaces-qa.mjs` | 40/40 |
+| `responsive-qa.mjs` | 48/48 |
+| `audit-2-probe.mjs` | 25/25 |
+| Erros de console/página | nenhum |
+
+**Finding real corrigido nesta recuperação:** `scripts/seed-design-system-qa.mjs` fixava os
+atendimentos em `2026-10-05`, então a Agenda QA degradava em silêncio a partir do dia
+seguinte (23/23 → 17/19, com 4 checagens de detalhe/hovercard/Lista puladas). O seed agora
+data os atendimentos em **hoje** (fuso da clínica, `America/Sao_Paulo`), tornando o gate
+re-executável em qualquer dia. Evidência nova em `docs/qa-recovery/`.

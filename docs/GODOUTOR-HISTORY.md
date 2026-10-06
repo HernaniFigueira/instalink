@@ -1,5 +1,9 @@
 # GoDoutor — Histórico
 
+## 2026-10-06 — Recuperação do DS 1.0 sobre a main pós-PR#61
+
+> **STATUS: recuperado e revalidado em browser real; MERGE NÃO.** Com a PR #61 (Clinical Access) mergeada em `main` (`b4462d0`), o trabalho do DS preservado em `backup/pr61-ds-head-edb0613` (`edb0613`) foi re-aplicado **sem conflito** sobre a nova base. União de três vias verificada nos 4 arquivos sobrepostos; o fechamento de privacidade da PR #61 ficou idêntico à main. Revalidação: typecheck 0 · build ✓ · suíte 3251 PASS/5 FAIL (baseline) · Chromium real: shell 22/22, agenda 23/23, superfícies 40/40, responsive 48/48, AUDIT#2 25/25. Corrigido o seed do QA de Agenda que fixava a data em `2026-10-05` (agora data em hoje, fuso da clínica), destravando o gate. Evidência: `docs/qa-recovery/`.
+
 ## 2026-10-05 — GoDoutor Design System 1.0 (App Shell + Agenda UX)
 
 > **STATUS: implementado e auto-verificado em browser real; PR aberta (MERGE NÃO).** Branch de sessão `arena/01a10c9e-instalink`, empilhada sobre o topo da PR #61 (`5cc1a88`) por autorização explícita. Contrato: `docs/GODOUTOR-DESIGN-SYSTEM.md`; relatório: `docs/AUTO-HOMOLOGACAO-DESIGN-SYSTEM-1-0.md`.
