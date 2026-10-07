@@ -1,5 +1,9 @@
 # GoDoutor · Design System 1.1 — Entregáveis da missão (PR #64)
 
+> **Commit de referência:** `f157d8e` (branch `arena/40573dbd-instalink`, PR #64
+> OPEN/MERGEABLE, **sem merge**). Este documento é atualizado no mesmo commit da
+> evidência: os números abaixo são os desta árvore.
+>
 > Mesma PR #64 (`arena/40573dbd-instalink`), **sem merge**: o material abaixo é a
 > prestação de contas para homologação manual. Nada aqui foi presumido: cada
 > número sai de `measurements.json` desta pasta (Chromium real, 4 larguras) ou de
