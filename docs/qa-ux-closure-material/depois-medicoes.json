@@ -1,7 +1,7 @@
 {
   "base": "http://127.0.0.1:3000",
   "tag": "depois",
-  "hoverMsAteAparecer": 244,
+  "hoverMsAteAparecer": 228,
   "hover": {
     "largura": 270,
     "altura": 173,
@@ -56,6 +56,8 @@
     "equivalentesVariacao": 0
   },
   "semana": {
+    "vistaSelecionada": "Semana",
+    "colunas": 7,
     "eventos": 6,
     "alcas": 6
   },

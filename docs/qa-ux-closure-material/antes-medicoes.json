@@ -1,7 +1,7 @@
 {
   "base": "http://127.0.0.1:3001",
   "tag": "antes",
-  "hoverMsAteAparecer": 229,
+  "hoverMsAteAparecer": 243,
   "hover": {
     "largura": 278,
     "altura": 180,
@@ -50,6 +50,8 @@
     "equivalentesVariacao": 0
   },
   "semana": {
+    "vistaSelecionada": "Semana",
+    "colunas": 7,
     "eventos": 6,
     "alcas": 6
   },

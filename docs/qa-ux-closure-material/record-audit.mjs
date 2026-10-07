@@ -247,10 +247,27 @@ await page.getByRole('button', { name: 'Próximo dia' }).first().click().catch((
 for (let i = 0; i < 3; i += 1) await frame('toolbar', clipToolbar, 120);
 await page.getByRole('button', { name: 'Hoje' }).first().click().catch(() => {});
 for (let i = 0; i < 3; i += 1) await frame('toolbar', clipToolbar, 120);
+const vistasTrocadas = [];
 for (const vista of ['Semana', 'Lista', 'Dia']) {
-  await page.getByRole('button', { name: vista, exact: true }).first().click().catch(() => {});
+  // Os itens do seletor são `role="tab"` dentro de uma `tablist` — NÃO são
+  // `button`. O clique anterior (getByRole('button')) era no-op silencioso e o
+  // GIF não mostrava a troca de vista. Aqui a troca é afirmada por
+  // `aria-selected`, e a superfície renderizada é conferida.
+  const aba = page.getByRole('tab', { name: vista, exact: true }).first();
+  await aba.click().catch(() => {});
+  await page.waitForTimeout(900);
+  vistasTrocadas.push({
+    vista,
+    selecionada: await aba.getAttribute('aria-selected'),
+    grade: await page.evaluate(() => ({
+      colunas: document.querySelectorAll('[data-agenda-column]').length,
+      linhasDeLista: document.querySelectorAll('.ag-list__row, [data-agenda-row]').length,
+      eventos: document.querySelectorAll('button.ag-event').length,
+    })),
+  });
   for (let i = 0; i < 4; i += 1) await frame('toolbar', { x: 60, y: 60, width: 1360, height: 620 }, 140);
 }
+console.log('troca de vista:', JSON.stringify(vistasTrocadas));
 await page.getByRole('button', { name: /Filtros/i }).first().click().catch(() => {});
 for (let i = 0; i < 5; i += 1) await frame('toolbar', clipToolbar, 130);
 await page.keyboard.press('Escape');

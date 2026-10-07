@@ -105,14 +105,18 @@ M.toolbar = await page.evaluate(() => {
 await shot('toolbar-1440');
 
 // ── 4 · SEMANA (alças de resize visíveis, sem mutar nada) ───────────────
-await page.getByRole('button', { name: 'Semana', exact: true }).click().catch(() => {});
-await wait(1200);
+// `role="tab"`: o getByRole('button') anterior era no-op silencioso e a
+// medição saía da vista DIA com rótulo de Semana.
+await page.getByRole('tab', { name: 'Semana', exact: true }).first().click().catch(() => {});
+await wait(1400);
 M.semana = await page.evaluate(() => ({
+  vistaSelecionada: document.querySelector('.il-segmented [role="tab"][aria-selected="true"]')?.textContent?.trim() || null,
+  colunas: document.querySelectorAll('[data-agenda-column]').length,
   eventos: document.querySelectorAll('button.ag-event').length,
   alcas: document.querySelectorAll('span[aria-label^="Redimensionar"]').length,
 }));
 await shot('semana-1440');
-await page.getByRole('button', { name: 'Dia', exact: true }).click().catch(() => {});
+await page.getByRole('tab', { name: 'Dia', exact: true }).first().click().catch(() => {});
 await wait(900);
 
 // ── 5 · DETALHE (painel lateral preso à direita) ────────────────────────

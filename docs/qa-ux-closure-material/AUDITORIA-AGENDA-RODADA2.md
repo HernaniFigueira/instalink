@@ -133,14 +133,17 @@ Comando exato da comparação: `npx vitest run` e `npx tsc --noEmit` executados 
 - `antes-medicoes.json` / `depois-medicoes.json` — o mesmo script nas duas bases vivas (antes = `4cd669f`).
 - `complementares.json` — zoom 200%, contraste, ação destrutiva, negativa de import/export no servidor, rotas do menu.
 
+**Lacunas fechadas**
+`c-fila-1440.png` · `c-fila-1024.png` · `c-fila-390.png` · `c-datepicker-1440.png` · `c-lista-1440.png` · `c-detalhe-estrutura-1440.png` · `c-zoom200-detalhe.png` · `lacunas.json`
+
 **Antes × depois lado a lado**
 `cmp-hover-1440.png` · `cmp-ctxmenu-1440.png` · `cmp-detalhe-390.png` · `cmp-perfil-1440.png` · `cmp-dashboard-1440.png` · `cmp-menu-1440.png` · `cmp-semana-1440.png`
 
 **Geradores dos complementares**
-`node docs/qa-ux-closure-material/antes-depois.mjs antes|depois` · `node docs/qa-ux-closure-material/verificacoes-complementares.mjs`
+`node docs/qa-ux-closure-material/antes-depois.mjs antes|depois` · `node docs/qa-ux-closure-material/verificacoes-complementares.mjs` · `node docs/qa-ux-closure-material/record-lacunas.mjs`
 
 **GIFs (gestos)**
-`a-hover-resumo-detalhe.gif` · `a-menu-contexto-status.gif` · `a-drag-esc.gif` · `a-resize.gif` · `a-sidebar-rail.gif` · `a-toolbar-views.gif`
+`a-hover-resumo-detalhe.gif` · `a-menu-contexto-status.gif` · `a-drag-esc.gif` · `a-resize.gif` · `a-sidebar-rail.gif` · `a-toolbar-views.gif` · **`c-lacunas.gif`** (fila · data · três vistas · detalhe)
 
 **PNGs (estados, 1440/1366/1024/390)**
 `a-shell-*` · `a-menu-grupo-*` · `a-menu-aberto-*` · `a-menu-mobile-390` · `a-toolbar-*` · `a-hover-*` · `a-hover-dentro-*` · `a-detalhe-*` · `a-ctxmenu-*` · `a-ctxmenu-teclado-*` · `a-ctxmenu-estado-fresco-*` · `a-transicao-1440` · `a-drag-aberto-*` · `a-drag-esc-*` · `a-drag-clique-fora-*` · `a-perfil-*` · `a-dashboard-*` · `a-clientes-admin-1440` · `a-clientes-naoadmin-*` · `a-resize-arrastando-1440` · `a-resize-depois-1440` · `a-menu-contexto-1440` · `a-menu-transicao-1440` · `a-modal-central-1440` · `a-sidebar-aberta-1440` · `a-drag-popover-1440` · `a-drag-esc-limpo-1440` · `a-drag-cancelar-1440`
@@ -188,3 +191,66 @@ Além do audit principal, um segundo script (`verificacoes-complementares.mjs` �
 | **Ação destrutiva** | "Cancelar atendimento" no menu abre confirmação com o que vai acontecer ("O horário volta a ficar livre e o registro fica como cancelado no histórico — nada é apagado"); Escape sai sem gravar (`statusPreservado`) |
 | **Import/export (não-admin, no SERVIDOR)** | os três endpoints respondem **403** "Seu perfil não tem permissão para esta ação." — esconder o botão não é a defesa |
 | **Menu: rotas legadas/contextuais** | nenhuma ("Recursos", "Execuções", "Payload", "Testes internos" ausentes) |
+
+
+---
+
+## 11 · LACUNAS FECHADAS NESTA PASSADA (Fila · data · Lista · detalhe)
+
+O `record-audit.mjs` já gravava hover, menu de contexto, arraste, resize, rail, toolbar com Dia/Semana/Lista, popover de Filtros e o modal central. Faltavam **três superfícies que a missão lista nominalmente** — e um defeito de roteiro que as escondia.
+
+### 11.1 O defeito de roteiro (e por que ele importa para a leitura das evidências)
+
+Os itens do seletor Dia/Semana/Lista são `role="tab"` dentro de uma `tablist`, **não** `button`. Três scripts clicavam com `getByRole('button', …)` — que não encontra o alvo e, com `.catch(()=>{})`, **falhava em silêncio**:
+
+| Script | O que ele media antes | O que passou a medir |
+|---|---|---|
+| `record-audit.mjs` | GIF "toolbar" dizia mostrar a troca de vista, mas ficava no Dia o tempo todo | `role="tab"` + asserção por `aria-selected` + contagem de colunas/linhas a cada troca |
+| `antes-depois.mjs` | Media a vista **Dia** com rótulo "Semana" | `vistaSelecionada` afirmada + colunas da semana |
+| `record-lacunas.mjs` | (novo) — | idem |
+
+Medição corrigida (mesma base, três vistas):
+
+| Vista | `aria-selected` | colunas de grade | linhas de lista | eventos | overflowX |
+|---|---|---|---|---|---|
+| Semana | true | **7** | 0 | 6 | 0 |
+| Lista | true | 0 | **6** | 0 | 0 |
+| Dia | true | **3** | 0 | 6 | 0 |
+
+Nada disso era defeito do produto — era **roteiro de evidência errado**, e por isso a correção é registrada aqui em vez de virar "achado". Os GIFs `a-toolbar-views.gif`, `a-lacunas` e os pares abaixo foram **regerados** depois da correção (evidência antiga descartada, não reciclada).
+
+### 11.2 FILA — observada, medida, e uma decisão explícita de NÃO mexer
+
+O controle "Fila 3" abre a fila de atendimento. Ela é observável nas quatro larguras e usa **duas superfícies** conforme o espaço:
+
+| Largura | Superfície | Geometria | Cabe tudo? |
+|---|---|---|---|
+| 1440 | `aside` de trilho dedicada (`data-queue-rail`) que **coexiste** com a grade | x 1144 · 280×588 · topo 124 · recuo 16px da borda | sim (rolagem interna 0) |
+| 1024 | `dialog.il-drawer` (primitiva modal do DS 1.0) | x 630 · 380×680 · raio 20px · sombra de overlay | sim |
+| 390 | idem, compacto | x 8 · 374×768 | sim |
+
+Capturas: `c-fila-1440.png` · `c-fila-1024.png` · `c-fila-390.png`.
+
+**Decisão registrada:** a Fila **não** foi convertida para o `DetailSideModal` (a geometria presa à direita usada por detalhe/prévias). Motivos, na ordem: (1) no desktop ela **não é um painel de leitura por cima da tela** — é um trilho de fluxo que precisa coexistir com a grade, o oposto do painel modal; (2) no compacto é um `dialog` de verdade, que é a primitiva correta para uma superfície **modal** (enquanto o detalhe deixou de ser modal depois da correção: sem backdrop, preso à borda); (3) a primitiva `Drawer`/`il-drawer` tem **22 pontos de uso em 14 arquivos**, e a regra do DS 1.1 congelado manda não reescrever primitiva compartilhada por um caso isolado. Fica registrado como ponto para o dono decidir, com a evidência na mão — não como defeito escondido.
+
+### 11.3 SELETOR DE DATA
+
+O gatilho da data ("Quinta, 08/10/2026") abre um popover ancorado de **306×264** com 33 controles e cabeçalho de mês por extenso, fechando por Escape — mesma família visual da Filtros. Captura: `c-datepicker-1440.png`.
+
+### 11.4 VISTA EM LISTA
+
+6 linhas para os 6 registros do dia, cada uma com **horário + paciente + serviço · profissional + status** (ex.: `08:30 · Marina Souza · Consulta veterinária · Dra. Helena Andrioni · Pendente`), sem rolagem e sem vazamento horizontal. Captura: `c-lista-1440.png`.
+
+### 11.5 DETALHE — estrutura interna
+
+Painel preso à direita (460×900), com seções **Cliente · Profissional · Valor**, ações **Registrar chegada · Confirmar · Reagendar · Cancelar · Ver histórico · Alterar duração · Histórico (1)**, rolagem interna 0 e Escape devolvendo o foco ao evento. Captura: `c-detalhe-estrutura-1440.png`.
+
+### 11.6 GIF novo
+
+`c-lacunas.gif` — fila abrindo e fechando, seletor de data, troca entre as três vistas (agora **real**) e a abertura/fechamento do detalhe. Medições em `lacunas.json`.
+
+---
+
+## 12 · NOTA DE AMBIENTE (transparência sobre o interregno)
+
+No meio desta passada, o ambiente de trabalho foi **recriado** (o HEAD local voltou para `main`, `node_modules`, `.next`, `.cache` e `/tmp` foram limpos). O trabalho **não foi perdido**: os três commits da sessão já estavam publicados no remoto (`8347cd3`). A recuperação foi feita pelo caminho não destrutivo (`git fetch` → `git reset --mixed origin/arena/40573dbd-instalink`), seguida de `npm ci`, `scripts/seed.mjs`, `qa-ux-closure-fixture.mjs` e `qa-material-fixture.mjs`. Nenhum arquivo foi descartado e nenhum reset `--hard` foi usado. Todas as medições desta seção foram feitas **depois** da recuperação, no ambiente já restaurado.
