@@ -1,0 +1,853 @@
+{
+  "shell-1440": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoProporcao": 0.72,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "menu-1440": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "toggle": {
+      "rotulo": "Expandir navegação",
+      "largura": 43,
+      "altura": 40,
+      "x": 8,
+      "y": 852,
+      "noRodape": true,
+      "alvoOk": true
+    },
+    "armazenado": null,
+    "larguraRail": 60,
+    "paineis": [
+      "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+      "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+      "Gestão ·  · Oportunidades · Resultados · Financeiro",
+      "Configurações ·  · Canais & Integrações · Configurações"
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1440": {
+    "classe": "workspace-sidebar is-expanded",
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "tituloDeGrupoNoFluxo": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1440": {
+    "hoje": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "seta": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "data": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "segmentado": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)"
+    },
+    "itemSegmentado": {
+      "altura": 32,
+      "raio": "3px",
+      "borda": "0px solid rgb(229, 231, 235)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "filtros": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "fila": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "alturasDaMesmaLinha": [
+      40,
+      40
+    ],
+    "regra": "visitante"
+  },
+  "drag-esc-1440": {
+    "pontoDoGesto": {
+      "x": 348,
+      "y": 740
+    },
+    "antes": {
+      "faixa": true,
+      "popover": true
+    },
+    "depois": {
+      "faixa": false,
+      "popover": false,
+      "overlayDeArraste": "none"
+    },
+    "faixaSaiuEmMs": 5,
+    "saiuNaHora": true,
+    "cliqueTambemLimpa": true
+  },
+  "hover-1440": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "sobrepoeOEvento": false,
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "fundoDoCartao": "rgba(0, 0, 0, 0)",
+    "tituloNativoNoEvento": null
+  },
+  "detalhe-1440": {
+    "x": 980,
+    "y": 0,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Detalhe do agendamento",
+    "temFechar": 1,
+    "focoNoTitulo": true,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "clientes-base-1440-admin": {
+    "importar": true,
+    "exportar": true,
+    "exportarTudo": true,
+    "importarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    },
+    "exportarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    }
+  },
+  "previa-cliente-1440": {
+    "x": 880,
+    "y": 0,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Ana Prado",
+    "temIconeDoAssunto": 1,
+    "saidaParaFichaCompleta": "Ver perfil completo",
+    "gavetaFlutuanteNaTela": 0,
+    "corpo": "Ana Prado\n\nPaciente 360 — prévia rápida do cadastro\n\nVer perfil completo\nAP\nAna Prado\n\n(21) 98765-0005\n\nIdade não inform"
+  },
+  "acoes-rapidas-1440": {
+    "itens": 5,
+    "bordaDoItem": "0px",
+    "fundoDoItem": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "w": 40,
+      "h": 40
+    },
+    "deltaCentroIcone": 0,
+    "conteudo": "Novo agendamento",
+    "alinhamentoTexto": "center",
+    "rotuloVisivel": null
+  },
+  "shell-1366": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoProporcao": 0.72,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "menu-1366": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "toggle": {
+      "rotulo": "Expandir navegação",
+      "largura": 43,
+      "altura": 40,
+      "x": 8,
+      "y": 852,
+      "noRodape": true,
+      "alvoOk": true
+    },
+    "armazenado": "mini",
+    "larguraRail": 60,
+    "paineis": [
+      "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+      "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+      "Gestão ·  · Oportunidades · Resultados · Financeiro",
+      "Configurações ·  · Canais & Integrações · Configurações"
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1366": {
+    "classe": "workspace-sidebar is-expanded",
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "tituloDeGrupoNoFluxo": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1366": {
+    "hoje": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "seta": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "data": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "segmentado": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)"
+    },
+    "itemSegmentado": {
+      "altura": 32,
+      "raio": "3px",
+      "borda": "0px solid rgb(229, 231, 235)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "filtros": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "fila": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "alturasDaMesmaLinha": [
+      40,
+      40
+    ],
+    "regra": "visitante"
+  },
+  "drag-esc-1366": {
+    "pontoDoGesto": {
+      "x": 336,
+      "y": 740
+    },
+    "antes": {
+      "faixa": true,
+      "popover": true
+    },
+    "depois": {
+      "faixa": false,
+      "popover": false,
+      "overlayDeArraste": "none"
+    },
+    "faixaSaiuEmMs": 2,
+    "saiuNaHora": true,
+    "cliqueTambemLimpa": true
+  },
+  "hover-1366": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "sobrepoeOEvento": false,
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "fundoDoCartao": "rgba(0, 0, 0, 0)",
+    "tituloNativoNoEvento": null
+  },
+  "detalhe-1366": {
+    "x": 906,
+    "y": 0,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1366,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Detalhe do agendamento",
+    "temFechar": 1,
+    "focoNoTitulo": true,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "clientes-base-1366-admin": {
+    "importar": true,
+    "exportar": true,
+    "exportarTudo": true,
+    "importarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    },
+    "exportarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    }
+  },
+  "previa-cliente-1366": {
+    "x": 806,
+    "y": 0,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1366,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Ana Prado",
+    "temIconeDoAssunto": 1,
+    "saidaParaFichaCompleta": "Ver perfil completo",
+    "gavetaFlutuanteNaTela": 0,
+    "corpo": "Ana Prado\n\nPaciente 360 — prévia rápida do cadastro\n\nVer perfil completo\nAP\nAna Prado\n\n(21) 98765-0005\n\nIdade não inform"
+  },
+  "acoes-rapidas-1366": {
+    "itens": 5,
+    "bordaDoItem": "0px",
+    "fundoDoItem": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "w": 40,
+      "h": 40
+    },
+    "deltaCentroIcone": 0,
+    "conteudo": "Novo agendamento",
+    "alinhamentoTexto": "center",
+    "rotuloVisivel": null
+  },
+  "shell-1024": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoProporcao": 0.72,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "menu-1024": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "toggle": {
+      "rotulo": "Expandir navegação",
+      "largura": 43,
+      "altura": 40,
+      "x": 8,
+      "y": 852,
+      "noRodape": true,
+      "alvoOk": true
+    },
+    "armazenado": "mini",
+    "larguraRail": 60,
+    "paineis": [
+      "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+      "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+      "Gestão ·  · Oportunidades · Resultados · Financeiro",
+      "Configurações ·  · Canais & Integrações · Configurações"
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1024": {
+    "classe": "workspace-sidebar is-expanded",
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "tituloDeGrupoNoFluxo": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1024": {
+    "hoje": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "seta": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "data": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "segmentado": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)"
+    },
+    "itemSegmentado": {
+      "altura": 32,
+      "raio": "3px",
+      "borda": "0px solid rgb(229, 231, 235)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "filtros": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "fila": {
+      "altura": 40,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "alturasDaMesmaLinha": [
+      40,
+      40
+    ],
+    "regra": "visitante"
+  },
+  "drag-esc-1024": {
+    "pontoDoGesto": {
+      "x": 273,
+      "y": 740
+    },
+    "antes": {
+      "faixa": true,
+      "popover": true
+    },
+    "depois": {
+      "faixa": false,
+      "popover": false,
+      "overlayDeArraste": "none"
+    },
+    "faixaSaiuEmMs": 2,
+    "saiuNaHora": true,
+    "cliqueTambemLimpa": true
+  },
+  "hover-1024": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "sobrepoeOEvento": false,
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "fundoDoCartao": "rgba(0, 0, 0, 0)",
+    "tituloNativoNoEvento": null
+  },
+  "detalhe-1024": {
+    "x": 564,
+    "y": 0,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1024,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Detalhe do agendamento",
+    "temFechar": 1,
+    "focoNoTitulo": true,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "clientes-base-1024-admin": {
+    "importar": true,
+    "exportar": true,
+    "exportarTudo": true,
+    "importarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    },
+    "exportarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 40,
+      "raio": "6px"
+    }
+  },
+  "previa-cliente-1024": {
+    "x": 464,
+    "y": 0,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1024,
+      "h": 900
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Ana Prado",
+    "temIconeDoAssunto": 1,
+    "saidaParaFichaCompleta": "Ver perfil completo",
+    "gavetaFlutuanteNaTela": 0,
+    "corpo": "Ana Prado\n\nPaciente 360 — prévia rápida do cadastro\n\nVer perfil completo\nAP\nAna Prado\n\n(21) 98765-0005\n\nIdade não inform"
+  },
+  "acoes-rapidas-1024": {
+    "itens": 5,
+    "bordaDoItem": "0px",
+    "fundoDoItem": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "w": 40,
+      "h": 40
+    },
+    "deltaCentroIcone": 0,
+    "conteudo": "Novo agendamento",
+    "alinhamentoTexto": "center",
+    "rotuloVisivel": null
+  },
+  "shell-390": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoProporcao": 0.72,
+    "logoX": 54,
+    "iconeRailX": 0,
+    "deltaIdentidadeRail": 54,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "menu-mobile-390": {
+    "aberto": false,
+    "rotulosIndevidos": [],
+    "titulosDeGrupo": null,
+    "controleDeLargura": 1
+  },
+  "toolbar-390": {
+    "hoje": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "seta": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "data": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "segmentado": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)"
+    },
+    "itemSegmentado": {
+      "altura": 36,
+      "raio": "3px",
+      "borda": "0px solid rgb(229, 231, 235)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "filtros": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "fila": {
+      "altura": 44,
+      "raio": "6px",
+      "borda": "1px solid rgba(0, 0, 0, 0)",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "alturasDaMesmaLinha": [
+      40,
+      44
+    ],
+    "regra": "visitante"
+  },
+  "drag-esc-390": {
+    "pontoDoGesto": {
+      "x": 141,
+      "y": 684
+    },
+    "antes": {
+      "faixa": true,
+      "popover": true
+    },
+    "depois": {
+      "faixa": false,
+      "popover": false,
+      "overlayDeArraste": "none"
+    },
+    "faixaSaiuEmMs": 3,
+    "saiuNaHora": true,
+    "cliqueTambemLimpa": true
+  },
+  "hover-390": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": -147,
+    "sobrepoeOEvento": false,
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "fundoDoCartao": "rgba(0, 0, 0, 0)",
+    "tituloNativoNoEvento": null
+  },
+  "detalhe-390": {
+    "x": 8,
+    "y": 8,
+    "largura": 374,
+    "altura": 828,
+    "topo": 8,
+    "distanciaDireita": 8,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Detalhe do agendamento",
+    "temFechar": 1,
+    "focoNoTitulo": true,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "clientes-base-390-admin": {
+    "importar": true,
+    "exportar": true,
+    "exportarTudo": true,
+    "importarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 44,
+      "raio": "6px"
+    },
+    "exportarVisual": {
+      "borda": "1px",
+      "corDaBorda": "rgba(0, 0, 0, 0)",
+      "estilo": "solid",
+      "fundo": "rgba(0, 0, 0, 0)",
+      "altura": 44,
+      "raio": "6px"
+    }
+  },
+  "previa-cliente-390": {
+    "x": 8,
+    "y": 8,
+    "largura": 374,
+    "altura": 828,
+    "topo": 8,
+    "distanciaDireita": 8,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "dialogClasse": "gd-detail",
+    "titulo": "Ana Prado",
+    "temIconeDoAssunto": 1,
+    "saidaParaFichaCompleta": "Ver perfil completo",
+    "gavetaFlutuanteNaTela": 0,
+    "corpo": "Ana Prado\n\nPaciente 360 — prévia rápida do cadastro\n\nVer perfil completo\nAP\nAna Prado\n\n(21) 98765-0005\n\nIdade não inform"
+  },
+  "acoes-rapidas-390": {
+    "itens": 5,
+    "bordaDoItem": "0px",
+    "fundoDoItem": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "w": 40,
+      "h": 40
+    },
+    "deltaCentroIcone": 0,
+    "conteudo": "Novo agendamento",
+    "alinhamentoTexto": "center",
+    "rotuloVisivel": null
+  },
+  "clientes-base-1440-naoadmin": {
+    "importar": false,
+    "exportar": false,
+    "exportarTudo": false,
+    "importarVisual": null,
+    "exportarVisual": null
+  },
+  "clientes-base-390-naoadmin": {
+    "importar": false,
+    "exportar": false,
+    "exportarTudo": false,
+    "importarVisual": null,
+    "exportarVisual": null
+  },
+  "console": {
+    "erros": [],
+    "ruido": [],
+    "respostas4xx": []
+  }
+}

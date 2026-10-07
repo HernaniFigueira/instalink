@@ -343,15 +343,20 @@ body {
      ficava 4px mais baixo que "Hoje"/setas/data na mesma linha da toolbar. */
   position: relative; display: inline-flex; align-items: center; gap: 2px;
   min-height: var(--control-h);
-  padding: 3px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  /* P1 · RODADA 2 — MENOS CONTORNO: o grupo é um POÇO neutro (`--surface-3`),
+     não um controle desenhado. Quem marca a opção ativa é o polegar suave; a
+     borda do container não existe mais. Assim o seletor de modo (Dia/Semana/
+     Lista) para de competir com o CTA da própria toolbar. */
+  padding: 3px; background: var(--surface-3);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
 }
 .il-segmented--sm { min-height: var(--control-h-sm); }
 .il-segmented__thumb {
   position: absolute; top: 3px; left: 0; height: calc(100% - 6px); z-index: 0;
   border-radius: calc(var(--radius-sm) - 3px);
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface));
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(15, 23, 42, .08));
   transition: transform var(--motion-base) var(--ease-standard),
               width var(--motion-base) var(--ease-standard);
   pointer-events: none;
@@ -366,7 +371,7 @@ body {
   color: var(--text-soft);
   transition: color var(--motion-fast) var(--ease-standard);
 }
-.il-segmented__item:hover { color: var(--text); }
+.il-segmented__item:hover { color: var(--text); background: color-mix(in srgb, var(--surface-hover) 70%, transparent); }
 .il-segmented__item[aria-selected='true'] { color: var(--brand-fg); font-weight: 600; }
 .il-segmented__item:disabled { opacity: .45; pointer-events: none; }
 .il-segmented__count {
@@ -1271,7 +1276,11 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
   position: sticky; top: 0; z-index: 45;
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
-  padding: 0 16px;
+  /* P1 · RODADA 2 — IDENTIDADE NO MESMO EIXO DO RAIL: o guter esquerdo é
+     exatamente o começo da coluna de ícones da navegação (recuo do rail +
+     recuo do item), então logo, nome da clínica e ícones leem na MESMA linha
+     vertical. O lado direito mantém o guter de conteúdo (16px). */
+  padding: 0 16px 0 var(--gd-topbar-gutter-x);
   background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -1367,7 +1376,11 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
   display: inline-flex; align-items: center; gap: 10px;
   min-width: 0; max-width: min(40ch, 42vw);
   min-height: var(--control-h);
-  padding: 0 6px; border-radius: var(--radius-md);
+  /* P1 · RODADA 2 — SEM RECUO ESQUERDO: o bloco de identidade ENCOSTA no
+     gutter da topbar (que é o eixo dos ícones do rail). Com 6px de recuo, a
+     logo nascia 6px à direita do primeiro ícone da coluna e a página tinha
+     DUAS linhas verticais de início. */
+  padding: 0 6px 0 0; border-radius: var(--radius-md);
   color: var(--text-strong);
   font-size: var(--gd-type-page-title-size); font-weight: var(--gd-type-page-title-weight);
   line-height: var(--gd-type-page-title-line); letter-spacing: -.02em;
@@ -1692,6 +1705,19 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   border-right: 1px solid var(--il-nav-border);
 }
 .workspace-sidebar .workspace-label { display: none; }
+/* ── P0 · RODADA 2 — NAVEGAÇÃO ABERTA (`is-expanded`) ────────────────────
+   O rail estreito continua sendo o PADRÃO desta coluna; o controle do rodapé
+   (`.workspace-foot__item--collapse`) é quem abre a MESMA navegação com os
+   rótulos visíveis e os destinos de grupo no fluxo. Nenhuma rota, cor ou
+   permissão muda com a largura — muda só o espaço que a coluna ocupa, e a
+   preferência é do usuário (persistida). A largura vem de UM token
+   (`--gd-nav-w`), nunca de um número solto. */
+.il-platform .workspace-sidebar.is-expanded { width: var(--gd-nav-w); }
+.workspace-sidebar.is-expanded .workspace-label { display: inline; }
+.workspace-sidebar.is-expanded .workspace-link { justify-content: flex-start; }
+/* Título de grupo na coluna aberta: mesmo tratamento do drawer móvel — o grupo
+   é um RÓTULO, não um botão com seta (o rail não é accordion em modo nenhum). */
+.workspace-sidebar.is-expanded .workspace-nav-drawer__title { padding-left: 10px; }
 /* Identidade NÃO mora mais aqui (ver bloco dedicado adiante). */
 
 /* MISSÃO UX CLOSURE · o rail não tem cabeçalho nem controle de largura.
@@ -1732,15 +1758,23 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
               background-color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link[aria-current="page"] .workspace-link__icon {
-  /* O fundo do item já comunica seleção; o glifo fica claro sem um segundo
-     bloco concorrente. */
-  background: transparent; color: var(--il-nav-active-fg);
+  /* P1 · RODADA 2 — ITEM ATIVO: o ícone ganha um POÇO preenchido da própria
+     família do estado, dentro do quadrado de 24px e com o glifo CENTRADO
+     (flex do container). Antes o glifo ficava solto sobre o fundo do item: em
+     rail estreito, o ícone ativo não tinha centro visual. A tinta é derivada do
+     `--il-nav-active-fg` (funciona em qualquer preset, claro ou escuro) e o
+     item continua sendo o `aria-current`, nunca só a cor. */
+  background: color-mix(in srgb, var(--il-nav-active-fg) 13%, transparent);
+  color: var(--il-nav-active-fg);
   box-shadow: none;
 }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
-  font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
+  /* AUDITORIA · rodada 2 — rótulo de NAVEGAÇÃO na régua de leitura: 14px com
+     20px de linha (era 13.5px/1.3). Vale para o painel conectado do rail, para
+     a coluna aberta e para o drawer móvel. */
+  font-size: 14px; font-weight: 500; line-height: 20px; text-align: left;
   border-radius: var(--radius-md); color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
@@ -1869,7 +1903,9 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
    filhos direto, sob um rótulo discreto). */
 .workspace-nav-drawer__title {
   margin: var(--gd-space-3) 0 var(--gd-space-1); padding: 0 var(--gd-space-2);
-  font-size: var(--gd-font-size-metadata); font-weight: var(--gd-weight-semibold);
+  /* 14px/20px: o rótulo do GRUPO é navegação. A hierarquia continua vindo da
+     cor (muted) e do peso — não de um corpo de 11px que ninguém lê. */
+  font-size: 14px; line-height: 20px; font-weight: var(--gd-weight-semibold);
   color: var(--gd-text-muted);
 }
 .workspace-nav-drawer__title:first-child { margin-top: var(--gd-space-1); }
@@ -1937,7 +1973,8 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .ws-peek__item {
   display: flex; align-items: center; gap: var(--gd-space-2);
   padding: 7px var(--gd-space-2); border-radius: var(--radius-sm);
-  font-size: var(--gd-font-size-secondary); font-weight: var(--gd-weight-medium); color: var(--gd-text);
+  /* 14px/20px — o item do flyout do rail lê como destino, não como legenda. */
+  font-size: 14px; line-height: 20px; font-weight: var(--gd-weight-medium); color: var(--gd-text);
   text-decoration: none;
   transition: background-color var(--gd-motion-fast) var(--gd-ease);
 }
@@ -2225,6 +2262,25 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   background: var(--surface-hover);
   box-shadow: inset 0 0 0 1px var(--accent-border);
 }
+
+/* ── P1 · RODADA 2 — TOOLBAR DA AGENDA: UMA FAMÍLIA, UM SÓ CONTORNO ───────
+   Hoje · ‹ › · data · Dia/Semana/Lista · Filtros · Fila · Bloquear · Novo
+   agendamento vivem na mesma linha e agora compartilham a MESMA régua de
+   estado: repouso sem contorno, hover com preenchimento suave. O gatilho de
+   data (o único CONTROLE DE CAMPO da linha) entra nessa régua — antes era a
+   única caixa outlined da toolbar e fazia o resto parecer desalinhado. O foco
+   continua no anel canônico do DS (`:focus-visible` + `shadow-focus`). */
+.ag-page .gd-toolbar .il-field-control {
+  background: transparent;
+  border-color: transparent;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease),
+              border-color var(--gd-motion-fast) var(--gd-ease);
+}
+.ag-page .gd-toolbar .il-field-control:hover { background: var(--surface-hover); }
+.ag-page .gd-toolbar .il-field-control:focus-visible {
+  background: var(--surface);
+  border-color: var(--accent);
+}
 /* Painéis de modo (Dia/Semana/Mês/Lista): superfície única rolável do modo.
    O panel ocupa TODO o resto do viewport (flex:1) e o scroller é o único
    dono da rolagem vertical daquele modo. min-height trava um piso visual em
@@ -2306,15 +2362,25 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-check__mark { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
 .dsh-check__mark--done { background: var(--success); color: #fff; }
 .dsh-check__mark--todo { border: 1.5px solid var(--border-strong); background: var(--surface); }
+/* ── P1 · RODADA 2 — AÇÕES RÁPIDAS SEM CARD-DENTRO-DE-CARD ───────────────
+   O que era um cartão (borda + fundo próprio) DENTRO do cartão da seção vira
+   uma AÇÃO: ícone em poço suave + rótulo, centrados, sem contorno. A área
+   clicável continua a mesma (o alvo não encolhe); só a composição some com o
+   degrau visual. O hover é preenchimento neutro do sistema. */
 .dsh-quick {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 14px 8px; border-radius: var(--radius-lg);
-  border: 1px solid var(--border-soft); background: var(--surface);
-  font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center;
-  transition: border-color .15s ease, background-color .15s ease;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px;
+  padding: 10px 6px; border-radius: var(--radius-md);
+  border: 0; background: transparent;
+  font-size: 12px; font-weight: 600; color: var(--text); text-align: center;
+  transition: background-color .15s ease;
 }
-.dsh-quick:hover { border-color: var(--border-strong); background: var(--surface-hover); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--accent-fg); }
+.dsh-quick:hover { background: var(--surface-hover); }
+.dsh-quick__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--brand-soft); color: var(--brand-fg);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2539,22 +2605,49 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    flip vivem no HoverCard/useAnchoredLayer), com leitura de horário, status,
    paciente/pet, serviço e profissional e DUAS ações explícitas no rodapé.
    Sem sombra pesada e sem cara de modal: é resumo, não detalhe. */
-.ag-hover .gd-hovercard { padding: 0; border-radius: var(--gd-radius-md); box-shadow: var(--gd-shadow-overlay); }
-.ag-hover__card { width: 252px; padding: var(--gd-space-3); display: flex; flex-direction: column; gap: 6px; }
+/* AUDITORIA · rodada 2 — o resumo é uma PRÉVIA leve, não um modal: sombra
+   média (12/24px) em vez do `--gd-shadow-overlay` (60px de blur a 30% de
+   preto), fundo BRANCO do sistema (nada de amarelado) e o mesmo raio do
+   sistema. */
+.ag-hover .gd-hovercard {
+  padding: 0; border-radius: var(--gd-radius-md);
+  background: var(--gd-bg-surface);
+  box-shadow: var(--gd-shadow-md);
+}
+/* P0 · RODADA 2 — COMPACTO de verdade. O cartão é RESUMO: 244px, respiro de
+   10/12px e linhas de 12px; antes eram 252px com `--gd-space-3` e dois botões
+   de largura total que somavam 40px de altura e davam cara de painel. */
+.ag-hover__card { width: 244px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
 .ag-hover__head > span { font-size: 12px; font-weight: 600; color: var(--gd-text-muted); font-variant-numeric: tabular-nums; }
 .ag-hover__name { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--gd-text-strong); line-height: 1.3; }
 .ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .ag-hover__rows > div { display: flex; gap: 6px; font-size: 12px; line-height: 1.35; }
-.ag-hover__rows dt { color: var(--gd-text-faint); min-width: 74px; }
+.ag-hover__rows dt { color: var(--gd-text-faint); min-width: 66px; }
 .ag-hover__rows dd { margin: 0; color: var(--gd-text-muted); }
 .ag-hover__flag { margin: 0; font-size: 11px; font-weight: 600; color: var(--gd-text-muted); }
 .ag-hover__flag--attention { color: var(--attention-fg); }
 .ag-hover__actions {
-  display: flex; gap: 6px; padding-top: 6px; margin-top: 2px;
+  display: flex; align-items: center; gap: 6px; padding-top: 6px; margin-top: 2px;
   border-top: 1px solid var(--gd-border-soft);
 }
-.ag-hover__actions > * { flex: 1; }
+/* "Ver detalhes" é O caminho (ocupa o resto da linha); as demais ações do
+   resumo ficam do tamanho do rótulo — nada de duas caixas esticadas. */
+.ag-hover__actions > :first-child { flex: 1; }
+.ag-hover__actions > :not(:first-child) { flex: 0 0 auto; }
+/* Falha de uma ação do MENU CONTEXTUAL: faixa curta acima da grade, no tom de
+   erro do sistema — a mensagem do servidor aparece sem virar modal. */
+.ag-ctx-error {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 var(--gd-space-2); padding: 8px 10px;
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-danger-soft, var(--danger-bg));
+  color: var(--gd-danger-fg, var(--danger-fg));
+  font-size: 12px; font-weight: 600;
+}
+.ag-ctx-error button { display: inline-flex; margin-left: auto; color: inherit; opacity: .8; }
+.ag-ctx-error button:hover { opacity: 1; }
 
 /* ── ORDEM DE CAMADAS DA GRADE — um só lugar (DS 1.0 · missão UX CLOSURE) ──
    O sombreamento de indisponibilidade (exceção de disponibilidade do dia) é
@@ -2885,7 +2978,9 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
 .overlay-confirm__action { min-height: var(--control-h); padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-.overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: transparent; color: var(--brand-fg); }
+/* Mesma régua do botão secundário do DS (P1 · rodada 2): sem contorno em
+   repouso, preenchimento suave no hover. */
+.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--brand-fg); }
 .overlay-confirm .il-control--secondary:hover { background: var(--brand-soft); }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
 .overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }

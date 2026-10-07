@@ -35,13 +35,14 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
-  ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
+  ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
   FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
   bookingStatusDef, bookingBlockCls, bookingDotCls,
 } from '@/lib/status';
+import { ConfirmDialog, type PendingRequest } from '@/components/dashboard/OverlayDismissGuard';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
@@ -184,7 +185,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -199,6 +200,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onBlockClick: (id: string, trigger?: HTMLElement | null) => void;
   /** "Reagendar" no resumo do evento: abre o detalhe JÁ no fluxo de mudança. */
   onBlockReschedule: (id: string, trigger?: HTMLElement | null) => void;
+  /** Botão direito / Shift+F10 / tecla Menu no evento: menu contextual real. */
+  onBlockContextMenu: (id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => void;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string, point: { x: number; y: number }) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number, point: { x: number; y: number }) => void;
@@ -363,6 +366,21 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerUp={(e) => onPressEnd(b.id, e)}
           onPointerCancel={onPressCancel}
           onClick={() => onBlockClick(b.id)}
+          /* AUDITORIA · rodada 2 — MENU CONTEXTUAL do atendimento: botão
+             direito, Shift+F10 e a tecla Menu (teclado equivalente exigido
+             pelos leitores de tela). Sem `title` nativo e sem inventar ação:
+             os itens vêm da máquina de estados (BOOKING_FLOW). */
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onBlockContextMenu(b.id, { x: e.clientX, y: e.clientY }, e.currentTarget);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+              e.preventDefault();
+              const r = e.currentTarget.getBoundingClientRect();
+              onBlockContextMenu(b.id, { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) }, e.currentTarget);
+            }
+          }}
           className={
             'ag-event absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs ' + (variant === 'day' ? 'ag-event--day ' : 'ag-event--week ')
             + b.cls
@@ -1347,24 +1365,142 @@ export default function AgendaPage() {
     if (booking) { detailTriggerRef.current = trigger ?? null; setDetail(booking); }
   }, []);
 
+  /**
+   * AUDITORIA · RODADA 2 — MENU CONTEXTUAL DO ATENDIMENTO.
+   *
+   * Botão direito (e o equivalente de teclado Shift+F10 / tecla Menu) abre um
+   * menu REAL ancorado no ponteiro com as ações que o produto já sabe fazer:
+   * detalhe, as transições VÁLIDAS da máquina de estados, reagendar, duplicar
+   * e cancelar (com confirmação). Nada de menu decorativo e nada de transição
+   * inválida: os itens vêm de `BOOKING_FLOW[b.status]` — a mesma tabela que o
+   * servidor usa para recusar (`applyBookingStatusTx`).
+   */
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; point: { x: number; y: number }; trigger: HTMLElement | null } | null>(null);
+  const [ctxBusy, setCtxBusy] = useState('');
+  const [ctxError, setCtxError] = useState('');
+  const [cancelPending, setCancelPending] = useState<PendingRequest | null>(null);
+
+  const onBlockContextMenu = useCallback((id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => {
+    if (!bookingsRef.current.get(id)) return;
+    setCtxError('');
+    setCtxMenu({ id, point, trigger });
+  }, []);
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  /** Transição pelo menu: MESMA porta do detalhe (PATCH /api/bookings). */
+  const changeStatus = useCallback(async (id: string, status: BookingStatus) => {
+    if (!bookingsRef.current.get(id) || ctxBusy) return;
+    setCtxBusy(status); setCtxError('');
+    // MESMA porta do detalhe: PATCH /api/bookings (o servidor revalida a
+    // máquina de estados, as automações e o histórico — o menu não é atalho).
+    const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ businessId, id, status }),
+    }, { scope: 'action', area: 'Agenda' });
+    setCtxBusy('');
+    if (!res.ok) { setCtxError(res.message || 'Não foi possível mudar o status.'); return; }
+    void load();
+  }, [businessId, ctxBusy, load]);
+
+  /** Itens do menu do atendimento — derivados do estado ATUAL do registro. */
+  const ctxItems: MenuItem[] = (() => {
+    const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
+    if (!b) return [];
+    const items: MenuItem[] = [
+      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setDetail(b); } },
+    ];
+    const alvos = BOOKING_FLOW[b.status] || [];
+    for (const to of alvos) {
+      if (to === 'cancelled') continue;   // destrutivo fica no fim, com confirmação
+      items.push({
+        id: `status-${to}`,
+        label: `${BOOKING_STATUS[to].panel}${to === 'pending' ? ' (reabrir)' : ''}`,
+        icon: to === 'confirmed' ? 'check' : to === 'completed' ? 'checkCircle' : to === 'no_show' ? 'clock' : 'history',
+        disabled: !!ctxBusy,
+        separatorBefore: to === (alvos.filter((x) => x !== 'cancelled')[0]),
+        onSelect: () => void changeStatus(b.id, to),
+      });
+    }
+    if (rescheduleDecision(b.status).kind === 'move') {
+      items.push({
+        id: 'reagendar', label: 'Reagendar', icon: 'sync', separatorBefore: true,
+        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setDetailReschedule(true); setDetail(b); },
+      });
+    }
+    items.push({
+      id: 'duplicar', label: 'Duplicar atendimento', icon: 'copy',
+      onSelect: () => {
+        // Duplicar = abrir o fluxo COMPLETO já preenchido; a gravação continua
+        // sendo a criação canônica (POST /api/bookings) — nenhuma rota nova.
+        setCreating({
+          date: b.date, time: b.time, professionalId: b.professionalId,
+          serviceId: b.serviceId, contactId: b.customerId || undefined,
+          name: b.customerName, phone: b.customerPhone,
+          selectedDurationMin: durationOf(b),
+        });
+      },
+    });
+    if (alvos.includes('cancelled')) {
+      items.push({
+        id: 'cancelar', label: 'Cancelar atendimento', icon: 'x', danger: true, separatorBefore: true,
+        onSelect: () => setCancelPending({
+          reason: 'programmatic',
+          state: {
+            context: 'generic',
+            title: 'Cancelar este atendimento?',
+            description: `${b.petName || b.customerName} · ${formatDateBR(b.date)} às ${b.time}. O horário volta a ficar livre e o registro fica como cancelado no histórico — nada é apagado.`,
+            confirmLabel: 'Manter atendimento',
+            discardLabel: ctxBusy ? 'Cancelando…' : 'Cancelar atendimento',
+          },
+          proceed: () => setCancelPending(null),
+          discard: () => { setCancelPending(null); void changeStatus(b.id, 'cancelled'); },
+        }),
+      });
+    }
+    return items;
+  })();
+
+  /* Fechar o menu quando o registro muda por fora (load/patch): nada de menu
+     pendurado sobre um evento que já não é o mesmo. */
+  useEffect(() => { setCtxMenu(null); }, [bookings]);
+
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
   // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
+  //
+  // P0 · RODADA 2 — CANCELAR APAGA A SELEÇÃO NA HORA. O intervalo pendente
+  // (`selectedRange`) é o que desenha a faixa na grade; ele só existe enquanto
+  // existe um gesto em andamento (quick create aberto, bloqueio, criar). Por
+  // isso TODO cancelamento limpa o estado no MESMO evento: ESC aqui, o
+  // `onClose` do popover ancorado (inclusive o clique fora), "Cancelar
+  // arraste", "Cancelar" do bloqueio, troca de modo/período. Antes o popover
+  // fechava e a faixa continuava na grade até o próximo clique.
+  const clearPendingSelection = useCallback(() => {
+    setSelectedRange(null);
+    setQuickCreate(null);
+  }, []);
   useEffect(() => {
-    if (!dragId && !filterOpen && !helpOpen) return;
+    if (!dragId && !filterOpen && !helpOpen && !selectedRange) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (dragId) endDrag();
+      if (dragId) { endDrag(); clearPendingSelection(); }
       else if (filterOpen) setFilterOpen(false);
       else if (helpOpen) setHelpOpen(false);
+      else clearPendingSelection();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, filterOpen, helpOpen, endDrag]);
+  }, [dragId, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection]);
 
 
 
-  // Cancela o drag se a view mudar no meio do movimento.
-  useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
+  // Cancela o drag se a view mudar no meio do movimento — e o gesto pendente
+  // (quick create/seleção visual) junto: período ou modo novo, grade limpa.
+  useEffect(() => {
+    endDrag();
+    clearPendingSelection();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [view, focus]);
 
   async function confirmDrop() {
     if (!dropAsk) return;
@@ -1790,7 +1926,7 @@ export default function AgendaPage() {
                 <span className="font-medium opacity-85 hidden sm:inline">— horário ocupado ou fora do expediente</span>
               )}
             </span>
-            <Button size="xs" variant="secondary" onClick={endDrag}>
+            <Button size="xs" variant="secondary" onClick={() => { endDrag(); clearPendingSelection(); }}>
               <Icon n="x" size={12} /> Cancelar arraste
             </Button>
           </div>
@@ -1962,6 +2098,7 @@ export default function AgendaPage() {
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
                       onBlockReschedule={onBlockReschedule}
+                      onBlockContextMenu={onBlockContextMenu}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
@@ -2054,7 +2191,12 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {resizeAsk && <Drawer open title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+      {/* AUDITORIA · rodada 2 — CONFIRMAÇÃO DE EDIÇÃO É MODAL CENTRAL. Mudar a
+          duração/alteração de horário de um atendimento é uma DECISÃO sobre o
+          registro (o Material chama isso de alert dialog); estava em gaveta
+          lateral, que é a geometria de LER o registro. A leitura continua no
+          painel preso à direita (`.gd-detail`); a confirmação é central. */}
+      {resizeAsk && <Drawer open variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
         <div className="p-5 space-y-3">
           <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {durationLabel(timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time))}</p>
           <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
@@ -2081,7 +2223,7 @@ export default function AgendaPage() {
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
-        <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+        <Drawer open variant="dialog" dialogWidth="520px" onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
             <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
@@ -2178,7 +2320,9 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           timezone={bizTz}
-          onClose={() => setQuickCreate(null)}
+          /* Cancelar/fechar (ESC, clique fora, botão) encerra o gesto: a
+             seleção sai da grade na mesma hora (P0 · rodada 2). */
+          onClose={clearPendingSelection}
           onCreated={() => { setQuickCreate(null); setSelectedRange(null); void load(); }}
           onMore={(seed) => {
             // "Mais opções" = fluxo COMPLETO com o mesmo preenchimento: nada do
@@ -2196,6 +2340,40 @@ export default function AgendaPage() {
             });
           }}
         />
+      )}
+      {ctxMenu && (
+        <ContextMenu
+          open
+          onClose={closeCtxMenu}
+          point={ctxMenu.point}
+          items={ctxItems}
+          label="Ações do atendimento"
+          returnFocus={ctxMenu.trigger}
+          header={(() => {
+            const b = bookingsRef.current.get(ctxMenu.id);
+            if (!b) return null;
+            return (
+              <>
+                <strong>{b.petName || b.customerName}</strong>
+                <span>{formatDateBR(b.date)} · {b.time}–{minToTime(timeToMin(b.time) + durationOf(b))}</span>
+              </>
+            );
+          })()}
+        />
+      )}
+      {cancelPending && (
+        <ConfirmDialog
+          pending={cancelPending}
+          onContinue={() => setCancelPending(null)}
+          onDiscard={() => { setCancelPending(null); const id = ctxMenu?.id; if (id) void changeStatus(id, 'cancelled'); }}
+        />
+      )}
+      {ctxError && (
+        <div className="ag-ctx-error" role="alert">
+          <Icon n="alert" size={14} />
+          <span>{ctxError}</span>
+          <button type="button" onClick={() => setCtxError('')} aria-label="Fechar aviso"><Icon n="x" size={13} /></button>
+        </div>
       )}
       {detail && (
         <BookingDetailSheet

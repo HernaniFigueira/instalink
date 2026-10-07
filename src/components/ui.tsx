@@ -36,8 +36,15 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
+  // P1 · RODADA 2 — AÇÃO SECUNDÁRIA SEM CONTORNO EM REPOUSO. A borda cheia na
+  // cor da marca fazia de TODO botão secundário (setas da data, "Hoje",
+  // "Filtros", "Fila", ações internas de card) um contorno que competia com o
+  // CTA primário. Agora o repouso é texto na cor do sistema e o ESTADO é que dá
+  // o contorno: hover/active preenchem com o suave da própria família. A
+  // `border` continua declarada (transparente) para a métrica não mudar de
+  // caixa entre variantes, e o foco segue no `shadow-focus` global.
   secondary:
-    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-[var(--brand-soft)]',
+    'bg-transparent text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)] active:bg-[var(--brand-soft)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
@@ -1694,43 +1701,162 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
               else if (e.key === 'Tab') setOpen(false);
             }}
           >
-            {items.map((item, idx) => (
-              <div key={item.id}>
-                {item.separatorBefore && <div className="gd-menu__separator" role="separator" />}
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    ref={(el) => { itemRefs.current[idx] = el; }}
-                    role="menuitem"
-                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
-                    data-active={idx === active}
-                    onMouseEnter={() => setActive(idx)}
-                    tabIndex={-1}
-                  >
-                    {item.icon && <Icon n={item.icon} size={15} />}
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    ref={(el) => { itemRefs.current[idx] = el; }}
-                    role="menuitem"
-                    disabled={item.disabled}
-                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
-                    data-active={idx === active}
-                    onMouseEnter={() => setActive(idx)}
-                    onClick={() => run(item)}
-                    tabIndex={-1}
-                  >
-                    {item.icon && <Icon n={item.icon} size={15} />}
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                )}
-              </div>
-            ))}
+            <MenuItemList items={items} active={active} setActive={setActive} run={run} listRef={listRef} itemRefs={itemRefs} />
           </div>
         </LayerPortal>
       )}
+    </>
+  );
+}
+
+/** Item de menu renderizado — usado pelo DropdownMenu e pelo ContextMenu (uma
+ *  só marcação, um só CSS, um só comportamento de teclado). */
+function MenuItemList({ items, active, setActive, run, listRef, itemRefs }: {
+  items: MenuItem[]; active: number; setActive: (i: number) => void;
+  run: (item: MenuItem) => void; listRef: React.RefObject<HTMLDivElement>;
+  itemRefs: React.MutableRefObject<Array<HTMLElement | null>>;
+}) {
+  return (
+    <div ref={listRef}>
+      {items.map((item, idx) => (
+        <div key={item.id}>
+          {item.separatorBefore && <div className="gd-menu__separator" role="separator" />}
+          {item.href ? (
+            <Link
+              href={item.href}
+              ref={(el) => { itemRefs.current[idx] = el; }}
+              role="menuitem"
+              className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+              data-active={idx === active}
+              onMouseEnter={() => setActive(idx)}
+              tabIndex={-1}
+            >
+              {item.icon && <Icon n={item.icon} size={15} />}
+              <span className="truncate">{item.label}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              ref={(el) => { itemRefs.current[idx] = el; }}
+              role="menuitem"
+              disabled={item.disabled}
+              className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+              data-active={idx === active}
+              onMouseEnter={() => setActive(idx)}
+              onClick={() => run(item)}
+              tabIndex={-1}
+            >
+              {item.icon && <Icon n={item.icon} size={15} />}
+              <span className="truncate">{item.label}</span>
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * ContextMenu canônico (botão direito / Shift+F10 / tecla Menu).
+ *
+ * Contratos:
+ *  • abre ANCORADO NO PONTEIRO (ou no canto do alvo, no caso do teclado) e
+ *    nunca sai da viewport — o flip vive no `useAnchoredLayer`;
+ *  • teclado: foco entra no primeiro item ao abrir, ↑/↓ navegam com wrap,
+ *    Home/End vão às pontas, Enter/Espaço executam, Escape e Tab fecham;
+ *  • ponteiro: `mousedown` fora, rolagem e perda de foco fecham — um menu de
+ *    contexto aberto não fica pendurado sobre a grade;
+ *  • ao fechar, o foco VOLTA para quem abriu (o evento da Agenda);
+ *  • hierarquia de camadas: usa `setLayerOrder` do LayerPortal, então um
+ *    Popover/Dialog aberto por um item do menu fica POR CIMA dele.
+ */
+export function ContextMenu({ open, onClose, point, items, label = 'Ações', header, returnFocus }: {
+  open: boolean; onClose: () => void;
+  /** Ponto do ponteiro (clientX/clientY) que originou o menu. */
+  point: { x: number; y: number } | null;
+  items: MenuItem[]; label?: string; header?: React.ReactNode;
+  /** Elemento que recebe o foco de volta ao fechar. */
+  returnFocus?: HTMLElement | null;
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  const [active, setActive] = useState(0);
+  const style = useAnchoredLayer(open && !!point, anchorRef, 'bottom-start', 4, posRef);
+  useDismissOnEscape(open, onClose);
+  const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
+  useEffect(() => {
+    if (!open) return;
+    setActive(enabled[0] ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // Foco REAL no item ativo (roving focus) e devolução ao gatilho no fim.
+  useEffect(() => { if (open) itemRefs.current[active]?.focus(); }, [open, active]);
+  /**
+   * DEVOLUÇÃO DE FOCO. O menu é montado/desmontado pelo pai (`{open && ...}`),
+   * então o caminho de volta é a LIMPEZA do efeito — não uma passagem por
+   * `open === false`. Só devolvemos o foco quando ele ainda está no menu (ou
+   * solto no body): se uma ação abriu um Dialog/Sheet, quem manda no foco é a
+   * camada de cima, e ela assume em seguida.
+   */
+  useEffect(() => () => {
+    const ativo = document.activeElement;
+    const dentro = !!ativo && !!listRef.current?.contains(ativo);
+    if ((!ativo || ativo === document.body || dentro) && returnFocus?.isConnected) {
+      returnFocus.focus?.({ preventScroll: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnFocus]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (listRef.current?.contains(t)) return;
+      onClose();
+    };
+    const onScroll = () => onClose();
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('resize', onScroll);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open, onClose]);
+  const move = (dir: 1 | -1) => {
+    if (!enabled.length) return;
+    const pos = enabled.indexOf(active);
+    setActive(enabled[(pos + dir + enabled.length) % enabled.length]);
+  };
+  const run = (item: MenuItem) => {
+    if (!item || item.disabled) return;
+    onClose();
+    item.onSelect?.();
+  };
+  if (!open || !point) return null;
+  return (
+    <>
+      {/* Âncora virtual: o menu nasce no PONTO clicado, não num elemento. */}
+      <span ref={anchorRef} aria-hidden="true" style={{ position: 'fixed', left: point.x, top: point.y, width: 0, height: 0 }} />
+      <LayerPortal style={style} className="gd-layer gd-menu gd-menu--context" role="menu" label={label} positionRef={posRef}>
+        {header && <div className="gd-menu__header">{header}</div>}
+        <div
+          className="gd-menu__list"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+            else if (e.key === 'Home') { e.preventDefault(); if (enabled.length) setActive(enabled[0]); }
+            else if (e.key === 'End') { e.preventDefault(); if (enabled.length) setActive(enabled[enabled.length - 1]); }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(items[active]); }
+            else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+            else if (e.key === 'Tab') onClose();
+          }}
+        >
+          <MenuItemList items={items} active={active} setActive={setActive} run={run} listRef={listRef} itemRefs={itemRefs} />
+        </div>
+      </LayerPortal>
     </>
   );
 }
@@ -1841,7 +1967,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
  * devolvido ao gatilho. Base comportamental: Material 3 modal side sheet +
  * `dialog` nativo (focus trap e ::backdrop do próprio browser).
  */
-export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus }: {
+export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
   /**
@@ -1855,6 +1981,21 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   /** Gatilho ALTERNATIVO quando o do clique desmonta (ex.: "Ver detalhes" do
    *  HoverCard, que sai da tela junto com o card): o foco volta para o evento. */
   returnFocus?: React.RefObject<HTMLElement | null>;
+  /**
+   * Ícone do ASSUNTO no cabeçalho (opcional). Existe para as PRÉVIAS/FICHAS
+   * laterais (perfil do cliente, Pet 360, contexto da conversa) entrarem no
+   * MESMO side modal do detalhe sem inventar um segundo cabeçalho: título,
+   * subtítulo, ícone e fechar continuam sendo uma linha só. O detalhe do
+   * agendamento não passa ícone — o contrato medido dele (DS 1.1 §8) fica
+   * idêntico.
+   */
+  icon?: string;
+  /**
+   * Saída para a superfície COMPLETA do mesmo registro (ficha em página). Vive
+   * no cabeçalho, à esquerda do fechar — nunca no rodapé, onde competiria com
+   * as ações do próprio registro.
+   */
+  fullPage?: { href: string; label: string };
   /**
    * `flush` = corpo SEM recuo próprio: quem recua é cada SEÇÃO (borda cheia de
    * ponta a ponta, divisórias contínuas). Use só em conteúdo seccionado — é a
@@ -1914,10 +2055,18 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
     >
       <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}>
         <header className="gd-detail__header">
+          {icon && (
+            <span className="gd-detail__icon" aria-hidden="true"><Icon n={icon} size={17} /></span>
+          )}
           <div className="min-w-0 flex-1">
             <h2 ref={headingRef} tabIndex={-1} id={titleId}>{title}</h2>
             {subtitle && <p className="gd-detail__sub">{subtitle}</p>}
           </div>
+          {fullPage && (
+            <Link href={fullPage.href} className="gd-detail__fullpage">
+              <Icon n="external" size={14} /> {fullPage.label}
+            </Link>
+          )}
           <CloseButton label={`Fechar ${title}`} onClick={() => requestClose('close-button')} />
         </header>
         <div className={cn('gd-detail__body ws-scroll', flush && 'gd-detail__body--flush')}>{children}</div>

@@ -81,9 +81,12 @@ describe('sidebar · grupo ABERTO aceso, distinto da rota ativa', () => {
     expect(open).toContain('color: var(--il-nav-fg)');
     // ícone ACESO no par ativo (contraste AA entre si)
     expect(open).toContain('background: transparent; color: var(--il-nav-active-fg)');
-    // current continua o mais forte (accent preenchido)
-    const cur = css.slice(css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {'), css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {') + 300);
-    expect(cur).toContain('background: transparent; color: var(--il-nav-active-fg)');
+    // current continua o mais forte: poço PREENCHIDO da família do estado
+    // (P1 · rodada 2) + glifo no par ativo — o dobro do grupo apenas aberto.
+    const curAt = css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
+    const cur = css.slice(css.indexOf('{', curAt) + 1, css.indexOf('}', curAt));
+    expect(cur).toContain('color: var(--il-nav-active-fg)');
+    expect(cur).toMatch(/background: color-mix\(in srgb, var\(--il-nav-active-fg\) 13%/);
   });
 
   it('par do ícone aceso é AA em todos os presets', () => {

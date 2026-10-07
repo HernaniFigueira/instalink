@@ -92,7 +92,13 @@ describe('homologação PR #43 — foreground de ícones e superfícies suaves',
     const shell = css.slice(bridgeIndex, bridgeIndex + 700);
     expect(shell).toContain('--brand-fg: var(--accent-fg)');
     expect(css).toContain('.dsh-quick__icon');
-    expect(css).toContain('background: var(--surface-2); color: var(--accent-fg)');
+    // P1 · rodada 2 — Ações rápidas deixaram de ser card-dentro-de-card: o
+    // poço do ícone usa os tokens da própria família de marca
+    // (`--brand-soft`/`--brand-fg`) — que a ponte do shell define COMO
+    // (`--gd-bg-subtle` / `--accent-fg`). O contrato de cor continua o mesmo:
+    // foreground legível de acento sobre superfície suave, nunca o contraste
+    // do CTA sólido.
+    expect(css).toContain('background: var(--brand-soft); color: var(--brand-fg)');
     for (const id of ['azul-profundo', 'verde-salvia', 'neutro', 'vinho']) {
       const a = findAccent(id);
       expect(a, id).toBeTruthy();

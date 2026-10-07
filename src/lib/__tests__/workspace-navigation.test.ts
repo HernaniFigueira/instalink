@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { PANEL_ROUTES, panelNavigation } from '../panel';
 import {
   workspaceAreas, switchUnitHref, routeBreadcrumb, workspaceSections,
-  workspaceRailItems, workspacePanelItems,
+  workspaceRailItems, workspacePanelItems, OFF_MENU_ROUTES,
 } from '../workspace-navigation';
 
 describe('360 navigation is an authorized projection', () => {
@@ -70,11 +70,24 @@ describe('360 navigation is an authorized projection', () => {
     const areas = workspaceAreas(nav.allowed, { multiUnit: true });
     const panel = areas.flatMap((a) => workspacePanelItems(a).map((r) => r.href));
     const rail = areas.flatMap((a) => workspaceRailItems(a).map((r) => r.href));
-    // Painel = catálogo autorizado inteiro MENOS a Página legada (flag) e
-    // MENOS os alias de compatibilidade; rail = subconjunto do painel.
+    // Painel = catálogo autorizado inteiro MENOS a Página legada (flag), MENOS
+    // os alias de compatibilidade E MENOS os destinos que por decisão de produto
+    // não ocupam MENU com a experiência padrão (P0 · rodada 2: comércio
+    // legado/diagnóstico — a rota segue autorizada e viva por URL, e continua
+    // alcançável DENTRO da tela que a explica).
     expect(panel.sort()).toEqual(
-      nav.allowed.filter((r) => r.href !== '/pagina' && r.href !== '/profissionais').map((r) => r.href).sort(),
+      nav.allowed
+        .filter((r) => r.href !== '/pagina' && r.href !== '/profissionais' && !OFF_MENU_ROUTES.includes(r.href))
+        .map((r) => r.href)
+        .sort(),
     );
+    // Contrato da supressão: os destinos suprimidos são EXATAMENTE os
+    // declarados — nada de supressão implícita decidida na tela.
+    for (const href of OFF_MENU_ROUTES) {
+      if (!nav.allowed.some((r) => r.href === href)) continue;
+      expect(panel, href).not.toContain(href);
+      expect(rail, href).not.toContain(href);
+    }
     expect(new Set(panel).size).toBe(panel.length);
     expect(new Set(rail).size).toBe(rail.length);
     for (const href of rail) expect(panel, href).toContain(href);

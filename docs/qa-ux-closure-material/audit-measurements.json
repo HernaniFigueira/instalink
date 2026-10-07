@@ -1,0 +1,1899 @@
+{
+  "fixture": {
+    "totalNoDia": 6,
+    "pendente": {
+      "id": "76f29e27-49d8-4c46-8723-de4a27999dee",
+      "status": "pending",
+      "proximoRotulo": "Confirmado",
+      "petOuNome": "Ana Prado"
+    },
+    "confirmado": {
+      "id": "3b937238-aba9-4454-a064-d0978a1c0350",
+      "status": "confirmed",
+      "duracaoMin": 15,
+      "startAt": "2026-10-08T14:00:00.000Z",
+      "endAt": "2026-10-08T14:15:00.000Z",
+      "time": "11:00",
+      "petOuNome": "Diego Rocha",
+      "horaFimOriginal": "11:15"
+    }
+  },
+  "shell-1440": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "overflowX": 0
+  },
+  "menu-1440": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "larguraRail": 60,
+    "fonteDoDestino": {
+      "tamanho": 14,
+      "linha": "20px"
+    },
+    "fonteDoTituloDeGrupo": null,
+    "itensDoPainel": 0,
+    "fonteDoItemDoPainel": null,
+    "overflowX": 0,
+    "paineis": [
+      {
+        "texto": "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+        "itens": 5,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+        "itens": 4,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Gestão ·  · Oportunidades · Resultados · Financeiro",
+        "itens": 3,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Configurações ·  · Canais & Integrações · Configurações",
+        "itens": 2,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      }
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1440": {
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "overflowX": 0,
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1440": {
+    "controles": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "segundaFaixa": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "terceiraFaixa": [
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "grupoSegmentado": {
+      "rotulo": "Visualização da agenda",
+      "altura": 40,
+      "largura": 231,
+      "raio": "6px",
+      "borda": "1px rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)",
+      "linha": "21px",
+      "fonte": "14px",
+      "visivel": true
+    },
+    "qtd": 18,
+    "alturaMin": 32,
+    "alturaMax": 40,
+    "variacaoDeAltura": 8,
+    "qtdEquivalentes": 12,
+    "variacaoDosEquivalentes": 0,
+    "alturaSemBorda": [
+      "Novo agendamento",
+      "Novo agendamento"
+    ],
+    "comBordaVisivel": [
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      }
+    ],
+    "variacaoDaNavegacao": 8,
+    "overflowX": 0
+  },
+  "hover-1440": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "distanciaVertical": 0,
+    "dentroDaViewport": true,
+    "sobrepoeOEvento": false,
+    "fundo": "rgb(255, 255, 255)",
+    "sombra": "rgba(15, 23, 42, 0.12) 0px 4px 12px -4px, rgba(15, 23, 42, 0",
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "temStatus": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "tituloNativoNoEvento": null,
+    "fonteDoNome": "13.5px",
+    "atrasoDeAberturaMs": 186.20000000018626,
+    "permaneceAoEntrarNoCartao": true
+  },
+  "detalhe-1440": {
+    "x": 980,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "titulo": "Detalhe do agendamento",
+    "focoNoTitulo": true,
+    "temFechar": 1,
+    "alturaCheia": true,
+    "preencheADireita": true,
+    "larguraDoToken": 460,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "drag-1440": {
+    "aberto": {
+      "faixa": true,
+      "popover": true,
+      "overlay": "none"
+    },
+    "depoisDoEsc": {
+      "faixa": false,
+      "popover": false,
+      "overlay": "none"
+    },
+    "saiuEmMs": 4,
+    "limpezaIntegral": true,
+    "herdaEstado": false,
+    "cliqueForaTambemLimpa": true
+  },
+  "ctxmenu-1440": {
+    "indice": 5,
+    "rotuloEncontrado": "Ana Prado · Vacinação anual · 08/10/2026 12:30 · Dr. Pedro Andrioni · Pendente — clique para ver o detalhe ou arraste para reagendar",
+    "botaoDireito": {
+      "abriu": true,
+      "itens": [
+        "Ver detalhes",
+        "Confirmado",
+        "Reagendar",
+        "Duplicar atendimento",
+        "Cancelar atendimento"
+      ],
+      "desabilitados": [],
+      "cabecalho": "Ana Prado · 08/10/2026 · 12:30–12:45",
+      "dentroDaViewport": true,
+      "focoNoPrimeiroItem": true,
+      "largura": 216,
+      "altura": 273,
+      "overflowX": 0
+    },
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true,
+    "tecladoShiftF10": true,
+    "setasMudamOFoco": true
+  },
+  "transicao-1440": {
+    "alvo": "Ana Prado · Vacinação anual · 08/10/2026 12:30 · Dr. Pedro Andrioni · Pendente — clique para ver o detalhe ou arraste para reagendar",
+    "antes": "pending",
+    "depoisDoMenu": "confirmed",
+    "historico": [
+      {
+        "at": "2026-10-07T09:41:28.024Z",
+        "from": "pending",
+        "to": "confirmed",
+        "by": "owner"
+      }
+    ],
+    "reversaoStatus": 200,
+    "restauradoPara": "pending",
+    "abriuNoEstadoFresco": true,
+    "invalidasAusentes": {
+      "itens": [
+        "Ver detalhes",
+        "Confirmado",
+        "Reagendar",
+        "Duplicar atendimento",
+        "Cancelar atendimento"
+      ],
+      "semConcluido": true,
+      "semFaltou": true,
+      "semReabrir": true,
+      "proximoValido": true
+    },
+    "servidorRecusaInvalida": {
+      "status": 409,
+      "erro": "O atendimento só pode ser concluído sem registro depois do horário marcado."
+    },
+    "servidorRecusaMaquina": {
+      "status": 422,
+      "erro": "Confirme o agendamento antes de registrar a falta."
+    }
+  },
+  "perfil-1440": {
+    "x": 880,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "colunas": {
+      "temGrade": true,
+      "colunasDaGrade": "168px 343px",
+      "xDoResumo": 939,
+      "xDoConteudo": 1081,
+      "resumoAEsquerda": true
+    },
+    "gavetaFlutuante": 0
+  },
+  "acoes-1440": {
+    "itens": 5,
+    "borda": "0px",
+    "fundo": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "tamanho": 40
+    },
+    "deltaCentroIcone": 0,
+    "alinhamento": "center",
+    "overflowX": 0
+  },
+  "shell-1366": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "overflowX": 0
+  },
+  "menu-1366": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "larguraRail": 60,
+    "fonteDoDestino": {
+      "tamanho": 14,
+      "linha": "20px"
+    },
+    "fonteDoTituloDeGrupo": null,
+    "itensDoPainel": 0,
+    "fonteDoItemDoPainel": null,
+    "overflowX": 0,
+    "paineis": [
+      {
+        "texto": "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+        "itens": 5,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+        "itens": 4,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Gestão ·  · Oportunidades · Resultados · Financeiro",
+        "itens": 3,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Configurações ·  · Canais & Integrações · Configurações",
+        "itens": 2,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      }
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1366": {
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "overflowX": 0,
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1366": {
+    "controles": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "segundaFaixa": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "terceiraFaixa": [
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "grupoSegmentado": {
+      "rotulo": "Visualização da agenda",
+      "altura": 40,
+      "largura": 231,
+      "raio": "6px",
+      "borda": "1px rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)",
+      "linha": "21px",
+      "fonte": "14px",
+      "visivel": true
+    },
+    "qtd": 18,
+    "alturaMin": 32,
+    "alturaMax": 40,
+    "variacaoDeAltura": 8,
+    "qtdEquivalentes": 12,
+    "variacaoDosEquivalentes": 0,
+    "alturaSemBorda": [
+      "Novo agendamento",
+      "Novo agendamento"
+    ],
+    "comBordaVisivel": [
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      }
+    ],
+    "variacaoDaNavegacao": 8,
+    "overflowX": 0
+  },
+  "hover-1366": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "distanciaVertical": 0,
+    "dentroDaViewport": true,
+    "sobrepoeOEvento": false,
+    "fundo": "rgb(255, 255, 255)",
+    "sombra": "rgba(15, 23, 42, 0.12) 0px 4px 12px -4px, rgba(15, 23, 42, 0",
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "temStatus": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "tituloNativoNoEvento": null,
+    "fonteDoNome": "13.5px",
+    "atrasoDeAberturaMs": 185.80000000004657,
+    "permaneceAoEntrarNoCartao": true
+  },
+  "detalhe-1366": {
+    "x": 906,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1366,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "titulo": "Detalhe do agendamento",
+    "focoNoTitulo": true,
+    "temFechar": 1,
+    "alturaCheia": true,
+    "preencheADireita": true,
+    "larguraDoToken": 460,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "drag-1366": {
+    "aberto": {
+      "faixa": true,
+      "popover": true,
+      "overlay": "none"
+    },
+    "depoisDoEsc": {
+      "faixa": false,
+      "popover": false,
+      "overlay": "none"
+    },
+    "saiuEmMs": 3,
+    "limpezaIntegral": true,
+    "herdaEstado": false,
+    "cliqueForaTambemLimpa": true
+  },
+  "ctxmenu-1366": {
+    "indice": 5,
+    "rotuloEncontrado": "Ana Prado · Vacinação anual · 08/10/2026 12:30 · Dr. Pedro Andrioni · Pendente — clique para ver o detalhe ou arraste para reagendar",
+    "botaoDireito": {
+      "abriu": true,
+      "itens": [
+        "Ver detalhes",
+        "Confirmado",
+        "Reagendar",
+        "Duplicar atendimento",
+        "Cancelar atendimento"
+      ],
+      "desabilitados": [],
+      "cabecalho": "Ana Prado · 08/10/2026 · 12:30–12:45",
+      "dentroDaViewport": true,
+      "focoNoPrimeiroItem": true,
+      "largura": 216,
+      "altura": 273,
+      "overflowX": 0
+    },
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true,
+    "tecladoShiftF10": true,
+    "setasMudamOFoco": true
+  },
+  "perfil-1366": {
+    "x": 806,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1366,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "colunas": {
+      "temGrade": true,
+      "colunasDaGrade": "168px 343px",
+      "xDoResumo": 865,
+      "xDoConteudo": 1007,
+      "resumoAEsquerda": true
+    },
+    "gavetaFlutuante": 0
+  },
+  "acoes-1366": {
+    "itens": 5,
+    "borda": "0px",
+    "fundo": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "tamanho": 40
+    },
+    "deltaCentroIcone": 0,
+    "alinhamento": "center",
+    "overflowX": 0
+  },
+  "shell-1024": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoX": 18,
+    "iconeRailX": 18,
+    "deltaIdentidadeRail": 0,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "overflowX": 0
+  },
+  "menu-1024": {
+    "rotulosIndevidos": [],
+    "flagContextual": 0,
+    "chevrons": 0,
+    "larguraRail": 60,
+    "fonteDoDestino": {
+      "tamanho": 14,
+      "linha": "20px"
+    },
+    "fonteDoTituloDeGrupo": null,
+    "itensDoPainel": 0,
+    "fonteDoItemDoPainel": null,
+    "overflowX": 0,
+    "paineis": [
+      {
+        "texto": "Clínica ·  · Estrutura · Atendimento · Disponibilidade · Serviços · Equipe",
+        "itens": 5,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Automação ·  · Assistente · Campanhas · Automações · Follow-up",
+        "itens": 4,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Gestão ·  · Oportunidades · Resultados · Financeiro",
+        "itens": 3,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      },
+      {
+        "texto": "Configurações ·  · Canais & Integrações · Configurações",
+        "itens": 2,
+        "fonte": {
+          "tamanho": 14,
+          "linha": "20px"
+        }
+      }
+    ],
+    "rotulosIndevidosNosPaineis": []
+  },
+  "largura-1024": {
+    "dataNavWidth": "full",
+    "largura": 236,
+    "rotuloVisivel": true,
+    "filhosNoFluxo": 14,
+    "painelFlutuanteAberto": 0,
+    "armazenado": "full",
+    "rotuloControle": "Recolher navegação",
+    "overflowX": 0,
+    "aposReload": {
+      "dataNavWidth": "full",
+      "largura": 236
+    },
+    "voltouAoRail": {
+      "dataNavWidth": "mini",
+      "largura": 60
+    }
+  },
+  "toolbar-1024": {
+    "controles": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "segundaFaixa": [
+      {
+        "rotulo": "Hoje",
+        "altura": 40,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 40,
+        "largura": 167,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 40,
+        "largura": 40,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "terceiraFaixa": [
+      {
+        "rotulo": "Dia",
+        "altura": 32,
+        "largura": 60,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 32,
+        "largura": 89,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 32,
+        "largura": 70,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 40,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 40,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "grupoSegmentado": {
+      "rotulo": "Visualização da agenda",
+      "altura": 40,
+      "largura": 231,
+      "raio": "6px",
+      "borda": "1px rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)",
+      "linha": "21px",
+      "fonte": "14px",
+      "visivel": true
+    },
+    "qtd": 18,
+    "alturaMin": 32,
+    "alturaMax": 40,
+    "variacaoDeAltura": 8,
+    "qtdEquivalentes": 12,
+    "variacaoDosEquivalentes": 0,
+    "alturaSemBorda": [
+      "Novo agendamento",
+      "Novo agendamento"
+    ],
+    "comBordaVisivel": [
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      }
+    ],
+    "variacaoDaNavegacao": 8,
+    "overflowX": 0
+  },
+  "hover-1024": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": 10,
+    "distanciaVertical": 0,
+    "dentroDaViewport": true,
+    "sobrepoeOEvento": false,
+    "fundo": "rgb(255, 255, 255)",
+    "sombra": "rgba(15, 23, 42, 0.12) 0px 4px 12px -4px, rgba(15, 23, 42, 0",
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "temStatus": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "tituloNativoNoEvento": null,
+    "fonteDoNome": "13.5px",
+    "atrasoDeAberturaMs": 184.60000000009313,
+    "permaneceAoEntrarNoCartao": true
+  },
+  "detalhe-1024": {
+    "x": 564,
+    "largura": 460,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1024,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "titulo": "Detalhe do agendamento",
+    "focoNoTitulo": true,
+    "temFechar": 1,
+    "alturaCheia": true,
+    "preencheADireita": true,
+    "larguraDoToken": 460,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "drag-1024": {
+    "aberto": {
+      "faixa": true,
+      "popover": true,
+      "overlay": "none"
+    },
+    "depoisDoEsc": {
+      "faixa": false,
+      "popover": false,
+      "overlay": "none"
+    },
+    "saiuEmMs": 2,
+    "limpezaIntegral": true,
+    "herdaEstado": false,
+    "cliqueForaTambemLimpa": true
+  },
+  "ctxmenu-1024": {
+    "indice": 5,
+    "rotuloEncontrado": "Ana Prado · Vacinação anual · 08/10/2026 12:30 · Dr. Pedro Andrioni · Pendente — clique para ver o detalhe ou arraste para reagendar",
+    "botaoDireito": {
+      "abriu": true,
+      "itens": [
+        "Ver detalhes",
+        "Confirmado",
+        "Reagendar",
+        "Duplicar atendimento",
+        "Cancelar atendimento"
+      ],
+      "desabilitados": [],
+      "cabecalho": "Ana Prado · 08/10/2026 · 12:30–12:45",
+      "dentroDaViewport": true,
+      "focoNoPrimeiroItem": true,
+      "largura": 216,
+      "altura": 273,
+      "overflowX": 0
+    },
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true,
+    "tecladoShiftF10": true,
+    "setasMudamOFoco": true
+  },
+  "perfil-1024": {
+    "x": 464,
+    "largura": 560,
+    "altura": 900,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "viewport": {
+      "w": 1024,
+      "h": 900
+    },
+    "alturaDoDialogo": "900px",
+    "overflowX": 0,
+    "colunas": {
+      "temGrade": true,
+      "colunasDaGrade": "168px 343px",
+      "xDoResumo": 523,
+      "xDoConteudo": 665,
+      "resumoAEsquerda": true
+    },
+    "gavetaFlutuante": 0
+  },
+  "acoes-1024": {
+    "itens": 5,
+    "borda": "0px",
+    "fundo": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "tamanho": 40
+    },
+    "deltaCentroIcone": 0,
+    "alinhamento": "center",
+    "overflowX": 0
+  },
+  "shell-390": {
+    "topbarAltura": 60,
+    "logoAltura": 34,
+    "logoX": 54,
+    "iconeRailX": 0,
+    "deltaIdentidadeRail": 54,
+    "logoTemTile": {
+      "borda": "0px",
+      "raio": "0px",
+      "fundo": "rgba(0, 0, 0, 0)"
+    },
+    "overflowX": 0
+  },
+  "menu-mobile-390": {
+    "aberto": false,
+    "rotulosIndevidos": [],
+    "titulos": null,
+    "fonteDoTitulo": null,
+    "linhaDoTitulo": null,
+    "fonteDoDestino": null,
+    "linhaDoDestino": null,
+    "controleDeLargura": 1
+  },
+  "toolbar-390": {
+    "controles": [
+      {
+        "rotulo": "Hoje",
+        "altura": 44,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 44,
+        "largura": 44,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 44,
+        "largura": 180,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "16px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 44,
+        "largura": 44,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia",
+        "altura": 36,
+        "largura": 36,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 36,
+        "largura": 65,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 36,
+        "largura": 46,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 44,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 44,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "segundaFaixa": [
+      {
+        "rotulo": "Hoje",
+        "altura": 44,
+        "largura": 58,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Dia anterior",
+        "altura": 44,
+        "largura": 44,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Escolher data (Um dia)",
+        "altura": 44,
+        "largura": 180,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "16px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Próximo dia",
+        "altura": 44,
+        "largura": 44,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "terceiraFaixa": [
+      {
+        "rotulo": "Dia",
+        "altura": 36,
+        "largura": 36,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Semana",
+        "altura": 36,
+        "largura": 65,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Lista",
+        "altura": 36,
+        "largura": 46,
+        "raio": "3px",
+        "borda": "0px rgb(229, 231, 235)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "14.3px",
+        "fonte": "13px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Bloquear horário",
+        "altura": 44,
+        "largura": 134,
+        "raio": "6px",
+        "borda": "1px rgba(0, 0, 0, 0)",
+        "fundo": "rgba(0, 0, 0, 0)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "altura": 44,
+        "largura": 173,
+        "raio": "6px",
+        "borda": "1px rgb(37, 99, 235)",
+        "fundo": "rgb(37, 99, 235)",
+        "linha": "20px",
+        "fonte": "14px",
+        "visivel": true
+      }
+    ],
+    "grupoSegmentado": {
+      "rotulo": "Visualização da agenda",
+      "altura": 44,
+      "largura": 159,
+      "raio": "6px",
+      "borda": "1px rgba(0, 0, 0, 0)",
+      "fundo": "rgb(244, 246, 252)",
+      "linha": "21px",
+      "fonte": "14px",
+      "visivel": true
+    },
+    "qtd": 18,
+    "alturaMin": 36,
+    "alturaMax": 44,
+    "variacaoDeAltura": 8,
+    "qtdEquivalentes": 12,
+    "variacaoDosEquivalentes": 0,
+    "alturaSemBorda": [
+      "Novo agendamento",
+      "Novo agendamento"
+    ],
+    "comBordaVisivel": [
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      },
+      {
+        "rotulo": "Novo agendamento",
+        "borda": "1px rgb(37, 99, 235)"
+      }
+    ],
+    "variacaoDaNavegacao": 8,
+    "overflowX": 0
+  },
+  "hover-390": {
+    "existe": true,
+    "largura": 270,
+    "altura": 173,
+    "distanciaHorizontal": -147,
+    "distanciaVertical": 42,
+    "dentroDaViewport": true,
+    "sobrepoeOEvento": false,
+    "fundo": "rgb(255, 255, 255)",
+    "sombra": "rgba(15, 23, 42, 0.12) 0px 4px 12px -4px, rgba(15, 23, 42, 0",
+    "paineisLateraisAbertos": 0,
+    "temCtaVerDetalhes": true,
+    "temStatus": true,
+    "itens": [
+      "Serviço",
+      "Profissional"
+    ],
+    "tituloNativoNoEvento": null,
+    "fonteDoNome": "13.5px",
+    "atrasoDeAberturaMs": 187.69999999995343,
+    "permaneceAoEntrarNoCartao": true,
+    "cabeNaViewportEstreita": true
+  },
+  "detalhe-390": {
+    "x": 0,
+    "largura": 390,
+    "altura": 844,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "0px",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "alturaDoDialogo": "844px",
+    "overflowX": 0,
+    "titulo": "Detalhe do agendamento",
+    "focoNoTitulo": true,
+    "temFechar": 1,
+    "alturaCheia": true,
+    "preencheADireita": true,
+    "larguraDoToken": 390,
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true
+  },
+  "drag-390": {
+    "aberto": {
+      "faixa": true,
+      "popover": true,
+      "overlay": "none"
+    },
+    "depoisDoEsc": {
+      "faixa": false,
+      "popover": false,
+      "overlay": "none"
+    },
+    "saiuEmMs": 4,
+    "limpezaIntegral": true,
+    "herdaEstado": false,
+    "cliqueForaTambemLimpa": true
+  },
+  "ctxmenu-390": {
+    "indice": 5,
+    "rotuloEncontrado": "Ana Prado · Vacinação anual · 08/10/2026 12:30 · Dr. Pedro Andrioni · Pendente — clique para ver o detalhe ou arraste para reagendar",
+    "botaoDireito": {
+      "abriu": true,
+      "itens": [
+        "Ver detalhes",
+        "Confirmado",
+        "Reagendar",
+        "Duplicar atendimento",
+        "Cancelar atendimento"
+      ],
+      "desabilitados": [],
+      "cabecalho": "Ana Prado · 08/10/2026 · 12:30–12:45",
+      "dentroDaViewport": true,
+      "focoNoPrimeiroItem": true,
+      "largura": 216,
+      "altura": 273,
+      "overflowX": 0
+    },
+    "fechouComEscape": true,
+    "focoDeVoltaNoEvento": true,
+    "tecladoShiftF10": true,
+    "setasMudamOFoco": true
+  },
+  "perfil-390": {
+    "x": 0,
+    "largura": 390,
+    "altura": 844,
+    "topo": 0,
+    "distanciaDireita": 0,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "0px",
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "alturaDoDialogo": "844px",
+    "overflowX": 0,
+    "colunas": {
+      "temGrade": true,
+      "colunasDaGrade": "326px",
+      "xDoResumo": 58,
+      "xDoConteudo": 32,
+      "resumoAEsquerda": false
+    },
+    "gavetaFlutuante": 0
+  },
+  "acoes-390": {
+    "itens": 5,
+    "borda": "0px",
+    "fundo": "rgba(0, 0, 0, 0)",
+    "cardDentroDeCard": false,
+    "icone": {
+      "borda": "0px",
+      "raio": "999px",
+      "fundo": "rgb(241, 244, 249)",
+      "tamanho": 40
+    },
+    "deltaCentroIcone": 0,
+    "alinhamento": "center",
+    "overflowX": 0
+  },
+  "resize": {
+    "alvo": "3b937238-aba9-4454-a064-d0978a1c0350",
+    "rotulo": "Diego Rocha",
+    "minutosAntes": 15,
+    "janelaAntes": {
+      "startAt": "2026-10-08T14:00:00.000Z",
+      "endAt": "2026-10-08T14:15:00.000Z"
+    },
+    "horaAntes": "11:00",
+    "alcaVisivel": true,
+    "feedbackDuranteOArraste": null,
+    "pediuConfirmacao": true,
+    "minutosDepois": 30,
+    "janelaDepois": {
+      "startAt": "2026-10-08T14:00:00.000Z",
+      "endAt": "2026-10-08T14:30:00.000Z"
+    },
+    "persistiu": true,
+    "cancelamentoNaoGravou": true,
+    "reversaoStatus": 200,
+    "restaurado": "2026-10-08T14:15:00.000Z",
+    "voltouAoOriginal": true
+  },
+  "clientes-admin": {
+    "importar": true,
+    "exportar": true,
+    "exportarTudo": true
+  },
+  "clientes-naoadmin-1440": {
+    "importar": false,
+    "exportar": false,
+    "exportarTudo": false,
+    "apiCsv": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "apiFull": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "apiImport": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    }
+  },
+  "clientes-naoadmin-390": {
+    "importar": false,
+    "exportar": false,
+    "exportarTudo": false,
+    "apiCsv": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "apiFull": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "apiImport": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    }
+  },
+  "console": {
+    "erros": [],
+    "ruido": [
+      "[ctxmenu-1440] Failed to load resource: the server responded with a status of 409 (Conflict)",
+      "[ctxmenu-1440] Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "[clientes] Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    ],
+    "requisicoesComErro": [
+      {
+        "etapa": "ctxmenu-1440",
+        "status": 409,
+        "url": "/api/bookings"
+      },
+      {
+        "etapa": "ctxmenu-1440",
+        "status": 422,
+        "url": "/api/bookings"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/export?businessId=63261c1d-aa85-4476-ba66-824cfca96709"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/export-full?businessId=63261c1d-aa85-4476-ba66-824cfca96709"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/import"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/export?businessId=63261c1d-aa85-4476-ba66-824cfca96709"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/export-full?businessId=63261c1d-aa85-4476-ba66-824cfca96709"
+      },
+      {
+        "etapa": "clientes",
+        "status": 403,
+        "url": "/api/contacts/import"
+      }
+    ]
+  }
+}

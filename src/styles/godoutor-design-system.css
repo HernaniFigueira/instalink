@@ -248,9 +248,11 @@
   /* DS 1.1 — a topbar sobe para 60px: identidade com logo de presença real
      (36px) não vive comprimida em 56px sem apertar busca e ações. */
   --gd-topbar-h: 60px;           /* top bar full-width, acima da sidebar */
-  --gd-topbar-logo: 36px;        /* logo SOLTA (sem tile): altura de presença */
-  --gd-topbar-logo-max: 132px;   /* largura máxima preservando proporção */
+  --gd-topbar-logo: 34px;        /* logo SOLTA (sem tile): altura de presença */
+  --gd-topbar-logo-max: 124px;   /* largura máxima preservando proporção */
+  --gd-topbar-gutter-x: 18px;    /* guter esquerdo da topbar = eixo dos ícones do rail */
   --gd-rail-w: 60px;             /* rail recolhida (ícones) */
+  --gd-nav-w: 236px;             /* navegação aberta (ícone + rótulo) */
   --gd-sidebar-w: 248px;         /* navegação fixada (pin) */
   --gd-nav-panel-w: 232px;       /* extensão do grupo (hover/focus) — ligada ao rail */
   --gd-z-base: 1;
@@ -596,6 +598,26 @@
 .gd-menu__item[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
 .gd-menu__item--danger { color: var(--gd-danger-fg); }
 .gd-menu__separator { height: 1px; margin: var(--gd-space-1) 0; background: var(--gd-border-soft); }
+/* MENU DE CONTEXTO (rodada 2 · auditoria da Agenda): mesmo painel do menu do
+   sistema, com um CABEÇALHO de uma linha que diz SOBRE O QUE se está agindo —
+   sem virar um resumo inteiro (o resumo é o hover; aqui é identificação). */
+.gd-menu--context { min-width: 216px; max-width: min(288px, calc(100vw - 16px)); }
+.gd-menu--context .gd-menu__header {
+  padding: 6px var(--gd-space-2) 8px;
+  margin-bottom: var(--gd-space-1);
+  border-bottom: 1px solid var(--gd-border-soft);
+}
+.gd-menu--context .gd-menu__header strong {
+  display: block; font-size: var(--gd-font-size-secondary); font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gd-menu--context .gd-menu__header span {
+  display: block; margin-top: 1px; font-size: var(--gd-font-size-caption);
+  color: var(--gd-text-muted); font-variant-numeric: tabular-nums;
+}
+/* Item do menu de contexto: 36px (alvo confortável de ponteiro) e o rótulo na
+   régua de navegação — nada abaixo de 13px. */
+.gd-menu--context .gd-menu__item { min-height: 36px; font-size: 13px; }
 .gd-layer__label {
   margin: 0 0 var(--gd-space-2);
   font-size: var(--gd-font-size-caption); font-weight: var(--gd-weight-semibold);
@@ -725,6 +747,10 @@
    tela), geometria: contrato GoDoutor (encostado na borda, não "card solto"). */
 .gd-detail {
   position: fixed; inset: 0; z-index: var(--gd-z-modal);
+  /* 100dvh explícito: no mobile o `inset: 0` acompanha a barra de endereço e o
+     painel encolhia/crescia junto. A altura do detalhe é a do viewport
+     DINÂMICO — o rodapé de ações nunca fica atrás do chrome do navegador. */
+  height: 100vh; height: 100dvh;
   margin: 0 !important; padding: 0; border: 0;
   width: auto; height: auto; max-width: none; max-height: none;
   background: transparent; color: inherit; overflow: hidden;
@@ -766,6 +792,27 @@
   color: var(--gd-text-strong); outline: none;
 }
 .gd-detail__sub { margin: 2px 0 0; font-size: var(--gd-font-size-secondary); color: var(--gd-text-muted); }
+/* Ícone do ASSUNTO (prévias/fichas laterais): mesmo chip do cabeçalho dos
+   sheets do sistema, dentro do MESMO cabeçalho — nada de um segundo header. */
+.gd-detail__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: var(--gd-radius-md, 8px);
+  border: 1px solid color-mix(in srgb, var(--gd-accent) 14%, var(--gd-border));
+  background: color-mix(in srgb, var(--gd-accent) 8%, var(--gd-bg-surface));
+  color: var(--gd-accent-fg);
+}
+/* Saída para a superfície completa: ação DISCRETA do cabeçalho (a mesma régua
+   do botão secundário — sem contorno em repouso, preenchimento suave no hover). */
+.gd-detail__fullpage {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: var(--gd-control-h-sm, 34px); padding: 0 10px;
+  border: 1px solid transparent; border-radius: var(--gd-radius-md, 8px);
+  font-size: var(--gd-font-size-secondary, 13px); font-weight: var(--gd-weight-semibold, 600);
+  color: var(--gd-accent-fg); text-decoration: none;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease);
+}
+.gd-detail__fullpage:hover { background: var(--gd-bg-hover); }
 .gd-detail__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--gd-space-4); }
 /* Conteúdo SECCIONADO (detalhe de agendamento): cada seção recua e desenha a
    própria divisória de ponta a ponta — o corpo não soma recuo nenhum. */
@@ -776,9 +823,15 @@
   border-top: 1px solid var(--gd-border-soft); background: var(--gd-bg-surface);
 }
 @media (max-width: 479px) {
-  /* Mobile: o detalhe ocupa a largura útil com margem mínima — nunca uma
-     coluna estreita perdida no meio da tela. */
-  .gd-detail__panel { top: var(--gd-space-2); right: var(--gd-space-2); bottom: var(--gd-space-2); width: calc(100vw - 2 * var(--gd-space-2)); }
+  /* AUDITORIA · rodada 2 — NO COMPACTO o detalhe continua PRESO À BORDA e com
+     ALTURA CHEIA (100% da largura). A versão anterior insetava 8px de cada
+     lado: no celular aquilo virava um CARD FLUTUANTE — a mesma geometria que a
+     homologação rejeitou no desktop. O Material descreve a modal side sheet em
+     largura compacta como a folha ocupando a tela inteira; é isso que fica. */
+  .gd-detail__panel {
+    top: 0; right: 0; bottom: 0; width: 100vw;
+    border-left: 0;
+  }
   .gd-detail__body { padding: var(--gd-space-4); }
 }
 @media (prefers-reduced-motion: reduce) {

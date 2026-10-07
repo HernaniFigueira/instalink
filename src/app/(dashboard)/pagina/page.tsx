@@ -10,14 +10,13 @@ import { THEME_PRESETS, CLINIC_THEME_PRESETS, clinicPresetId, matchingPreset, pr
 import { isLegacyPagesEnabled } from '@/lib/product';
 import { cn } from '@/lib/utils';
 import type { Block, BlockType, Business, Page, Theme } from '@/lib/types';
-import { Button, Input, PageSkeleton, Select, Tabs, Textarea } from '@/components/ui';
+import { Button, DetailSideModal, Input, PageSkeleton, Select, Tabs, Textarea } from '@/components/ui';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { canLoadOverview } from '@/lib/overview';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { Icon } from '@/components/icons';
 import { ClinicPreview } from '@/components/dashboard/ClinicPreview';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { useUnsavedChanges } from '@/components/dashboard/useUnsavedChanges';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { readFaqItems, visibleFaqItems, type FaqItem } from '@/lib/faq';
@@ -575,10 +574,12 @@ export default function PaginaPage() {
       <button type="button" className="pe-fab" onClick={() => setPreviewSheet(true)} aria-haspopup="dialog">
         <Icon n="monitor" size={15} /> Prévia
       </button>
-      <WorkspaceSheet open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia"
-        icon="eye" width="min(560px, 94vw)">
+      {/* P0 · RODADA 2 — a PRÉVIA é uma superfície lateral: mesmo side modal do
+          detalhe (preso à direita, altura cheia), sem cara de gaveta solta. */}
+      <DetailSideModal open={previewSheet} onClose={() => setPreviewSheet(false)} title="Prévia"
+        icon="eye" width="560px" flush>
         <div className="p-3"><ClinicPreview business={previewBusiness} page={page} catalog={catalog} /></div>
-      </WorkspaceSheet>
+      </DetailSideModal>
     </>
   );
 }

@@ -36,7 +36,12 @@ beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => {
+  cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs();
+  // A preferência de largura é persistida pelo controle do rodapé (P0 · rodada
+  // 2): cada caso começa do estado de fábrica (rail).
+  window.localStorage.clear();
+});
 
 const unit = { id: 'one', name: 'Clínica sintética', logo: '/demo/clinic.svg', slug: 'demo-one' };
 const FULL_PERMISSIONS = {
@@ -216,18 +221,46 @@ describe('Etapa A — sidebar por seções', () => {
     expect(container.querySelector('.ws-clinic')).toBeNull();
   });
 
-  it('o rail NÃO tem controle de expandir/recolher (nem botão flutuante, nem estado persistido)', () => {
+  it('P0 · rodada 2 — o rodapé TEM o controle de expandir/recolher, e o rail continua o PADRÃO', async () => {
+    const u = userEvent.setup();
     const { container } = setup();
-    // Nenhum botão de colapso, em nenhuma forma: a largura da coluna é fixa.
-    expect(screen.queryByRole('button', { name: /Expandir navegação|Recolher navegação/ })).toBeNull();
-    expect(container.querySelector('.workspace-foot__item--collapse')).toBeNull();
-    expect(container.querySelector('.workspace-sidebar')?.className).not.toContain('is-collapsed');
-    // E nenhuma chave de largura é lida/gravada pelo shell (o rail é fixo):
-    // nenhum acesso a localStorage de preferência de coluna, em nenhuma forma.
+    const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
+    // Em repouso: rail (mini), rótulos ocultos, nenhum modo expandido.
+    expect(side.getAttribute('data-nav-width')).toBe('mini');
+    expect(side.className).not.toContain('is-expanded');
+    // O controle existe, é UM e vive no rodapé (nunca flutuando sobre o conteúdo).
+    const toggle = screen.getByRole('button', { name: 'Expandir navegação' });
+    expect(container.querySelector('.workspace-foot__item--collapse')).toBe(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    // Clicar abre a MESMA navegação com rótulos e PERSISTE a escolha.
+    await u.click(toggle);
+    expect(side.getAttribute('data-nav-width')).toBe('full');
+    expect(side.className).toContain('is-expanded');
+    expect(window.localStorage.getItem('godoutor-side-v2')).toBe('full');
+    // E o botão passa a oferecer a volta (recolher), também persistida.
+    await u.click(screen.getByRole('button', { name: 'Recolher navegação' }));
+    expect(side.getAttribute('data-nav-width')).toBe('mini');
+    expect(window.localStorage.getItem('godoutor-side-v2')).toBe('mini');
+    // O SHELL continua sem estado de largura: quem guarda a preferência é a
+    // própria navegação (uma fonte só), e o layout reflui sozinho no flex.
     const shell = fs.readFileSync(path.join(process.cwd(), 'src/components/DashboardShell.tsx'), 'utf8');
     expect(shell).not.toMatch(/localStorage\.(get|set|remove)Item\(\s*'(godoutor|il)-side/);
     expect(shell).not.toMatch(/localStorage\.(get|set)Item\(\s*`(godoutor|il)-side/);
     expect(shell).not.toContain("'--sidebar-w'");
+  });
+
+  it('P0 · rodada 2 — a navegação ABERTA desenha os filhos do grupo no fluxo (sem painel flutuante, sem seta)', async () => {
+    const u = userEvent.setup();
+    const { container } = setup();
+    await u.click(screen.getByRole('button', { name: 'Expandir navegação' }));
+    const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
+    // O grupo deixa de ser BOTÃO (nada de accordion) e vira título + destinos.
+    expect(within(side).queryByRole('button', { name: 'Clínica' })).toBeNull();
+    expect(side.querySelectorAll('.workspace-nav-drawer__title').length).toBeGreaterThan(0);
+    expect(side.querySelectorAll('.workspace-link--sub').length).toBeGreaterThan(0);
+    // E nenhuma extensão flutuante é renderizada nesse modo.
+    expect(document.getElementById('ws-nav-panel')).toBeNull();
+    expect(container.querySelector('.ws-peek')).toBeNull();
   });
 
   it('destino fora do menu NUNCA deixa painel vazio (invariante da área dona)', async () => {
@@ -501,15 +534,15 @@ describe('MISSÃO UX CLOSURE · o rail (só ícones, tooltip, sem submenu inline
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
   });
 
-  it('a extensão do grupo contém TODOS os destinos autorizados (contrato do P0)', async () => {
+  it('a extensão do grupo contém os destinos do dia a dia da área (contrato do P0)', async () => {
     const u = userEvent.setup();
     setup({ activePath: '/configuracoes' });
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     for (const [group, expected] of [
       ['Clínica', ['Serviços', 'Disponibilidade', 'Equipe', 'Atendimento']],
-      ['Automação', ['Automações', 'Execuções', 'Follow-up', 'Campanhas']],
+      ['Automação', ['Automações', 'Follow-up', 'Campanhas']],
       ['Gestão', ['Resultados', 'Financeiro', 'Oportunidades']],
-      ['Configurações', ['Canais & Integrações', 'Recursos']],
+      ['Configurações', ['Canais & Integrações']],
     ] as const) {
       await u.click(within(main).getByRole('button', { name: group }));
       const panel = document.getElementById('ws-nav-panel')!;
@@ -517,8 +550,11 @@ describe('MISSÃO UX CLOSURE · o rail (só ícones, tooltip, sem submenu inline
       for (const label of expected) {
         expect(labels.some((l) => l.startsWith(label)), `${group} → ${label}`).toBe(true);
       }
-      // Destinos contextuais são sinalizados (por que não ocupam linha no rail).
-      if (group === 'Clínica') expect(panel.textContent).toContain('contextual');
+      // P0 · RODADA 2 — nenhuma linha de MENU traz comércio/diagnóstico nem o
+      // rótulo interno "contextual" que existia para explicar o item.
+      for (const banned of ['Produtos', 'Recursos', 'Execuções', 'contextual', 'CONTEXTUAL']) {
+        expect(panel.textContent, `${group} → ${banned}`).not.toContain(banned);
+      }
       // Nenhum alias de compatibilidade duplica porta.
       expect(labels.some((l) => l.startsWith('Profissionais'))).toBe(false);
     }

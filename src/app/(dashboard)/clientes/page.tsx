@@ -31,6 +31,7 @@ import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { BROAD_ACCESS_ROLES } from '@/lib/access-core';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
@@ -101,10 +102,16 @@ export default function ClientesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState('');
   const [exportNotice, setExportNotice] = useState('');
-  // A saída COMPLETA (JSON) é de quem administra a unidade — a permissão
-  // genérica de Clientes não despeja a base sensível inteira.
+  // P2 · RODADA 2 — FERRAMENTA DE BASE É DE ADMINISTRAÇÃO.
+  // Importar/Exportar e a saída COMPLETA (JSON) movimentam a base inteira da
+  // unidade: além da permissão própria (`clientes_importar`/`clientes_exportar`),
+  // passam a exigir o PAPEL de administração (OWNER/ADMIN; MASTER em suporte).
+  // Recepção, profissional e vendedor não veem os botões, mesmo que a
+  // permissão individual tenha sido concedida — a régua é o papel, e ela vale
+  // também para a lista (o servidor continua sendo a autoridade final).
   const { role } = usePanelPermissions();
-  const canExportFull = ['OWNER', 'ADMIN', 'MASTER'].includes(String(role || '').toUpperCase());
+  const broadAccess = BROAD_ACCESS_ROLES.includes(String(role || '').toUpperCase() as (typeof BROAD_ACCESS_ROLES)[number]);
+  const canExportFull = broadAccess;
   // Workflow + Permissões: exportar/importar a base é capacidade própria e só
   // vale com escopo da unidade (a mesma regra que o servidor aplica).
   const workspace = useWorkspace();
@@ -126,8 +133,8 @@ export default function ClientesPage() {
   // WhatsApp é módulo próprio: quem atende só ganha o atalho se tiver a
   // permissão (o acesso clínico NÃO concede Conversas).
   const canWhats = permsReady && permissions.whatsapp === true;
-  const canExportBase = permsReady && unitScope && permissions.clientes_exportar === true;
-  const canImportBase = permsReady && unitScope && permissions.clientes_importar === true;
+  const canExportBase = broadAccess && permsReady && unitScope && permissions.clientes_exportar === true;
+  const canImportBase = broadAccess && permsReady && unitScope && permissions.clientes_importar === true;
   const [pipeline, setPipeline] = useState<BusinessPipeline | null>(null);
 
   /**

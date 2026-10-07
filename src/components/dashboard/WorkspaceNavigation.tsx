@@ -56,6 +56,10 @@ type Unit = {
 type Nav = ReturnType<typeof panelNavigation>;
 type NavItem = Nav['allowed'][number];
 
+/** Preferência de largura da navegação no desktop (`'full'` | `'mini'`). */
+const NAV_WIDTH_KEY = 'godoutor-side-v2';
+const NAV_WIDTH_KEY_LEGACY = 'il-side-v2';
+
 export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUnit, mobileOpen, onMobileOpen, onHelp, onUnit }: {
   nav: Nav; activePath: string; unit: Unit;
   /** Estado do drawer móvel pertence ao shell: é a topbar que abre o menu. */
@@ -72,6 +76,28 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   const setMobile = (open: boolean) => onMobileOpen?.(open);
   const mobile = !!mobileOpen;
   const legacyPagesEnabled = isLegacyPagesEnabled();
+  // ── P0 · RODADA 2 — RECOLHER/EXPANDIR (o controle de largura VOLTOU) ──
+  // O rail estreito continua sendo o PADRÃO (é o que o dia a dia usa), mas a
+  // decisão de largura volta a ser do usuário: no rodapé existe UM controle que
+  // alterna rail (ícones) ↔ navegação aberta (ícone + rótulo + filhos do grupo
+  // no fluxo). A preferência é persistida (`godoutor-side-v2`, os mesmos
+  // valores 'full' | 'mini' do contrato histórico; `il-side-v2` só é lida como
+  // fallback de quem já tinha a preferência gravada).
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(NAV_WIDTH_KEY) ?? localStorage.getItem(NAV_WIDTH_KEY_LEGACY);
+      setExpanded(stored === 'full');
+    } catch { /* sem preferência legível ⇒ rail (o padrão) */ }
+  }, []);
+  const toggleWidth = () => setExpanded((open) => {
+    const next = !open;
+    try {
+      localStorage.setItem(NAV_WIDTH_KEY, next ? 'full' : 'mini');
+      localStorage.removeItem(NAV_WIDTH_KEY_LEGACY);
+    } catch { /* preferência é conveniência, nunca bloqueia o controle */ }
+    return next;
+  });
   const areas = useMemo(() => workspaceAreas(nav.allowed, { multiUnit }), [nav.allowed, multiUnit]);
   const sections = useMemo(() => workspaceSections(areas), [areas]);
   // REGRA ÚNICA de exibição (lib): rail = frequência; painel = tudo que é
@@ -150,6 +176,9 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   useEffect(() => {
     const root = asideRef.current;
     if (!root) return;
+    // Navegação ABERTA: rótulo e dica são a mesma informação — tooltip do rail
+    // não existe nesse modo (seria repetição flutuante do que já está escrito).
+    if (expanded) { setTip(null); return; }
     const tipOf = (el: Element) => el.closest('[data-tip]');
     const show = (e: Event) => {
       const el = tipOf(e.target as Element);
@@ -179,7 +208,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       root.removeEventListener('focusin', show);
       root.removeEventListener('focusout', hide);
     };
-  }, []);
+  }, [expanded]);
 
   function hrefFor(item: NavItem) {
     if (item.href === '/organizacao') return `/organizacao?organization=${unit.organizationId || ''}`;
@@ -189,7 +218,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   // ── RAIL ─────────────────────────────────────────────────────
   // `mini` = desenhado para a coluna estreita (só ícone + tooltip). O drawer
   // móvel sempre usa o modo expandido (toque não tem hover).
-  const link = (item: NavItem, sub = false, mini = true) => (
+  const link = (item: NavItem, sub = false, mini = !expanded) => (
     <Link
       key={item.href}
       href={hrefFor(item)}
@@ -268,9 +297,16 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   const menu = () => (
     <>
       {sections.map((section) => {
-        const rows = section.groups.flatMap(({ area, flat }) =>
-          flat ? railItems(area).map((item) => link(item)) : [groupButton(area)],
-        ).filter(Boolean);
+        const rows = section.groups.flatMap(({ area, flat }) => {
+          // NAVEGAÇÃO ABERTA (P0 · rodada 2): os destinos do grupo entram no
+          // FLUXO sob o título do grupo — a coluna larga não precisa de painel
+          // flutuante, e o rail continua sem accordion/seta em nenhum modo.
+          if (expanded) {
+            const items = panelItems(area).map((item) => link(item, !flat));
+            return flat || !items.length ? items : [groupTitle(area), ...items];
+          }
+          return flat ? railItems(area).map((item) => link(item)) : [groupButton(area)];
+        }).filter(Boolean);
         if (!rows.length) return null;
         return (
           <div className="workspace-section" key={section.id}>
@@ -282,6 +318,22 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </>
   );
 
+  /** Título do grupo quando a navegação está ABERTA (mesmo tratamento do
+   *  drawer móvel: o grupo é um rótulo, não um botão com seta). */
+  const groupTitle = (area: WorkspaceArea) => (
+    <p key={`t-${area.id}`} className="workspace-nav-drawer__title">{area.label}</p>
+  );
+
+  /** Linhas "abertas" de uma seção — usadas pelo drawer móvel e pela navegação
+   *  expandida no desktop (UMA implementação, nenhuma lista paralela). */
+  const inlineRows = (section: (typeof sections)[number]) =>
+    section.groups.flatMap(({ area, flat }) => {
+      const items = panelItems(area);
+      if (!items.length) return [];
+      if (flat) return items.map((item) => link(item, false, false));
+      return [groupTitle(area), ...items.map((item) => link(item, true, false))];
+    });
+
   /**
    * DRAWER MÓVEL — o painel (hover) não existe em toque: no celular o grupo
    * mostra os filhos DIRETO, sob um rótulo discreto do grupo, incluindo os
@@ -290,15 +342,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   const mobileMenu = () => (
     <>
       {sections.map((section) => {
-        const rows = section.groups.flatMap(({ area, flat }) => {
-          const items = panelItems(area);
-          if (!items.length) return [];
-          if (flat) return items.map((item) => link(item, false, false));
-          return [
-            <p key={`t-${area.id}`} className="workspace-nav-drawer__title">{area.label}</p>,
-            ...items.map((item) => link(item, true, false)),
-          ];
-        });
+        const rows = inlineRows(section);
         if (!rows.length) return null;
         return <div className="workspace-section" key={section.id}>{rows}</div>;
       })}
@@ -351,11 +395,27 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         className="workspace-foot__item"
         onClick={() => { setMobile(false); onHelp?.(); }}
         aria-label="Ajuda e suporte"
-        data-tip="Ajuda e suporte"
+        {...(expanded ? {} : { 'data-tip': 'Ajuda e suporte' })}
       >
         <Icon n="help" size={18} />
         <span className="workspace-label">Ajuda e suporte</span>
       </button>
+      {/* CONTROLE DE LARGURA (P0 · rodada 2). O rail continua o PADRÃO; este
+          botão é o único lugar que decide a largura, e a escolha sobrevive ao
+          reload. Fica no rodapé da coluna, nunca flutuando sobre o conteúdo. */}
+      {!withBrand && (
+        <button
+          type="button"
+          className="workspace-foot__item workspace-foot__item--collapse"
+          onClick={toggleWidth}
+          aria-label={expanded ? 'Recolher navegação' : 'Expandir navegação'}
+          aria-pressed={expanded}
+          {...(expanded ? {} : { 'data-tip': 'Expandir navegação' })}
+        >
+          <Icon n="panel" size={18} />
+          <span className="workspace-label">{expanded ? 'Recolher navegação' : 'Expandir navegação'}</span>
+        </button>
+      )}
       {withBrand && (
         <p className="workspace-foot__brand">
           powered by <strong>GoDoutor</strong>
@@ -363,6 +423,13 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       )}
     </div>
   );
+
+  useEffect(() => {
+    // Trocar para a navegação aberta fecha a extensão (não fica painel órfão
+    // apontando para um grupo que agora desenha os filhos na própria coluna).
+    if (expanded) peekCtl.closePeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
 
   // Teclado dentro do painel: ↑/↓/Home/End andam, ← e Escape voltam ao grupo.
   const peekKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, areaId: string) => {
@@ -388,6 +455,10 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
    * painel é portal no <body> para escapar de qualquer stacking context.
    */
   const peekPanel = () => {
+    // Navegação ABERTA não tem extensão: os destinos do grupo já estão no
+    // fluxo da coluna. Um peek que tenha ficado pinado antes da troca de
+    // largura simplesmente não é renderizado.
+    if (expanded) return null;
     if (!peekCtl.peekId || typeof document === 'undefined') return null;
     const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
     const items = area ? panelItems(area) : [];
@@ -416,7 +487,6 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
             >
               <Icon n={item.icon} size={15} />
               <span>{item.label}</span>
-              {item.sidebar === false && <span className="ws-peek__flag" aria-hidden="true">contextual</span>}
             </Link>
           ))}
         </div>
@@ -427,7 +497,12 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
 
   return (
     <>
-      <aside ref={asideRef} className="workspace-sidebar" aria-label="Navegação da clínica">
+      <aside
+        ref={asideRef}
+        className={`workspace-sidebar${expanded ? ' is-expanded' : ''}`}
+        data-nav-width={expanded ? 'full' : 'mini'}
+        aria-label="Navegação da clínica"
+      >
         <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
           {menu()}
         </nav>

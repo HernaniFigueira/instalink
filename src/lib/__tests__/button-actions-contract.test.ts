@@ -2,10 +2,20 @@ import { describe,it,expect } from 'vitest';
 import { buttonCls } from '@/components/ui';
 import { contrastRatio, NAV_ACCENTS } from '../nav-accent';
 describe('Clinical action hierarchy contract',()=>{
- it('secondary is outline at rest and soft-filled on hover with the same border',()=>{
+ // P1 · RODADA 2 — "drastically reduce border on secondary/ghost/icon buttons".
+ // O contrato antigo (contorno na cor da marca em REPOUSO) virou o defeito: a
+ // borda cheia competia com o CTA primário em toda toolbar. O novo contrato:
+ // repouso SEM contorno visível (border transparente mantém a métrica da caixa)
+ // e o ESTADO dá o contorno — preenchimento suave da família no hover/active.
+ it('secondary is contour-free at rest and soft-filled on hover/active',()=>{
   const cls=buttonCls('secondary','sm');
-  expect(cls.split(' ')).toContain('bg-transparent');expect(cls).toContain('border-[var(--brand)]');expect(cls).toContain('text-[var(--brand-fg)]');
-  expect(cls.split(' ')).toContain('hover:bg-[var(--brand-soft)]');expect(cls).not.toContain('border-transparent');expect(cls).not.toContain('hover:border-');
+  expect(cls.split(' ')).toContain('bg-transparent');
+  expect(cls).toContain('text-[var(--brand-fg)]');
+  expect(cls).toContain('border-transparent');
+  expect(cls).not.toContain('border-[var(--brand)]');
+  expect(cls.split(' ')).toContain('hover:bg-[var(--brand-soft)]');
+  expect(cls.split(' ')).toContain('active:bg-[var(--brand-soft)]');
+  expect(cls).not.toContain('hover:border-');
  });
  it('primary remains solid and WhatsApp does not inherit brand',()=>{
   expect(buttonCls('primary')).toContain('bg-[var(--accent)]');

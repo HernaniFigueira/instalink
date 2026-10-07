@@ -330,3 +330,56 @@ describe('6 · métricas canônicas (a régua é do controle, não da página)',
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// P0 · RODADA 2 — CANCELAR O GESTO APAGA A SELEÇÃO NA HORA
+// ═══════════════════════════════════════════════════════════════
+// Defeito medido em homologação: depois de clicar/arrastar num horário vago, a
+// faixa azul do intervalo continuava desenhada na grade mesmo com o popover já
+// fechado (Escape, clique fora, "Mais opções", troca de modo/período). A
+// seleção visual é ESTADO DE GESTO: sem gesto, sem faixa. Este bloco trava o
+// caminho por onde o estado é criado e por onde ele TEM de ser limpo.
+describe('P0 · rodada 2 — seleção de intervalo é estado de gesto', () => {
+  const clearFn = agenda.slice(
+    agenda.indexOf('const clearPendingSelection = useCallback'),
+    agenda.indexOf('const clearPendingSelection = useCallback') + 260,
+  );
+
+  it('uma única limpeza zera a faixa E o popover ancorado', () => {
+    expect(clearFn).toContain('setSelectedRange(null)');
+    expect(clearFn).toContain('setQuickCreate(null)');
+    expect(agenda).toMatch(/useCallback\(\(\) => \{\s*setSelectedRange\(null\);\s*setQuickCreate\(null\);\s*\}, \[\]\)/);
+  });
+
+  it('Escape limpa o gesto pendente (mesmo sem arraste em andamento)', () => {
+    const esc = agenda.slice(agenda.indexOf('const onKey = (e: KeyboardEvent) => {'), agenda.indexOf('window.addEventListener(\'keydown\', onKey)'));
+    expect(esc).toContain("e.key !== 'Escape'");
+    expect(esc).toContain('if (dragId) { endDrag(); clearPendingSelection(); }');
+    // Sem drag/filtro/ajuda, o ESC ainda encerra a seleção pendente.
+    expect(esc).toContain('else clearPendingSelection();');
+    // …e o listener existe enquanto houver gesto pendente (o estado entra nas
+    // dependências: sem ele o handler desmontaria antes do ESC).
+    expect(agenda).toContain('if (!dragId && !filterOpen && !helpOpen && !selectedRange) return;');
+    expect(agenda).toMatch(/\}, \[dragId, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection\]\)/);
+  });
+
+  it('o popover ancorado limpa a seleção em QUALQUER fechamento', () => {
+    // ESC, clique fora e o botão de fechar do Popover passam todos por onClose:
+    // a seleção sai da grade na mesma hora.
+    expect(agenda).toContain('onClose={clearPendingSelection}');
+  });
+
+  it('trocar modo/período e "Cancelar arraste" também encerram o gesto', () => {
+    const viewEffect = agenda.slice(agenda.indexOf('// Cancela o drag se a view mudar'), agenda.indexOf('async function confirmDrop()'));
+    expect(viewEffect).toContain('endDrag();');
+    expect(viewEffect).toContain('clearPendingSelection();');
+    expect(agenda).toContain('onClick={() => { endDrag(); clearPendingSelection(); }}');
+  });
+
+  it('a faixa desenhada na grade depende SÓ do estado do gesto', () => {
+    // A marca visual continua sendo `agenda-selected-range` (é ela que o olho
+    // vê); nenhum outro caminho a mantém viva depois do cancelamento.
+    expect(agenda).toContain('data-testid="agenda-selected-range"');
+    expect(agenda).toMatch(/\{selectedRange && <div data-testid="agenda-selected-range"/);
+  });
+});

@@ -110,14 +110,19 @@ describe('P1 · sidebar contínua + colapso', () => {
   const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
   const css = read('src/app/globals.css');
 
-  it('NÃO existe botão de expandir/recolher (nem no rodapé, nem flutuante)', () => {
-    // MISSÃO UX CLOSURE · item 1: no desktop a coluna é SEMPRE o rail estreito.
-    // Sem pin, sem botão de colapso, sem «<<», sem estado persistido de largura.
-    expect(nav).not.toContain('workspace-foot__item--collapse');
-    expect(nav).not.toMatch(/Expandir navegação|Recolher navegação/);
+  it('P0 · rodada 2 — o controle de expandir/recolher voltou ao rodapé, sem « e sem estado no shell', () => {
+    // O rail continua sendo o PADRÃO; o que voltou foi a decisão de LARGURA do
+    // usuário, num controle único no rodapé (nunca flutuando sobre o conteúdo,
+    // nunca um « decorativo) com a preferência persistida.
+    expect(nav).toContain('workspace-foot__item--collapse');
+    expect(nav).toMatch(/Expandir navegação/);
+    expect(nav).toMatch(/Recolher navegação/);
     expect(nav).not.toContain('«');
+    // A classe de estado é `is-expanded` (o rail é o padrão: nenhum
+    // `is-collapsed` — o estado padrão não precisa de classe).
     expect(nav).not.toMatch(/is-collapsed/);
-    expect(css).not.toContain('.workspace-foot__item--collapse');
+    expect(css).toContain('.workspace-foot__item--collapse');
+    expect(css).toContain('.workspace-sidebar.is-expanded');
     expect(css).not.toMatch(/\.is-collapsed/);
     const shell = read('src/components/DashboardShell.tsx');
     expect(shell).not.toMatch(/localStorage\.\w+\(\s*'(godoutor|il)-side/);

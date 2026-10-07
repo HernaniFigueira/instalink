@@ -190,10 +190,13 @@ export const WORKSPACE_SECTIONS: WorkspaceSectionDef[] = [
 // ── O QUE APARECE ONDE (regra única, nunca repetida na tela) ────
 //   • COLUNA (rail): só destinos com `sidebar !== false` — a régua é
 //     FREQUÊNCIA de uso, não importância;
-//   • PAINEL DO GRUPO: TODOS os destinos autorizados do grupo, inclusive os
-//     de `sidebar: false`, porque o painel é a superfície de atalho
-//     contextual. É isto que garante o P0 da missão: nenhuma rota autorizada
-//     desaparece por causa da arquitetura visual;
+//   • PAINEL DO GRUPO: os destinos autorizados do grupo, inclusive os de
+//     `sidebar: false` (o painel é a superfície de atalho contextual). É isto
+//     que garante o P0 da missão: nenhuma rota CLÍNICA autorizada desaparece
+//     por causa da arquitetura visual. Exceção declarada: os destinos de
+//     comércio/diagnóstico em `OFF_MENU_ROUTES` não ocupam menu nenhum com a
+//     experiência padrão (continuam autorizados, vivos por URL e alcançáveis
+//     DENTRO da tela que os explica);
 //   • ALIAS DE COMPATIBILIDADE (`compatOnly`) nunca aparece — duas portas
 //     para a mesma tela é ruído, e a rota segue viva por URL;
 //   • a Página legada segue fora das duas superfícies quando
@@ -204,6 +207,26 @@ export interface MenuProjectionOptions {
   /** Hrefs que a tela precisa esconder por decisão de produto (GDP legado). */
   hidden?: (route: PanelRouteDef) => boolean;
 }
+
+/**
+ * P0 · RODADA 2 — DESTINOS QUE NÃO OCUPAM O MENU PADRÃO.
+ *
+ * O Clinical OS é operado pela clínica: os módulos de COMÉRCIO (`/produtos`,
+ * `/pedidos`) e as telas de DIAGNÓSTICO/AJUSTE do próprio sistema (`/recursos`,
+ * `/execucoes`) não são portas do dia a dia. O produto já diz onde cada uma
+ * vive — este arquivo é a APRESENTAÇÃO, então é aqui que a decisão é aplicada:
+ *
+ *   /execucoes → dentro de Automações (a tela lista as execuções);
+ *   /recursos  → dentro de Assistente ("Capacidades do sistema") e por URL;
+ *   /produtos · /pedidos → experiência de comércio legada.
+ *
+ * Com a experiência LEGADA ligada (`GODOUTOR_LEGACY_PAGES=1`) o menu volta ao
+ * comportamento anterior, sem migração. Em nenhum caso a rota é apagada: o
+ * catálogo (`lib/panel.ts`), as permissões e o acesso por URL seguem intactos —
+ * a supressão é de MENU. Módulo (`modes`) e permissão continuam sendo decididos
+ * ANTES, em `panelNavigation`.
+ */
+export const OFF_MENU_ROUTES: readonly string[] = ['/produtos', '/pedidos', '/recursos', '/execucoes'];
 
 /** Itens que ocupam linha na coluna de navegação. */
 export function workspaceRailItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
@@ -217,11 +240,13 @@ export function workspacePanelItems(area: WorkspaceArea, opts: MenuProjectionOpt
 
 function isHidden(route: PanelRouteDef, opts: MenuProjectionOptions): boolean {
   if (opts.hidden?.(route)) return true;
-  // Só a Página legada é decisão de PRODUTO (a rota segue viva por URL).
-  // Módulos (`features`) e permissões já foram filtrados ANTES, em
-  // `panelNavigation` — a apresentação nunca esconde destino por conta própria.
+  // Só a Página legada e os destinos de comércio/diagnóstico são decisão de
+  // PRODUTO (a rota segue viva por URL). Módulos (`features`) e permissões já
+  // foram filtrados ANTES, em `panelNavigation` — a apresentação nunca esconde
+  // destino por conta própria.
   const legacyPages = opts.legacyPages ?? isLegacyPagesEnabled();
-  return !legacyPages && route.href === '/pagina';
+  if (legacyPages) return false;
+  return route.href === '/pagina' || OFF_MENU_ROUTES.includes(route.href);
 }
 
 export interface WorkspaceSection extends WorkspaceSectionDef {

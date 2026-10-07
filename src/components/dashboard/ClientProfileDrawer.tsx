@@ -25,12 +25,11 @@ import { leadOriginLabel } from '@/lib/leads';
 import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
 import { FINANCE_STATUS_LABEL } from '@/lib/finance';
 import { followUpDueDate } from '@/lib/encounters';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -1236,7 +1235,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 /**
  * CASCA da ficha (§11) — a mesma pessoa, dois móveis.
  *
- *   preview → `WorkspaceSheet` (gaveta), com link para a página completa;
+ *   preview → `DetailSideModal` (o MESMO side modal do detalhe do sistema:
+ *             preso à direita, altura cheia, sem cara de card solto), com a
+ *             saída para a página completa no cabeçalho;
  *   page    → conteúdo direto na área principal, com "← Voltar para clientes"
  *             à esquerda e as ações à direita. Sem gaveta dentro de página,
  *             sem perder sidebar/topbar.
@@ -1262,21 +1263,28 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
       </div>
     );
   }
+  // P0 · RODADA 2 — PRÉVIA LATERAL = MESMO PADRÃO DO DETALHE. A gaveta
+  // flutuante (`.ws-sheet`, com gap nas extremidades e raio de card) sai das
+  // superfícies de PRÉVIA/FICHA: perfil de cliente, Pet 360 e contexto de
+  // conversa usam o `DetailSideModal` — preso à borda direita, altura cheia do
+  // viewport, sem raio e sem sombra. A largura vem do token do DS (560px para
+  // a ficha) e o corpo não soma recuo (`flush`): quem recua é o conteúdo, que
+  // já tem o próprio `p-4`.
   return (
-    <WorkspaceSheet
+    <DetailSideModal
       open
       onClose={onClose}
       dismissGuard={dismissGuard}
       title={title}
       subtitle={subtitle}
       icon="users"
-      width="max-w-[560px]"
-      fullPageHref={backHref}
-      fullPageLabel="Ver perfil completo"
+      width="560px"
+      flush
+      fullPage={{ href: backHref, label: 'Ver perfil completo' }}
       footer={footer}
     >
       {children}
-    </WorkspaceSheet>
+    </DetailSideModal>
   );
 }
 
@@ -1299,12 +1307,16 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
   const lastTalk = (person.conversations || []).slice(0, 1)[0] || null;
 
   return (
-    <div className="p-4 space-y-3.5">
-      <div className="flex flex-wrap items-start gap-3.5">
+    /* AUDITORIA · rodada 2 — DUAS COLUNAS: quem é (avatar, nome, contato,
+       etiquetas) à ESQUERDA; o que decide (próximo atendimento, últimos
+       atendimentos, última conversa) à DIREITA. Em tela estreita empilha na
+       mesma ordem — nenhuma informação muda de lugar sem necessidade. */
+    <div className="p-4 grid gap-4 sm:grid-cols-[minmax(0,168px)_minmax(0,1fr)] sm:items-start">
+      <div className="min-w-0 space-y-3">
         <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={56} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
-          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5 break-words">
             {person.phone ? formatPhoneBR(person.phone) : 'Sem telefone'}
             {!clinicalView && person.email ? ` · ${person.email}` : ''}
           </p>
@@ -1313,15 +1325,14 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
             {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
           </p>}
         </div>
-
+        {!clinicalView && <div className="flex flex-wrap gap-1.5">
+          {tags.length ? tags.map((t) => (
+            <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
+          )) : <Badge tone="zinc">Sem etiquetas</Badge>}
+        </div>}
       </div>
 
-      {!clinicalView && <div className="flex flex-wrap gap-1.5">
-        {tags.length ? tags.map((t) => (
-          <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
-        )) : <Badge tone="zinc">Sem etiquetas</Badge>}
-      </div>}
-
+      <div className="min-w-0 space-y-3.5">
       <div className="rounded-[var(--radius-md)] border border-[var(--border)] divide-y divide-[var(--border)]">
         <div className="px-3.5 py-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo atendimento</p>
@@ -1362,6 +1373,7 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
           ? 'A ficha completa (agenda, atendimentos, arquivos e financeiro) abre em página própria — a lista continua onde estava.'
           : 'Esta pessoa ainda não tem cadastro no CRM.'}
       </p>
+      </div>
     </div>
   );
 }
