@@ -409,6 +409,10 @@ async function contextMenuFlow(w, tag, alvos) {
         focoNoPrimeiroItem: document.activeElement?.getAttribute('role') === 'menuitem',
         largura: Math.round(r.width), altura: Math.round(r.height),
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
+        // O resumo do hover se CALA com o menu aberto: um painel por alvo.
+        // Sem isto, o cartão do hover seguia aceso junto do menu — exatamente a
+        // leitura equivocada ("o menu era o próprio resumo") da inspeção.
+        resumoDoHoverSilenciado: document.querySelectorAll('.ag-hover__card').length === 0,
       };
     });
     await shot(`a-ctxmenu-${tag}`);
@@ -531,7 +535,10 @@ async function resizeFlow(alvos) {
   await page.mouse.move(Math.round(alcaCaixa.x + alcaCaixa.width / 2), Math.round(alcaCaixa.y + alcaCaixa.height / 2));
   await page.mouse.down();
   await page.mouse.move(Math.round(alcaCaixa.x + alcaCaixa.width / 2), Math.round(alcaCaixa.y + alcaCaixa.height / 2 + alvoPx), { steps: 14 });
-  M.resize.feedbackDuranteOArraste = await page.evaluate(() => document.querySelector('[data-resize-hint]')?.textContent || null);
+  // O feedback vive DENTRO do cartão arrastado (a etiqueta do app). Ler o
+  // primeiro `[data-resize-hint]` do documento pega o de OUTRO evento — vazio —
+  // e foi o que produziu o `null` da rodada anterior; aqui é o do alvo.
+  M.resize.feedbackDuranteOArraste = await evento.locator('[data-resize-hint]').textContent().then((t) => (t || '').trim() || null).catch(() => null);
   await shot('a-resize-arrastando-1440');
   await page.mouse.up();
   await wait(700);

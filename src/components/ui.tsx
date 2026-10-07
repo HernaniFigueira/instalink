@@ -1517,9 +1517,17 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
  *   • onde não existe hover real (toque), a prévia não abre por foco de toque. */
 export const HOVER_CARD_OPEN_MS = 180;
 export const HOVER_CARD_CLOSE_MS = 140;
-export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS, closeDelayMs = HOVER_CARD_CLOSE_MS, offset = 10, closeOnClick = true, className }: {
+export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS, closeDelayMs = HOVER_CARD_CLOSE_MS, offset = 10, closeOnClick = true, suppress = false, className }: {
   content: React.ReactNode; side?: LayerSide; children: React.ReactNode;
   openDelayMs?: number; closeDelayMs?: number; offset?: number; closeOnClick?: boolean; className?: string;
+  /**
+   * Silencia o resumo enquanto um menu de contexto (ou qualquer camada irmã
+   * mais forte) está aberto. Sem isto, o cartão do hover fica ACESO junto com o
+   * menu aberto no mesmo evento — dois painéis para o mesmo alvo, originando de
+   * novo a confusão "o menu é o próprio resumo" relatada na inspeção do produto.
+   * O silêncio é temporário: sair e voltar com o ponteiro reabre normalmente.
+   */
+  suppress?: boolean;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
@@ -1537,7 +1545,7 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
   };
   /** Ponteiro/foco entrou no alvo OU na camada: cancela o fechamento pendente. */
   const enter = () => {
-    if (!canHover()) return;
+    if (suppress || !canHover()) return;
     if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
     if (openTimer.current !== null) return;
     openTimer.current = window.setTimeout(() => { setOpen(true); openTimer.current = null; }, openDelayMs);
@@ -1548,6 +1556,13 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
     closeTimer.current = window.setTimeout(() => { setOpen(false); closeTimer.current = null; }, closeDelayMs);
   };
   useEffect(() => clear, []);
+  // Silêncio forçado: fecha o resumo na hora e cancela timers pendentes.
+  useEffect(() => {
+    if (!suppress) return;
+    clear();
+    setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suppress]);
   useDismissOnEscape(open, () => setOpen(false));
   return (
     <>

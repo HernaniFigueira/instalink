@@ -250,6 +250,20 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
   });
 });
 
+
+  it('o resumo do hover se cala enquanto o menu de contexto está aberto', () => {
+    // Um painel por alvo: sem isto o cartão do hover fica aceso atrás do menu,
+    // que foi exatamente a confusão relatada na inspeção ("o menu era o resumo").
+    const ui = read('src/components/ui.tsx');
+    expect(ui).toContain('suppress?: boolean;');
+    expect(ui).toContain('if (suppress || !canHover()) return;');
+    expect(ui).toContain('if (!suppress) return;');
+    // E a Agenda usa o silêncio enquanto o menu estiver aberto.
+    const agenda = read('src/app/(dashboard)/agenda/page.tsx');
+    expect(agenda).toContain('suppress={hoverSuppressed}');
+    expect(agenda).toContain('hoverSuppressed={ctxMenu !== null}');
+  });
+
 describe('AUDITORIA · rodada 2 — rótulos de navegação e resumo do cliente', () => {
   it('a navegação lê em 14px/20px (painel do rail, coluna aberta e drawer)', () => {
     const at = css.indexOf('\n.workspace-link {');

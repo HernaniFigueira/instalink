@@ -342,7 +342,7 @@
     "largura": 270,
     "altura": 173,
     "distanciaHorizontal": 10,
-    "distanciaVertical": 0,
+    "distanciaVertical": -37,
     "dentroDaViewport": true,
     "sobrepoeOEvento": false,
     "fundo": "rgb(255, 255, 255)",
@@ -356,7 +356,7 @@
     ],
     "tituloNativoNoEvento": null,
     "fonteDoNome": "13.5px",
-    "atrasoDeAberturaMs": 186.20000000018626,
+    "atrasoDeAberturaMs": 186,
     "permaneceAoEntrarNoCartao": true
   },
   "detalhe-1440": {
@@ -394,7 +394,7 @@
       "popover": false,
       "overlay": "none"
     },
-    "saiuEmMs": 4,
+    "saiuEmMs": 5,
     "limpezaIntegral": true,
     "herdaEstado": false,
     "cliqueForaTambemLimpa": true
@@ -417,7 +417,8 @@
       "focoNoPrimeiroItem": true,
       "largura": 216,
       "altura": 273,
-      "overflowX": 0
+      "overflowX": 0,
+      "resumoDoHoverSilenciado": true
     },
     "fechouComEscape": true,
     "focoDeVoltaNoEvento": true,
@@ -430,7 +431,7 @@
     "depoisDoMenu": "confirmed",
     "historico": [
       {
-        "at": "2026-10-07T09:41:28.024Z",
+        "at": "2026-10-07T10:02:01.727Z",
         "from": "pending",
         "to": "confirmed",
         "by": "owner"
@@ -824,7 +825,7 @@
     "largura": 270,
     "altura": 173,
     "distanciaHorizontal": 10,
-    "distanciaVertical": 0,
+    "distanciaVertical": -37,
     "dentroDaViewport": true,
     "sobrepoeOEvento": false,
     "fundo": "rgb(255, 255, 255)",
@@ -838,7 +839,7 @@
     ],
     "tituloNativoNoEvento": null,
     "fonteDoNome": "13.5px",
-    "atrasoDeAberturaMs": 185.80000000004657,
+    "atrasoDeAberturaMs": 184.39999999990687,
     "permaneceAoEntrarNoCartao": true
   },
   "detalhe-1366": {
@@ -899,7 +900,8 @@
       "focoNoPrimeiroItem": true,
       "largura": 216,
       "altura": 273,
-      "overflowX": 0
+      "overflowX": 0,
+      "resumoDoHoverSilenciado": true
     },
     "fechouComEscape": true,
     "focoDeVoltaNoEvento": true,
@@ -1269,7 +1271,7 @@
     "largura": 270,
     "altura": 173,
     "distanciaHorizontal": 10,
-    "distanciaVertical": 0,
+    "distanciaVertical": -29,
     "dentroDaViewport": true,
     "sobrepoeOEvento": false,
     "fundo": "rgb(255, 255, 255)",
@@ -1283,7 +1285,7 @@
     ],
     "tituloNativoNoEvento": null,
     "fonteDoNome": "13.5px",
-    "atrasoDeAberturaMs": 184.60000000009313,
+    "atrasoDeAberturaMs": 184,
     "permaneceAoEntrarNoCartao": true
   },
   "detalhe-1024": {
@@ -1321,7 +1323,7 @@
       "popover": false,
       "overlay": "none"
     },
-    "saiuEmMs": 2,
+    "saiuEmMs": 4,
     "limpezaIntegral": true,
     "herdaEstado": false,
     "cliqueForaTambemLimpa": true
@@ -1344,7 +1346,8 @@
       "focoNoPrimeiroItem": true,
       "largura": 216,
       "altura": 273,
-      "overflowX": 0
+      "overflowX": 0,
+      "resumoDoHoverSilenciado": true
     },
     "fechouComEscape": true,
     "focoDeVoltaNoEvento": true,
@@ -1657,7 +1660,7 @@
     "largura": 270,
     "altura": 173,
     "distanciaHorizontal": -147,
-    "distanciaVertical": 42,
+    "distanciaVertical": -183,
     "dentroDaViewport": true,
     "sobrepoeOEvento": false,
     "fundo": "rgb(255, 255, 255)",
@@ -1671,7 +1674,7 @@
     ],
     "tituloNativoNoEvento": null,
     "fonteDoNome": "13.5px",
-    "atrasoDeAberturaMs": 187.69999999995343,
+    "atrasoDeAberturaMs": 185.8000000002794,
     "permaneceAoEntrarNoCartao": true,
     "cabeNaViewportEstreita": true
   },
@@ -1710,7 +1713,7 @@
       "popover": false,
       "overlay": "none"
     },
-    "saiuEmMs": 4,
+    "saiuEmMs": 3,
     "limpezaIntegral": true,
     "herdaEstado": false,
     "cliqueForaTambemLimpa": true
@@ -1733,7 +1736,8 @@
       "focoNoPrimeiroItem": true,
       "largura": 216,
       "altura": 273,
-      "overflowX": 0
+      "overflowX": 0,
+      "resumoDoHoverSilenciado": true
     },
     "fechouComEscape": true,
     "focoDeVoltaNoEvento": true,
@@ -1789,7 +1793,7 @@
     },
     "horaAntes": "11:00",
     "alcaVisivel": true,
-    "feedbackDuranteOArraste": null,
+    "feedbackDuranteOArraste": "11:00–11:30 · 30 min",
     "pediuConfirmacao": true,
     "minutosDepois": 30,
     "janelaDepois": {

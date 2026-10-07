@@ -185,7 +185,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -202,6 +202,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onBlockReschedule: (id: string, trigger?: HTMLElement | null) => void;
   /** Botão direito / Shift+F10 / tecla Menu no evento: menu contextual real. */
   onBlockContextMenu: (id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => void;
+  /** Com o MENU aberto no mesmo evento, o resumo do hover se cala: um painel
+   *  por vez (o insumo da confusão "o menu era o próprio resumo"). */
+  hoverSuppressed: boolean;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string, point: { x: number; y: number }) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number, point: { x: number; y: number }) => void;
@@ -476,6 +479,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             key={b.id}
             side="right-start"
             className="ag-hover"
+            suppress={hoverSuppressed}
             content={
               /* MISSÃO UX CLOSURE · item 3A — RESUMO CONTEXTUAL do evento:
                  horário, paciente/pet, serviço, profissional e status em um
@@ -2099,6 +2103,7 @@ export default function AgendaPage() {
                       onBlockClick={onBlockClick}
                       onBlockReschedule={onBlockReschedule}
                       onBlockContextMenu={onBlockContextMenu}
+                      hoverSuppressed={ctxMenu !== null}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}

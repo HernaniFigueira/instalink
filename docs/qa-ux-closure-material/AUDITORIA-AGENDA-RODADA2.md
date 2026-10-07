@@ -22,6 +22,7 @@ A coluna "Evidência" aponta o artefato desta pasta (PNG/GIF/JSON) que prova o e
 | 7 | **Botão direito no evento** | menu de contexto com ações de status | **mostrava o mesmo resumo do hover** (nenhum menu) | menu REAL: Ver detalhes · transições válidas · Reagendar · Duplicar · Cancelar | **corrigido nesta rodada** | `a-ctxmenu-*.png`, `a-menu-contexto-status.gif`, `ctxmenu-1440` |
 | 8 | Teclado equivalente | Shift+F10/Menu | ausente | `Shift+F10` e tecla `Menu` abrem o mesmo menu, foco no 1º item, ↑↓/Home/End, Enter, Escape devolve o foco | **corrigido nesta rodada** | `a-ctxmenu-teclado-1440.png`, `ctxmenu-1440` |
 | 9 | Transições inválidas | não aparecem | — (não havia menu) | menu derivado de `BOOKING_FLOW`: com `pending` só aparece "Confirmado" (nem Concluído, nem Faltou, nem "Reabrir") | **correto** | `transicao-1440 → invalidasAusentes` |
+| 9b | Resumo do hover × menu abertos juntos | só um painel por alvo | — | com o menu aberto o resumo do hover se CALA (`resumoDoHoverSilenciado: true`) | **corrigido nesta rodada** | `ctxmenu-1440`, `a-ctxmenu-1440.png` |
 | 10 | Autoridade do servidor | servidor recusa | servidor recusa | `no_show` saindo de `pending` ⇒ **422** "Não é possível mudar de…"; `completed` fora de hora ⇒ **409** | **correto** | `transicao-1440 → servidorRecusa*` |
 | 11 | Mudança de status pelo menu | sim | — | `pending → confirmed` aplicado, histórico `{from,to,by:'owner'}` gravado e **revertido** | **correto** | `transicao-1440`, `a-menu-transicao-1440.png` |
 | 12 | Duplicar atendimento | existe | — | "Duplicar atendimento" abre a criação **central** pré-preenchida (POST canônico; nenhuma rota nova) | **corrigido nesta rodada** | `ctxmenu-1440 → itens` |
@@ -29,7 +30,7 @@ A coluna "Evidência" aponta o artefato desta pasta (PNG/GIF/JSON) que prova o e
 | 14 | Criar/editar completo | modal | central (DS 1.1) | central, confirmado por medição | **correto** | `a-modal-central-1440.png`, `a-toolbar-views.gif` |
 | 15 | Confirmação de **edição** (duração/reagendar) | diálogo de decisão | **gaveta lateral** | modal **central** (460/520px) | **corrigido nesta rodada** | `a-resize.gif`, `rodada2-consistencia-visual.test.ts` |
 | 16 | Arraste em horário vago | cria; cancelar limpa | seleção ficava presa | ESC / clique fora limpam a faixa na hora (2–5 ms), sem herdar estado | **corrigido nesta rodada** | `a-drag-esc.gif`, `drag-*` |
-| 17 | Redimensionar duração | arraste + confirmação | arraste + confirmação | 15 → 30 min persistidos, cancelamento não grava, reversão 200 | **correto** | `a-resize.gif`, `a-resize-medicao.json`, `resize` |
+| 17 | Redimensionar duração | arraste + confirmação | arraste + confirmação | 15 → 30 min persistidos, cancelamento não grava, reversão 200, **etiqueta viva no cartão** (`11:00–11:35 · 35 min`) | **correto** | `a-resize.gif`, `a-resize-medicao.json`, `resize` |
 | 18 | Toolbar (alturas) | uma família | 34/40/28px misturados | 12 controles equivalentes **todos com 40px** (variação 0) em 1440/1366/1024; 44px no toque a 390 | **correto** | `toolbar-* → variacaoDosEquivalentes` |
 | 19 | Contorno ocioso nos controles | sem caixa em repouso | secundário com borda pesada | Hoje/setas/data/Filtros/Fila sem borda visível; único contorno visível é o CTA primário (por desenho) | **correto** | `toolbar-* → comBordaVisivel` |
 | 20 | Ver Dia/Semana/Lista | segmentado | segmentado com contorno duplo | poço neutro de 40px com polegar suave (itens internos de 32px são o polegar, não controles equivalentes) | **correto** | `a-toolbar-views.gif`, `toolbar-* → grupoSegmentado` |
@@ -46,7 +47,7 @@ A coluna "Evidência" aponta o artefato desta pasta (PNG/GIF/JSON) que prova o e
 | 31 | Fila/Aguardando/Em atendimento como status | — | — | **não existem como status de agendamento** (são estados de Fila); a máquina tem pendente/confirmado/concluído/faltou/cancelado | **não observável (fora do domínio)** | §7 |
 | 32 | Hover/contexto/status na referência | — | — | não foi possível reproduzir na Clínica Experts: **sem consulta visível** na semana 04–10/10/2026 e no dia 07/10 (só um bloqueio), ambiente sem isolamento comprovado | **não observável** | inspeção do dono do projeto (relatada) |
 
-**Resumo da matriz:** 25 itens **corretos** (7 dos quais foram corrigidos nesta rodada: 7, 8, 12, 15, 22, 24, 25), 2 **não observáveis por decisão de domínio** (13, 31) e 1 **não observável na referência** (32). Nenhum item permanece como defeito aberto.
+**Resumo da matriz:** 26 itens **corretos** (8 dos quais foram corrigidos nesta rodada: 7, 8, 9b, 12, 15, 22, 24, 25), 2 **não observáveis por decisão de domínio** (13, 31) e 1 **não observável na referência** (32). Nenhum item permanece como defeito aberto.
 
 ---
 
@@ -58,10 +59,12 @@ A coluna "Evidência" aponta o artefato desta pasta (PNG/GIF/JSON) que prova o e
 | Depois de fechar o menu o foco não voltava ao evento | o menu é desmontado pelo pai, então o efeito de devolução nunca via `open === false` | `src/components/ui.tsx` | devolução de foco na **limpeza** do efeito, só quando o foco ainda está no menu (não rouba o foco de um Dialog aberto por um item) |
 | Confirmação de duração/reagendamento em gaveta lateral | `Drawer` sem `variant` (padrão `side`) | `src/app/(dashboard)/agenda/page.tsx` | `variant="dialog"` (central) 460px/520px |
 | Painel de detalhe virava card flutuante no celular | `@media (max-width: 479px)` insetava 8px nos quatro lados | `src/styles/godoutor-design-system.css` | compacto = preso à borda, `100vw`, altura cheia (folha lateral, não card) |
+| Foco não voltava ao evento ao fechar o menu | o menu é desmontado pelo pai, então o efeito de devolução (`if (open) return`) nunca rodava | `src/components/ui.tsx` | devolução na LIMPEZA do efeito, só quando o foco ainda está no menu |
 | `.gd-detail` não media o viewport dinâmico de forma explícita | `inset: 0` no contêiner fixo | idem | `height: 100vh; height: 100dvh` declarados |
 | Prévia do cliente era uma coluna empilhada | composição em `flex` vertical | `src/components/dashboard/ClientProfileDrawer.tsx` | grade `resumo (168px) + conteúdo` a partir de 640px; empilha abaixo |
 | Rótulos de navegação abaixo de 14px | 13,5px no destino, 13px no painel do rail, 11px no título de grupo | `src/app/globals.css` | 14px/20px nos três |
 | Resumo do hover com cara de painel | 252px, `--gd-shadow-overlay` (60px de blur) e dois botões esticados | `src/app/globals.css` | 244px, `--gd-shadow-md`, CTA ocupando a linha e ação secundária do tamanho do rótulo |
+| Resumo do hover continuava aceso atrás do menu aberto | `HoverCard` sem noção de camada irmã mais forte | `src/components/ui.tsx`, `src/app/(dashboard)/agenda/page.tsx` | prop canônica `suppress` (fecha na hora e ignora entrada do ponteiro) + `hoverSuppressed={ctxMenu !== null}` |
 | `.overlay-confirm` só sabia dizer "Descartar" | rótulos fixos no componente | `src/components/dashboard/OverlayDismissGuard.tsx` | `confirmLabel`/`discardLabel` opcionais (padrão preservado) para confirmações destrutivas fora de formulário |
 
 ---
@@ -118,7 +121,7 @@ Comando exato da comparação: `npx vitest run` e `npx tsc --noEmit` executados 
 2. **Exclusão de agendamento não existe no produto.** O caminho destrutivo é "Cancelar atendimento" (histórico preservado, horário liberado). Criar um `DELETE` seria mudança de domínio/API — não foi feito, e a matriz registra o item como ausente por decisão.
 3. **A referência (Clínica Experts) não pôde ser reproduzida com dados** nesta rodada (sem consulta visível nos períodos inspecionados e sem isolamento comprovado). Os itens 6 e 7 da matriz usam a inspeção relatada pelo dono do projeto; os demais foram medidos no GoDoutor.
 4. **Zoom do navegador** (125%/150%) não foi medido — as larguras de evidência são as pedidas (1440/1366/1024/390) em `deviceScaleFactor: 1`.
-5. **`feedbackDuranteOArraste` do resize** foi capturado como `null` no JSON (o seletor `[data-resize-hint]` do auditor pega o primeiro hint do documento, que pode ser de outro bloco); o rótulo vivo aparece no GIF `a-resize.gif` e a persistência foi medida pela API.
+5. **`feedbackDuranteOArraste` do resize** agora é medido no cartão do ALVO (`11:00–11:35 · 35 min` com cartão crescendo para 64px); a rodada anterior lia o primeiro `[data-resize-hint]` do documento — de outro evento, vazio — e por isso registrava `null`. Era falha do auditor, não do produto.
 
 ---
 
