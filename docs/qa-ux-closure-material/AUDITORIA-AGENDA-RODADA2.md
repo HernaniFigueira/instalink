@@ -130,6 +130,14 @@ Comando exato da comparação: `npx vitest run` e `npx tsc --noEmit` executados 
 **Dados medidos**
 - `audit-measurements.json` — 12 passos × 4 larguras + contexto/status/resize/clientes, com console e requisições.
 - `a-resize-medicao.json` — minutos antes/depois e janela antes/depois do resize.
+- `antes-medicoes.json` / `depois-medicoes.json` — o mesmo script nas duas bases vivas (antes = `4cd669f`).
+- `complementares.json` — zoom 200%, contraste, ação destrutiva, negativa de import/export no servidor, rotas do menu.
+
+**Antes × depois lado a lado**
+`cmp-hover-1440.png` · `cmp-ctxmenu-1440.png` · `cmp-detalhe-390.png` · `cmp-perfil-1440.png` · `cmp-dashboard-1440.png` · `cmp-menu-1440.png` · `cmp-semana-1440.png`
+
+**Geradores dos complementares**
+`node docs/qa-ux-closure-material/antes-depois.mjs antes|depois` · `node docs/qa-ux-closure-material/verificacoes-complementares.mjs`
 
 **GIFs (gestos)**
 `a-hover-resumo-detalhe.gif` · `a-menu-contexto-status.gif` · `a-drag-esc.gif` · `a-resize.gif` · `a-sidebar-rail.gif` · `a-toolbar-views.gif`
@@ -139,3 +147,44 @@ Comando exato da comparação: `npx vitest run` e `npx tsc --noEmit` executados 
 
 **Geradores (reproduzem tudo)**
 `node docs/qa-ux-closure-material/audit.mjs` · `node docs/qa-ux-closure-material/record-audit.mjs` · `node docs/qa-ux-closure-material/round2.mjs` · `node docs/qa-ux-closure-material/record2.mjs` (exigem `npm run dev` + as duas fixtures).
+
+
+---
+
+## 9 · ANTES × DEPOIS COM O MESMO SCRIPT, EM DOIS SERVIDORES
+
+Para não depender de impressão, o MESMO script (`antes-depois.mjs`) rodou em duas bases vivas ao mesmo tempo, com o MESMO banco e a MESMA fixture:
+
+- **antes** = `http://127.0.0.1:3001` — worktree do commit **`4cd669f`**, que é exatamente o commit do deploy Ready que foi inspecionado;
+- **depois** = `http://127.0.0.1:3000` — HEAD desta rodada.
+
+| Medida | ANTES (`4cd669f`, o que foi inspecionado) | DEPOIS (esta rodada) | Leitura |
+|---|---|---|---|
+| Botão direito no evento | `existe: false` — **nenhum menu**; o resumo do hover seguia aceso (`hoverAceso: true`) | `existe: true` com `[Ver detalhes, Confirmado, Reagendar, Duplicar atendimento, Cancelar atendimento]`; `hoverAceso: false` | reproduz a observação do dono do projeto e mostra a correção |
+| Shift+F10 | `false` | `true` | teclado equivalente |
+| Detalhe a 1440 | x 980 · 460 · 900 · preso | idêntico | sem regressão |
+| Detalhe a 390 | x **8**, largura **374**, topo **8**, altura **828** (card flutuante) | x **0**, largura **390**, topo **0**, altura **844** (preso à borda) | defeito de crachá medido antes/depois |
+| Rótulo de navegação | **13,5px / 17,55px** | **14px / 20px** | régua do DS 1.1 |
+| Prévias: resumo × conteúdo | `temGrade: false`; resumo **à direita** do conteúdo | `temGrade: true`, colunas **168px 343px**, resumo à esquerda | duas colunas |
+| Ações rápidas do Dashboard | borda **1px**, fundo branco (card dentro de card) | borda **0**, fundo transparente | sem card-em-card |
+| Resumo do hover | 278×180 · 229 ms até aparecer | 270×173 · 244 ms | ambos brancos, com CTA e status |
+| Alças de resize na Semana | 6 eventos / 6 alças | 6 / 6 | nada tocado, nada mutado |
+| Controles da barra (amostra da 2ª faixa) | 3 controles de 40px, variação 0 | idem | régua mantida |
+
+Artefatos: `antes-*.png`, `depois-*.png`, `antes-medicoes.json`, `depois-medicoes.json` e os pares lado a lado **`cmp-*.png`** (hover, menu de contexto, detalhe 390, perfil, dashboard, menu, semana).
+
+> **Nota honrada sobre um falso alarme:** durante a montagem desta seção, um probe intermediário (`locator.click({button:'right'})` logo após o `goto`) não achou o menu. Investigado com `MutationObserver` em três tempos de espera (500/2500/6000 ms): o menu abre **sempre** (32–51 ms depois do clique) e permanece. A falha era do probe — o auto-scroll do Playwright trocava o elemento sob o ponteiro —, **não** do produto. Não há mudança de código associada a esse episódio.
+
+---
+
+## 10 · VERIFICAÇÕES COMPLEMENTARES (rodada 3)
+
+Além do audit principal, um segundo script (`verificacoes-complementares.mjs` → `complementares.json`, `c-*.png`) mede o que costuma escapar:
+
+| Verificação | Resultado |
+|---|---|
+| **Zoom 200%** (viewport 720×450 @2x) | `overflowX: 0` (nada vaza), 6 eventos visíveis, 12 controles funcionais na barra, menor alvo 36px, detalhe preso à direita com altura cheia (`x 260 · 460 · distância 0`) |
+| **Contraste WCAG AA** | nav **15,8:1** · título da página **16,3:1** · nome do evento **6,5:1** · rótulo de status **6,5:1** — todos ≥ 4,5:1 |
+| **Ação destrutiva** | "Cancelar atendimento" no menu abre confirmação com o que vai acontecer ("O horário volta a ficar livre e o registro fica como cancelado no histórico — nada é apagado"); Escape sai sem gravar (`statusPreservado`) |
+| **Import/export (não-admin, no SERVIDOR)** | os três endpoints respondem **403** "Seu perfil não tem permissão para esta ação." — esconder o botão não é a defesa |
+| **Menu: rotas legadas/contextuais** | nenhuma ("Recursos", "Execuções", "Payload", "Testes internos" ausentes) |
