@@ -150,3 +150,42 @@ Passada feita lendo os PNGs/GIFs desta pasta depois de todos os gates — não p
 Nada foi declarado "comprovado" sem número ou imagem: hover, swap/retract do rail,
 rótulo flutuante e ação de ícone têm **GIF** (`*.gif` nesta pasta) e os gates têm
 a tabela D acima.
+
+---
+
+## G. RESUMO `REQUISITO → IMPLEMENTADO → EVIDÊNCIA → PENDÊNCIA`
+
+Leitura por requisito da missão. **Pendência só aparece onde é real** — e a
+pendência estrutural (dívida herdada de `main`) está declarada, não escondida.
+
+| Requisito | Implementado | Evidência (arquivo / número) | Pendência |
+| --- | --- | --- | --- |
+| §1–2 Pesquisa oficial antes de decidir; sem clone visual, sem Material UI/Web, sem branding alheio | Tabela B deste documento + §9.8/§9.10 do `GODOUTOR-DESIGN-SYSTEM.md` | `m3.material.io` (text-fields, side-sheets, navigation-rail, motion), `material-web` (text-field/menu/dialog), `fonts.google.com/specimen/Barlow`, docs do `next/font` | — |
+| §3 Barlow 400/500/600/700; escala central; 700 só onde a hierarquia justifica | `next/font/local` (woff2 OFL vendorizados) + `--gd-font-sans` + `--gd-type-*` como fonte única | `fonte-1440`: `barlowCarregada: true`, `pesosDisponiveis: ["400","500","600","700"]`, `requisicoesAoGoogle: 0` | `next/font/google` **impossível** neste ambiente (TLS bloqueado) — impedimento declarado; Geist segue só como fonte **mono** de código |
+| §4 Campos M3 Outlined: rótulo dentro quando vazio, sobe no foco notching, permanece com valor, erro integrado, disabled ≠ read-only, 40–44px | `FieldShell` único para Input/Textarea/Select/Combobox/Date; `Field` classifica os nossos primitives | `campo-1440`: vazio `labelDentro: true` / `alturaCaixa: 40`; foco e preenchido `labelDentro: false` + borda `rgb(37,99,235)`; `temPlaceholderComoRotulo: false` | — |
+| §5 Topbar: logo real solta, maior, nome completo, sem tile/borda/fundo, logo não é botão, sem monograma sobre logo, 60–64px, logo ~36–40px, identidade uma vez, estreito prioriza identidade | `.ws-clinic*` sem tile; ≤479px identidade ganha da busca | `topbar-1440`: `altura 60`, `logoAltura 36`, `logoTemTile {border 0, radius 0, fundo transparente}`, `nomeCortado false`, `identidadeRepetidaNoRail false` · sonda: `logoEhBotaoOuLink: false`, `identidadeUmaVez: 1` | — |
+| §6 Rail ~60px, sem botão flutuante, painel conectado (gap 0), sem card/sombra, **sem chevrons**, hover/foco 120–180ms, mantém rail→painel, troca A→B sem fechar, retrai com atraso, Enter/Space, Escape + foco de volta | `.workspace-link__chevron { display:none }`; `NavigationRail`/`NavigationGroupPanel` | `rail-1440`: `largura 60`, `chevronsNoRail 0`, `botoesFlutuantesDeExpandir 0`, `painelAbriuEmMs 8`, `gapRailPainel 0`, `trocouSemFechar 1`, `permaneceComCursorDentro 1`, `retraiuAoSSair true`, `abriuPorTeclado true`, `fechouPorEscape true`, `focoDeVolta "clinica"` · GIF `rail-hover-swap-retract.gif` | — |
+| §7 Hover ≠ clique: card compacto 8–12px, prefere direita com flip, nunca fora da viewport, sem `title` nativo, essencial + "Ver detalhes", toque não simula hover, clique abre o detalhe direto | `HoverCard` (180/140ms) com gate `(hover: hover)`; clique → `open-detail` | `hover-1440`: `abriuPrevia true`, `abriuDetalheComHover false`, `distanciaAteEvento 10`, `dentroDaViewport true`, `ctaVerDetalhes 1`, `previaRetraiu true`; `agenda-1440.itensComTitleNativo 0` · GIF `appointment-hover-vs-click.gif` | — |
+| §8 Detalhe = `DetailSideModal` preso à direita, `100dvh`, sem margem, ~400–460px, backdrop, slide 160–200ms, focus trap, Escape, foco de volta | `DetailSideModal` (não renomeado) | `detalhe-1440`: `x 980`, `largura 460`, `topo 0`, `base 900`, `raio 0px`, `sombra none`, `gapDireita 0`, `backdropCor rgba(13,18,32,0.52)`, `focoContido true`, `fechouComEscape true`, `focoVoltouParaEvento true` | — |
+| §9 Criação central ~672px, hierarquia curta, divulgação progressiva, rodapé previsível, uma primária + Cancelar, sem ajuda permanente, avançado recolhido, sequência slot → popover → "Mais opções" → dialog | `Dialog` central 672px; avançado é `Disclosure` canônico (nasce fechado, não monta conteúdo fechado) | PNGs `form-central-*`, `form-vazio/foco/preenchido/erro/select*`; contrato re-apontado em `agenda-cell-prefill-flow` (`aria-expanded`) | — |
+| §10 Select/Combobox/Menu: âncora e alinhamento corretos, largura previsível, selecionado explícito, hover/foco/disabled/scroll, setas/Enter/Escape, busca em listas longas, conectado ao gatilho | `useAnchoredLayer` com âncora na **caixa do campo** (`fieldBoxOf`); `Combobox` herda a largura do campo | `combobox-1440`: `larguraCampo 540 = larguraLista 540`, `listaAlinhaComCampo true`, `selecionadaExplicita 1`, `dentroDaViewport true` | `Combobox` ainda **não tem superfície de produção** (evidência vem do catálogo `/dev/design-system`, mesmo Chromium/CSS) |
+| §11 Prontuário em leitura = documento; sem mudar regra clínica; autoria/data/privacidade/profissional preservados | `ClinicalRecordSection` + `ReadOnlyField` nas **seis** seções da superfície viva; nota interna em `Disclosure` | `workspace-leitura-1440`: `emLeitura true`, `controlesNaSecao 0`, `blocosDeDocumento 1`, `valoresEmLeitura 5`, `vazioDeclarado ["Não informado"]`, `notaInternaEmDisclosure true`; contrato em `f1b1` (leitura ⇒ `input/textarea/select = 0`) | — |
+| §12 Alertas proporcionais: inline → contexto, Alert → condição importante, Toast → transitório, Modal → bloqueante, vermelho cheio só destrutivo | Erro no próprio campo; `Notice`/toast canônicos; uma **ação primária** por etapa no detalhe | `erro-1440`: `campoInvalido true`, `contorno rgb(220,38,38)`, mensagem no campo, `bannersDeErroNaTela` listados por papel; `detalhe-1440.acoes`: `primario "Registrar chegada"`, `coloridos 2`; `agenda-1440.avisosAmbarNaTela 0` | — |
+| §13 Copy limpa em Dashboard/Agenda/Clientes/Atendimento/Equipe/Oportunidades/Configurações (sem voz de landing, sem subtítulo que repete título, sem ajuda permanente) | 9 telas + subtítulo do detalhe + subtítulo da ficha de anamnese | `git diff` das páginas; `godoutor-clinical-convergence` (Disponibilidade, com asserção negativa `casa`/`empresa`), `a34-human-test-fixes`, `homologacao-skeletons-anamnese` | — |
+| §14–15 Primitivos/tokens antes das páginas; sem px/raio/sombra arbitrário, sem fonte por tela, sem modal-select artesanal, sem cor hardcoded | Evoluídos no único arquivo de tokens: `FieldShell`, `DetailSideModal`, `Disclosure`, `Combobox`, `Notice`, `ReadOnlyField`, + novo `ClinicalRecordSection` | `src/styles/godoutor-design-system.css` (fonte única) + `git diff --check` limpo | — |
+| §16 Proibido tocar infra/domínio (Supabase, Vercel, `DATABASE_URL`, auth, tenant, schema, migrations, disponibilidade, conflito, Clinical Access, autoria, permissões, API externa, WhatsApp, pipeline) | Nenhum arquivo proibido no diff | `git diff --name-only daf94ed..HEAD \| grep -iE "supabase\|vercel\|migration\|schema\|auth/\|tenant\|whatsapp\|pipeline"` → **vazio** | — |
+| §17–18 QA real em 1440/1366/1024/390 com PNGs + GIFs; gates iguais nos dois lados com tabela comparativa | 99 PNGs + 4 GIFs + `measurements.json`; tabela D | `measurements.json`: 57 blocos, `console.erros []`, `validacaoEsperada 4`, `respostas4xxInesperadas []` · GIFs `rail-hover-swap-retract`, `appointment-hover-vs-click`, `floating-label`, `icon-button-idle-hover` | — |
+| §19 Aceitação (Barlow aplicada … nenhuma rota perdida … evidência real) | Todas as linhas verificadas acima | `gh pr view 64` → PR **OPEN/MERGEABLE**, head desta fase; `git diff --name-only` sem remoção de rota | Homologação **manual** do dono do produto (por desenho: a PR fica aberta) |
+| §20 Entregáveis A–F | Seções A–F deste documento | este arquivo | — |
+
+### Pendências (o que NÃO está fechado, sem eufemismo)
+
+1. **6 falhas herdadas de `main`** — `a34-instagram` (3), `automation-audit-p4`,
+   `convergence-wave2`, `pipeline`: idênticas antes e depois (tabela D). São de
+   domínio/infra (Instagram, automação, roteamento de banco, pipeline) e corrigir
+   aqui violaria o §16. **Não são regressão desta PR**; ficam como dívida da base.
+2. **`next/font/google` indisponível no ambiente** — impedimento técnico
+   (TLS), contornado com `next/font/local` + woff2 OFL.
+3. **Combobox sem tela de produção** — evidência no catálogo; re-medir na primeira
+   tela real que o usar.
+4. **Homologação manual pendente** — decisão do dono do produto; **nenhum merge**.
