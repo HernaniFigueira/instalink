@@ -6,7 +6,7 @@
 //   3A · o resumo do evento é CONTEXTUAL (HoverCard) com "Ver detalhes" e
 //        "Reagendar" quando a REGRA autoriza, e NÃO existe tooltip nativo na
 //        grade;
-//   3B · "Ver detalhes" abre o MODAL LATERAL canônico (DetailPanel ~460px),
+//   3B · "Ver detalhes" abre o MODAL LATERAL canônico (DetailSideModal ~460px),
 //        não um sheet de 620px nem um 95% da viewport;
 //   3C · criar/editar agendamento é MODAL CENTRAL (mesmo overlay system);
 //   4  · bloqueio operacional NÃO domina: hachura na grade + indicador
@@ -108,9 +108,11 @@ describe('3A · posicionamento do resumo (flip e clamp) — regressão medida', 
 });
 
 describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
-  it('BookingDetailSheet usa DetailPanel (nunca o sheet de 620px)', () => {
+  it('BookingDetailSheet usa DetailSideModal (nunca o sheet de 620px)', () => {
     const detail = read('src/components/dashboard/BookingDetailSheet.tsx');
-    expect(detail).toContain('<DetailPanel');
+    // DS 1.1: o primitive de detalhe chama-se `DetailSideModal` (preso à
+    // direita, altura cheia). `DetailPanel` segue existindo só como alias.
+    expect(detail).toContain('<DetailSideModal');
     expect(detail).not.toContain('WorkspaceSheet');
     expect(detail).not.toContain('max-w-[620px]');
     // Largura na janela pedida pela missão (420–480px), por token do DS.
@@ -118,7 +120,16 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
     // A largura é SEMPRE do token — com fallback do MESMO valor, para o painel
     // nunca cair para largura de conteúdo quando o `var()` não resolve
     // (defeito medido na auditoria: 448–456px variando com o texto).
-    expect(dsCss).toMatch(/width: min\(var\(--gd-detail-w, 460px\), calc\(100vw - \(2 \* var\(--gd-detail-gap, 16px\)\)\)\)/);
+    // DS 1.1: o painel é PRESO à direita e ocupa a altura cheia; a largura
+    // continua sendo o token (o `100vw` só age em tela menor que o token).
+    expect(dsCss).toMatch(/width: min\(var\(--gd-detail-w, 460px\), 100vw\)/);
+    const painel = dsCss.slice(dsCss.indexOf('.gd-detail__panel {'));
+    const corpo = painel.slice(0, painel.indexOf('}'));
+    expect(corpo).toContain('top: 0; right: 0; bottom: 0;');
+    expect(corpo).toContain('border-radius: 0');
+    expect(corpo).toContain('box-shadow: none');
+    // Nada de margem de viewport: o DS 1.0 usava `--gd-detail-gap` nos 4 lados.
+    expect(corpo).not.toContain('--gd-detail-gap');
     // O painel não recebe mais um `var()` autorreferente por prop default: sem
     // largura explícita, nenhum style inline — quem manda é o token.
     const ui = read('src/components/ui.tsx');
@@ -243,7 +254,7 @@ describe('6 · hierarquia de overlays (fonte única)', () => {
     popOverlay(bottom);                          // idempotente
   });
 
-  it('Dialog, DetailPanel e WorkspaceSheet compartilham a MESMA pilha', () => {
+  it('Dialog, DetailSideModal e WorkspaceSheet compartilham a MESMA pilha', () => {
     const ui = read('src/components/ui.tsx');
     const sheet = read('src/components/dashboard/WorkspaceSheet.tsx');
     for (const src of [ui, sheet]) {
@@ -291,13 +302,16 @@ describe('6 · métricas canônicas (a régua é do controle, não da página)',
     expect(css).toContain('display:inline-flex; min-height:var(--control-h-sm); align-items:center; justify-content:center; gap:6px;');
   });
 
-  it('a seta do grupo fica DENTRO do rail (não vaza e não é cortada)', () => {
+  it('o rail NÃO tem chevron: o grupo não é accordion (DS 1.1)', () => {
     const css = read('src/app/globals.css');
-    const regra = css.slice(css.indexOf('.workspace-sidebar .workspace-link--group .workspace-link__chevron'));
-    expect(regra).toContain('position: absolute;');
-    expect(regra).toContain('width: 9px; height: 9px;');
-    // A largura útil do item no rail é ~37px: ícone 24 + gap 10 + seta 15 vazava.
-    expect(css).not.toMatch(/\.workspace-sidebar .workspace-link__chevron \{[^}]*margin-left: auto/);
+    const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
+    // Defeito histórico: a seta de 15px vazava 14px do rail e era cortada; virou
+    // sinalizador de 9px e, no DS 1.1, foi REMOVIDA — a seta prometia accordion.
+    expect(css).toContain('.workspace-link__chevron { display: none; }');
+    expect(nav).not.toContain('workspace-link__chevron');
+    // O grupo continua declarando o estado para tecnologia assistiva.
+    expect(nav).toContain('aria-expanded={open}');
+    expect(nav).toContain('aria-haspopup="true"');
   });
 
   it('as páginas auditadas não recriam a métrica do controle por conta própria', () => {

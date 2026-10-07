@@ -479,7 +479,9 @@ describe('A3.4 · MOBILE (320–430px) — sem rolagem horizontal da página', (
     expect(SHEET.match(/min-h-11 w-auto/g)?.length).toBeGreaterThanOrEqual(2);
     expect(SHEET).toContain('className="w-full sm:w-auto"'); // Finalizar/Reabrir
     expect(SHEET).toMatch(/mr-auto flex w-full min-w-0 flex-wrap items-center gap-2 text-xs/);
-    expect(SHEET).toContain("layout !== 'page' && isDraft && autoState === 'saved'");
+    // DS 1.1 · §11/§13 — o rótulo inline de "salvo" continua existindo, agora
+    // também condicionado a `editable` (rascunho do profissional que atende).
+    expect(SHEET).toMatch(/layout !== 'page' && isDraft && editable && autoState === 'saved'/);
   });
 
   it('nenhuma largura fixa acima da viewport nos três arquivos', () => {

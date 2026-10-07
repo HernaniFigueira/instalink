@@ -67,12 +67,13 @@ describe('Scroll lock compartilhado (sheets empilhados)', () => {
 });
 
 describe('Overlays operacionais usam WorkspaceSheet', () => {
-  it('BookingDetailSheet no overlay canônico (MISSÃO UX CLOSURE: DetailPanel)', () => {
+  it('BookingDetailSheet no overlay canônico (DS 1.1: DetailSideModal)', () => {
     const s = read('src/components/dashboard/BookingDetailSheet.tsx');
     // Item 3B da missão: o DETALHE é o painel lateral canônico do DS
     // (DetailPanel · 460px). Continua sendo um overlay contextual do painel —
     // nunca uma página nova, nunca um segundo Dialog de criação.
-    expect(s).toContain('DetailPanel');
+    // Nome canônico do DS 1.1 (o DS 1.0 o chamava de `DetailPanel`).
+    expect(s).toContain('DetailSideModal');
     expect(s).not.toContain('WorkspaceSheet');
     expect(s).not.toContain('<Drawer');
     expect(s).toContain('Detalhe do agendamento');

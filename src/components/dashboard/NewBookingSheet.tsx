@@ -20,7 +20,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
@@ -401,7 +401,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
-      subtitle="Paciente → serviço → data e horário → confirmação"
       width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
@@ -453,9 +452,20 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           ) : (
           <div className="space-y-3">
-          {/* 1. Cliente */}
+          {/* 1. Cliente — o rótulo usa o tipo canônico do DS (label 13/20 500);
+              a nota de por que buscamos no CRM virou AJUDA CONTEXTUAL (tooltip),
+              em vez de parágrafo permanente sob o campo (§13). */}
           <div>
-            <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+            <span className="mb-1.5 flex items-center gap-1.5">
+              <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+              {!picked && (
+                <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
+                  <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
+                    <Icon n="help" size={13} />
+                  </button>
+                </Tooltip>
+              )}
+            </span>
             {picked ? (
               <div className="flex flex-wrap items-center gap-3 bg-[var(--success-bg)] border border-[var(--success-border)] rounded-lg px-3.5 py-3">
                 <Avatar name={name || '?'} size={36} />
@@ -472,9 +482,6 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               <>
                 <Input type="search" name="godoutor-client-search" autoComplete="off" spellCheck={false} autoCorrect="off" autoCapitalize="none" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
-                <p className="text-xs text-[var(--text-muted)] mt-1.5">
-                  Buscamos no CRM para não duplicar cadastro — {isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}
-                </p>
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
                   <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
@@ -528,7 +535,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <Field label="2. Serviço" required hint="O que será feito neste agendamento">
+          <Field label="2. Serviço" required>
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
               <option value="">Selecione…</option>
               {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}{eligibleProfessionalIds(s as any, pros).length === 0 ? ' — Sem profissional habilitado' : ''}</option>)}
@@ -595,9 +602,12 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             {rangeIntent && loadingSlots && <p role="status" className="text-sm text-[var(--text-muted)]">Verificando disponibilidade…</p>}
             {rangeIntent && !editingTime && slotsError && <Notice tone="error">{slotsError}</Notice>}
           </section>}
-          <details open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)} className="group rounded-md border border-[var(--border)] bg-[var(--surface)]">
-            <summary className="flex list-none cursor-pointer items-center justify-between p-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">Opções avançadas<Icon n="chevD" size={16} className="ml-auto transition-transform group-open:rotate-180" /></summary>
-            <div className="space-y-3 border-t border-[var(--border)] p-3">
+          {/* §9/§14 — as opções avançadas são DIVULGAÇÃO canônica (nasce
+              fechada). O `<details>`+`<summary>` com chevron próprio desenhava
+              um segundo padrão de abrir/fechar; agora é o `Disclosure` do DS,
+              controlado pelo mesmo estado que decide o conteúdo. */}
+          <Disclosure label="Opções avançadas" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
+            <div className="space-y-3 p-3">
           <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin ? durationLabel(service.durationMin) : '—'}; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
               value={staffDuration} disabled={saving || reviewing || repeat}
@@ -676,7 +686,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>}
 
             </div>
-          </details>
+          </Disclosure>
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
             <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
           </section>}

@@ -270,7 +270,15 @@ describe('CTA, Filtros e Fila continuam abrindo os fluxos existentes', () => {
     await user.click(screen.getByRole('button', { name: 'Novo agendamento' }));
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
     expect(dialog).toBeTruthy();
-    expect(within(dialog).getByText(/Paciente → serviço → data e horário/)).toBeTruthy();
+    // DS 1.1 (§9/§13): o parágrafo "Paciente → serviço → data e horário →
+    // confirmação" foi REMOVIDO do cabeçalho — a sequência já é dita pelos
+    // rótulos numerados do próprio formulário, sem soletrar o fluxo.
+    const texto = dialog.textContent || '';
+    expect(texto).not.toContain('Paciente → serviço → data e horário');
+    // A sequência continua legível nos rótulos numerados do formulário.
+    expect(texto).toContain('1. Cliente');
+    expect(texto).toContain('2. Serviço');
+    expect(texto).toContain('3. Data');
   });
 
   it('10. Filtros continua abrindo (popover com Status · Serviços · Profissional)', async () => {

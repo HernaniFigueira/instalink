@@ -31,7 +31,7 @@ import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking, ScheduleResource } from '@/lib/types';
-import { DetailPanel } from '@/components/ui';
+import { DetailSideModal } from '@/components/ui';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
 import { useOverlayDismissGuard } from './OverlayDismissGuard';
@@ -61,7 +61,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
    */
   startRescheduling?: boolean;
   /** Evento que abriu o detalhe: recebe o foco de volta quando o gatilho do
-   *  clique foi um CTA do HoverCard (que desmonta). Repassado ao DetailPanel. */
+   *  clique foi um CTA do HoverCard (que desmonta). Repassado ao DetailSideModal. */
   returnFocus?: React.RefObject<HTMLElement | null>;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
@@ -119,6 +119,17 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
       { agenda: true, atendimento: !!permissions.atendimento },
     );
   const can = (id: WorkflowActionId) => wf.allowed.includes(id);
+  /**
+   * §12 — a AÇÃO PRIMÁRIA desta etapa: a primeira do FLUXO que o servidor
+   * autorizou. Um passo adiante por vez; as demais ações são transições de
+   * estado e ficam NEUTRAS (só o destrutivo mantém tintura).
+   */
+  const primaria: 'check_in' | 'start_care' | 'open_care' | 'confirm' | 'close_retro' =
+    can('check_in') ? 'check_in'
+      : can('start_care') ? 'start_care'
+        : can('open_care') ? 'open_care'
+          : can('confirm') ? 'confirm'
+            : 'close_retro';
   const rescheduleDirty = rescheduling && (date !== booking.date || time !== '' || cancelSeries);
   const dismissReschedule = () => rescheduleDismiss.requestClose('close-button', { dirty: rescheduleDirty, saving: !!acting, context: 'edit' }, () => {
     setRescheduling(false); setConfirming(false); setCancelSeries(false); setDate(booking.date); setTime(''); setError('');
@@ -238,7 +249,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
-  // O DetailPanel recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
+  // O DetailSideModal recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
 
   function showHistory() {
     setHistoryOpen(true);
@@ -252,13 +263,12 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
     : '';
 
   return (
-    <DetailPanel
+    <DetailSideModal
       open
       onClose={onClose}
       returnFocus={returnFocus}
       dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}
       title="Detalhe do agendamento"
-      subtitle="Resumo, ações e histórico do atendimento"
       flush
       >
         {/* ── Sumário do atendimento (1ª seção do detalhe) ──
@@ -295,10 +305,19 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           />
         )}
 
-          {/* ── Ações do atendimento: etapa × papel (servidor decide) ── */}
+          {/* ── Ações do atendimento: etapa × papel (servidor decide) ──
+              §12/§14 — UMA ação primária por etapa (a próxima do fluxo) e as
+              demais NEUTRAS: antes a linha misturava azul + verde + âmbar +
+              vermelho e disputava a leitura. Só o destrutivo mantém tintura. */}
           {!rescheduling && (
             <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state}>
               <div className="flex flex-wrap gap-1.5">
+                {/*
+                  §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:
+                  ela move o atendimento adiante. As demais (Confirmar/Concluir/
+                  Não compareceu/Reabrir/Reagendar) são transições e ficam
+                  NEUTRAS; só o Cancelar mantém tintura, porque é destrutivo.
+                */}
                 {can('check_in') && (
                   <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
                     <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
@@ -322,18 +341,18 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   </Button>
                 )}
                 {can('confirm') && (
-                  <Button size="sm" variant="success" onClick={() => act('confirmed')} disabled={!!acting}>
+                  <Button size="sm" variant={primaria === 'confirm' ? 'primary' : 'secondary'} onClick={() => act('confirmed')} disabled={!!acting}>
                     {acting === 'confirmed' ? 'Salvando…' : 'Confirmar'}
                   </Button>
                 )}
                 {can('close_retro') && (
-                  <Button size="sm" variant="success" onClick={() => act('completed')} disabled={!!acting}
+                  <Button size="sm" variant={primaria === 'close_retro' ? 'primary' : 'secondary'} onClick={() => act('completed')} disabled={!!acting}
                     title="Fechar o atendimento que já passou, sem registro clínico">
                     {acting === 'completed' ? 'Salvando…' : 'Concluir'}
                   </Button>
                 )}
                 {can('no_show') && (
-                  <Button size="sm" variant="warning" onClick={() => act('no_show')} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => act('no_show')} disabled={!!acting}>
                     {acting === 'no_show' ? 'Salvando…' : 'Não compareceu'}
                   </Button>
                 )}
@@ -582,6 +601,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             </div>
           )}
         {rescheduleDismiss.dialog}
-    </DetailPanel>
+    </DetailSideModal>
   );
 }

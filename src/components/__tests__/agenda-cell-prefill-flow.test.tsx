@@ -493,9 +493,17 @@ describe('Clinical UX Closure — range and block mode', () => {
     expect(slotButton('09:00')).toBeNull();
     expect(within(sheet()).getByRole('button', {name: 'Alterar horário'})).toBeTruthy();
     expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
+    // DS 1.1 · §9/§14 — opções avançadas são DIVULGAÇÃO canônica: nascem
+    // fechadas e o conteúdo só entra no DOM quando abertas (nada de dado oculto
+    // vazando para leitura de tela/print). A duração desenhada pelo arraste
+    // continua sendo a MESMA intenção — medida com o painel aberto.
+    const avancadas = within(sheet()).getByRole('button', { name: 'Opções avançadas' });
+    expect(avancadas.getAttribute('aria-expanded')).toBe('false');
+    expect(within(sheet()).queryByLabelText('Duração deste atendimento em minutos')).toBeNull();
+    fireEvent.click(avancadas);
     const duration = within(sheet()).getByLabelText('Duração deste atendimento em minutos') as HTMLInputElement;
     expect(duration.value).toBe('240');
-    expect(duration.closest('details')?.open).toBe(false);
+    expect(avancadas.getAttribute('aria-expanded')).toBe('true');
     expect(within(sheet()).getByRole('searchbox', { name: 'Buscar cliente' }).getAttribute('autocomplete')).toBe('off');
     fireEvent.click(within(sheet()).getByRole('button', { name: 'Fechar' }));
     await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());

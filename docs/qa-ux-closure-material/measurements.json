@@ -1,0 +1,967 @@
+{
+  "topbar-1440": {
+    "altura": 60,
+    "logoAltura": 36,
+    "logoLargura": 25.90625,
+    "proporcao": 0.72,
+    "nome": "Andrioni Veterinaria",
+    "nomeCortado": false,
+    "identidadeRepetidaNoRail": false,
+    "logoTemTile": {
+      "border": "0px",
+      "radius": "0px",
+      "background": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "rail-1440": {
+    "largura": 60,
+    "chevronsNoRail": 0,
+    "chevronsVisiveis": 0,
+    "botoesFlutuantesDeExpandir": 0,
+    "grupos": 4,
+    "grupoAria": [
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      },
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      }
+    ],
+    "painelAbriuEmMs": 7,
+    "gapRailPainel": 0,
+    "larguraPainel": 232,
+    "alturaRail": 840,
+    "trocouSemFechar": 1,
+    "permaneceComCursorDentro": 1,
+    "tituloPainel": "Clínica",
+    "retraiuAoSSair": true,
+    "abriuPorTeclado": true,
+    "fechouPorEscape": true,
+    "focoDeVolta": "clinica"
+  },
+  "agenda-1440": {
+    "eventos": 6,
+    "itensComTitleNativo": 0,
+    "alturaToolbar": 40,
+    "barraBloqueios": true,
+    "avisosAmbarNaTela": 0,
+    "textoBloqueios": "1 bloqueio neste períodoNão contam como atendimento.12:00–13:00Almoço da equipeDra. Helena"
+  },
+  "hover-1440": {
+    "abriuPrevia": true,
+    "abriuDetalheComHover": false,
+    "distanciaAteEvento": 10,
+    "dentroDaViewport": true,
+    "ctaVerDetalhes": 1,
+    "previaRetraiu": true
+  },
+  "detalhe-1440": {
+    "x": 980,
+    "largura": 460,
+    "topo": 0,
+    "base": 900,
+    "alturaViewport": 900,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "gapDireita": 0,
+    "backdropCor": "rgba(13, 18, 32, 0.52)",
+    "backdropEscurece": true,
+    "titulo": "Detalhe do agendamento",
+    "botaoFechar": true,
+    "focoContido": true,
+    "acoes": {
+      "total": 4,
+      "primario": "Registrar chegada",
+      "coloridos": 2,
+      "rotulos": [
+        "Registrar chegada",
+        "Não compareceu",
+        "Reagendar",
+        "Cancelar"
+      ]
+    },
+    "fechouComEscape": true,
+    "focoVoltouParaEvento": true,
+    "focoAntesDoClique": "",
+    "screenshotBytes": 94338
+  },
+  "campo-1440": {
+    "vazio": {
+      "labelFontSize": "14px",
+      "labelTop": 10,
+      "labelDentro": true,
+      "bordaCaixa": "rgb(125, 140, 163)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "comFoco": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "rotuloDoCampo": "Observação",
+    "preenchido": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "placeholderVisivelSemFoco": "rgb(111, 104, 98)",
+    "erro": {
+      "campoInvalido": false,
+      "temTextoDeErro": false,
+      "mensagem": ""
+    },
+    "select": {
+      "alturaCaixa": 40,
+      "bordaDoSelect": "0px",
+      "opcoes": 4,
+      "rotulo": "2. Serviço *",
+      "setaRepete": "no-repeat",
+      "setaTamanho": "14px auto",
+      "setaPosicao": "calc(100% - 12px) 50%"
+    },
+    "selectComValor": {
+      "valor": "afc6dac2-e2e6-499c-9f95-dbf2c6796cd8",
+      "rotulo": "Consulta veterinária · 30 min",
+      "rotuloElevado": -8
+    }
+  },
+  "atendimento-leitura-1440": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 1,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": true,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-vazio-1440": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 4,
+    "vazioDeclarado": [
+      "Não informado",
+      "Não informado",
+      "Não informado",
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": false,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-nota-aberta-1440": {
+    "expanded": "true",
+    "regiao": "Nota interna",
+    "texto": ""
+  },
+  "workspace-leitura-1440": {
+    "emLeitura": true,
+    "blocosDeDocumento": 1,
+    "valoresEmLeitura": 5,
+    "controlesNaSecao": 0,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "notaInternaEmDisclosure": true,
+    "notaRecolhida": "false",
+    "secoesDoAtendimento": 6,
+    "rotuloDaSecao": "Registro do atendimento"
+  },
+  "erro-1440": {
+    "campoInvalido": true,
+    "mensagem": "Campo obrigatório.",
+    "contorno": "rgb(220, 38, 38)",
+    "rotuloEmErro": "Motivo da consulta *",
+    "camposInvalidos": 1,
+    "bannersDeErroNaTela": [
+      {
+        "papel": "alert",
+        "texto": "Campo obrigatório."
+      },
+      {
+        "papel": "status",
+        "texto": "Salvo agora"
+      }
+    ]
+  },
+  "combobox-1440": {
+    "listaAberta": true,
+    "listaAlinhaComCampo": true,
+    "larguraLista": 540,
+    "larguraCampo": 540,
+    "selecionadaExplicita": 1,
+    "dentroDaViewport": true
+  },
+  "icone-1440": {
+    "repouso": {
+      "fundo": "rgba(0, 0, 0, 0)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(82, 76, 70)"
+    },
+    "hover": {
+      "fundo": "rgb(242, 245, 252)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(28, 24, 21)"
+    },
+    "temFundoNoHover": true,
+    "bordaEmRepouso": true,
+    "area": {
+      "w": 40,
+      "h": 40
+    }
+  },
+  "fonte-1440": {
+    "family": "__sans_b8fcf6, __sans_Fallback_b8fcf6, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif, Barlow, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "barlowCarregada": true,
+    "pesosDisponiveis": [
+      "400",
+      "500",
+      "600",
+      "700"
+    ],
+    "requisicoesAoGoogle": 0
+  },
+  "topbar-1366": {
+    "altura": 60,
+    "logoAltura": 36,
+    "logoLargura": 25.90625,
+    "proporcao": 0.72,
+    "nome": "Andrioni Veterinaria",
+    "nomeCortado": false,
+    "identidadeRepetidaNoRail": false,
+    "logoTemTile": {
+      "border": "0px",
+      "radius": "0px",
+      "background": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "rail-1366": {
+    "largura": 60,
+    "chevronsNoRail": 0,
+    "chevronsVisiveis": 0,
+    "botoesFlutuantesDeExpandir": 0,
+    "grupos": 4,
+    "grupoAria": [
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      },
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      }
+    ],
+    "painelAbriuEmMs": 5,
+    "gapRailPainel": 0,
+    "larguraPainel": 232,
+    "alturaRail": 840,
+    "trocouSemFechar": 1,
+    "permaneceComCursorDentro": 1,
+    "tituloPainel": "Clínica",
+    "retraiuAoSSair": true,
+    "abriuPorTeclado": true,
+    "fechouPorEscape": true,
+    "focoDeVolta": "clinica"
+  },
+  "agenda-1366": {
+    "eventos": 6,
+    "itensComTitleNativo": 0,
+    "alturaToolbar": 40,
+    "barraBloqueios": true,
+    "avisosAmbarNaTela": 0,
+    "textoBloqueios": "1 bloqueio neste períodoNão contam como atendimento.12:00–13:00Almoço da equipeDra. Helena"
+  },
+  "hover-1366": {
+    "abriuPrevia": true,
+    "abriuDetalheComHover": false,
+    "distanciaAteEvento": 10,
+    "dentroDaViewport": true,
+    "ctaVerDetalhes": 1,
+    "previaRetraiu": true
+  },
+  "detalhe-1366": {
+    "x": 906,
+    "largura": 460,
+    "topo": 0,
+    "base": 900,
+    "alturaViewport": 900,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "gapDireita": 0,
+    "backdropCor": "rgba(13, 18, 32, 0.52)",
+    "backdropEscurece": true,
+    "titulo": "Detalhe do agendamento",
+    "botaoFechar": true,
+    "focoContido": true,
+    "acoes": {
+      "total": 4,
+      "primario": "Registrar chegada",
+      "coloridos": 2,
+      "rotulos": [
+        "Registrar chegada",
+        "Não compareceu",
+        "Reagendar",
+        "Cancelar"
+      ]
+    },
+    "fechouComEscape": true,
+    "focoVoltouParaEvento": true,
+    "focoAntesDoClique": "",
+    "screenshotBytes": 92288
+  },
+  "campo-1366": {
+    "vazio": {
+      "labelFontSize": "14px",
+      "labelTop": 10,
+      "labelDentro": true,
+      "bordaCaixa": "rgb(125, 140, 163)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "comFoco": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "rotuloDoCampo": "Observação",
+    "preenchido": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "placeholderVisivelSemFoco": "rgb(111, 104, 98)",
+    "erro": {
+      "campoInvalido": false,
+      "temTextoDeErro": false,
+      "mensagem": ""
+    },
+    "select": {
+      "alturaCaixa": 40,
+      "bordaDoSelect": "0px",
+      "opcoes": 4,
+      "rotulo": "2. Serviço *",
+      "setaRepete": "no-repeat",
+      "setaTamanho": "14px auto",
+      "setaPosicao": "calc(100% - 12px) 50%"
+    },
+    "selectComValor": {
+      "valor": "afc6dac2-e2e6-499c-9f95-dbf2c6796cd8",
+      "rotulo": "Consulta veterinária · 30 min",
+      "rotuloElevado": -8
+    }
+  },
+  "atendimento-leitura-1366": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 1,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": true,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-vazio-1366": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 4,
+    "vazioDeclarado": [
+      "Não informado",
+      "Não informado",
+      "Não informado",
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": false,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-nota-aberta-1366": {
+    "expanded": "true",
+    "regiao": "Nota interna",
+    "texto": ""
+  },
+  "workspace-leitura-1366": {
+    "emLeitura": true,
+    "blocosDeDocumento": 1,
+    "valoresEmLeitura": 5,
+    "controlesNaSecao": 0,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "notaInternaEmDisclosure": true,
+    "notaRecolhida": "false",
+    "secoesDoAtendimento": 6,
+    "rotuloDaSecao": "Registro do atendimento"
+  },
+  "erro-1366": {
+    "campoInvalido": true,
+    "mensagem": "Campo obrigatório.",
+    "contorno": "rgb(220, 38, 38)",
+    "rotuloEmErro": "Motivo da consulta *",
+    "camposInvalidos": 1,
+    "bannersDeErroNaTela": [
+      {
+        "papel": "alert",
+        "texto": "Campo obrigatório."
+      },
+      {
+        "papel": "status",
+        "texto": "Salvo agora"
+      }
+    ]
+  },
+  "combobox-1366": {
+    "listaAberta": true,
+    "listaAlinhaComCampo": true,
+    "larguraLista": 540,
+    "larguraCampo": 540,
+    "selecionadaExplicita": 1,
+    "dentroDaViewport": true
+  },
+  "icone-1366": {
+    "repouso": {
+      "fundo": "rgba(0, 0, 0, 0)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(82, 76, 70)"
+    },
+    "hover": {
+      "fundo": "rgb(242, 245, 252)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(28, 24, 21)"
+    },
+    "temFundoNoHover": true,
+    "bordaEmRepouso": true,
+    "area": {
+      "w": 40,
+      "h": 40
+    }
+  },
+  "fonte-1366": {
+    "family": "__sans_b8fcf6, __sans_Fallback_b8fcf6, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif, Barlow, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "barlowCarregada": true,
+    "pesosDisponiveis": [
+      "400",
+      "500",
+      "600",
+      "700"
+    ],
+    "requisicoesAoGoogle": 0
+  },
+  "topbar-1024": {
+    "altura": 60,
+    "logoAltura": 36,
+    "logoLargura": 25.90625,
+    "proporcao": 0.72,
+    "nome": "Andrioni Veterinaria",
+    "nomeCortado": false,
+    "identidadeRepetidaNoRail": false,
+    "logoTemTile": {
+      "border": "0px",
+      "radius": "0px",
+      "background": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "rail-1024": {
+    "largura": 60,
+    "chevronsNoRail": 0,
+    "chevronsVisiveis": 0,
+    "botoesFlutuantesDeExpandir": 0,
+    "grupos": 4,
+    "grupoAria": [
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      },
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      }
+    ],
+    "painelAbriuEmMs": 7,
+    "gapRailPainel": 0,
+    "larguraPainel": 232,
+    "alturaRail": 840,
+    "trocouSemFechar": 1,
+    "permaneceComCursorDentro": 1,
+    "tituloPainel": "Clínica",
+    "retraiuAoSSair": true,
+    "abriuPorTeclado": true,
+    "fechouPorEscape": true,
+    "focoDeVolta": "clinica"
+  },
+  "agenda-1024": {
+    "eventos": 6,
+    "itensComTitleNativo": 0,
+    "alturaToolbar": 40,
+    "barraBloqueios": true,
+    "avisosAmbarNaTela": 0,
+    "textoBloqueios": "1 bloqueio neste períodoNão contam como atendimento.12:00–13:00Almoço da equipeDra. Helena"
+  },
+  "hover-1024": {
+    "abriuPrevia": true,
+    "abriuDetalheComHover": false,
+    "distanciaAteEvento": 10,
+    "dentroDaViewport": true,
+    "ctaVerDetalhes": 1,
+    "previaRetraiu": true
+  },
+  "detalhe-1024": {
+    "x": 564,
+    "largura": 460,
+    "topo": 0,
+    "base": 900,
+    "alturaViewport": 900,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "gapDireita": 0,
+    "backdropCor": "rgba(13, 18, 32, 0.52)",
+    "backdropEscurece": true,
+    "titulo": "Detalhe do agendamento",
+    "botaoFechar": true,
+    "focoContido": true,
+    "acoes": {
+      "total": 4,
+      "primario": "Registrar chegada",
+      "coloridos": 2,
+      "rotulos": [
+        "Registrar chegada",
+        "Não compareceu",
+        "Reagendar",
+        "Cancelar"
+      ]
+    },
+    "fechouComEscape": true,
+    "focoVoltouParaEvento": true,
+    "focoAntesDoClique": "",
+    "screenshotBytes": 88396
+  },
+  "campo-1024": {
+    "vazio": {
+      "labelFontSize": "14px",
+      "labelTop": 10,
+      "labelDentro": true,
+      "bordaCaixa": "rgb(125, 140, 163)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "comFoco": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "rotuloDoCampo": "Observação",
+    "preenchido": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 40,
+      "temPlaceholderComoRotulo": false
+    },
+    "placeholderVisivelSemFoco": "rgb(111, 104, 98)",
+    "erro": {
+      "campoInvalido": false,
+      "temTextoDeErro": false,
+      "mensagem": ""
+    },
+    "select": {
+      "alturaCaixa": 40,
+      "bordaDoSelect": "0px",
+      "opcoes": 4,
+      "rotulo": "2. Serviço *",
+      "setaRepete": "no-repeat",
+      "setaTamanho": "14px auto",
+      "setaPosicao": "calc(100% - 12px) 50%"
+    },
+    "selectComValor": {
+      "valor": "afc6dac2-e2e6-499c-9f95-dbf2c6796cd8",
+      "rotulo": "Consulta veterinária · 30 min",
+      "rotuloElevado": -8
+    }
+  },
+  "atendimento-leitura-1024": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 1,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": true,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-vazio-1024": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 4,
+    "vazioDeclarado": [
+      "Não informado",
+      "Não informado",
+      "Não informado",
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": false,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-nota-aberta-1024": {
+    "expanded": "true",
+    "regiao": "Nota interna",
+    "texto": ""
+  },
+  "workspace-leitura-1024": {
+    "emLeitura": true,
+    "blocosDeDocumento": 1,
+    "valoresEmLeitura": 5,
+    "controlesNaSecao": 0,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "notaInternaEmDisclosure": true,
+    "notaRecolhida": "false",
+    "secoesDoAtendimento": 6,
+    "rotuloDaSecao": "Registro do atendimento"
+  },
+  "erro-1024": {
+    "campoInvalido": true,
+    "mensagem": "Campo obrigatório.",
+    "contorno": "rgb(220, 38, 38)",
+    "rotuloEmErro": "Motivo da consulta *",
+    "camposInvalidos": 1,
+    "bannersDeErroNaTela": [
+      {
+        "papel": "alert",
+        "texto": "Campo obrigatório."
+      },
+      {
+        "papel": "status",
+        "texto": "Salvo agora"
+      }
+    ]
+  },
+  "combobox-1024": {
+    "listaAberta": true,
+    "listaAlinhaComCampo": true,
+    "larguraLista": 540,
+    "larguraCampo": 540,
+    "selecionadaExplicita": 1,
+    "dentroDaViewport": true
+  },
+  "icone-1024": {
+    "repouso": {
+      "fundo": "rgba(0, 0, 0, 0)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(82, 76, 70)"
+    },
+    "hover": {
+      "fundo": "rgb(242, 245, 252)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(28, 24, 21)"
+    },
+    "temFundoNoHover": true,
+    "bordaEmRepouso": true,
+    "area": {
+      "w": 40,
+      "h": 40
+    }
+  },
+  "fonte-1024": {
+    "family": "__sans_b8fcf6, __sans_Fallback_b8fcf6, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif, Barlow, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "barlowCarregada": true,
+    "pesosDisponiveis": [
+      "400",
+      "500",
+      "600",
+      "700"
+    ],
+    "requisicoesAoGoogle": 0
+  },
+  "topbar-390": {
+    "altura": 60,
+    "logoAltura": 36,
+    "logoLargura": 25.90625,
+    "proporcao": 0.72,
+    "nome": "Andrioni Veterinaria",
+    "nomeCortado": false,
+    "identidadeRepetidaNoRail": false,
+    "logoTemTile": {
+      "border": "0px",
+      "radius": "0px",
+      "background": "rgba(0, 0, 0, 0)"
+    }
+  },
+  "rail-390": {
+    "largura": 0,
+    "chevronsNoRail": 0,
+    "chevronsVisiveis": 0,
+    "botoesFlutuantesDeExpandir": 0,
+    "grupos": 4,
+    "grupoAria": [
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      },
+      {
+        "expanded": "false",
+        "haspopup": "true"
+      }
+    ]
+  },
+  "agenda-390": {
+    "eventos": 6,
+    "itensComTitleNativo": 0,
+    "alturaToolbar": 92,
+    "barraBloqueios": true,
+    "avisosAmbarNaTela": 0,
+    "textoBloqueios": "1 bloqueio neste períodoNão contam como atendimento.12:00–13:00Almoço da equipeDra. Helena"
+  },
+  "hover-390": {
+    "abriuPrevia": true,
+    "abriuDetalheComHover": false,
+    "distanciaAteEvento": -147,
+    "dentroDaViewport": true,
+    "ctaVerDetalhes": 1,
+    "previaRetraiu": true
+  },
+  "detalhe-390": {
+    "x": 8,
+    "largura": 374,
+    "topo": 8,
+    "base": 892,
+    "alturaViewport": 900,
+    "raio": "0px",
+    "sombra": "none",
+    "bordaEsquerda": "1px",
+    "gapDireita": 8,
+    "backdropCor": "rgba(13, 18, 32, 0.52)",
+    "backdropEscurece": true,
+    "titulo": "Detalhe do agendamento",
+    "botaoFechar": true,
+    "focoContido": true,
+    "acoes": {
+      "total": 4,
+      "primario": "Registrar chegada",
+      "coloridos": 2,
+      "rotulos": [
+        "Registrar chegada",
+        "Não compareceu",
+        "Reagendar",
+        "Cancelar"
+      ]
+    },
+    "fechouComEscape": true,
+    "focoVoltouParaEvento": true,
+    "focoAntesDoClique": "",
+    "screenshotBytes": 35300
+  },
+  "campo-390": {
+    "vazio": {
+      "labelFontSize": "14px",
+      "labelTop": 12,
+      "labelDentro": true,
+      "bordaCaixa": "rgb(125, 140, 163)",
+      "alturaCaixa": 44,
+      "temPlaceholderComoRotulo": false
+    },
+    "comFoco": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 44,
+      "temPlaceholderComoRotulo": false
+    },
+    "rotuloDoCampo": "Observação",
+    "preenchido": {
+      "labelFontSize": "12px",
+      "labelTop": -8,
+      "labelDentro": false,
+      "bordaCaixa": "rgb(37, 99, 235)",
+      "alturaCaixa": 44,
+      "temPlaceholderComoRotulo": false
+    },
+    "placeholderVisivelSemFoco": "rgb(111, 104, 98)",
+    "erro": {
+      "campoInvalido": false,
+      "temTextoDeErro": false,
+      "mensagem": ""
+    },
+    "select": {
+      "alturaCaixa": 44,
+      "bordaDoSelect": "0px",
+      "opcoes": 4,
+      "rotulo": "2. Serviço *",
+      "setaRepete": "no-repeat",
+      "setaTamanho": "14px auto",
+      "setaPosicao": "calc(100% - 12px) 50%"
+    },
+    "selectComValor": {
+      "valor": "afc6dac2-e2e6-499c-9f95-dbf2c6796cd8",
+      "rotulo": "Consulta veterinária · 30 min",
+      "rotuloElevado": -8
+    }
+  },
+  "atendimento-leitura-390": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 1,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": true,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-vazio-390": {
+    "blocosDeLeitura": 6,
+    "valoresVazios": 4,
+    "vazioDeclarado": [
+      "Não informado",
+      "Não informado",
+      "Não informado",
+      "Não informado"
+    ],
+    "textareasNaTela": 1,
+    "evolucaoEmLeitura": false,
+    "queixaEmLeitura": true,
+    "notaInternaRecolhida": "false",
+    "autoriaVisivel": true,
+    "somenteLeituraAvisado": false
+  },
+  "atendimento-nota-aberta-390": {
+    "expanded": "true",
+    "regiao": "Nota interna",
+    "texto": ""
+  },
+  "workspace-leitura-390": {
+    "emLeitura": true,
+    "blocosDeDocumento": 1,
+    "valoresEmLeitura": 5,
+    "controlesNaSecao": 0,
+    "vazioDeclarado": [
+      "Não informado"
+    ],
+    "notaInternaEmDisclosure": true,
+    "notaRecolhida": "false",
+    "secoesDoAtendimento": 6,
+    "rotuloDaSecao": "Registro do atendimento"
+  },
+  "erro-390": {
+    "campoInvalido": true,
+    "mensagem": "Campo obrigatório.",
+    "contorno": "rgb(220, 38, 38)",
+    "rotuloEmErro": "Motivo da consulta *",
+    "camposInvalidos": 1,
+    "bannersDeErroNaTela": [
+      {
+        "papel": "alert",
+        "texto": "Campo obrigatório."
+      },
+      {
+        "papel": "status",
+        "texto": "Salvo agora"
+      }
+    ]
+  },
+  "combobox-390": {
+    "listaAberta": true,
+    "listaAlinhaComCampo": true,
+    "larguraLista": 350,
+    "larguraCampo": 350,
+    "selecionadaExplicita": 1,
+    "dentroDaViewport": true
+  },
+  "icone-390": {
+    "repouso": {
+      "fundo": "rgba(0, 0, 0, 0)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(82, 76, 70)"
+    },
+    "hover": {
+      "fundo": "rgb(242, 245, 252)",
+      "borda": "1px",
+      "bordaCor": "rgba(0, 0, 0, 0)",
+      "cor": "rgb(28, 24, 21)"
+    },
+    "temFundoNoHover": true,
+    "bordaEmRepouso": true,
+    "area": {
+      "w": 44,
+      "h": 44
+    }
+  },
+  "fonte-390": {
+    "family": "__sans_b8fcf6, __sans_Fallback_b8fcf6, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, Arial, sans-serif, Barlow, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "barlowCarregada": true,
+    "pesosDisponiveis": [
+      "400",
+      "500",
+      "600",
+      "700"
+    ],
+    "requisicoesAoGoogle": 0
+  },
+  "console": {
+    "erros": [],
+    "validacaoEsperadaConsole": [
+      "[anamnese] Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "[anamnese] Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "[anamnese] Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "[anamnese] Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    ],
+    "ruidoClassificado": 0,
+    "respostas4xx": 4,
+    "validacaoEsperada": 4,
+    "validacaoDetalhe": {
+      "url": "/api/anamnese",
+      "status": 400,
+      "etapas": [
+        "anamnese"
+      ]
+    },
+    "respostas4xxInesperadas": []
+  }
+}

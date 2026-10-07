@@ -17,7 +17,7 @@
 //   • persistência é a do domínio (PATCH /api/encounters) com a versão vinda da
 //     AUTORIDADE do workspace — uma versão só para o Encounter inteiro.
 import { useMemo, useState } from 'react';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, ClinicalRecordSection, Input, ReadOnlyField, Select } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -103,6 +103,31 @@ export function EncounterClinicalProblemsSection({
     if (!item.label.trim() && !item.notes.trim()) { removeItem(item.id); return; }
     setConfirmingId((current) => (current === item.id ? '' : item.id));
   };
+
+  // §11 — LEITURA = documento: cada problema/diagnóstico é uma linha de leitura
+  // (tipo + descrição + observação), sem select nem input desabilitado.
+  if (disabled) {
+    return (
+      <section className="encounter-workspace__section" aria-label="Problemas e diagnósticos" data-section="problemas" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Problemas e diagnósticos">
+            {items.length === 0
+              ? <ReadOnlyField label="Problemas deste atendimento" value="" empty="Nenhum problema registrado neste atendimento." block />
+              : items.map((item, index) => (
+                <ReadOnlyField
+                  key={item.id}
+                  label={`${CLINICAL_PROBLEM_KIND_LABELS[item.kind] || 'Registro'} ${index + 1}`}
+                  value={item.label}
+                  hint={item.notes || undefined}
+                  block
+                />
+              ))}
+          </ClinicalRecordSection>
+          <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="encounter-workspace__section" aria-label="Problemas e diagnósticos" data-section="problemas">

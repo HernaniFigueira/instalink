@@ -231,14 +231,19 @@
 }
 
 html { scroll-behavior: smooth; }
+/* DS 1.1 · §3 — a fonte do produto é UMA: o token canônico. O `body` apontava
+   para `--font-geist-sans`, variável que deixou de existir quando a Barlow
+   entrou: um `var()` inexistente invalida a declaração inteira e o navegador
+   caía no default da plataforma (Times New Roman) em tudo que não estivesse
+   dentro do `.gd-app`. Agora o corpo herda o mesmo token do app. */
 body {
   @apply subpixel-antialiased;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--gd-font-sans);
   font-feature-settings: 'cv11', 'ss01';
 }
-.font-display { font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif; letter-spacing: -.015em; }
+.font-display { font-family: var(--gd-font-sans); letter-spacing: -.015em; }
 ::selection { background: var(--brand); color: #fff; }
 
 /* Foco visível em QUALQUER elemento interativo do painel — coerente e
@@ -1354,21 +1359,37 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
 /* IDENTIDADE NA TOPBAR (missão item 2): logo + NOME COMPLETO da clínica no
    bloco esquerdo. A sidebar não repete isso. Com mais de uma unidade o bloco
    é botão (troca real de contexto); com uma só, é texto. */
+/* DS 1.1 — IDENTIDADE: LOGO SOLTA + NOME COMPLETO, uma vez só.
+   A logo é a marca da clínica, não um avatar de app: nada de tile (sem borda,
+   sem fundo, sem raio) — só a arte, na proporção do arquivo. O texto ao lado é
+   o NOME COMPLETO, no papel de título de página. */
 .ws-clinic {
-  display: inline-flex; align-items: center; gap: 9px;
-  min-width: 0; max-width: min(34ch, 38vw);
+  display: inline-flex; align-items: center; gap: 10px;
+  min-width: 0; max-width: min(40ch, 42vw);
   min-height: var(--control-h);
   padding: 0 6px; border-radius: var(--radius-md);
-  color: var(--text); font-size: 13.5px; font-weight: 650; letter-spacing: -.01em;
+  color: var(--text-strong);
+  font-size: var(--gd-type-page-title-size); font-weight: var(--gd-type-page-title-weight);
+  line-height: var(--gd-type-page-title-line); letter-spacing: -.02em;
 }
 .ws-clinic--action { border: 1px solid transparent; transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
 .ws-clinic--action:hover { background: var(--surface-hover); border-color: var(--border); }
-.ws-clinic__logo { width: 26px; height: 26px; border-radius: var(--radius-sm); object-fit: cover; flex-shrink: 0; border: 1px solid var(--border); background: var(--surface-2); }
+.ws-clinic__logo {
+  /* `height` fixa a presença; `width: auto` + `max-width` PRESERVAM a proporção
+     do arquivo (nada de quadrado forçado distorcendo logo horizontal). */
+  height: var(--gd-topbar-logo); width: auto; max-width: var(--gd-topbar-logo-max);
+  object-fit: contain; flex-shrink: 0;
+  border: 0; border-radius: 0; background: none;
+}
 .ws-clinic__mark {
-  width: 26px; height: 26px; border-radius: var(--radius-sm); flex-shrink: 0;
+  /* Fallback de QUEM NÃO TEM ARQUIVO: a sigla ocupa o lugar da logo com o peso
+     do texto — sem bloco colorido decorativo (a cor de marca fica no acento). */
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--accent); color: var(--accent-contrast);
-  font-size: 11px; font-weight: 700; letter-spacing: -.01em;
+  height: var(--gd-topbar-logo); min-width: calc(var(--gd-topbar-logo) * .72);
+  padding: 0 2px; flex-shrink: 0;
+  color: var(--text-strong);
+  font-size: calc(var(--gd-topbar-logo) * .46); font-weight: var(--gd-weight-bold);
+  letter-spacing: -.02em; background: none; border-radius: 0;
 }
 .ws-clinic__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-clinic__chev { color: var(--text-muted); flex-shrink: 0; }
@@ -1747,24 +1768,12 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link--group[aria-expanded='true'] .workspace-link__icon {
   background: transparent; color: var(--il-nav-active-fg);
 }
-.workspace-link[aria-current='page'] .workspace-link__chevron,
-.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
-.workspace-link__chevron {
-  margin-left: auto; color: var(--il-nav-fg); flex-shrink: 0;
-  transition: transform var(--motion-base) var(--ease-standard),
-              color var(--motion-fast) var(--ease-standard);
-}
-/* MISSÃO UX CLOSURE · item 1 — NO RAIL a seta não cabe no fluxo: a largura útil
-   do item é 37px (padding do container + gutter da scrollbar) e `ícone 24 +
-   gap 10 + seta 15` empurrava a seta 14px para fora do rail, onde era CORTADA
-   pela divisa (defeito visível no badge/seta do grupo). No rail a seta vira um
-   sinalizador de 9px ancorado no canto do PRÓPRIO item — a caixa do item de
-   grupo continua exatamente a do item direto (37×40) e nada vaza. */
-.workspace-sidebar .workspace-link--group .workspace-link__chevron {
-  position: absolute; top: 5px; right: 3px;
-  width: 9px; height: 9px; margin: 0; opacity: .7;
-}
-.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { transform: rotate(90deg); }
+/* DS 1.1 — o gatilho de grupo NÃO tem chevron: o rail não é accordion.
+   Contrato antigo (seta de 15px girando 90°, depois sinalizador de 9px) foi
+   removido junto com o elemento: o feedback de abertura é o PAINEL conectado, e
+   o estado acessível é `aria-expanded`. Nenhuma seta decorativa sobrevive na
+   navegação — em nenhuma largura. */
+.workspace-link__chevron { display: none; }
 /* O rail/traço vertical do item ativo foi REMOVIDO (GoDoutor 2.0): o estado
    ativo é fundo suave + texto/cor de marca + `aria-current`. O elemento segue
    no DOM como marcador (data-nav-rail) para acessibilidade e testes, sem
@@ -1986,9 +1995,14 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   /* Identidade RÍGIDA (o nome completo da clínica manda) e busca ELÁSTICA:
      em telas estreitas a busca recolhe para o ícone e volta à largura total
      quando tem foco. */
-  .il-platform .ws-topbar__left { flex: 0 1 auto; min-width: 45%; }
-  .ws-clinic { max-width: none; flex: 0 1 auto; gap: 7px; font-size: 13px; }
-  .ws-clinic__name { min-width: 0; }
+  .il-platform .ws-topbar__left { flex: 0 1 auto; min-width: 50%; }
+  /* DS 1.1 — no estreito a logo encolhe um degrau (32px) mas continua SOLTA e
+     proporcional; o NOME não é cortado: a busca é quem cede. */
+  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
+  /* §5 — em tela estreita a IDENTIDADE não encolhe: logo no tamanho do token e
+     nome COMPLETO (pode quebrar em duas linhas, nunca virar "Andri…"). Quem
+     cede espaço é a busca, que recolhe para o ícone. */
+  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .il-platform .global-search { width: var(--control-h); max-width: none; flex: 0 0 auto; }
   .il-platform .global-search__field { padding: 0; gap: 0; justify-content: center; cursor: pointer; }
   .il-platform .global-search__input { width: 0; flex: 0 0 auto; padding: 0; }
@@ -3537,15 +3551,30 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 dialog.gd-team-editor { z-index: 50; }
 dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }
 
-/* Curated workspace type scale. Geist remains the sole identity font.
+/* Curated workspace type scale — DS 1.1: os papéis APONTAM para a escala
+ * canônica (`--gd-type-*`), então trocar a escala (ou a família) muda o produto
+ * inteiro de uma vez. Barlow é a identidade; a escala é a mesma em toda tela.
  * Scoped primitives, not blanket overrides of conversations/public renderers. */
-.il-platform { --type-page: 22px; --type-section: 16px; --type-card: 14px; --type-body: 14px; --type-label: 13px; --type-help: 13px; }
-.il-platform .il-type-page { font-size: var(--type-page); font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
-.il-platform .il-type-section { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
-.il-platform .il-type-label { font-size: var(--type-label); font-weight: 500; line-height: 1.45; }
-.il-platform .il-type-help { font-size: var(--type-help); line-height: 1.55; color: var(--text-muted); }
-.il-platform .dsh-card__title { font-size: var(--type-card); line-height: 1.4; }
-.il-platform .ws-sheet__titles h2 { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
+.il-platform {
+  --type-page: var(--gd-type-page-title-size);
+  --type-page-line: var(--gd-type-page-title-line);
+  --type-section: var(--gd-type-section-size);
+  --type-card: var(--gd-type-section-size);
+  --type-body: var(--gd-type-body-size);
+  --type-label: var(--gd-type-label-size);
+  --type-help: var(--gd-type-helper-size);
+  --type-meta: var(--gd-type-metadata-size);
+}
+.il-platform .il-type-page { font-size: var(--type-page); font-weight: var(--gd-type-page-title-weight); line-height: var(--type-page-line); letter-spacing: -.02em; }
+.il-platform .il-type-section { font-size: var(--type-section); font-weight: var(--gd-type-section-weight); line-height: var(--gd-type-section-line); }
+.il-platform .il-type-label { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); line-height: var(--gd-type-label-line); }
+.il-platform .il-type-help { font-size: var(--type-help); font-weight: var(--gd-type-helper-weight); line-height: var(--gd-type-helper-line); color: var(--text-muted); }
+.il-platform .il-type-body, .il-platform table { font-size: var(--type-body); line-height: var(--gd-type-body-line); }
+.il-platform .il-type-meta { font-size: var(--type-meta); font-weight: var(--gd-type-metadata-weight); line-height: var(--gd-type-metadata-line); color: var(--text-muted); }
+.il-platform .dsh-card__title { font-size: var(--type-card); line-height: var(--gd-type-section-line); }
+.il-platform .ws-sheet__titles h2 { font-size: var(--type-section); font-weight: var(--gd-type-section-weight); line-height: var(--gd-type-section-line); }
 .il-platform .tabular-nums { font-variant-numeric: tabular-nums; }
-.il-platform .il-type-body, .il-platform table { font-size: var(--type-body); line-height: 1.5; }
-.il-platform table th { font-size: var(--type-label); font-weight: 500; text-transform: none; letter-spacing: normal; }
+/* Agenda e números temporais: Barlow com numerais tabulares mantém a coluna de
+   horários alinhada igual à fonte anterior. */
+.il-platform .ag-event, .il-platform .ag-time, .il-platform .ag-list__time { font-variant-numeric: tabular-nums; }
+.il-platform table th { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); text-transform: none; letter-spacing: normal; }

@@ -98,7 +98,7 @@ export default function CampanhasPage() {
       <PageHeader
         icon="megaphone"
         title="Campanhas"
-        hint="Mensagens para clientes que autorizaram receber. Retornos, orientações, data especial — você escolhe o público."
+        hint="Só entram clientes que autorizaram receber mensagens."
         action={
           <span className="flex items-center gap-2">
             <Link2 href={`/clientes${q}`} label="Clientes" />

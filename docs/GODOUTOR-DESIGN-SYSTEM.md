@@ -1,6 +1,11 @@
-# GoDoutor Design System 1.0
+# GoDoutor Design System 1.0 → 1.1
 
-> **Status:** CONCLUÍDO / PR #62 ABERTA / MERGE NÃO AUTORIZADO (2026-10-06).
+> **DS 1.1 (evolução dirigida por Material 3):** ver §9 ao final — campos com
+> rótulo flutuante, `DetailSideModal`, tipografia Barlow, rail sem chevrons,
+> prontuário em leitura, alertas proporcionais e a tabela de pesquisa oficial.
+> **Status DS 1.1:** PR #64 ABERTA / MERGE NÃO AUTORIZADO (2026-10-06).
+
+> **Status (base, DS 1.0):** CONCLUÍDO / PR #62 ABERTA / MERGE NÃO AUTORIZADO (2026-10-06).
 > **Fonte única de verdade visual:** `src/styles/godoutor-design-system.css` (tokens `--gd-*`).
 > **Contrato:** este documento. `docs/GODOUTOR-UI-CONTRACT.md` (missões anteriores) fica
 > como histórico: onde conflitar, **este documento vence**.
@@ -167,7 +172,6 @@ varredura de `fixed inset-0` fora do `ui.tsx`.
   verificado por teste (`responsive-qa.mjs`), não por memória.
 
 ## 7. Contratos substituídos (histórico)
-## 7. Contratos substituídos (histórico)
 
 Sob o DS 1.0, contratos visuais anteriores deixaram de valer e os testes foram
 **re-apontados** (não enfraquecidos — os limiares AA continuam medidos):
@@ -243,3 +247,201 @@ arquivo identificado (nada “escondido” como exceção).
 - Testes de contrato do DS: `src/lib/__tests__/ds-agenda-quick-create.test.tsx`
   (popover ancorado, seis campos, sem POST antes da confirmação, erro do servidor
   preservado, handoff para “Mais opções”).
+
+---
+
+# 9. Design System 1.1 — evolução dirigida por Material 3
+
+A missão não pediu um DS novo: pediu que o DS 1.0 ficasse **mais claro, mais
+previsível e mais silencioso**, absorvendo do Material Design 3 o que é
+*comportamento* (estado, movimento, hierarquia, acessibilidade, divulgação
+progressiva) e **nada** de identidade (paleta, marca, ícones proprietários,
+layouts exatos). O resultado continua GoDoutor; o que muda é a régua.
+
+## 9.1 Princípio operacional (a régua de texto)
+
+O sistema é um **aplicativo operacional**, não um site institucional. A ordem de
+leitura de qualquer tela é:
+
+> **ação → estado → conteúdo → contexto sob demanda**
+
+Um texto só sobrevive se **muda uma decisão**, **evita um erro**, **explica uma
+regra não óbvia** ou **comunica uma condição clínica/operacional importante**.
+Tudo o mais sai, encolhe ou vira ajuda contextual. Consequência direta: **as
+páginas não têm design próprio** — elas escolhem componentes semânticos.
+
+## 9.2 Tipografia — uma família, uma escala
+
+**Barlow** (Jeremy Tribby / The Barlow Project Authors, SIL OFL 1.1) é a fonte da
+interface: 400/500/600 e 700 **só onde a hierarquia justifica** (nunca como
+peso padrão de título).
+
+| Papel | Tamanho/linha | Peso | Token |
+| --- | --- | --- | --- |
+| Título de página | 20/26 | 600 | `--gd-type-page-title-*` |
+| Seção | 16/22 | 600 | `--gd-type-section-*` |
+| Corpo | 14/20 | 400 | `--gd-type-body-*` |
+| Rótulo (campo, item) | 13/20 | 500 | `--gd-type-label-*` |
+| Metadado | 12/18 | 500 | `--gd-type-metadata-*` |
+| Ajuda | 12/18 | 400 | `--gd-type-helper-*` |
+| Botão | 14/20 | 500 | `--gd-type-button-*` |
+
+`globals.css` **não** redefine tamanhos: os aliases históricos
+(`.il-platform .il-type-*`) apontam para estes tokens. Números de Agenda/horário
+seguem `tabular-nums` (alinhamento de coluna), e a densidade é elegante — não
+inflada.
+
+**Como a Barlow é servida (e o impedimento documentado).** O caminho preferido
+era `next/font/google`, que baixa a fonte no *build* e a serve do próprio host,
+sem requisição ao Google em runtime. No ambiente de homologação desta missão
+**não há rota para `fonts.googleapis.com`** (TLS bloqueado; `curl` falha) e o
+`next build` **morre** com `Failed to fetch \`Barlow\` from Google Fonts` — ou
+seja, o gate de build e toda a evidência visual ficariam irreproduzíveis. Decisão
+documentada: os `.woff2` OFL da própria Barlow (subset `latin`, pesos
+400/500/600/700) foram **vendorizados** em `src/app/fonts/barlow/` (origem
+`@fontsource/barlow@5.3.0`, licença em `OFL.txt`) e servidos por
+`next/font/local` — mesmo resultado funcional (self-host, `preload`, `swap`,
+fallback métrico) e agora também **buildável offline**. A QA mede o que importa:
+`document.fonts.check('400 14px Barlow') === true` e
+`performance.getEntriesByType('resource')` com **zero** requisição a
+`fonts.googleapis.com`/`fonts.gstatic.com`.
+
+## 9.3 Campos — `FieldShell` (Material 3 Outlined)
+
+Um único componente (`Field` + `.gd-field*`) serve Input, Textarea, Select,
+Combobox, Autocomplete e Date/Time:
+
+- **vazio e sem foco:** o rótulo mora dentro da caixa (nunca vira placeholder);
+- **foco:** o rótulo sobe e **notcha** o contorno (o `background` da superfície
+  cria o corte, como no outline do Material);
+- **preenchido:** o rótulo permanece acima;
+- **erro:** contorno + rótulo + texto no par de danger (nunca só a cor);
+- **ajuda:** abaixo do campo, e **substituída visualmente** pelo erro — mas o
+  elemento continua no DOM (fora da tela) porque `aria-describedby` é montado
+  com os dois ids e id pendurado não descreve nada;
+- **desabilitado × somente-leitura:** superfícies diferentes (o segundo continua
+  legível e selecionável);
+- **alturas:** 40–44px, e 44px + 16px de fonte em ponteiro grosso/≤767px;
+- **contorno:** `--gd-border-strong` contra branco ≥ 3:1 (critério do Material).
+
+`Combobox` **adota** a caixa quando está dentro de um `Field`
+(`gd-field__control--inline`): um só contorno, rótulo e ARIA vindos do shell.
+
+## 9.4 Overlays — três papéis, nunca "um painel para tudo"
+
+| Papel | Componente | Geometria/comportamento |
+| --- | --- | --- |
+| Decisão | `Dialog` | central, faixa por token (`--gd-dialog-w`), foco preso, Escape |
+| Fluxo longo | `WorkspaceSheet` (`Drawer`/`Sheet`) | lateral de formulário, largura por preset |
+| **Ler um registro** | **`DetailSideModal`** | **preso à borda direita**, `100dvh`, sem gap/margem no desktop, sem raio e sem sombra, largura `--gd-detail-w` (460px), backdrop `--gd-overlay-strong`, slide de fora da borda em ~190ms e volta em ~170ms, foco preso e devolvido ao gatilho |
+
+`DetailPanel` continua existindo **apenas como alias depreciado** de
+`DetailSideModal` (nada de dois padrões com o mesmo nome). A base comportamental
+é a do **modal side sheet** do Material (bloqueia o resto do app); a geometria é
+a do contrato GoDoutor (encostado na borda, não "card flutuante") — o painel
+insetado de 16px do DS 1.0 lia como card solto, não como detalhe do registro.
+
+## 9.5 Navegação — rail de destinos, não acordeão
+
+O rail tem ~60px, fica sempre no mesmo lugar e o grupo abre um **painel
+conectado** (gap 0, divisória de 1px, sem cara de card): hover/foco entra em
+120–180ms, permanece enquanto o cursor vai do rail para o painel, troca de grupo
+A→B sem fechar, e retrai com atraso curto ao sair. **Nenhum chevron em gatilho de
+grupo** — sem acordeão não existe seta, e seta em gatilho que não abre nada é
+interação falsa. Teclado: Tab/foco é equivalente ao hover, Enter/Space abre,
+Escape fecha e devolve o foco ao gatilho. A identidade da clínica aparece **uma
+vez** (topbar) e `projection` do rail nunca esconde rota autorizada.
+
+## 9.6 Leitura — `ReadOnlyField` e `Disclosure`
+
+Prontuário/Atendimento em leitura **não é formulário desabilitado**: é documento.
+
+- `ReadOnlyField` — rótulo canônico + texto na escala de corpo, **sem caixa de
+  input**, preservando parágrafos (`white-space: pre-wrap`); valor vazio é
+  declarado e fraco (`Não informado`), nunca um branco ambíguo.
+- `ClinicalRecordSection` — o BLOCO do documento: título na escala de seção, malha
+  de leitura (2 colunas quando cabe, campo longo ocupando a linha) e valores em
+  `ReadOnlyField`. É o que as **seis seções da superfície VIVA** do prontuário
+  (`/atendimento/<id>`, a rota que a Agenda e o detalhe do agendamento abrem)
+  renderizam quando `editable=false` — antes disso elas desenhavam `disabled` em
+  cada controle (defeito real: `EncounterCoreSection`, anamnese, avaliação,
+  problemas, conduta e procedimentos).
+- `Disclosure` — bloco secundário que **abre**: `button[aria-expanded]` +
+  região rotulada, fechado por padrão, movimento curto, `keepMounted` opcional
+  (o padrão desmonta, para não vazar dado oculto em leitura de tela/impressão).
+- Ações no rodapé da seção, alertas perto do contexto, histórico recolhível,
+  autoria e privacidade preservadas. **Nenhuma regra clínica, autoria, permissão
+  ou acesso foi alterado** — a mudança é de apresentação (o servidor continua a
+  autoridade de escrita).
+
+## 9.7 Alertas — proporcionais ao impacto
+
+| Situação | Superfície |
+| --- | --- |
+| Contexto local (a ação foi negada **aqui**, a fila espera, o bloqueio existe) | `Notice`/`AttentionStrip` **no fluxo**, peso leve, dispensável |
+| Condição importante (registro finalizado, conflito de versão) | `Notice` com título, no topo do conteúdo afetado |
+| Confirmação transitória (qualquer 403 de ação) | **toast** canônico (`useToasts`/`ToastViewport`, `.gd-toast`) |
+| Decisão realmente bloqueante | `Dialog` |
+
+Vermelho cheio fica reservado para ação destrutiva de verdade. A barra âmbar de
+bloqueios da Agenda virou indicador compacto (ícone + contagem + pílulas) porque
+competia com a toolbar; o aviso de permissão e o toast de 403 saíram das cores de
+página (`amber-*`/`zinc-*`) para os tokens do DS.
+
+## 9.8 Tabela A — referência oficial → princípio → adaptação GoDoutor
+
+| REFERÊNCIA OFICIAL | O QUE O MATERIAL RECOMENDA | PROBLEMA NO GODOUTOR | ADAPTAÇÃO (DS 1.1) |
+| --- | --- | --- | --- |
+| [Text fields — overview](https://m3.material.io/components/text-fields/overview) | Linha de base clara entre *filled* e *outlined*; o **outlined** é o de menor ênfase, para formulários longos; estado do campo visível de relance; rótulo e erro curtos | Cada tela tinha um jeito: rótulo acima, placeholder-como-rótulo, altura de controle variável | `FieldShell` outlined com rótulo flutuante como **único** campo do produto (§9.3) |
+| [Text fields — accessibility](https://m3.material.io/components/text-fields/accessibility) | Contorno ≥ 3:1 contra o fundo; Tab percorre os campos; o **nome acessível é igual ao rótulo visível**; ícone final rotulado pela função | Contraste de borda e associação rótulo↔controle dependiam de cada tela | `--gd-border-strong` ≥ 3:1, `aria-labelledby` para o rótulo visível, ajuda/erro ligados por `aria-describedby` (§9.3) |
+| [material-web — text-field](https://github.com/material-components/material-web/blob/main/docs/components/text-field.md) | `md-outlined-text-field` com `label` flutuante, `error`/`error-text`, ícones inicial/final, texto de apoio; rótulo externo exige `aria-label` | Sem contrato de shell; erro e ajuda competiam pelo mesmo espaço | `Field` (nosso análogo ao `md-outlined-text-field`) com ajuda/erro/ícones na mesma caixa e erro substituindo a ajuda **sem apagar o id** |
+| [Side sheets](https://m3.material.io/components/side-sheets/overview) | *Standard* vs **modal** (bloqueia o resto; usado em telas compactas) | O detalhe era um painel flutuante insetado, lido como "card solto" | `DetailSideModal`: semântica modal + geometria presa à borda direita, altura cheia (§9.4) |
+| [material-web — dialog](https://github.com/material-components/material-web/blob/main/docs/components/dialog.md) | Três seções opcionais (headline/conteúdo/ações), `type="alert"` para alerta, foco preso por padrão, `aria-label` sem headline, abrir/fechar resolvem após a animação | Criação/edição em painel lateral e "modais artesanais" | Criação/edição **central** (`Dialog`), alerta para decisão bloqueante, foco preso e fechamento só depois do movimento |
+| [material-web — menu](https://github.com/material-components/material-web/blob/main/docs/components/menu.md) | Menu se **ancora** ao gatilho (`anchor`/`anchorElement`, mesmo pai `position:relative`); navegação por setas e typeahead; variante em top-layer quando há clipping | Menus com posição própria e sem teclado; selects diferentes por tela | Camadas ancoradas (`useAnchoredLayer`, flip dentro da viewport) + `DropdownMenu` com roving focus, setas, Enter/Espaço e Escape; `Select` nativo só para listas curtas, `Combobox` com busca para listas longas (§9.9) |
+| [Navigation rail](https://m3.material.io/components/navigation-rail/overview) | Rail para janelas médias+, 3–7 destinos, **sempre no mesmo lugar**, indicador de ativo | Gatilho de grupo com chevron de "acordeão" e um botão flutuante de expandir/recolher que não existiam no comportamento | Rail fixo de destinos + painel conectado; **chevrons removidos** e nenhum controle flutuante (§9.5) |
+| [Motion — how it works](https://m3.material.io/styles/motion/overview/how-it-works) | Esquemas *standard* (pouco bounce) e *expressive*; tokens espaciais vs de efeito; molas com fast/default/slow | Transições heterogêneas, algumas com deslocamento simbólico; nada declarado | GoDoutor = esquema **standard/utilitário**: 120–200ms, ease-out, sem bounce, overlay entra/sai por inteiro; `prefers-reduced-motion` zera movimento |
+| [Barlow — Google Fonts](https://fonts.google.com/specimen/Barlow) | Família de 100–900, subset latino, OFL | Duas famílias e uma escala com tamanhos soltos por tela | Uma família e uma escala canônica por papel (§9.2) |
+| [next/font (Next.js)](https://nextjs.org/docs/app/api-reference/components/font) | `next/font` **self-hospeda em build**, faz preload e **não** manda requisição do navegador ao Google | — | `next/font/local` com os OFL vendorizados (impedimento de rede documentado em §9.2); QA prova 0 requisições ao Google |
+
+## 9.9 Contratos substituídos no DS 1.1 (histórico)
+
+| Contrato antigo | Contrato DS 1.1 | Testes re-apontados |
+| --- | --- | --- |
+| `Field` com rótulo acima do controle | `FieldShell` outlined com rótulo flutuante (`:placeholder-shown` como detector de vazio) | `ui.test.tsx` (a associação ARIA foi **mantida**, inclusive a ajuda oculta sob erro) |
+| Chevron no gatilho de grupo do rail (e `transform: rotate`) | Gatilho sem seta, mantendo `aria-expanded`/`aria-haspopup` | `ui-audit-v01-v10.test.ts` (V06), `agenda-ux-closure.test.tsx` |
+| Monograma da clínica em **tile** com par accent/contrast | Logo **solta** e proporcional (`height` por token + `width:auto`); sem arquivo, monograma em **texto** (`--text-strong`) | `m10-identidade-persistente.test.ts` |
+| `DetailPanel` (painel insetado, raio+sombra) | `DetailSideModal` (borda direita, altura cheia, sem raio/sombra) — `DetailPanel` fica como alias | `agenda-ux-closure.test.tsx`, `fase2-ws-sheet-close.test.ts`, `homologacao-p0-autosave-client.test.ts` |
+| Subtítulo "Paciente → serviço → data e horário → confirmação" no cabeçalho do agendamento | Removido: a sequência é dita pelos rótulos numerados do próprio formulário | `agenda-protagonista.test.tsx` |
+| Aviso de permissão e toast de 403 com `amber-*`/`zinc-*` de página | `Notice` + pilha de **toast** canônica, tokens do DS | `ds-1-1-leitura-e-alertas.test.tsx` |
+| Prontuário finalizado com textareas `disabled` (rota legada `/registro`) | `ReadOnlyField` + `Disclosure` (leitura de documento) | `ds-1-1-leitura-e-alertas.test.tsx` |
+| Seções da superfície VIVA do prontuário com `disabled={disabled}` | `ClinicalRecordSection` + `ReadOnlyField` nas seis seções (`data-readonly`) | `f1b1-clinical-sections.test.tsx` (contrato re-apontado), `ds-1-1-leitura-e-alertas.test.tsx` |
+| Linha de ações do detalhe do agendamento com azul + verde + âmbar + vermelho (4 cores competindo) | Uma ação PRIMÁRIA por etapa (a primeira do fluxo permitida) e transições NEUTRAS; tintura só no destrutivo | `detalhe-*` em `measurements.json` (`acoes.primario`, `acoes.coloridos`) |
+| Seta do `Select` dentro do `FieldShell` tilhando pela largura do campo | A seta é desenho do DS, declarada no CSS do shell (uma vez, à direita) | `campo-*` em `measurements.json` (`setaRepete: "no-repeat"`) |
+
+## 9.10 Onde o Material NÃO é seguido (e por que é melhor para o GoDoutor)
+
+1. **Paleta, marca, ícones e formas:** nada foi copiado. O Material entra como
+   comportamento; a identidade (acento, superfícies, ícones do sistema) é nossa —
+   absorver o visual do Material seria trocar de produto, não de qualidade.
+2. **Cantos arredondados de 16dp no side sheet / raio grande em overlays:** o
+   detalhe do GoDoutor é um painel de trabalho encostado na borda. Raio ali cria
+   "card solto" e desalinha a leitura com a grade da Agenda (defeito medido,
+   §9.4). Mantemos a borda reta e a divisória de 1px.
+3. **Menus de AÇÃO com largura sempre igual à do gatilho:** o `DropdownMenu`
+   (kebab de ações) tem piso de 190px e alinha pela borda do gatilho — igualar
+   por igualar deixaria a lista de ações estreita demais para o rótulo em
+   português. Já o menu **anexado a um campo** (Combobox/Autocomplete dentro do
+   `FieldShell`) acompanha a largura do campo, que é exatamente o que o Material
+   descreve para texto + lista. São dois casos, não uma regra única.
+4. **Busca dentro do `Select`:** o select nativo (com o shell canônico) continua
+   sendo o certo para listas curtas de clínica (2–8 opções) porque é o controle
+   que o sistema operacional acessibiliza de graça; listas longas usam
+   `Combobox`, que já tem busca e teclado. Instalar um select "Material-like"
+   para tudo seria trocar um padrão do SO por um componente nosso sem ganho real.
+5. **Molas (spring) com bounce do esquema *expressive*:** produto utilitário
+   (§9.8) — a previsibilidade do ease-out de 120–200ms é melhor para quem
+   opera a agenda o dia inteiro do que a expressividade do movimento.
+6. **Snackbar para tudo:** confirmação local (bloqueio criado, agendamento
+   salvo) fica **no fluxo** onde a ação aconteceu; toast é para o que acontece
+   fora do contexto da tela (403 global). Material permite ambos; a escolha é
+   pela distância entre a ação e o olhar de quem opera.

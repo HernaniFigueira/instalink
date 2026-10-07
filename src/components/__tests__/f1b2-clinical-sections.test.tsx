@@ -215,7 +215,9 @@ describe('F1B2 · seção Problemas (lista compacta, identidade estável)', () =
     expect(sent[0].label).toBe('Dermatite alérgica alimentar');
   });
 
-  it('escrita bloqueada: campos desabilitados e o motivo visível', () => {
+  // DS 1.1 · §11 — contrato re-apontado: escrita bloqueada = DOCUMENTO. Não há
+  // botão desabilitado; há leitura dos problemas, e o motivo dito uma vez.
+  it('escrita bloqueada: leitura do documento e o motivo visível', () => {
     render(
       <Harmony>
         {({ authority, row: r, adoptToken }) => (
@@ -227,7 +229,9 @@ describe('F1B2 · seção Problemas (lista compacta, identidade estável)', () =
         )}
       </Harmony>,
     );
-    expect(screen.getByRole('button', { name: 'Adicionar problema' })).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('button', { name: 'Adicionar problema' })).toBeNull();
+    expect(document.querySelector('[data-readonly="true"]')).toBeTruthy();
+    expect(document.querySelectorAll('input, textarea, select').length).toBe(0);
     expect(screen.getByText(/Somente o profissional responsável/)).toBeTruthy();
   });
 });

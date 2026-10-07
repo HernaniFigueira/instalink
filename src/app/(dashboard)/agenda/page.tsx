@@ -1635,23 +1635,18 @@ export default function AgendaPage() {
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
+      {/* DS 1.1 · §12 — a confirmação da ação que acabou de acontecer é um
+          aviso LOCAL: superfície canônica (`Notice`), no fluxo, sem disputar a
+          toolbar. Antes era um bloco com cor, raio, sombra e botão próprios. */}
       {flash && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={
-            'mb-3 border rounded-lg px-3 py-2.5 text-xs font-semibold flex items-start gap-2 shadow-xs '
-            + (flash.tone === 'ok'
-              ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]'
-              : flash.tone === 'warn'
-                ? 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)]'
-                : 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger-fg)]')
-          }
+        <Notice
+          live
+          className="mb-3"
+          tone={flash.tone === 'ok' ? 'success' : flash.tone === 'warn' ? 'warning' : 'error'}
+          onDismiss={() => setFlash(null)}
         >
-          <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
-          <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto font-semibold underline underline-offset-2 shrink-0">Fechar</button>
-        </div>
+          {flash.text}
+        </Notice>
       )}
 
       {pendencies.length > 0 && (
@@ -1814,7 +1809,7 @@ export default function AgendaPage() {
           <Icon n="lock" size={13} aria-hidden="true" />
           {blockCountLabel}
         </span>
-        <span className="ag-blocks-bar__hint">Bloqueios não são atendimentos — o período aparece hachurado na grade.</span>
+        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
         <div className="ag-blocks-bar__items">{blocksInView.map(block => (
           <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
             const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');

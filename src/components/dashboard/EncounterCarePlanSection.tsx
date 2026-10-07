@@ -14,7 +14,7 @@
 // seção Atendimento. Aqui eles aparecem apenas como CONTEXTO EM LEITURA, para
 // o profissional ver o plano completo sem existir um segundo lugar de edição.
 import { useMemo } from 'react';
-import { Textarea } from '@/components/ui';
+import { ClinicalRecordSection, ReadOnlyField, Textarea } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import { CLINICAL_PLAN_LIMITS, normalizeEncounterClinical, type ClinicalCarePlan } from '@/lib/encounter-clinical';
@@ -53,6 +53,24 @@ export function EncounterCarePlanSection({
   const followUpText = row.followUp
     || (row.followUpMode === 'interval' && Number(row.followUpDays) > 0 ? `Em ${row.followUpDays} dias` : '')
     || (row.followUpMode === 'date' && row.followUpDate ? `Em ${row.followUpDate}` : '');
+
+  // §11 — LEITURA = documento: a conduta é o texto que o profissional escreveu;
+  // o contexto complementar continua em bloco, agora com valores de leitura.
+  if (disabled) {
+    return (
+      <section className="encounter-workspace__section" aria-label="Conduta" data-section="conduta" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Conduta">
+            <ReadOnlyField label="Plano / conduta clínica" value={form.conduct} multiline block
+              empty="Sem conduta registrada neste atendimento." />
+            <ReadOnlyField label="Orientações ao tutor" value={guidance} />
+            <ReadOnlyField label="Retorno" value={followUpText} />
+          </ClinicalRecordSection>
+          <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="encounter-workspace__section" aria-label="Conduta" data-section="conduta">

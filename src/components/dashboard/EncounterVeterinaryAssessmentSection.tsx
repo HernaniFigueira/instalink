@@ -19,7 +19,7 @@
 //   • vazio é permitido: campo em branco não vira 0 nem inventa leitura;
 //   • o servidor valida número finito e limite técnico (contra lixo/overflow).
 import { useMemo } from 'react';
-import { Field, Input, Textarea } from '@/components/ui';
+import { ClinicalRecordSection, Field, Input, ReadOnlyField, Textarea } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -179,6 +179,34 @@ export function EncounterVeterinaryAssessmentSection({
     update({ ...form, [key]: value });
   };
   const disabled = !editable;
+
+  // §11 — LEITURA = documento: o exame de hoje vira texto (com a unidade do
+  // campo), o exame físico em bloco, e o peso do cadastro continua sendo
+  // contexto de leitura. Nenhum input desabilitado.
+  if (!editable) {
+    return (
+      <section className="encounter-workspace__section" aria-label="Avaliação clínica veterinária" data-section="avaliacao" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Avaliação clínica veterinária">
+            {NUMBER_FIELDS.map((f) => (
+              <ReadOnlyField key={f.key} label={`${f.label} (${f.unit})`} value={form[f.key]} />
+            ))}
+            {TEXT_FIELDS.map((f) => (
+              <ReadOnlyField key={f.key} label={f.label} value={form[f.key]} />
+            ))}
+            <ReadOnlyField label="Exame físico / achados gerais" value={form.physicalExam} multiline block />
+          </ClinicalRecordSection>
+          {petWeightKg ? (
+            <p className="encounter-section__hint">
+              Peso do cadastro do paciente: {petWeightKg} kg — contexto de leitura. O peso medido hoje é o
+              campo acima.
+            </p>
+          ) : null}
+          <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="encounter-workspace__section" aria-label="Avaliação clínica veterinária" data-section="avaliacao">

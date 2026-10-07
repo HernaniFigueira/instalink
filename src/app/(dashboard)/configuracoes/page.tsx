@@ -260,7 +260,6 @@ export default function ConfigPage() {
       <PageHeader
         icon="settings"
         title="Configurações"
-        hint="Cadastro institucional e operacional da clínica."
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
       {/* Diagnóstico 'Como está a inteligência' movido para Canais — ver /canais */}

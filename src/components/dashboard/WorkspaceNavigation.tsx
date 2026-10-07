@@ -252,7 +252,11 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
           <span className="workspace-label">{area.label}</span>
-          <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
+          {/* DS 1.1 — SEM CHEVRON no rail. A seta prometia um accordion que
+              não existe: o grupo abre um PAINEL lateral conectado, e o próprio
+              painel (título + itens) é o feedback de abertura. O estado aberto
+              continua acessível por `aria-expanded`; nada de ícone decorativo
+              sugerindo hierarquia/pilha. */}
         </button>
       </div>
     );

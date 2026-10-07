@@ -87,9 +87,12 @@ describe('P1 · anamnese — preset vet com tipos clínicos (nada tudo-em-textar
 describe('P1 · anamnese — linguagem clínica e contexto do pet', () => {
   const filler = read('src/components/dashboard/AnamneseFiller.tsx');
 
-  it('sheet usa linguagem clínica (ficha clínica, episódio atual)', () => {
-    expect(filler).toContain('Ficha clínica');
+  // DS 1.1 · §13 — o subtítulo "Ficha clínica — episódio atual do paciente" saiu
+  // (repetia a primeira frase do corpo). O contrato que importa continua: a
+  // linguagem é CLÍNICA, e o episódio atual é nomeado no corpo da ficha.
+  it('sheet usa linguagem clínica (ficha, episódio atual)', () => {
     expect(filler).toContain('Episódio atual');
+    expect(filler).toContain('Salvar ficha');
     expect(filler).toContain('Salvar ficha');
     expect(filler).not.toContain('questionário administrativo');
     expect(filler).not.toContain('INP');

@@ -16,7 +16,7 @@
 //   • identidade estável por item (`id`), nunca índice de array;
 //   • persistência pela AUTORIDADE do workspace (uma versão por Encounter).
 import { useMemo, useState } from 'react';
-import { Button, Input } from '@/components/ui';
+import { Button, ClinicalRecordSection, Input, ReadOnlyField } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -87,6 +87,25 @@ export function EncounterClinicalProceduresSection({
     if (!item.name.trim() && !item.notes.trim()) { removeItem(item.id); return; }
     setConfirmingId((current) => (current === item.id ? '' : item.id));
   };
+
+  // §11 — LEITURA = documento: procedimento e observação em linhas de leitura.
+  if (disabled) {
+    return (
+      <section className="encounter-workspace__section" aria-label="Procedimentos realizados" data-section="procedimentos" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Procedimentos realizados">
+            {items.length === 0
+              ? <ReadOnlyField label="Procedimentos deste atendimento" value="" empty="Nenhum procedimento registrado neste atendimento." block />
+              : items.map((item, index) => (
+                <ReadOnlyField key={item.id} label={`Procedimento ${index + 1}`} value={item.name}
+                  hint={item.notes || undefined} block />
+              ))}
+          </ClinicalRecordSection>
+          <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="encounter-workspace__section" aria-label="Procedimentos realizados" data-section="procedimentos">

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // PILHA DE OVERLAYS — quem está no TOPO responde a Escape/Tab
 // ═══════════════════════════════════════════════════════════════
-// Todo overlay modal do produto (Dialog central, DetailPanel, WorkspaceSheet)
+// Todo overlay modal do produto (Dialog central, DetailSideModal, WorkspaceSheet)
 // entra nesta pilha ao abrir e sai ao fechar. A regra é uma só:
 //
 //   • Escape fecha APENAS o overlay do topo;

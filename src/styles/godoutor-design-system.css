@@ -114,6 +114,9 @@
 
   /* ── COLOR · overlays e código ────────────────────────────────────────── */
   --gd-overlay: rgba(13, 18, 32, 0.42);
+  /* Backdrop do DETAIL SIDE MODAL: mais forte que o do popover/menu — o detalhe
+     tira o resto do app de foco (Material: modal side sheet bloqueia a ação). */
+  --gd-overlay-strong: rgba(13, 18, 32, 0.52);
   --gd-code-bg: #16181d;
   --gd-code-fg: #e6e8ee;
 
@@ -131,8 +134,10 @@
   --gd-nav-panel-shadow: 0 10px 24px -18px rgba(19, 26, 54, 0.28);
   --gd-nav-cta: var(--gd-accent);
 
-  /* ── TYPOGRAPHY (uma família, três pesos, escala fechada) ──────────────── */
-  --gd-font-sans: var(--font-geist-sans), Geist, 'Geist Sans', ui-sans-serif, system-ui,
+  /* ── TYPOGRAPHY (DS 1.1 — Barlow + escala canônica) ────────────────────── */
+  /* Barlow é servida pelo `next/font/google` (self-hosted no build). A lista de
+     fallback fica no token para que o texto nunca caia em serifada. */
+  --gd-font-sans: var(--font-barlow), Barlow, ui-sans-serif, system-ui,
     -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --gd-font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --gd-weight-regular: 400;
@@ -141,13 +146,33 @@
   --gd-weight-bold: 700;         /* só título de página/marca */
 
   --gd-font-size-page-title: 20px;   /* título de página */
-  --gd-font-size-section: 15px;      /* título de seção/registro */
-  --gd-font-size-body: 13.5px;       /* corpo */
-  --gd-font-size-secondary: 12.5px;  /* apoio/label */
+  --gd-font-size-section: 16px;      /* título de seção/registro */
+  --gd-font-size-body: 14px;         /* corpo */
+  --gd-font-size-secondary: 13px;    /* apoio/label */
   --gd-font-size-metadata: 12px;     /* metadado */
   --gd-font-size-caption: 11px;      /* legenda/eyebrow */
   --gd-leading-tight: 1.25;
   --gd-leading-normal: 1.45;
+
+  /* ── TYPOGRAPHY SCALE CANÔNICA (DS 1.1, §2) ──────────────────────────────
+     Tamanho/altura-de-linha/peso por PAPEL, não por tela. Toda superfície usa
+     um destes papéis; um `text-[15px]` solto é dívida, não estilo.
+       page-title · 20/26 600   — título de página (uma vez por tela)
+       section    · 16/22 600   — título de seção/registro
+       body       · 14/20 400   — corpo
+       label      · 13/20 500   — rótulo de campo/controle
+       metadata   · 12/18 500   — metadado (status, horário, contagem)
+       helper     · 12/18 400   — texto de apoio/ajuda (nunca competindo)
+       button     · 14/20 500   — rótulo de botão
+     700 (`--gd-weight-bold`) só quando a hierarquia justifica (título de página
+     e marca) — nunca em corpo, metadado ou botão. */
+  --gd-type-page-title-size: 20px;   --gd-type-page-title-line: 26px;  --gd-type-page-title-weight: var(--gd-weight-semibold);
+  --gd-type-section-size: 16px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
+  --gd-type-body-size: 14px;         --gd-type-body-line: 20px;        --gd-type-body-weight: var(--gd-weight-regular);
+  --gd-type-label-size: 13px;        --gd-type-label-line: 20px;       --gd-type-label-weight: var(--gd-weight-medium);
+  --gd-type-metadata-size: 12px;     --gd-type-metadata-line: 18px;    --gd-type-metadata-weight: var(--gd-weight-medium);
+  --gd-type-helper-size: 12px;       --gd-type-helper-line: 18px;      --gd-type-helper-weight: var(--gd-weight-regular);
+  --gd-type-button-size: 14px;       --gd-type-button-line: 20px;      --gd-type-button-weight: var(--gd-weight-medium);
 
   /* ── SPACING (escala oficial — nada de 17px/13px/27px) ────────────────── */
   --gd-space-1: 4px;
@@ -214,10 +239,17 @@
   --gd-detail-gap: var(--gd-space-4);   /* margem da viewport */
   --gd-motion-overlay: 200ms;    /* entrada de overlay (janela 180–220ms) */
   --gd-motion-overlay-out: 170ms;
+  /* Detail side modal (DS 1.1): entra/sai na janela 160–200ms do contrato. */
+  --gd-motion-side-modal: 190ms;
+  --gd-motion-side-modal-out: 170ms;
   --gd-nav-panel-attach: 0px;    /* o painel de grupo nasce COLADO no rail */
 
   /* ── LAYOUT DO APP SHELL ──────────────────────────────────────────────── */
-  --gd-topbar-h: 56px;           /* top bar full-width, acima da sidebar */
+  /* DS 1.1 — a topbar sobe para 60px: identidade com logo de presença real
+     (36px) não vive comprimida em 56px sem apertar busca e ações. */
+  --gd-topbar-h: 60px;           /* top bar full-width, acima da sidebar */
+  --gd-topbar-logo: 36px;        /* logo SOLTA (sem tile): altura de presença */
+  --gd-topbar-logo-max: 132px;   /* largura máxima preservando proporção */
   --gd-rail-w: 60px;             /* rail recolhida (ícones) */
   --gd-sidebar-w: 248px;         /* navegação fixada (pin) */
   --gd-nav-panel-w: 232px;       /* extensão do grupo (hover/focus) — ligada ao rail */
@@ -260,6 +292,167 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   FIELD SHELL — OUTLINED + FLOATING LABEL (DS 1.1)
+   ═══════════════════════════════════════════════════════════════
+   Comportamento absorvido do Material 3 (Outlined text field), adaptado aos
+   tokens GoDoutor:
+
+     • vazio, sem foco  → o rótulo mora DENTRO do campo, no lugar da leitura;
+     • foco             → o rótulo sobe e NOTCHA a linha do contorno;
+     • preenchido       → o rótulo permanece acima (nunca desaparece);
+     • erro             → contorno + rótulo + texto de apoio no par de danger;
+     • disabled/readonly→ superfícies distintas, sem "cara de erro".
+
+   Por que um shell: o rótulo precisa de uma CAIXA para flutuar sobre a borda.
+   Sem isso, cada tela inventa seu jeito (e foi o que aconteceu: rótulo acima em
+   uma tela, placeholder-como-rótulo em outra). O rótulo do GoDoutor nunca é
+   substituído por placeholder: o placeholder é EXEMPLO e só aparece no foco. */
+.gd-field { display: block; min-width: 0; }
+.gd-field__box {
+  position: relative; display: flex; align-items: center; gap: var(--gd-space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--gd-space-3);
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border-strong);
+  border-radius: var(--gd-radius-sm);
+  transition: border-color var(--gd-motion-fast) var(--gd-ease),
+              box-shadow var(--gd-motion-fast) var(--gd-ease),
+              background-color var(--gd-motion-fast) var(--gd-ease);
+}
+/* A caixa é o CONTROLE: quem está dentro não desenha borda própria. */
+.gd-field__box > .il-field-control,
+.gd-field__box > input,
+.gd-field__box > select,
+.gd-field__box > textarea {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  min-height: calc(var(--control-h) - 2px);
+  padding: 0; margin: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
+  color: var(--gd-text);
+}
+.gd-field__box > textarea { min-height: 76px; padding: var(--gd-space-2) 0; resize: vertical; }
+/* O `Select` canônico tem UM desenho de seta (o do DS), colado à direita. A
+   regra acima zera o `background` do controle e isso apagava repeat/size/position
+   que vinham das utilities — a seta inline, sem elas, TILHAVA pela largura do
+   campo (defeito real, achado ao olhar o catálogo na revisão do §4/§10). A seta
+   é desenho do DS: fica declarada aqui, junto do resto da métrica do campo. */
+/* A especificidade importa: o grupo acima casa `.gd-field__box > .il-field-control`
+   (0,2,0), então a regra da seta precisa casar o select TAMBÉM com a classe do
+   controle (0,2,1) — senão o `background: transparent` do grupo continuaria
+   apagando repeat/size/position e a seta voltaria a tilhar. */
+.gd-field__box > select.il-field-control,
+.gd-field__box > select {
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-size: 14px auto;
+  background-position: right var(--gd-space-3) center;
+  padding-right: calc(14px + var(--gd-space-3) + var(--gd-space-1));
+}
+.gd-field__box > input:focus, .gd-field__box > select:focus, .gd-field__box > textarea:focus,
+.gd-field__box > .il-field-control:focus { outline: none; box-shadow: none; border-color: transparent; }
+/* Textarea não centraliza: o shell vira coluna. */
+.gd-field--multiline .gd-field__box { align-items: flex-start; }
+
+/* Rótulo: ponto de partida DENTRO do campo… */
+.gd-field__label {
+  position: absolute; left: var(--gd-space-3); top: 50%;
+  transform: translateY(-50%);
+  max-width: calc(100% - (2 * var(--gd-space-3)));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
+  font-weight: var(--gd-weight-regular); color: var(--gd-text-muted);
+  pointer-events: none;
+  transition: top var(--gd-motion-fast) var(--gd-ease),
+              font-size var(--gd-motion-fast) var(--gd-ease),
+              color var(--gd-motion-fast) var(--gd-ease);
+}
+/* …e vai para a LINHA do contorno quando o campo está em uso (foco, valor ou
+   rótulo sempre-flutuante de select/data). O `background` da superfície cria o
+   NOTCH, exatamente como o outline do Material. */
+.gd-field__box:focus-within .gd-field__label,
+.gd-field__box:has(input:not(:placeholder-shown)) .gd-field__label,
+.gd-field__box:has(textarea:not(:placeholder-shown)) .gd-field__label,
+.gd-field--float .gd-field__label {
+  top: 0; transform: translateY(-50%);
+  padding: 0 5px; margin-left: -5px;
+  background: var(--gd-bg-surface);
+  border-radius: var(--gd-radius-xs);
+  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+  font-weight: var(--gd-weight-medium); color: var(--gd-text-secondary);
+}
+/* PLACEHOLDER é EXEMPLO, nunca rótulo (§4). Com o campo vazio e fora de foco,
+   o lugar do texto é do RÓTULO — então o exemplo fica invisível e só aparece
+   quando o rótulo já subiu (foco) ou quando há valor digitado. Sem esta regra,
+   rótulo e placeholder se sobrepunham dentro da caixa. */
+.gd-field__box > input::placeholder,
+.gd-field__box > textarea::placeholder { color: transparent; }
+.gd-field__box:focus-within > input::placeholder,
+.gd-field__box:focus-within > textarea::placeholder { color: var(--gd-text-faint); }
+
+/* Hover: o contorno escurece um degrau (não é sombra, é contraste). */
+.gd-field__box:hover { border-color: var(--gd-text-faint); }
+/* Foco: um único anel, o mesmo do sistema. */
+.gd-field__box:focus-within {
+  border-color: var(--gd-accent);
+  box-shadow: var(--gd-focus-ring);
+}
+.gd-field__box:focus-within .gd-field__label { color: var(--gd-accent-fg); }
+/* Erro: contorno + rótulo + texto no par de danger (nunca só a cor: o texto
+   de apoio diz o que corrigir). */
+.gd-field[data-invalid='true'] .gd-field__box { border-color: var(--gd-danger); }
+.gd-field[data-invalid='true'] .gd-field__box:focus-within { box-shadow: 0 0 0 3px var(--gd-danger-bg); }
+.gd-field[data-invalid='true'] .gd-field__label,
+.gd-field[data-invalid='true'] .gd-field__box:focus-within .gd-field__label { color: var(--gd-danger-fg); }
+/* Desabilitado × somente-leitura: superfícies DIFERENTES. Desabilitado não
+   recebe foco; leitura continua legível e selecionável. */
+.gd-field[data-disabled='true'] .gd-field__box { background: var(--gd-bg-subtle); border-color: var(--gd-border); }
+.gd-field[data-disabled='true'] .gd-field__box > * { color: var(--gd-text-disabled); cursor: not-allowed; }
+.gd-field[data-readonly='true'] .gd-field__box { background: var(--gd-bg-inset); border-color: var(--gd-border); }
+.gd-field__hint, .gd-field__error {
+  display: block; margin-top: var(--gd-space-1);
+  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+}
+.gd-field__hint { color: var(--gd-text-muted); font-weight: var(--gd-type-helper-weight); }
+.gd-field__error { color: var(--gd-danger-fg); font-weight: var(--gd-weight-medium); }
+/* Ajuda com erro presente: fora da tela, dentro da árvore de acessibilidade. */
+.gd-field__hint--off {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+/* Ícones do campo (busca, limpar, erro) entram na MESMA caixa, sem virar um
+   segundo controle com métrica própria. */
+/* Controles que ADOTAM a caixa (Combobox/Autocomplete dentro de um Field):
+   o wrapper ocupa a linha e o controle não desenha um segundo contorno — o
+   rótulo flutuante e o anel de foco continuam sendo os do shell. */
+.gd-field__control-host { flex: 1 1 auto; min-width: 0; }
+.gd-field__box .gd-field__control--inline {
+  padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+.gd-field__box .gd-field__control--inline:focus { outline: none; box-shadow: none; }
+.gd-field__box > svg, .gd-field__icon { flex-shrink: 0; color: var(--gd-text-muted); }
+@media (pointer: coarse), (max-width: 767px) {
+  .gd-field__box { min-height: var(--control-h-touch); }
+  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select { min-height: calc(var(--control-h-touch) - 2px); }
+  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select, .gd-field__box > textarea { font-size: 16px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TIPOGRAFIA CANÔNICA (DS 1.1) — papéis, não tamanhos por tela
+   ═══════════════════════════════════════════════════════════════
+   Uma classe por papel. A superfície escolhe o PAPEL; o valor vem do token.
+   Material (Typography) chama isso de typescale: rótulo/valor com papel fixo e
+   previsível. Adaptação GoDoutor: mesma disciplina, escala mais densa (14px de
+   corpo, não 16), porque aqui o produto é operacional, não editorial. */
+.gd-t-page-title { font-size: var(--gd-type-page-title-size); line-height: var(--gd-type-page-title-line); font-weight: var(--gd-type-page-title-weight); letter-spacing: -.02em; }
+.gd-t-section { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-type-section-weight); }
+.gd-t-body { font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-type-body-weight); }
+.gd-t-label { font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line); font-weight: var(--gd-type-label-weight); }
+.gd-t-metadata { font-size: var(--gd-type-metadata-size); line-height: var(--gd-type-metadata-line); font-weight: var(--gd-type-metadata-weight); }
+.gd-t-helper { font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-type-helper-weight); color: var(--gd-text-muted); }
+.gd-t-button { font-size: var(--gd-type-button-size); line-height: var(--gd-type-button-line); font-weight: var(--gd-type-button-weight); }
+
 /* Acessibilidade: movimento é decoração. Quem pediu menos, recebe menos. */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -268,6 +461,88 @@
     --gd-motion-slow: 0ms;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   DISCLOSURE — o que é secundário só abre quando pedido
+   ═══════════════════════════════════════════════════════════════
+   DS 1.1 · §11/§14. Gatilho de linha inteira, sem cara de botão de ação
+   (é navegação dentro da página, não comando), com o caret indicando estado
+   REAL. O painel entra curto e discreto; quem pediu menos movimento recebe
+   o conteúdo na hora. */
+.gd-disclosure { border-top: 1px solid var(--gd-border-soft); }
+.gd-disclosure__trigger {
+  display: flex; align-items: center; gap: var(--gd-space-2);
+  width: 100%; min-height: var(--gd-control-h-sm); padding: var(--gd-space-2) 0;
+  background: transparent; border: 0; text-align: left; cursor: pointer;
+  color: var(--gd-text-muted); border-radius: var(--gd-radius-sm);
+}
+.gd-disclosure__trigger:hover { color: var(--gd-text); }
+.gd-disclosure__trigger:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+.gd-disclosure__caret { flex: none; }
+.gd-disclosure__label {
+  font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line);
+  font-weight: var(--gd-type-label-weight); color: var(--gd-text);
+}
+.gd-disclosure__hint {
+  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+  color: var(--gd-text-muted);
+}
+.gd-disclosure__panel { padding: 0 0 var(--gd-space-3); animation: gd-disclosure-in var(--gd-motion-base, 150ms) ease-out; }
+.gd-disclosure__panel[hidden] { display: none; }
+@keyframes gd-disclosure-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   READ-ONLY FIELD — LEITURA, não formulário desabilitado
+   ═══════════════════════════════════════════════════════════════
+   DS 1.1 · §11. Contrato canônico para mostrar dado que NÃO se edita aqui
+   (prontuário finalizado, resumo do registro, ficha somente leitura):
+
+     • é CONTEÚDO: rótulo canônico (label 13/20 500) + texto na escala de corpo,
+       sem caixa de input, sem borda de controle, sem cinza de "desabilitado" —
+       campo desabilitado comunica indisponível; registro finalizado está LIDO;
+     • valor vazio é FRACO (`Não informado` em metadata/muted), nunca um vazio
+       que pareça falha de carregamento;
+     • preserva quebras de linha do texto clínico (o profissional escreveu em
+       parágrafos e é assim que a leitura faz sentido);
+     • a ajuda contextual continua existindo, separada do valor. */
+/* §11 — DOCUMENTO clínico em leitura: o bloco tem título, a malha distribui os
+   valores em duas colunas quando cabe, e NENHUM campo desenha contorno de input. */
+.gd-ro-section { display: block; }
+.gd-ro-section__title {
+  margin: 0 0 var(--gd-space-1);
+  font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line);
+  font-weight: var(--gd-type-section-weight); color: var(--gd-text);
+}
+.gd-ro-section__hint { margin: 0 0 var(--gd-space-3); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); color: var(--gd-text-muted); }
+.gd-ro-grid { display: grid; grid-template-columns: 1fr; gap: var(--gd-space-3); }
+@media (min-width: 640px) { .gd-ro-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Campo longo (evolução, exame, conduta) ocupa a linha inteira do documento. */
+.gd-ro-grid .gd-ro--block { grid-column: 1 / -1; }
+
+.gd-ro { display: flex; flex-direction: column; gap: 2px; }
+.gd-ro__label {
+  font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line);
+  font-weight: var(--gd-type-label-weight); color: var(--gd-text-muted);
+}
+.gd-ro__value {
+  font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
+  color: var(--gd-text); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.gd-ro__empty {
+  font-size: var(--gd-type-metadata-size); line-height: var(--gd-type-metadata-line);
+  font-weight: var(--gd-type-metadata-weight); color: var(--gd-text-faint);
+}
+.gd-ro__hint {
+  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+  color: var(--gd-text-muted);
+}
+/* Bloco de leitura com respiro próprio (substitui o par rótulo+controle). */
+.gd-ro--block { padding: 10px 0; border-bottom: 1px solid var(--gd-border-soft); }
+.gd-ro--block:last-child { border-bottom: 0; }
+
 
 /* ═══════════════════════════════════════════════════════════════
    PRIMITIVES CANÔNICOS — camadas flutuantes e controles do DS 1.0
@@ -423,15 +698,31 @@
 .gd-icon-control--xs {
   width: var(--gd-control-h-xs); height: var(--gd-control-h-xs); min-width: var(--gd-control-h-xs);
 }
+/* §7 — a ação de ícone é LEVE em repouso e ganha superfície no estado. A área
+   clicável continua sendo o quadrado do token: no ponteiro grosso ela sobe para
+   o alvo de toque (44px), mesmo quando o desenho é discreto. */
+.gd-icon-control, .gd-icon-control--sm, .gd-icon-control--xs {
+  background: transparent; border-color: transparent;
+}
+.gd-icon-control:hover, .gd-icon-control--sm:hover, .gd-icon-control--xs:hover,
+.gd-icon-control:focus-visible, .gd-icon-control--sm:focus-visible, .gd-icon-control--xs:focus-visible {
+  background: var(--gd-bg-hover);
+}
+@media (pointer: coarse), (max-width: 767px) {
+  .gd-icon-control, .gd-icon-control--sm, .gd-icon-control--xs {
+    width: var(--gd-control-h-touch); height: var(--gd-control-h-touch); min-width: var(--gd-control-h-touch);
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    DETAIL PANEL — overlay de DETALHE (direita, flutuante, 420–480px)
    ═══════════════════════════════════════════════════════════════
-   Padrão canônico para "ver o registro": backdrop suave, painel flutuante que
-   entra pela direita, margem de viewport, cantos arredondados e largura
-   controlada. Este é o overlay de LEITURA — não o de criação (que é o
-   `.gd-dialog` central) nem o formulário longo (`.ws-sheet`). */
-.gd-detail-backdrop { background: var(--gd-overlay); }
+   DS 1.1 — padrão canônico para "ver o registro": backdrop que bloqueia o app e
+   painel PRESO à borda direita, altura cheia (100dvh), sem margem, sem cantos e
+   sem sombra; a largura é do token `--gd-detail-w`. Este é o overlay de LEITURA
+   — não o de criação (`.gd-dialog`, sempre central) nem o formulário longo
+   (`.ws-sheet`). Semântica: Modal side sheet do Material (bloqueia o resto da
+   tela), geometria: contrato GoDoutor (encostado na borda, não "card solto"). */
 .gd-detail {
   position: fixed; inset: 0; z-index: var(--gd-z-modal);
   margin: 0 !important; padding: 0; border: 0;
@@ -439,27 +730,32 @@
   background: transparent; color: inherit; overflow: hidden;
 }
 .gd-detail:not([open]) { display: none; }
-.gd-detail::backdrop { background: var(--gd-overlay); animation: gd-fade-in var(--gd-motion-base) var(--gd-ease); }
+/* DS 1.1 · DETAIL SIDE MODAL — comportamento do Modal side sheet do Material
+   (ancorado na lateral, bloqueia o resto do app, entra lateralmente), com a
+   geometria do contrato GoDoutor: PRESO à borda direita, 100dvh, sem gap e sem
+   margem no desktop. O painel flutuante insetado de 16px (DS 1.0) NÃO é mais o
+   comportamento final: ele lia como card solto, não como detalhe do registro. */
+.gd-detail::backdrop { background: var(--gd-overlay-strong); animation: gd-fade-in var(--gd-motion-base) var(--gd-ease); }
 .gd-detail__panel {
   position: absolute;
-  top: var(--gd-detail-gap); right: var(--gd-detail-gap); bottom: var(--gd-detail-gap);
+  top: 0; right: 0; bottom: 0;
   display: flex; flex-direction: column; min-height: 0;
-  /* Largura SEMPRE do token. Os fallbacks repetem os valores de `--gd-detail-w`
-     / `--gd-detail-gap` de propósito: protegem o painel de um `var()` que não
-     resolve (autorreferente ou token ausente), caso em que `width` cairia para
-     `auto` e o painel passaria a ter a largura do CONTEÚDO — que foi o defeito
-     medido na auditoria (448–456px variando com o texto, em vez de 460px). */
-  width: min(var(--gd-detail-w, 460px), calc(100vw - (2 * var(--gd-detail-gap, 16px))));
+  /* Largura SEMPRE do token (com fallback do mesmo valor: um `var()` que não
+     resolve fazia `width` cair para `auto` = largura do conteúdo — defeito já
+     medido uma vez, não volta). `100vw` só age em tela menor que o token. */
+  width: min(var(--gd-detail-w, 460px), 100vw);
   background: var(--gd-bg-surface);
-  border: 1px solid var(--gd-border);
-  border-radius: var(--gd-radius-lg);
-  box-shadow: var(--gd-shadow-overlay);
+  /* Sem raio e sem sombra: a divisória é a única linha entre o painel e o app. */
+  border: 0; border-left: 1px solid var(--gd-border);
+  border-radius: 0; box-shadow: none;
   overflow: hidden;
 }
-.gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-overlay) var(--gd-ease); }
-.gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-overlay-out) cubic-bezier(.4, 0, 1, 1) forwards; }
-@keyframes gd-detail-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
-@keyframes gd-detail-out { to { opacity: 0; transform: translateX(28px); } }
+.gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-side-modal) var(--gd-ease); }
+.gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:
+   é uma folha presa à lateral, não um card que aparece. */
+@keyframes gd-detail-in { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes gd-detail-out { to { transform: translateX(100%); } }
 .gd-detail__header {
   display: flex; align-items: flex-start; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;

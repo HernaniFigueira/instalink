@@ -69,7 +69,6 @@ export default function CanaisPage() {
       <PageHeader
         icon="plugs"
         title="Canais & Integrações"
-        hint="Por onde o cliente fala com você, de onde ele chega e como outros sistemas se conectam."
       />
 
       {/* A3.3 — abas em pill (padrão único de navegação interna do painel).

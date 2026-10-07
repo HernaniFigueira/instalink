@@ -81,7 +81,7 @@ export default function DisponibilidadePage() {
     <PageHeader
       icon="clock"
       title="Disponibilidade"
-      hint="Quando a clínica e cada profissional podem atender — base da agenda. Profissionais podem seguir o horário da clínica ou ter agenda própria."
+      hint="Base da agenda. Cada profissional pode seguir o horário da clínica ou ter agenda própria."
     />
   );
 

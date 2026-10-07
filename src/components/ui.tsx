@@ -111,10 +111,25 @@ export function PageBackAction({ href, onClick, label = 'Voltar', className }: {
  *  régua do Button/Select do mesmo nível (`--gd-control-h` / `-sm` / `-xs`).
  *  A altura/quadratura vive no contrato `.gd-icon-control*` do design system —
  *  a página nunca define `h-[34px]` nem corrige "por fora". */
+/**
+ * IconButton — a AÇÃO DE ÍCONE do produto (DS 1.1 · §7).
+ *
+ * Contrato:
+ *   • em REPOUSO é quase neutra: **sem borda permanente**, sem fundo, ícone no
+ *     token de texto secundário. Um lápis de edição não é uma caixinha
+ *     outlined — é uma ação discreta que aparece quando o olho procura;
+ *   • hover/foco acendem um fundo suave (`--gd-surface-3`) e o ícone sobe para
+ *     o texto principal: o estado é o que dá o contorno, não o repouso;
+ *   • a ÁREA CLICÁVEL não encolhe junto com o visual: o quadrado é token
+ *     (`--gd-control-h` / `-sm` / `-xs`, 44px em ponteiro grosso);
+ *   • `variant="secondary"` (outline) é EXCEÇÃO HIERÁRQUICA, usada onde o ícone
+ *     é controle de navegação da própria tela (setas de data da Agenda, mês do
+ *     calendário, fechar de overlay) — nunca como padrão.
+ */
 export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   icon: string; label: string; variant?: ButtonVariant; size?: 'sm' | 'md' | 'xs'; tip?: string;
 }) {
-  const { icon, label, variant = 'secondary', size = 'md', tip, className, ...rest } = props;
+  const { icon, label, variant = 'ghost', size = 'md', tip, className, ...rest } = props;
   return (
     <button
       aria-label={label}
@@ -233,6 +248,8 @@ interface FieldContextValue {
   descriptionIds: string[];
   required?: boolean;
   invalid?: boolean;
+  /** O controle está DENTRO de um `.gd-field__box`: não desenha borda própria. */
+  inShell?: boolean;
 }
 const FieldContext = createContext<FieldContextValue | null>(null);
 
@@ -287,34 +304,209 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function Field({ label, hint, children, required, htmlFor, error }: {
+/**
+ * FieldShell — o CAMPO CANÔNICO do DS 1.1 (Material 3 Outlined + floating label).
+ *
+ * Comportamento (o mesmo em toda superfície, sem exceção de página):
+ *   vazio e sem foco → o rótulo mora dentro da caixa;
+ *   foco             → o rótulo sobe e notcha o contorno;
+ *   preenchido       → o rótulo permanece acima;
+ *   erro             → contorno + rótulo + texto de apoio;
+ *   disabled/readonly→ superfícies distintas.
+ *
+ * O rótulo NUNCA vira placeholder. O placeholder é exemplo e só aparece no foco
+ * (`placeholder=" "` quando o chamador não deu nenhum, para o CSS conseguir
+ * detectar "tem valor" sem estado de React por campo).
+ *
+ * A métrica e o desenho vivem em `.gd-field*` (tokens `--gd-*`), então Input,
+ * Textarea, Select, Combobox e o gatilho do DatePicker medem igual.
+ */
+export function Field({ label, hint, children, required, htmlFor, error, className }: {
   label: string; hint?: string; children: React.ReactNode; required?: boolean;
-  htmlFor?: string; error?: string;
+  htmlFor?: string; error?: string; className?: string;
 }) {
   const id = useId();
-  const child = isValidElement<{ id?: string }>(children) ? children : null;
-  const nativeControl = child && typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type);
+  const child = isValidElement<{ id?: string; type?: string; placeholder?: string; disabled?: boolean; readOnly?: boolean }>(children) ? children : null;
+  /**
+   * Que CONTROLE é este? A resposta precisa cobrir os dois jeitos de escrever um
+   * campo no produto: o elemento nativo (`<input>`) e os NOSSOS primitives
+   * (`<Input>`, `<Textarea>`, `<Select>`). Antes só o elemento nativo contava —
+   * e como toda tela usa `<Input>`, `nativeControl` era sempre falso, o rótulo
+   * era tratado como "sempre flutuante" e o campo VAZIO já aparecia com o rótulo
+   * fora da caixa (defeito medido na QA do §4: `labelDentro: false` no repouso).
+   */
+  const nativeTag = child && typeof child.type === 'string' ? child.type : '';
+  const kind: 'input' | 'textarea' | 'select' | 'other' = (() => {
+    if (nativeTag === 'input' || child?.type === Input) return 'input';
+    if (nativeTag === 'textarea' || child?.type === Textarea) return 'textarea';
+    if (nativeTag === 'select' || child?.type === Select) return 'select';
+    return 'other';
+  })();
+  const nativeControl = nativeTag === 'input' || nativeTag === 'textarea' || nativeTag === 'select';
   const field: FieldContextValue = {
     controlId: child?.props.id || htmlFor || `${id}-control`,
     labelId: `${id}-label`,
     descriptionIds: [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean),
     required, invalid: !!error,
+    inShell: true,
   };
+  /**
+   * `:placeholder-shown` é o detector de "campo vazio" sem estado de React: um
+   * campo com placeholder NUNCA casa quando está vazio. Então injetamos um
+   * espaço quando o chamador não deu placeholder nenhum — não é rótulo nem
+   * texto de apoio, é SONDA. O placeholder de verdade continua exemplo e só
+   * aparece no foco (CSS).
+   */
+  const isTextKind = kind === 'input' || kind === 'textarea';
+  // Tipos que o navegador desenha sozinho (`date`, `time`…) não respondem a
+  // `:placeholder-shown`: o rótulo flutua sempre, senão ele encostaria no
+  // formato que o próprio navegador mostra.
+  const selfDrawn = kind === 'input' && !!child?.props.type
+    && ['date', 'time', 'datetime-local', 'month', 'week', 'color', 'file'].includes(String(child.props.type));
+  const probePlaceholder = isTextKind && !selfDrawn && !child?.props.placeholder;
+  const injected = {
+    ...(nativeControl ? fieldControlProps(child!.props as React.AriaAttributes & { id?: string; required?: boolean }, field) : {}),
+    ...(probePlaceholder ? { placeholder: ' ' } : {}),
+  };
+  const control = Object.keys(injected).length ? cloneElement(child!, injected) : children;
+  const multiline = kind === 'textarea';
+  /**
+   * Quem flutua SEMPRE: select (a opção "Selecione…" já é um valor, não existe
+   * vazio), controles desenhados pelo navegador (data/hora) e qualquer coisa
+   * que não seja um campo de texto conhecido (ex.: o gatilho do DatePicker).
+   */
+  const alwaysFloat = kind === 'select' || selfDrawn || kind === 'other';
+  const isDisabled = !!(child?.props as { disabled?: boolean } | undefined)?.disabled;
+  const isReadOnly = !!(child?.props as { readOnly?: boolean } | undefined)?.readOnly;
   return (
     <FieldContext.Provider value={field}>
-      <label className="il-type-body block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
-        <span id={field.labelId} className="il-type-label block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
-          {label} {required && <span aria-hidden="true" className="text-[var(--danger)]">*</span>}
+      <label
+        className={cn('gd-field', multiline && 'gd-field--multiline', alwaysFloat && 'gd-field--float', className)}
+        data-invalid={error ? 'true' : undefined}
+        data-disabled={isDisabled ? 'true' : undefined}
+        data-readonly={isReadOnly ? 'true' : undefined}
+        htmlFor={htmlFor || child?.props.id || (nativeControl || kind !== 'other' ? field.controlId : undefined)}
+      >
+        <span className="gd-field__box">
+          {control}
+          <span id={field.labelId} className="gd-field__label">
+            {label}{required && <span aria-hidden="true" className="text-[var(--danger)]"> *</span>}
+          </span>
         </span>
-        {nativeControl ? cloneElement(child, fieldControlProps(child.props, field)) : children}
-        {hint && <span id={`${id}-hint`} className="il-type-help block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
-        {error && <span id={`${id}-error`} role="alert" className="block text-xs text-[var(--danger-fg)] mt-1">{error}</span>}
+        {/* O erro SUBSTITUI a ajuda na leitura visual — mas a ajuda continua no
+            DOM (fora da tela): `aria-describedby` é montado com os dois ids e um
+            id pendurado descreveria nada para quem usa leitor de tela. */}
+        {hint && (
+          error
+            ? <span id={`${id}-hint`} className="gd-field__hint gd-field__hint--off">{hint}</span>
+            : <span id={`${id}-hint`} className="gd-field__hint">{hint}</span>
+        )}
+        {error && <span id={`${id}-error`} role="alert" className="gd-field__error">{error}</span>}
       </label>
     </FieldContext.Provider>
   );
 }
 
+/**
+ * ReadOnlyField — dado que NÃO se edita nesta tela (DS 1.1 · §11).
+ *
+ * Contrato (prontuário finalizado, resumo de registro, ficha somente leitura):
+ *   • leitura é CONTEÚDO, não formulário desabilitado: rótulo canônico + texto
+ *     na escala de corpo, sem caixa de input e sem cinza de "desabilitado";
+ *   • vazio vira `Não informado` em peso fraco — nunca um branco que pareça
+ *     campo não carregado;
+ *   • `multiline` preserva os parágrafos que o profissional escreveu;
+ *   • a ajuda contextual (`hint`) fica separada do valor;
+ *   • `block` desenha o respiro entre blocos de leitura de uma seção.
+ * Nenhuma regra clínica, autoria ou permissão mora aqui: é apresentação.
+ */
+export function ReadOnlyField({ label, value, hint, empty = 'Não informado', multiline = false, block = false, className, action }: {
+  /** Opcional dentro de um Disclosure: o gatilho já nomeia o bloco. */
+  label?: string;
+  value?: React.ReactNode;
+  /** Texto vazio/nulo/só-espaços cai no estado `Não informado`. */
+  hint?: string;
+  empty?: string;
+  multiline?: boolean;
+  block?: boolean;
+  className?: string;
+  /** Ação da seção (ex.: "Ver histórico") — fica no rodapé do bloco. */
+  action?: React.ReactNode;
+}) {
+  const vazio = value === null || value === undefined
+    || (typeof value === 'string' && value.trim().length === 0);
+  return (
+    <div className={cn('gd-ro', block && 'gd-ro--block', className)}>
+      {label ? <span className="gd-ro__label">{label}</span> : null}
+      {vazio
+        ? <span className="gd-ro__empty">{empty}</span>
+        : <span className="gd-ro__value">{value}</span>}
+      {hint && <span className="gd-ro__hint">{hint}</span>}
+      {action && <span className="mt-1.5 inline-flex items-center gap-2">{action}</span>}
+    </div>
+  );
+}
+
 /** Checkbox com cara de checkbox (não de texto clicável). */
+/**
+ * Disclosure — bloco secundário que ABRE (DS 1.1 · §14).
+ *
+ * Contrato:
+ *   • é uma divulgação REAL: `<button aria-expanded aria-controls>` + região
+ *     rotulada — não é um "accordion" falso, nem um chevron decorativo (a
+ *     lição do rail: chevron só existe se houver algo para abrir);
+ *   • fechado por padrão: conteúdo secundário (nota interna, histórico) não
+ *     ocupa a primeira leitura da tela;
+ *   • movimento curto (o painel entra em ~150ms) e discretamente reduzido para
+ *     quem pediu menos movimento;
+ *   • controlável (`open`/`onOpenChange`) ou livre (`defaultOpen`);
+ *   • o conteúdo continua no DOM quando fechado apenas se `keepMounted` — o
+ *     padrão é desmontar, para não vazar dado oculto em leitura de tela/print.
+ */
+/**
+ * ClinicalRecordSection — o BLOCO de um prontuário em LEITURA (§11).
+ *
+ * Read-only no GoDoutor é DOCUMENTO, não formulário desabilitado: cada seção tem
+ * título próprio, os valores entram como texto (com `ReadOnlyField`) e o que é
+ * secundário vai para `Disclosure`/metadado discreto. Sem caixa por campo, sem
+ * contorno de input, sem "Salvo agora" de página.
+ */
+export function ClinicalRecordSection({ title, hint, children, className }: {
+  title: string; hint?: string; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <section className={cn('gd-ro-section', className)} aria-label={title}>
+      <h3 className="gd-ro-section__title">{title}</h3>
+      {hint ? <p className="gd-ro-section__hint">{hint}</p> : null}
+      <div className="gd-ro-grid">{children}</div>
+    </section>
+  );
+}
+
+export function Disclosure({ label, hint, children, defaultOpen = false, open, onOpenChange, keepMounted = false, className }: {
+  label: string; hint?: string; children: React.ReactNode; defaultOpen?: boolean;
+  open?: boolean; onOpenChange?: (open: boolean) => void; keepMounted?: boolean; className?: string;
+}) {
+  const id = useId();
+  const [interno, setInterno] = useState(defaultOpen);
+  const aberto = open ?? interno;
+  const alternar = () => { const proximo = !aberto; if (open === undefined) setInterno(proximo); onOpenChange?.(proximo); };
+  return (
+    <div className={cn('gd-disclosure', className)} data-open={aberto ? 'true' : undefined}>
+      <button type="button" className="gd-disclosure__trigger" aria-expanded={aberto} aria-controls={`${id}-panel`} onClick={alternar}>
+        <Icon n={aberto ? 'chevD' : 'chevR'} size={14} className="gd-disclosure__caret" />
+        <span className="gd-disclosure__label">{label}</span>
+        {hint && <span className="gd-disclosure__hint">{hint}</span>}
+      </button>
+      {aberto || keepMounted ? (
+        <div id={`${id}-panel`} role="region" aria-label={label} hidden={!aberto} className="gd-disclosure__panel">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Checkbox({ label, hint, checked, onChange, disabled }: {
   label: React.ReactNode; hint?: string; checked: boolean;
   onChange: (v: boolean) => void; disabled?: boolean;
@@ -685,21 +877,37 @@ export function Stat({ label, value, hint, tone = 'brand', icon }: {
   );
 }
 
-export function Notice({ tone = 'info', children, title, className }: { tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string; className?: string }) {
+export function Notice({ tone = 'info', children, title, className, icon, onDismiss, dismissLabel = 'Fechar aviso', live = false }: {
+  tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string; className?: string;
+  /** Ícone da função (ex.: `lock` no aviso de permissão). */
+  icon?: string;
+  /** Aviso de contexto local: fecha sem virar modal nem toast. */
+  onDismiss?: () => void;
+  dismissLabel?: string;
+  /** Confirmações de ação transitórias anunciam; avisos estáveis não. */
+  live?: boolean;
+}) {
   const map = {
     info: 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]',
     success: 'bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]',
     warning: 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]',
     error: 'bg-[var(--danger-bg)] text-[var(--danger-fg)] border-[var(--danger-border)]',
   }[tone];
-  const icon = { info: 'spark', success: 'checkCircle', warning: 'alert', error: 'alert' }[tone];
+  const icone = icon || { info: 'spark', success: 'checkCircle', warning: 'alert', error: 'alert' }[tone];
   return (
-    <div className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map, className)}>
-      <Icon n={icon} size={15} className="mt-0.5 shrink-0" />
-      <div className="min-w-0">
+    <div
+      className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map, className)}
+      role={live ? 'status' : undefined}
+      aria-live={live ? 'polite' : undefined}
+    >
+      <Icon n={icone} size={15} className="mt-0.5 shrink-0" />
+      <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
         <div>{children}</div>
       </div>
+      {onDismiss && (
+        <CloseButton onClick={onDismiss} label={dismissLabel} className="shrink-0 -mr-1 -mt-0.5" />
+      )}
     </div>
   );
 }
@@ -1076,10 +1284,27 @@ type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start' | '
 function anchorRectOf(ref: React.RefObject<HTMLElement | null>): DOMRect | null {
   const el = ref.current;
   if (!el) return null;
+  // §10 — o gatilho pode viver DENTRO de um campo canônico (Combobox, DatePicker):
+  // a âncora visual, então, é a CAIXA do campo (o contorno), não o host interno
+  // que carrega o padding do rótulo. Medir o host interno deixava a lista 13px
+  // mais estreita de cada lado e desalinhada do contorno — medido na QA do §10.
+  const box = fieldBoxOf(el);
+  if (box) {
+    const r = box.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return r;
+  }
   const own = el.getBoundingClientRect();
   if (own.width > 0 && own.height > 0) return own;
   const child = el.firstElementChild as HTMLElement | null;
   return child ? child.getBoundingClientRect() : own;
+}
+
+/**
+ * A CAIXA de um campo canônico (`.gd-field__box`) que contém este elemento —
+ * o alvo de alinhamento de qualquer camada ancorada a um campo do DS.
+ */
+function fieldBoxOf(el: HTMLElement | null): HTMLElement | null {
+  return el?.closest<HTMLElement>('.gd-field__box') || null;
 }
 
 /**
@@ -1607,7 +1832,16 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
  * NÃO reutiliza a aparência do WorkspaceSheet (superfície/geometria próprias);
  * o WorkspaceSheet continua sendo o overlay de FORMULÁRIO lateral.
  */
-export function DetailPanel({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus }: {
+/**
+ * DetailSideModal — a superfície canônica de DETALHE (DS 1.1).
+ *
+ * Distinto do `WorkspaceSheet` (formulário/fluxo longo): este é o overlay de
+ * LEITURA de um registro — preso à borda direita, altura cheia, sem gap no
+ * desktop, backdrop forte, slide de fora da borda em ~190ms, foco contido e
+ * devolvido ao gatilho. Base comportamental: Material 3 modal side sheet +
+ * `dialog` nativo (focus trap e ::backdrop do próprio browser).
+ */
+export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
   /**
@@ -1693,6 +1927,13 @@ export function DetailPanel({ open, onClose, title, subtitle, children, footer, 
     </dialog>
   );
 }
+
+/**
+ * `DetailPanel` — ALIAS de compatibilidade do `DetailSideModal`.
+ * @deprecated use `DetailSideModal` (o nome antigo descrevia um painel
+ * flutuante insetado; o comportamento agora é o side modal preso à direita).
+ */
+export const DetailPanel = DetailSideModal;
 
 /** Sheet: apelido semântico do Drawer (mesma implementação, mesmo contrato). */
 export function Sheet(props: Parameters<typeof Drawer>[0]) {
@@ -1983,11 +2224,18 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
   label?: string; placeholder?: string; emptyLabel?: string; disabled?: boolean; className?: string;
 }) {
   const listId = useId();
+  const field = useContext(FieldContext);
+  /** Dentro de um `Field`, o contorno é o da caixa do shell — nunca dois. */
+  const inShell = !!field?.inShell;
   const multi = mode === 'multiple';
   const selected = multi ? (Array.isArray(value) ? value : []) : [String(value || '')];
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  /** Largura do âncora quando o campo é a própria caixa do shell (§10):
+   *  a lista ancorada acompanha a largura do CAMPO, como no Material —
+   *  menu de 190px flutuando embaixo de um campo largo parece solto. */
+  const [anchorW, setAnchorW] = useState<number | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const posRef = useRef<HTMLDivElement>(null);
@@ -2000,6 +2248,11 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
     return !q || o.label.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q);
   });
   useEffect(() => { setActive(0); }, [query, open]);
+  useEffect(() => {
+    if (!open || !inShell) { setAnchorW(null); return; }
+    const box = fieldBoxOf(anchorRef.current);
+    setAnchorW(box ? Math.round(box.getBoundingClientRect().width) : (anchorRef.current?.offsetWidth ?? null));
+  }, [open, inShell]);
   useDismissOnEscape(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -2019,8 +2272,12 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
     if (!multi) setOpen(false);
   };
 
+  const repoProps = inShell && field
+    ? fieldControlProps<{ id?: string; required?: boolean } & React.AriaAttributes>({ id: undefined, required: undefined }, field)
+    : {};
+
   return (
-    <div className={cn('relative', className)} ref={anchorRef}>
+    <div className={cn('relative', inShell && 'gd-field__control-host', className)} ref={anchorRef}>
       {multi && known.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {known.map((o) => (
@@ -2037,9 +2294,10 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         </div>
       )}
       <input
+        {...repoProps}
         type="text"
         role="combobox"
-        aria-label={label}
+        aria-label={inShell ? undefined : label}
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
@@ -2056,10 +2314,10 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
             onChange(selected.slice(0, -1));
           }
         }}
-        className={cn(FIELD_CLS, 'disabled:opacity-60')}
+        className={cn(FIELD_CLS, inShell && 'gd-field__control--inline', 'disabled:opacity-60')}
       />
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-menu" role="listbox" label={label} positionRef={posRef}>
+        <LayerPortal style={anchorW ? { ...style, minWidth: anchorW } : style} className="gd-layer gd-menu" role="listbox" label={label} positionRef={posRef}>
           <div id={listId} ref={layerRef} className="max-h-[260px] overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="il-type-help px-2 py-3 text-center text-[var(--gd-text-muted)]">{emptyLabel}</p>

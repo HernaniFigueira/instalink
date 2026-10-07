@@ -213,6 +213,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
           authority={authority}
           canEdit={canEditCore}
           onSaved={onCoreSaved}
+          readOnlyHint={readOnlyHint}
         />
       )}
 
@@ -299,12 +300,18 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave }
         </div>
       )}
 
-      <EncounterSaveFooter
-        dirty={dirtySections.length > 0 || anyDirty()}
-        saving={saveState === 'saving'}
-        error={saveState === 'error' ? saveError : ''}
-        testId="encounter-workspace-save-state"
-      />
+      {/* §11 — estado de GRAVAÇÃO é informação de RASCUNHO. Num atendimento
+          finalizado/em leitura, "Salvo agora" seria falso (nada está sendo
+          gravado) e a tela vira DOCUMENTO: o chip "Finalizado" e o painel de
+          fechamento já dizem o estado do registro. */}
+      {current.status === 'draft' && (
+        <EncounterSaveFooter
+          dirty={dirtySections.length > 0 || anyDirty()}
+          saving={saveState === 'saving'}
+          error={saveState === 'error' ? saveError : ''}
+          testId="encounter-workspace-save-state"
+        />
+      )}
 
       {dialog}
     </>

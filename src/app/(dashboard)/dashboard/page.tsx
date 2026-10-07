@@ -562,7 +562,6 @@ export default function DashboardPage() {
                   ))}
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-[var(--text-muted)]">Comece por aqui — na ordem que fizer sentido.</p>
                   <button type="button" onClick={hideSetup} className="text-[11px] font-semibold text-[var(--text-faint)] hover:text-[var(--text-muted)] underline underline-offset-2">Ocultar</button>
                 </div>
               </div>

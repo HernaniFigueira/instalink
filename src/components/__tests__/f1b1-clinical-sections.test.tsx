@@ -258,7 +258,9 @@ describe('F1B1 · seção Avaliação veterinária (unidade × valor)', () => {
     expect((send.mock.calls[0][2] as any).clinical.assessment.veterinary.weightKg).toBe(8.5);
   });
 
-  it('se a escrita estiver bloqueada, a seção diz o motivo e os campos ficam desabilitados', () => {
+  // DS 1.1 · §11 — o contrato MUDOU de propósito: escrita bloqueada = DOCUMENTO
+  // (valores em leitura, motivo dito uma vez), não um formulário desabilitado.
+  it('se a escrita estiver bloqueada, a seção diz o motivo e vira DOCUMENTO de leitura', () => {
     render(
       <Harmony>
         {({ authority, row: r, adoptToken }) => (
@@ -270,8 +272,11 @@ describe('F1B1 · seção Avaliação veterinária (unidade × valor)', () => {
       </Harmony>,
     );
     expect(screen.getByText('Somente o profissional responsável vinculado edita.')).toBeTruthy();
-    expect((screen.getByLabelText('Peso (kg)') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText(/Exame físico/) as HTMLTextAreaElement).disabled).toBe(true);
+    // Documento: nenhum controle de formulário (nem habilitado, nem desabilitado).
+    expect(screen.queryByLabelText('Peso (kg)')).toBeNull();
+    expect(document.querySelectorAll('input, textarea, select').length).toBe(0);
+    expect(screen.getByText('Peso (kg)')).toBeTruthy();
+    expect(screen.getByText('Exame físico / achados gerais')).toBeTruthy();
   });
 });
 
