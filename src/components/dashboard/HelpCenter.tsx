@@ -87,16 +87,20 @@ export function HelpCenter({ open, onClose, query, nav, businessId }: {
   return (
     <Drawer open={open} onClose={onClose} title="Ajuda e suporte" subtitle="Primeiros passos e caminhos rápidos"
       width="max-w-[520px]">
-      <div className="p-4 space-y-5">
-        <div className="relative">
-          <Icon n="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar ajuda…"
-            aria-label="Buscar ajuda"
-            className="w-full h-[var(--control-h)] pl-9 pr-3 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-white text-[13.5px] text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus-visible:border-[var(--brand)]"
-          />
+      <div data-help-center="true" className="p-4 space-y-5">
+        <div>
+          <label htmlFor="help-center-search" className="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]">Buscar ajuda</label>
+          <div className="relative">
+            <Icon n="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              id="help-center-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Digite um assunto para filtrar…"
+              aria-label="Buscar ajuda"
+              className="w-full h-[var(--control-h)] pl-9 pr-3 rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-white text-[13.5px] text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus-visible:border-[var(--brand)]"
+            />
+          </div>
         </div>
 
         {steps.length > 0 && (
@@ -152,7 +156,8 @@ export function HelpCenter({ open, onClose, query, nav, businessId }: {
           </p>
           <a
             href={`https://wa.me/${SUPPORT_WHATSAPP}`} target="_blank" rel="noreferrer"
-            className="mt-2.5 inline-flex items-center gap-2 h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] bg-[var(--brand)] text-white text-[13px] font-semibold hover:bg-[var(--brand-strong)]"
+            data-support-whatsapp="true"
+            className="mt-2.5 inline-flex items-center justify-center gap-2 h-[var(--control-h-sm)] px-3 rounded-[var(--radius-sm)] bg-[var(--brand)] text-white text-[13px] font-semibold hover:bg-[var(--brand-strong)]"
           >
             <Icon n="whatsapp" size={15} /> Abrir conversa
           </a>

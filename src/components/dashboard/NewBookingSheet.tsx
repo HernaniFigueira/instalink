@@ -50,6 +50,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     contactId?: string; name: string; phone: string; email?: string;
     /** A3.4: agenda pré-preenchida ao clicar num horário vago da grade. */
     date?: string; time?: string; professionalId?: string; serviceId?: string; selectedDurationMin?: number;
+    /** Prefill permitido ao duplicar agendamento (não inclui respostas/histórico). */
+    petId?: string; note?: string;
   };
   onClose: () => void;
   onCreated: () => void;
@@ -72,6 +74,10 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [name, setName] = useState(initial?.name || '');
   const [phone, setPhone] = useState(initial?.phone || '');
   const [email, setEmail] = useState(initial?.email || '');
+  // A duplicação pode vir de um agendamento sem vínculo CRM. Preservamos e
+  // mostramos os dados copiados como dados informados (não fingimos um contato
+  // selecionado); a gravação segue o fluxo normal de criação.
+  const [unlinkedPrefill, setUnlinkedPrefill] = useState(!initial?.contactId && !!(initial?.name || initial?.phone));
   // HOMOLOGAÇÃO · fechamento — SEM cadastro temporário: "+ Cadastrar" abre o
   // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
   // agendamento depois NÃO apaga o paciente.
@@ -82,13 +88,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initial?.note || '');
   const [staffDuration, setStaffDuration] = useState<number | ''>(initial?.selectedDurationMin || '');
   const [advanced, setAdvanced] = useState(false);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
   const [isVet, setIsVet] = useState(false);
-  const [petId, setPetId] = useState('');
+  const [petId, setPetId] = useState(initial?.petId || '');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
   const [fitInTime, setFitInTime] = useState(initial?.time || '');
@@ -126,7 +132,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const initialBookingSnapshot = useRef(JSON.stringify({
     query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
     serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
-    note: '', staffDuration: initial?.selectedDurationMin || '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
+    note: initial?.note || '', staffDuration: initial?.selectedDurationMin || '', petId: initial?.petId || '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
   }));
   const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, staffDuration, petId, fitInOpen, fitInTime, repeat, occurrences });
   const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
@@ -238,6 +244,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }, [contactId, businessId]);
 
   function pick(c: Contact) {
+    setUnlinkedPrefill(false);
     setContactId(c.id);
     setName(c.name);
     setPhone(c.phone);
@@ -249,6 +256,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   /** Abre o CADASTRO REAL (CRM). Prefill do que já foi digitado na busca. */
   function startNew() {
+    setUnlinkedPrefill(false);
     const digits = onlyDigits(query);
     setContactId('');
     setName(digits.length >= 10 ? '' : query.trim());
@@ -263,6 +271,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
    * em veterinária, o pet recém-criado selecionado.
    */
   function onClientRegistered(contactId: string, extra?: { petId?: string }) {
+    setUnlinkedPrefill(false);
     setRegisterOpen(false);
     setContactId(contactId);
     setQuery(''); setResults([]); setError('');
@@ -290,6 +299,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }
 
   function resetClient() {
+    setUnlinkedPrefill(false);
     setContactId(''); setName(''); setPhone(''); setEmail('');
     setQuery(''); setResults([]); setError('');
     setPetId(''); setPets([]); setIsVet(false);
@@ -476,6 +486,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                   </span>
                 </span>
                 <Badge tone="green" icon="check">Cadastro vinculado</Badge>
+                <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
+              </div>
+            ) : unlinkedPrefill ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-unlinked-client-prefill="true">
+                <Avatar name={name || '?'} size={36} />
+                <span className="min-w-0 flex-1 basis-40">
+                  <span className="block break-words text-sm font-semibold text-[var(--text)]">{name || 'Cliente sem nome'}</span>
+                  <span className="block break-words text-xs text-[var(--text-muted)]">{phone || 'Sem WhatsApp informado'}{email ? ` · ${email}` : ''}</span>
+                </span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Dados copiados · sem vínculo CRM</span>
                 <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
               </div>
             ) : (

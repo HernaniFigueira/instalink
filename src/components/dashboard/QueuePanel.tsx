@@ -230,9 +230,11 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
     <div data-queue-panel="true" className="flex min-h-0 flex-col">
       {/* Header sticky: a lista rola DENTRO da rail e o título/badges continuam
           à vista. O [X] fecha a rail (a fila do dia segue no botão da agenda). */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface)]">
-        <Icon n="clock" size={15} className="text-[var(--text-muted)]" />
-        <span className="text-sm font-semibold text-[var(--text)]">Fila de atendimento</span>
+      <div data-queue-panel-header="true" className="sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface)]">
+        <span data-queue-panel-title="true" className="inline-flex items-center gap-2">
+          <Icon n="clock" size={15} className="text-[var(--text-muted)]" />
+          <span className="text-sm font-semibold text-[var(--text)]">Fila de atendimento</span>
+        </span>
         {waiting > 0 && <Badge tone="amber">{waiting} aguardando</Badge>}
         {rows.some((r) => r.status === 'in_service') && (
           <Badge tone="green">{rows.filter((r) => r.status === 'in_service').length} em atendimento</Badge>
@@ -246,7 +248,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
           )}
           {onClose && (
             <IconButton icon="x" label="Fechar a fila" tip="Fechar a fila (a agenda volta a ocupar a largura toda)"
-              size="sm" variant="ghost" onClick={onClose} />
+              size="sm" variant="ghost" onClick={onClose} data-queue-panel-close="true" />
           )}
         </div>
       </div>

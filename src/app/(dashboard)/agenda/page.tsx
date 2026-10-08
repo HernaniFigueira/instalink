@@ -44,6 +44,7 @@ import {
 } from '@/lib/status';
 import { ConfirmDialog, type PendingRequest } from '@/components/dashboard/OverlayDismissGuard';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
+import { BookingEditDialog } from '@/components/dashboard/BookingEditDialog';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
@@ -130,8 +131,12 @@ interface BlockVM {
   leftPct: number;
   widthPct: number;
   time: string;
-  /** Linha 1: cliente · Linha 2: serviço · Linha 3: horário + estado. */
+  /** Resumo autorizado no evento e no HoverCard. */
   name: string;
+  customerName: string;
+  petName: string;
+  observation: string;
+  dateLabel: string;
   service: string;
   timeRange: string;
   statusLabel: string;
@@ -185,7 +190,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockReschedule, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -198,8 +203,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
    *  desmonta quando o mouse sai, então o foco de volta do detalhe precisa do
    *  evento, não do CTA do card. */
   onBlockClick: (id: string, trigger?: HTMLElement | null) => void;
-  /** "Reagendar" no resumo do evento: abre o detalhe JÁ no fluxo de mudança. */
-  onBlockReschedule: (id: string, trigger?: HTMLElement | null) => void;
+  /** "Editar" abre a superfície CENTRAL; o painel de detalhe permanece leitura. */
+  onBlockEdit: (id: string, trigger?: HTMLElement | null) => void;
   /** Botão direito / Shift+F10 / tecla Menu no evento: menu contextual real. */
   onBlockContextMenu: (id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => void;
   /** Com o MENU aberto no mesmo evento, o resumo do hover se cala: um painel
@@ -368,7 +373,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           onPointerMove={(e) => onPressMove(b.id, e)}
           onPointerUp={(e) => onPressEnd(b.id, e)}
           onPointerCancel={onPressCancel}
-          onClick={() => onBlockClick(b.id)}
+          onClick={(e) => onBlockClick(b.id, e.currentTarget)}
           /* AUDITORIA · rodada 2 — MENU CONTEXTUAL do atendimento: botão
              direito, Shift+F10 e a tecla Menu (teclado equivalente exigido
              pelos leitores de tela). Sem `title` nativo e sem inventar ação:
@@ -390,7 +395,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
               ? ' il-dragging ring-2 ring-[var(--brand)] ring-offset-1 cursor-grabbing shadow-lg'
-              : ' hover:brightness-[0.97] hover:shadow-md cursor-grab active:cursor-grabbing')
+              : ' hover:brightness-[0.99] hover:shadow-sm cursor-grab active:cursor-grabbing')
           }
           style={{
             top: b.top,
@@ -430,31 +435,55 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                 const card = handle.closest('button') as HTMLElement;
                 const originY = e.clientY;
                 const originalHeight = card.offsetHeight;
-                handle.setPointerCapture(e.pointerId);
-                const onMove = (ev: PointerEvent) => {
-                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
-                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
-                  // Feedback DURANTE o arraste (não é tooltip de repouso): a
-                  // etiqueta vive no cartão, sem `title` nativo na grade.
-                  const hint = card.querySelector<HTMLElement>('[data-resize-hint]');
-                  if (hint) hint.textContent = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
-                };
-                const onUp = (ev: PointerEvent) => {
+                const hint = card.querySelector<HTMLElement>('[data-resize-hint]');
+                let finished = false;
+                let moved = false;
+                const cleanup = () => {
+                  if (finished) return;
+                  finished = true;
+                  // A resize handle can release capture after Escape while the
+                  // pointer is already outside the card. The browser may then
+                  // synthesize a click on the empty grid; suppress that click
+                  // so canceling a resize never opens Quick Create.
+                  lastGridPressAt = Date.now();
                   handle.removeEventListener('pointermove', onMove);
                   handle.removeEventListener('pointerup', onUp);
                   handle.removeEventListener('pointercancel', onCancel);
-                  card.style.height = '';
-                  if (ev.type === 'pointercancel') return;
+                  handle.removeEventListener('lostpointercapture', onCancel);
+                  window.removeEventListener('keydown', onKey, true);
+                  // Restore the exact rendered height and clear every provisional
+                  // label before either opening confirmation or returning to idle.
+                  card.style.height = `${originalHeight}px`;
+                  if (hint) hint.textContent = '';
+                  try { if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+                };
+                const onMove = (ev: PointerEvent) => {
+                  moved = moved || Math.abs(ev.clientY - originY) > 1;
                   const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
-                  if (Math.abs(ev.clientY - originY) > 6) {
+                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
+                  if (hint) hint.textContent = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
+                };
+                const onUp = (ev: PointerEvent) => {
+                  if (finished) return;
+                  cleanup();
+                  if (ev.type === 'pointercancel' || ev.type === 'lostpointercapture') return;
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  if (moved && Math.abs(ev.clientY - originY) > 6) {
                     lastGridPressAt = Date.now();
                     onResize(b.id, minToTime(timeToMin(b.time) + proposed));
                   }
                 };
-                const onCancel = (ev: PointerEvent) => onUp(ev);
+                const onCancel = () => cleanup();
+                const onKey = (ev: KeyboardEvent) => {
+                  if (ev.key !== 'Escape') return;
+                  ev.preventDefault(); ev.stopPropagation(); cleanup();
+                };
+                handle.setPointerCapture(e.pointerId);
                 handle.addEventListener('pointermove', onMove);
                 handle.addEventListener('pointerup', onUp);
                 handle.addEventListener('pointercancel', onCancel);
+                handle.addEventListener('lostpointercapture', onCancel);
+                window.addEventListener('keydown', onKey, true);
               }} />
           )}
           {b.checkedInAt && (
@@ -485,26 +514,26 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                  horário, paciente/pet, serviço, profissional e status em um
                  cartão compacto, colado no atendimento (offset 10px, flip
                  quando falta espaço). Duas ações explícitas:
-                 "Ver detalhes" (painel lateral) e, quando a REGRA autoriza
-                 remarcar (`editable` = rescheduleDecision), "Reagendar".
-                 Nada de tooltip nativo e nada de card no canto da tela. */
+                 "Editar" (modal central) e "Ver detalhes" (painel lateral),
+                 com camadas exclusivas. Nada de tooltip nativo ou card fixo. */
               <div className="ag-hover__card">
                 <div className="ag-hover__head">
-                  <span className="tabular-nums">{b.timeRange}</span>
+                  <span className="ag-hover__heading">Agendamento</span>
                   <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
                 </div>
-                <p className="ag-hover__name">{b.name}</p>
+                <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
                 <dl className="ag-hover__rows">
+                  <div><dt>{b.petName ? 'Paciente' : 'Tutor'}</dt><dd>{b.petName || b.customerName}</dd></div>
+                  {b.petName && <div><dt>Tutor</dt><dd>{b.customerName}</dd></div>}
                   {b.service && <div><dt>Serviço</dt><dd>{b.service}</dd></div>}
                   {b.pro && <div><dt>Profissional</dt><dd>{b.pro}</dd></div>}
                 </dl>
+                {b.observation && <p className="ag-hover__observation"><strong>Observação</strong> · {b.observation}</p>}
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">
-                  <Button size="sm" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
-                  {b.editable && (
-                    <Button size="sm" variant="secondary" onClick={() => onBlockReschedule(b.id, eventRefs.current.get(b.id) ?? null)}>Reagendar</Button>
-                  )}
+                  {b.editable && <Button size="sm" variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}
+                  <Button size="sm" variant="ghost" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
                 </div>
               </div>
             }
@@ -590,6 +619,7 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
   /** true = o detalhe abre com o formulário de reagendamento já aberto
    *  (vem do "Reagendar" do resumo do evento). O clique simples nunca ativa. */
   const [detailReschedule, setDetailReschedule] = useState(false);
@@ -601,6 +631,8 @@ export default function AgendaPage() {
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
+    /** Duplicação copia só os campos operacionais autorizados; nunca histórico clínico/pagamentos. */
+    petId?: string; note?: string;
   } | null>(null);
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
   // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
@@ -648,6 +680,7 @@ export default function AgendaPage() {
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [dropChecking, setDropChecking] = useState(false);
 
   const interactionRef = useRef<InteractionState>({ ...IDLE_INTERACTION });
   const dragSlotsRef = useRef<DragSlots>(emptyDragSlots());
@@ -655,10 +688,11 @@ export default function AgendaPage() {
   const columnsRef = useRef<DropColumn[]>([]);
   const bookingsRef = useRef<Map<string, Booking>>(new Map());
   const durationRef = useRef(30);
-  const geometryRef = useRef<{ g: GridGeometry; minX: number; minY: number } | null>(null);
+  const geometryRef = useRef<{ g: GridGeometry; minY: number } | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const dragSeq = useRef(0);
+  const pendingDropRef = useRef<{ id: string; point: Point; seq: number } | null>(null);
   const lastPointerUpRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   /** Botão do evento que abriu o detalhe — recebe o foco de volta no fechamento
    *  quando o gatilho do clique foi um CTA do HoverCard (que desmonta junto). */
@@ -928,6 +962,10 @@ export default function AgendaPage() {
           time: b.time,
           // FASE 2 · P6 — veterinária: PET primeiro; tutor vira contexto.
           name: b.petName || b.customerName,
+          customerName: b.customerName,
+          petName: b.petName || '',
+          observation: (b.note || '').trim().slice(0, 180),
+          dateLabel: formatDateBR(b.date),
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
@@ -1058,7 +1096,7 @@ export default function AgendaPage() {
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
   }, [loaded, view, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
-  const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
+  const readGeometry = useCallback((): { g: GridGeometry; minY: number } | null => {
     const scroll = scrollRef.current;
     const cols = colsRef.current;
     if (!scroll || !cols || colWidth <= 0) return null;
@@ -1073,14 +1111,96 @@ export default function AgendaPage() {
       },
     );
     // O gutter (horas) e o cabeçalho são fixos: nada de destino atrás deles.
-    return { g, minX: scrollRect.left + GUTTER_W, minY: scrollRect.top + HEADER_H };
+    return { g, minY: scrollRect.top + HEADER_H };
   }, [colWidth, columns.length, grid.start, grid.end]);
 
   useEffect(() => { geometryRef.current = readGeometry(); }, [readGeometry]);
 
+  const clearDragVisuals = useCallback(() => {
+    interactionRef.current = { ...IDLE_INTERACTION };
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    setDragId('');
+    hoverRef.current = null;
+    setHover(null);
+    if (ghostRef.current) ghostRef.current.style.display = 'none';
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragSeq.current++;
+    pendingDropRef.current = null;
+    setDropChecking(false);
+    clearDragVisuals();
+    const empty = emptyDragSlots();
+    dragSlotsRef.current = empty;
+    setDrag(empty);
+  }, [clearDragVisuals]);
+
+  const planDropAt = useCallback((booking: Booking, point: Point, slots: DragSlots) => {
+    const geo = geometryRef.current || readGeometry();
+    if (!geo) return null;
+    geometryRef.current = geo;
+    return planDrop({
+      // Fora do eixo horizontal da grade é destino inválido; não clample à
+      // primeira coluna (um drop à esquerda não pode virar reagendamento).
+      point: { x: point.x, y: Math.max(point.y, geo.minY) },
+      geometry: geo.g,
+      columns: columnsRef.current,
+      drag: slots,
+      durationMin: bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30),
+      toleranceMin: DROP_TOLERANCE_MIN,
+      own: { date: booking.date, time: booking.time, professionalId: booking.professionalId || '' },
+    });
+  }, [readGeometry, services]);
+
+  const rejectDrop = useCallback((plan: ReturnType<typeof planDrop> | null, slots: DragSlots) => {
+    const col = plan && columnsRef.current[plan.column];
+    const attemptedTime = plan ? minToTime(plan.minute) : '';
+    const text = !plan || plan.column < 0
+      ? 'Nenhum horário livre perto de onde você soltou. Escolha outro ponto da grade.'
+      : slots.error
+        ? `Não foi possível verificar a disponibilidade: ${slots.error}`
+        : plan.availability === 'loading'
+          ? 'Ainda carregando os horários livres. Tente soltar novamente em instantes.'
+          : `${attemptedTime} em ${formatDateBR(col?.date || '')} não está disponível para este agendamento. O horário original foi mantido.`;
+    setFlash({ tone: 'error', text });
+    window.setTimeout(() => setFlash(null), 5000);
+  }, []);
+
+  const acceptDrop = useCallback((booking: Booking, plan: ReturnType<typeof planDrop> | null, slots: DragSlots) => {
+    if (!plan || plan.availability !== 'free' || !plan.target) {
+      rejectDrop(plan, slots);
+      return;
+    }
+    const col = columnsRef.current[plan.column];
+    setDropError('');
+    setDropAsk({
+      booking,
+      date: plan.target.date,
+      time: plan.target.time,
+      professionalId: col?.isProfessional ? col.professionalId : '',
+      columnLabel: col?.label || '',
+    });
+  }, [rejectDrop]);
+
+  const resolvePendingDrop = useCallback((seq: number, slots: DragSlots) => {
+    const pending = pendingDropRef.current;
+    if (!pending || pending.seq !== seq || seq !== dragSeq.current) return;
+    pendingDropRef.current = null;
+    setDropChecking(false);
+    const booking = bookingsRef.current.get(pending.id);
+    const plan = booking ? planDropAt(booking, pending.point, slots) : null;
+    // A rede já respondeu; só agora removemos o mapa e apresentamos o resultado.
+    endDrag();
+    setFlash(null);
+    if (!booking) { rejectDrop(null, slots); return; }
+    acceptDrop(booking, plan, slots);
+  }, [acceptDrop, endDrag, planDropAt, rejectDrop]);
+
   // ── Busca de horários: UMA vez por drag (nunca por pixel) ──
   const loadDragSlots = useCallback((b: Booking, dates: string[]) => {
     const seq = ++dragSeq.current;
+    pendingDropRef.current = null;
+    setDropChecking(false);
     const initial: DragSlots = { loading: true, error: '', slots: {}, byPro: {} };
     dragSlotsRef.current = initial;
     setDrag(initial);
@@ -1089,47 +1209,35 @@ export default function AgendaPage() {
       .then(async (res) => res.ok ? (await res.json()).days as Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[] }> : null)
       .catch(() => null)
       .then((days) => {
-      if (seq !== dragSeq.current) return;
-      const entries = dates.map((d) => [d, days?.[d] || null] as const);
-      const failed = entries.filter(([, j]) => !j).length;
-      const next: DragSlots = {
-        loading: false,
-        error: failed === entries.length ? SLOT_STATE_MESSAGE.error : '',
-        slots: {},
-        byPro: {},
-        eligibleProIds: {},
-      };
-      for (const [d, j] of entries) {
-        if (!j) continue;
-        next.slots[d] = withOwnSlot(d, Array.isArray(j.slots) ? [...j.slots] : [], own);
-        if (Array.isArray(j.eligibleProfessionalIds)) next.eligibleProIds![d] = j.eligibleProfessionalIds.map(String);
-        const byPro = (j.byPro || {}) as Record<string, string[]>;
-        next.byPro[d] = {};
-        for (const pid of Object.keys(byPro)) {
-          next.byPro[d][pid] = withOwnSlot(
-            d, Array.isArray(byPro[pid]) ? [...byPro[pid]] : [],
-            pid === b.professionalId ? own : null,
-          );
+        if (seq !== dragSeq.current) return;
+        const entries = dates.map((d) => [d, days?.[d] || null] as const);
+        const failed = entries.filter(([, j]) => !j).length;
+        const next: DragSlots = {
+          loading: false,
+          error: failed === entries.length ? SLOT_STATE_MESSAGE.error : '',
+          slots: {}, byPro: {}, eligibleProIds: {},
+        };
+        for (const [d, j] of entries) {
+          if (!j) continue;
+          next.slots[d] = withOwnSlot(d, Array.isArray(j.slots) ? [...j.slots] : [], own);
+          if (Array.isArray(j.eligibleProfessionalIds)) next.eligibleProIds![d] = j.eligibleProfessionalIds.map(String);
+          const byPro = (j.byPro || {}) as Record<string, string[]>;
+          next.byPro[d] = {};
+          for (const pid of Object.keys(byPro)) {
+            next.byPro[d][pid] = withOwnSlot(
+              d, Array.isArray(byPro[pid]) ? [...byPro[pid]] : [],
+              pid === b.professionalId ? own : null,
+            );
+          }
+          if (!b.professionalId) next.byPro[d][''] = next.slots[d];
         }
-        if (!b.professionalId) next.byPro[d][''] = next.slots[d];
-      }
-      dragSlotsRef.current = next;
-      setDrag(next);
-    });
-  }, [businessId]);
-
-  const endDrag = useCallback(() => {
-    dragSeq.current++;
-    interactionRef.current = { ...IDLE_INTERACTION };
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    setDragId('');
-    const empty = emptyDragSlots();
-    dragSlotsRef.current = empty;
-    setDrag(empty);
-    hoverRef.current = null;
-    setHover(null);
-    if (ghostRef.current) ghostRef.current.style.display = 'none';
-  }, []);
+        dragSlotsRef.current = next;
+        setDrag(next);
+        // Se o ponteiro foi solto antes da resposta, resolve o MESMO destino
+        // guardado. O registro continua intacto até a confirmação do usuário.
+        resolvePendingDrop(seq, next);
+      });
+  }, [businessId, resolvePendingDrop]);
 
   const visibleDates = useCallback(
     () => (view === 'week' ? weekDays : [focus]),
@@ -1150,7 +1258,7 @@ export default function AgendaPage() {
     if (!geo) return;
     geometryRef.current = geo;
     const b = bookingsRef.current.get(interactionRef.current.id);
-    const point: Point = { x: Math.max(at.x, geo.minX), y: Math.max(at.y, geo.minY) };
+    const point: Point = { x: at.x, y: Math.max(at.y, geo.minY) };
     const plan = planDrop({
       point,
       geometry: geo.g,
@@ -1262,14 +1370,14 @@ export default function AgendaPage() {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving) return;
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving || dropChecking) return;
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
     }).state;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [readGeometry, services, saving]);
+  }, [readGeometry, services, saving, dropChecking]);
 
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
@@ -1291,39 +1399,26 @@ export default function AgendaPage() {
     else scheduleHover(at);
   }, [computeHover, loadDragSlots, positionGhost, scheduleHover, visibleDates]);
 
-  const finishDrop = useCallback((id: string) => {
+  const finishDrop = useCallback((id: string, point: Point) => {
     const booking = bookingsRef.current.get(id);
-    const target = hoverRef.current;
+    if (!booking) { endDrag(); return; }
+    const slots = dragSlotsRef.current;
+    if (slots.loading) {
+      // Keep the single in-flight request alive, but immediately remove the
+      // ghost/selection. The user's actual pointer-up location is revalidated
+      // when the authoritative slot map arrives.
+      pendingDropRef.current = { id, point, seq: dragSeq.current };
+      setDropChecking(true);
+      setFlash({ tone: 'warn', text: 'Verificando a disponibilidade do horário…' });
+      clearDragVisuals();
+      return;
+    }
+    const plan = planDropAt(booking, point, slots);
     endDrag();
-    if (!booking) return;
-    if (!target || !target.time) {
-      setFlash({
-        tone: 'warn',
-        text: target && target.availability === 'loading'
-          ? 'Ainda carregando os horários livres. Tente soltar novamente em instantes.'
-          : 'Nenhum horário livre perto de onde você soltou. Escolha outro ponto da grade.',
-      });
-      window.setTimeout(() => setFlash(null), 4000);
-      return;
-    }
-    if (target.availability !== 'free') {
-      setFlash({ tone: 'error', text: `${target.time} em ${formatDateBR(target.date)} não está disponível para este atendimento.` });
-      window.setTimeout(() => setFlash(null), 4000);
-      return;
-    }
-    // Nada é salvo em silêncio: o drop abre a confirmação explícita.
-    // A coluna de um profissional envia o id dela; colunas de dia (semana)
-    // deixam o servidor resolver quem atende (política "equilibrar equipe").
-    const col = columnsRef.current[target.column];
-    setDropError('');
-    setDropAsk({
-      booking,
-      date: target.date,
-      time: target.time,
-      professionalId: col?.isProfessional ? col.professionalId : '',
-      columnLabel: col?.label || '',
-    });
-  }, [endDrag]);
+    setFlash(null);
+    acceptDrop(booking, plan, slots);
+  }, [acceptDrop, clearDragVisuals, endDrag, planDropAt]);
+
 
   const onPressEnd = useCallback((id: string, e: React.PointerEvent) => {
     const step = reduceInteraction(interactionRef.current, { type: 'up', at: { x: e.clientX, y: e.clientY } });
@@ -1333,10 +1428,10 @@ export default function AgendaPage() {
     if (step.effect === 'open-detail') {
       // CLIQUE SIMPLES → detalhe. Nunca inicia reagendamento.
       const booking = bookingsRef.current.get(id);
-      if (booking) setDetail(booking);
+      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); setDetail(booking); }
       return;
     }
-    if (step.effect === 'drop') finishDrop(id);
+    if (step.effect === 'drop') finishDrop(id, { x: e.clientX, y: e.clientY });
   }, [finishDrop]);
 
   const onPressCancel = useCallback(() => {
@@ -1346,17 +1441,18 @@ export default function AgendaPage() {
 
   /**
    * MISSÃO UX CLOSURE · item 3A — ação secundária do resumo do evento.
-   * Abre o MESMO detalhe (BookingDetailSheet) já no fluxo de reagendamento,
-   * que é quem decide entre mover e recriar (`rescheduleDecision`). Nenhuma
-   * regra nova: o resumo só encurta o caminho para a ação já existente.
+   * Abre um editor CENTRAL para campos que o contrato PATCH da Agenda permite
+   * persistir. Dados gerais sem suporte continuam explicitamente somente leitura;
+   * a ação Reagendar segue sendo o fluxo de domínio já existente.
    */
-  const onBlockReschedule = useCallback((id: string, trigger?: HTMLElement | null) => {
+  const onBlockEdit = useCallback((id: string, trigger?: HTMLElement | null) => {
     const booking = bookingsRef.current.get(id);
-    if (!booking) return;
-    if (rescheduleDecision(booking.status).kind !== 'move') return; // regra preservada
+    if (!booking || rescheduleDecision(booking.status).kind !== 'move') return;
     detailTriggerRef.current = trigger ?? null;
-    setDetailReschedule(true);
-    setDetail(booking);
+    setCtxMenu(null);
+    setDetail(null);
+    setDetailReschedule(false);
+    setEditBooking(booking);
   }, []);
 
   const onBlockClick = useCallback((id: string, trigger?: HTMLElement | null) => {
@@ -1366,7 +1462,7 @@ export default function AgendaPage() {
     const last = lastPointerUpRef.current;
     if (last.id === id && Date.now() - last.at < 700) return;
     const booking = bookingsRef.current.get(id);
-    if (booking) { detailTriggerRef.current = trigger ?? null; setDetail(booking); }
+    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); setDetail(booking); }
   }, []);
 
   /**
@@ -1382,11 +1478,12 @@ export default function AgendaPage() {
   const [ctxMenu, setCtxMenu] = useState<{ id: string; point: { x: number; y: number }; trigger: HTMLElement | null } | null>(null);
   const [ctxBusy, setCtxBusy] = useState('');
   const [ctxError, setCtxError] = useState('');
+  const [ctxSuccess, setCtxSuccess] = useState('');
   const [cancelPending, setCancelPending] = useState<PendingRequest | null>(null);
 
   const onBlockContextMenu = useCallback((id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => {
     if (!bookingsRef.current.get(id)) return;
-    setCtxError('');
+    setCtxError(''); setCtxSuccess('');
     setCtxMenu({ id, point, trigger });
   }, []);
 
@@ -1395,16 +1492,20 @@ export default function AgendaPage() {
   /** Transição pelo menu: MESMA porta do detalhe (PATCH /api/bookings). */
   const changeStatus = useCallback(async (id: string, status: BookingStatus) => {
     if (!bookingsRef.current.get(id) || ctxBusy) return;
-    setCtxBusy(status); setCtxError('');
-    // MESMA porta do detalhe: PATCH /api/bookings (o servidor revalida a
-    // máquina de estados, as automações e o histórico — o menu não é atalho).
-    const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessId, id, status }),
-    }, { scope: 'action', area: 'Agenda' });
-    setCtxBusy('');
-    if (!res.ok) { setCtxError(res.message || 'Não foi possível mudar o status.'); return; }
-    void load();
+    setCtxBusy(status); setCtxError(''); setCtxSuccess('');
+    try {
+      // MESMA porta do detalhe: PATCH /api/bookings (o servidor revalida a
+      // máquina de estados, as automações e o histórico — o menu não é atalho).
+      const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id, status }),
+      }, { scope: 'action', area: 'Agenda' });
+      if (!res.ok) { setCtxError(res.message || 'Não foi possível mudar o status.'); return; }
+      setCtxSuccess(status === 'cancelled' ? 'Agendamento cancelado.' : 'Status do agendamento atualizado.');
+      void load();
+    } catch (cause) {
+      setCtxError(cause instanceof Error ? cause.message : 'Não foi possível mudar o status.');
+    } finally { setCtxBusy(''); }
   }, [businessId, ctxBusy, load]);
 
   /** Itens do menu do atendimento — derivados do estado ATUAL do registro. */
@@ -1412,8 +1513,14 @@ export default function AgendaPage() {
     const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
     if (!b) return [];
     const items: MenuItem[] = [
-      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setDetail(b); } },
+      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); setDetail(b); } },
     ];
+    if (rescheduleDecision(b.status).kind === 'move') {
+      items.push({
+        id: 'editar', label: 'Editar', icon: 'edit',
+        onSelect: () => onBlockEdit(b.id, ctxMenu?.trigger ?? null),
+      });
+    }
     const alvos = BOOKING_FLOW[b.status] || [];
     for (const to of alvos) {
       if (to === 'cancelled') continue;   // destrutivo fica no fim, com confirmação
@@ -1429,11 +1536,11 @@ export default function AgendaPage() {
     if (rescheduleDecision(b.status).kind === 'move') {
       items.push({
         id: 'reagendar', label: 'Reagendar', icon: 'sync', separatorBefore: true,
-        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setDetailReschedule(true); setDetail(b); },
+        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); setDetail(b); },
       });
     }
     items.push({
-      id: 'duplicar', label: 'Duplicar atendimento', icon: 'copy',
+      id: 'duplicar', label: 'Duplicar agendamento', icon: 'copy', separatorBefore: true,
       onSelect: () => {
         // Duplicar = abrir o fluxo COMPLETO já preenchido; a gravação continua
         // sendo a criação canônica (POST /api/bookings) — nenhuma rota nova.
@@ -1441,13 +1548,15 @@ export default function AgendaPage() {
           date: b.date, time: b.time, professionalId: b.professionalId,
           serviceId: b.serviceId, contactId: b.customerId || undefined,
           name: b.customerName, phone: b.customerPhone,
+          petId: b.petId || undefined,
+          note: b.note || '',
           selectedDurationMin: durationOf(b),
         });
       },
     });
     if (alvos.includes('cancelled')) {
       items.push({
-        id: 'cancelar', label: 'Cancelar atendimento', icon: 'x', danger: true, separatorBefore: true,
+        id: 'cancelar', label: 'Cancelar agendamento', icon: 'x', danger: true, separatorBefore: true,
         onSelect: () => setCancelPending({
           reason: 'programmatic',
           state: {
@@ -1455,7 +1564,7 @@ export default function AgendaPage() {
             title: 'Cancelar este atendimento?',
             description: `${b.petName || b.customerName} · ${formatDateBR(b.date)} às ${b.time}. O horário volta a ficar livre e o registro fica como cancelado no histórico — nada é apagado.`,
             confirmLabel: 'Manter atendimento',
-            discardLabel: ctxBusy ? 'Cancelando…' : 'Cancelar atendimento',
+            discardLabel: 'Cancelar agendamento',
           },
           proceed: () => setCancelPending(null),
           discard: () => { setCancelPending(null); void changeStatus(b.id, 'cancelled'); },
@@ -1484,17 +1593,17 @@ export default function AgendaPage() {
     setQuickCreate(null);
   }, []);
   useEffect(() => {
-    if (!dragId && !filterOpen && !helpOpen && !selectedRange) return;
+    if (!dragId && !dropChecking && !filterOpen && !helpOpen && !selectedRange) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (dragId) { endDrag(); clearPendingSelection(); }
+      if (dragId || dropChecking) { e.preventDefault(); endDrag(); clearPendingSelection(); setFlash(null); }
       else if (filterOpen) setFilterOpen(false);
       else if (helpOpen) setHelpOpen(false);
       else clearPendingSelection();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection]);
+  }, [dragId, dropChecking, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection]);
 
 
 
@@ -1973,7 +2082,7 @@ export default function AgendaPage() {
               <p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p>
             </div>
           )}
-          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="ag-list__row w-full flex gap-4 items-start text-left">
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); setDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
             <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
@@ -2101,9 +2210,9 @@ export default function AgendaPage() {
                       onPressEnd={onPressEnd}
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
-                      onBlockReschedule={onBlockReschedule}
+                      onBlockEdit={onBlockEdit}
                       onBlockContextMenu={onBlockContextMenu}
-                      hoverSuppressed={ctxMenu !== null}
+                      hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
@@ -2369,9 +2478,16 @@ export default function AgendaPage() {
       {cancelPending && (
         <ConfirmDialog
           pending={cancelPending}
-          onContinue={() => setCancelPending(null)}
-          onDiscard={() => { setCancelPending(null); const id = ctxMenu?.id; if (id) void changeStatus(id, 'cancelled'); }}
+          onContinue={() => { const pending = cancelPending; setCancelPending(null); pending?.proceed(); }}
+          onDiscard={() => { const pending = cancelPending; setCancelPending(null); pending?.discard?.(); }}
         />
+      )}
+      {ctxSuccess && (
+        <div className="ag-ctx-success" role="status">
+          <Icon n="check" size={14} />
+          <span>{ctxSuccess}</span>
+          <button type="button" onClick={() => setCtxSuccess('')} aria-label="Fechar aviso"><Icon n="x" size={13} /></button>
+        </div>
       )}
       {ctxError && (
         <div className="ag-ctx-error" role="alert">
@@ -2398,6 +2514,19 @@ export default function AgendaPage() {
       )}
 
 
+      {editBooking && (
+        <BookingEditDialog
+          booking={editBooking}
+          businessId={businessId}
+          services={services}
+          pros={pros}
+          timezone={bizTz}
+          returnFocus={detailTriggerRef}
+          onClose={() => setEditBooking(null)}
+          onChanged={() => { void load(); }}
+        />
+      )}
+
       {creating && (
         <NewBookingSheet
           businessId={businessId}
@@ -2413,6 +2542,8 @@ export default function AgendaPage() {
             time: creating.time,
             professionalId: creating.professionalId,
             selectedDurationMin: creating.selectedDurationMin,
+            petId: creating.petId,
+            note: creating.note,
           }}
           onClose={() => { setCreating(null); setSelectedRange(null); }}
           onCreated={() => { setSelectedRange(null); void load(); }}

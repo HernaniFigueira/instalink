@@ -1,7 +1,7 @@
 # GoDoutor Design System 1.0 → 1.1
 
-> **DS 1.1 (evolução dirigida por Material 3):** ver §9 ao final — campos com
-> rótulo flutuante, `DetailSideModal`, tipografia Barlow, rail sem chevrons,
+> **DS 1.1 (evolução dirigida por Material 3):** ver §9 ao final — `DetailSideModal`,
+> tipografia Barlow, rail sem chevrons,
 > prontuário em leitura, alertas proporcionais e a tabela de pesquisa oficial.
 > **Status DS 1.1:** PR #64 ABERTA / MERGE NÃO AUTORIZADO (2026-10-06).
 
@@ -306,26 +306,25 @@ fallback métrico) e agora também **buildável offline**. A QA mede o que impor
 `performance.getEntriesByType('resource')` com **zero** requisição a
 `fonts.googleapis.com`/`fonts.gstatic.com`.
 
-## 9.3 Campos — `FieldShell` (Material 3 Outlined)
+## 9.3 Campos — `Field` (rótulo externo, contorno contínuo)
 
 Um único componente (`Field` + `.gd-field*`) serve Input, Textarea, Select,
 Combobox, Autocomplete e Date/Time:
 
-- **vazio e sem foco:** o rótulo mora dentro da caixa (nunca vira placeholder);
-- **foco:** o rótulo sobe e **notcha** o contorno (o `background` da superfície
-  cria o corte, como no outline do Material);
-- **preenchido:** o rótulo permanece acima;
-- **erro:** contorno + rótulo + texto no par de danger (nunca só a cor);
-- **ajuda:** abaixo do campo, e **substituída visualmente** pelo erro — mas o
-  elemento continua no DOM (fora da tela) porque `aria-describedby` é montado
-  com os dois ids e id pendurado não descreve nada;
-- **desabilitado × somente-leitura:** superfícies diferentes (o segundo continua
-  legível e selecionável);
-- **alturas:** 40–44px, e 44px + 16px de fonte em ponteiro grosso/≤767px;
-- **contorno:** `--gd-border-strong` contra branco ≥ 3:1 (critério do Material).
+- **rótulo:** sempre FORA e acima da caixa, com asterisco junto ao texto quando
+  obrigatório; não se move ao focar/preencher e nunca abre notch no contorno;
+- **placeholder:** só instrução/exemplo; nunca substitui nem recebe o rótulo;
+- **foco/erro:** o contorno contínuo recebe o estado; o rótulo mantém contraste
+  e a mensagem de erro fica associada por `aria-describedby`;
+- **ajuda:** abaixo do campo, substituída visualmente pelo erro quando presente
+  (continua no DOM para tecnologias assistivas);
+- **desabilitado × somente-leitura:** superfícies diferentes, mantendo o valor
+  legível e a associação com o rótulo;
+- **altura:** 40–44px, e 44px + 16px de fonte em ponteiro grosso/≤767px.
 
-`Combobox` **adota** a caixa quando está dentro de um `Field`
-(`gd-field__control--inline`): um só contorno, rótulo e ARIA vindos do shell.
+`Combobox` e `DatePicker` adotam o mesmo contorno e encaminham o rótulo visível
+para o nome acessível do controle. Wrappers compostos (como telefone) usam a
+mesma caixa externa, sem borda interna duplicada.
 
 ## 9.4 Overlays — três papéis, nunca "um painel para tudo"
 
@@ -392,7 +391,7 @@ página (`amber-*`/`zinc-*`) para os tokens do DS.
 
 | REFERÊNCIA OFICIAL | O QUE O MATERIAL RECOMENDA | PROBLEMA NO GODOUTOR | ADAPTAÇÃO (DS 1.1) |
 | --- | --- | --- | --- |
-| [Text fields — overview](https://m3.material.io/components/text-fields/overview) | Linha de base clara entre *filled* e *outlined*; o **outlined** é o de menor ênfase, para formulários longos; estado do campo visível de relance; rótulo e erro curtos | Cada tela tinha um jeito: rótulo acima, placeholder-como-rótulo, altura de controle variável | `FieldShell` outlined com rótulo flutuante como **único** campo do produto (§9.3) |
+| [Text fields — overview](https://m3.material.io/components/text-fields/overview) | Linha de base clara entre *filled* e *outlined*; o **outlined** é o de menor ênfase, para formulários longos; estado do campo visível de relance; rótulo e erro curtos | Cada tela tinha um jeito: rótulo acima, placeholder-como-rótulo, altura de controle variável | `Field` com rótulo externo persistente e contorno contínuo como **único** campo do produto (§9.3) |
 | [Text fields — accessibility](https://m3.material.io/components/text-fields/accessibility) | Contorno ≥ 3:1 contra o fundo; Tab percorre os campos; o **nome acessível é igual ao rótulo visível**; ícone final rotulado pela função | Contraste de borda e associação rótulo↔controle dependiam de cada tela | `--gd-border-strong` ≥ 3:1, `aria-labelledby` para o rótulo visível, ajuda/erro ligados por `aria-describedby` (§9.3) |
 | [material-web — text-field](https://github.com/material-components/material-web/blob/main/docs/components/text-field.md) | `md-outlined-text-field` com `label` flutuante, `error`/`error-text`, ícones inicial/final, texto de apoio; rótulo externo exige `aria-label` | Sem contrato de shell; erro e ajuda competiam pelo mesmo espaço | `Field` (nosso análogo ao `md-outlined-text-field`) com ajuda/erro/ícones na mesma caixa e erro substituindo a ajuda **sem apagar o id** |
 | [Side sheets](https://m3.material.io/components/side-sheets/overview) | *Standard* vs **modal** (bloqueia o resto; usado em telas compactas) | O detalhe era um painel flutuante insetado, lido como "card solto" | `DetailSideModal`: semântica modal + geometria presa à borda direita, altura cheia (§9.4) |
@@ -407,7 +406,7 @@ página (`amber-*`/`zinc-*`) para os tokens do DS.
 
 | Contrato antigo | Contrato DS 1.1 | Testes re-apontados |
 | --- | --- | --- |
-| `Field` com rótulo acima do controle | `FieldShell` outlined com rótulo flutuante (`:placeholder-shown` como detector de vazio) | `ui.test.tsx` (a associação ARIA foi **mantida**, inclusive a ajuda oculta sob erro) |
+| `Field` com rótulo acima do controle | `Field` com rótulo externo, estrela obrigatória ao lado e placeholder instrucional | `ui.test.tsx` (a associação ARIA foi **mantida**, inclusive a ajuda oculta sob erro) |
 | Chevron no gatilho de grupo do rail (e `transform: rotate`) | Gatilho sem seta, mantendo `aria-expanded`/`aria-haspopup` | `ui-audit-v01-v10.test.ts` (V06), `agenda-ux-closure.test.tsx` |
 | Monograma da clínica em **tile** com par accent/contrast | Logo **solta** e proporcional (`height` por token + `width:auto`); sem arquivo, monograma em **texto** (`--text-strong`) | `m10-identidade-persistente.test.ts` |
 | `DetailPanel` (painel insetado, raio+sombra) | `DetailSideModal` (borda direita, altura cheia, sem raio/sombra) — `DetailPanel` fica como alias | `agenda-ux-closure.test.tsx`, `fase2-ws-sheet-close.test.ts`, `homologacao-p0-autosave-client.test.ts` |

@@ -1055,7 +1055,9 @@ input[type='color'] { @apply cursor-pointer; }
   .il-platform .il-field-control { min-height: var(--control-h-touch); }
   .il-platform .il-field-control { font-size: 16px; }
   .il-segmented { min-height: var(--control-h-touch); }
-  .il-segmented__item { height: calc(var(--control-h-touch) - 8px); }
+  /* Cada opção é um alvo independente (Dia, Semana, Lista): não basta o
+     contêiner do grupo medir 44px se os botões internos ficam em 36px. */
+  .il-segmented__item { height: var(--control-h-touch); }
 }
 @media (prefers-reduced-motion: reduce) {
   .il-platform, .il-platform *, .il-platform *::before, .il-platform *::after {
@@ -1874,6 +1876,11 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
 .workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
+@media (pointer: coarse), (max-width: 767px) {
+  .workspace-nav-drawer .workspace-foot__item { min-height: var(--gd-control-h-touch); }
+  [data-help-center] #help-center-search { height: var(--gd-control-h-touch); min-height: var(--gd-control-h-touch); }
+  [data-help-center] [data-support-whatsapp] { height: auto; min-height: var(--gd-control-h-touch); }
+}
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
   color: var(--text-faint); letter-spacing: .01em;
@@ -2228,6 +2235,12 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform .agenda-page-gutter { padding:8px; }
 .il-platform [data-agenda-main] > div { border-radius:var(--radius-md); box-shadow:none; }
 .il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
+/* A fila tem cabeçalho próprio na rail desktop. No modal compacto, o Drawer já
+   fornece título e fechamento acessíveis; evita repetir ambos no conteúdo. */
+@media (max-width: 1279px) {
+  .il-drawer.queue-dock-modal [data-queue-panel-title],
+  .il-drawer.queue-dock-modal [data-queue-panel-close] { display: none; }
+}
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
@@ -2600,53 +2613,46 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .ag-blocks-bar__items { margin-left: 0; }
 }
 
-/* ── RESUMO DO EVENTO (hover/foco) — missão UX Closure · item 3A ──────
-   Cartão CONTEXTUAL do atendimento: compacto, colado no evento (o offset e o
-   flip vivem no HoverCard/useAnchoredLayer), com leitura de horário, status,
-   paciente/pet, serviço e profissional e DUAS ações explícitas no rodapé.
-   Sem sombra pesada e sem cara de modal: é resumo, não detalhe. */
-/* AUDITORIA · rodada 2 — o resumo é uma PRÉVIA leve, não um modal: sombra
-   média (12/24px) em vez do `--gd-shadow-overlay` (60px de blur a 30% de
-   preto), fundo BRANCO do sistema (nada de amarelado) e o mesmo raio do
-   sistema. */
+/* ── RESUMO DO EVENTO (hover/foco) — prévia contextual, não modal ────
+   Identifica paciente/tutor, data/horário, serviço, profissional, status e
+   observação curta; Editar abre modal central e Ver detalhes abre leitura
+   lateral. Hover e detalhe nunca ocupam a tela ao mesmo tempo. */
 .ag-hover .gd-hovercard {
-  padding: 0; border-radius: var(--gd-radius-md);
-  background: var(--gd-bg-surface);
-  box-shadow: var(--gd-shadow-md);
+  padding: 0; border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
+  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-sm);
 }
-/* P0 · RODADA 2 — COMPACTO de verdade. O cartão é RESUMO: 244px, respiro de
-   10/12px e linhas de 12px; antes eram 252px com `--gd-space-3` e dois botões
-   de largura total que somavam 40px de altura e davam cara de painel. */
-.ag-hover__card { width: 244px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
+.ag-hover__card { width: 288px; max-width: min(288px, calc(100vw - 24px)); padding: 12px; display: flex; flex-direction: column; gap: 7px; }
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
-.ag-hover__head > span { font-size: 12px; font-weight: 600; color: var(--gd-text-muted); font-variant-numeric: tabular-nums; }
-.ag-hover__name { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--gd-text-strong); line-height: 1.3; }
-.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: 2px; }
-.ag-hover__rows > div { display: flex; gap: 6px; font-size: 12px; line-height: 1.35; }
-.ag-hover__rows dt { color: var(--gd-text-faint); min-width: 66px; }
-.ag-hover__rows dd { margin: 0; color: var(--gd-text-muted); }
+.ag-hover__heading { font-size: 12px; font-weight: 600; color: var(--gd-text-muted); }
+.ag-hover__date { margin: 0; color: var(--gd-text); font-size: 13px; font-weight: 600; line-height: 1.35; }
+.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.ag-hover__rows > div { display: flex; align-items: baseline; gap: 8px; font-size: 12px; line-height: 1.4; }
+.ag-hover__rows dt { flex: 0 0 68px; color: var(--gd-text-muted); }
+.ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
+.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ag-hover__observation strong { color: var(--gd-text-secondary); }
 .ag-hover__flag { margin: 0; font-size: 11px; font-weight: 600; color: var(--gd-text-muted); }
 .ag-hover__flag--attention { color: var(--attention-fg); }
 .ag-hover__actions {
-  display: flex; align-items: center; gap: 6px; padding-top: 6px; margin-top: 2px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 7px; margin-top: 1px;
   border-top: 1px solid var(--gd-border-soft);
 }
-/* "Ver detalhes" é O caminho (ocupa o resto da linha); as demais ações do
-   resumo ficam do tamanho do rótulo — nada de duas caixas esticadas. */
-.ag-hover__actions > :first-child { flex: 1; }
-.ag-hover__actions > :not(:first-child) { flex: 0 0 auto; }
-/* Falha de uma ação do MENU CONTEXTUAL: faixa curta acima da grade, no tom de
-   erro do sistema — a mensagem do servidor aparece sem virar modal. */
+.ag-hover__actions > button { flex: 0 0 auto; min-height: 34px; }
+.ag-hover__actions > button:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+/* Resultado pós-PATCH (nunca otimista): sucesso e falha são avisos distintos. */
+.ag-ctx-success,
 .ag-ctx-error {
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; gap: 8px;
   margin: 0 0 var(--gd-space-2); padding: 8px 10px;
   border-radius: var(--gd-radius-sm);
-  background: var(--gd-danger-soft, var(--danger-bg));
-  color: var(--gd-danger-fg, var(--danger-fg));
   font-size: 12px; font-weight: 600;
 }
+.ag-ctx-success { border: 1px solid var(--success-border); background: var(--success-bg); color: var(--success-fg); }
+.ag-ctx-error { background: var(--gd-danger-soft, var(--danger-bg)); color: var(--gd-danger-fg, var(--danger-fg)); }
+.ag-ctx-success button,
 .ag-ctx-error button { display: inline-flex; margin-left: auto; color: inherit; opacity: .8; }
+.ag-ctx-success button:hover,
 .ag-ctx-error button:hover { opacity: 1; }
 
 /* ── ORDEM DE CAMADAS DA GRADE — um só lugar (DS 1.0 · missão UX CLOSURE) ──

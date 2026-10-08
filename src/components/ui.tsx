@@ -36,15 +36,11 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
-  // P1 · RODADA 2 — AÇÃO SECUNDÁRIA SEM CONTORNO EM REPOUSO. A borda cheia na
-  // cor da marca fazia de TODO botão secundário (setas da data, "Hoje",
-  // "Filtros", "Fila", ações internas de card) um contorno que competia com o
-  // CTA primário. Agora o repouso é texto na cor do sistema e o ESTADO é que dá
-  // o contorno: hover/active preenchem com o suave da própria família. A
-  // `border` continua declarada (transparente) para a métrica não mudar de
-  // caixa entre variantes, e o foco segue no `shadow-focus` global.
+  // Ação secundária da identidade GoDoutor: preenchimento suave em repouso,
+  // sem contorno pesado; hover/active reforçam a mesma família da marca. A
+  // borda transparente mantém a métrica e o foco segue no anel global.
   secondary:
-    'bg-transparent text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)] active:bg-[var(--brand-soft)]',
+    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-transparent hover:brightness-[0.98] active:brightness-[0.96]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
@@ -312,36 +308,16 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 }
 
 /**
- * FieldShell — o CAMPO CANÔNICO do DS 1.1 (Material 3 Outlined + floating label).
- *
- * Comportamento (o mesmo em toda superfície, sem exceção de página):
- *   vazio e sem foco → o rótulo mora dentro da caixa;
- *   foco             → o rótulo sobe e notcha o contorno;
- *   preenchido       → o rótulo permanece acima;
- *   erro             → contorno + rótulo + texto de apoio;
- *   disabled/readonly→ superfícies distintas.
- *
- * O rótulo NUNCA vira placeholder. O placeholder é exemplo e só aparece no foco
- * (`placeholder=" "` quando o chamador não deu nenhum, para o CSS conseguir
- * detectar "tem valor" sem estado de React por campo).
- *
- * A métrica e o desenho vivem em `.gd-field*` (tokens `--gd-*`), então Input,
- * Textarea, Select, Combobox e o gatilho do DatePicker medem igual.
+ * Field — campo canônico do DS: rótulo visível sempre FORA e acima da caixa.
+ * Input, Textarea, Select, Combobox, DatePicker e wrappers como PhoneBRInput
+ * compartilham a mesma associação ARIA e o mesmo contorno contínuo.
  */
 export function Field({ label, hint, children, required, htmlFor, error, className }: {
   label: string; hint?: string; children: React.ReactNode; required?: boolean;
   htmlFor?: string; error?: string; className?: string;
 }) {
   const id = useId();
-  const child = isValidElement<{ id?: string; type?: string; placeholder?: string; disabled?: boolean; readOnly?: boolean }>(children) ? children : null;
-  /**
-   * Que CONTROLE é este? A resposta precisa cobrir os dois jeitos de escrever um
-   * campo no produto: o elemento nativo (`<input>`) e os NOSSOS primitives
-   * (`<Input>`, `<Textarea>`, `<Select>`). Antes só o elemento nativo contava —
-   * e como toda tela usa `<Input>`, `nativeControl` era sempre falso, o rótulo
-   * era tratado como "sempre flutuante" e o campo VAZIO já aparecia com o rótulo
-   * fora da caixa (defeito medido na QA do §4: `labelDentro: false` no repouso).
-   */
+  const child = isValidElement<{ id?: string; type?: string; disabled?: boolean; readOnly?: boolean }>(children) ? children : null;
   const nativeTag = child && typeof child.type === 'string' ? child.type : '';
   const kind: 'input' | 'textarea' | 'select' | 'other' = (() => {
     if (nativeTag === 'input' || child?.type === Input) return 'input';
@@ -354,55 +330,28 @@ export function Field({ label, hint, children, required, htmlFor, error, classNa
     controlId: child?.props.id || htmlFor || `${id}-control`,
     labelId: `${id}-label`,
     descriptionIds: [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean),
-    required, invalid: !!error,
-    inShell: true,
+    required, invalid: !!error, inShell: true,
   };
-  /**
-   * `:placeholder-shown` é o detector de "campo vazio" sem estado de React: um
-   * campo com placeholder NUNCA casa quando está vazio. Então injetamos um
-   * espaço quando o chamador não deu placeholder nenhum — não é rótulo nem
-   * texto de apoio, é SONDA. O placeholder de verdade continua exemplo e só
-   * aparece no foco (CSS).
-   */
-  const isTextKind = kind === 'input' || kind === 'textarea';
-  // Tipos que o navegador desenha sozinho (`date`, `time`…) não respondem a
-  // `:placeholder-shown`: o rótulo flutua sempre, senão ele encostaria no
-  // formato que o próprio navegador mostra.
-  const selfDrawn = kind === 'input' && !!child?.props.type
-    && ['date', 'time', 'datetime-local', 'month', 'week', 'color', 'file'].includes(String(child.props.type));
-  const probePlaceholder = isTextKind && !selfDrawn && !child?.props.placeholder;
-  const injected = {
-    ...(nativeControl ? fieldControlProps(child!.props as React.AriaAttributes & { id?: string; required?: boolean }, field) : {}),
-    ...(probePlaceholder ? { placeholder: ' ' } : {}),
-  };
-  const control = Object.keys(injected).length ? cloneElement(child!, injected) : children;
+  const control = nativeControl
+    ? cloneElement(child!, fieldControlProps(child!.props as React.AriaAttributes & { id?: string; required?: boolean }, field))
+    : children;
   const multiline = kind === 'textarea';
-  /**
-   * Quem flutua SEMPRE: select (a opção "Selecione…" já é um valor, não existe
-   * vazio), controles desenhados pelo navegador (data/hora) e qualquer coisa
-   * que não seja um campo de texto conhecido (ex.: o gatilho do DatePicker).
-   */
-  const alwaysFloat = kind === 'select' || selfDrawn || kind === 'other';
-  const isDisabled = !!(child?.props as { disabled?: boolean } | undefined)?.disabled;
-  const isReadOnly = !!(child?.props as { readOnly?: boolean } | undefined)?.readOnly;
+  const childProps = child?.props as { disabled?: boolean; readOnly?: boolean } | undefined;
   return (
     <FieldContext.Provider value={field}>
       <label
-        className={cn('gd-field', multiline && 'gd-field--multiline', alwaysFloat && 'gd-field--float', className)}
+        className={cn('gd-field', multiline && 'gd-field--multiline', className)}
         data-invalid={error ? 'true' : undefined}
-        data-disabled={isDisabled ? 'true' : undefined}
-        data-readonly={isReadOnly ? 'true' : undefined}
+        data-disabled={childProps?.disabled ? 'true' : undefined}
+        data-readonly={childProps?.readOnly ? 'true' : undefined}
         htmlFor={htmlFor || child?.props.id || (nativeControl || kind !== 'other' ? field.controlId : undefined)}
       >
-        <span className="gd-field__box">
-          {control}
-          <span id={field.labelId} className="gd-field__label">
-            {label}{required && <span aria-hidden="true" className="text-[var(--danger)]"> *</span>}
-          </span>
+        <span id={field.labelId} className="gd-field__label">
+          {label}{required && <span aria-hidden="true" className="text-[var(--danger)]"> *</span>}
         </span>
-        {/* O erro SUBSTITUI a ajuda na leitura visual — mas a ajuda continua no
-            DOM (fora da tela): `aria-describedby` é montado com os dois ids e um
-            id pendurado descreveria nada para quem usa leitor de tela. */}
+        <span className="gd-field__box">{control}</span>
+        {/* Erro substitui visualmente a ajuda, mas ambos continuam associados
+            ao controle: leitores de tela recebem o contexto completo. */}
         {hint && (
           error
             ? <span id={`${id}-hint`} className="gd-field__hint gd-field__hint--off">{hint}</span>
@@ -1886,9 +1835,11 @@ export function ContextMenu({ open, onClose, point, items, label = 'Ações', he
 // por cima (ex.: cadastro de paciente) fecha sozinho, sem derrubar o de baixo.
 
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
-export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px' }: {
+export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
+  /** Event that opened a central modal when its hover action unmounts. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
   /**
    * Faixa do diálogo em unidade de CSS (ex.: '672px'). Confirmações simples
    * ficam curtas; revisões pedem mais. Vai como `--gd-dialog-w` (token local)
@@ -1922,7 +1873,8 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
       popOverlay(entry);
       window.removeEventListener('keydown', onKey, true);
       unlockBodyScroll(token.current);
-      prev?.focus?.();
+      if (prev?.isConnected) prev.focus?.({ preventScroll: true });
+      else if (returnFocus?.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -2337,21 +2289,28 @@ export function DatePicker({ value, onChange, label = 'Data', placeholder = 'Sel
   formatValue?: (iso: string) => string;
 }) {
   const [open, setOpen] = useState(false);
+  const field = useContext(FieldContext);
+  const describedBy = field?.descriptionIds.join(' ') || undefined;
   return (
     <Popover
       open={open}
       onClose={() => setOpen(false)}
       label={label}
-      className={className}
+      className={cn(className, field?.inShell && 'gd-field__control-host')}
       trigger={
         <button
+          id={field?.controlId}
           type="button"
           disabled={disabled}
-          aria-label={label}
+          aria-label={field?.inShell ? undefined : label}
+          aria-labelledby={field?.labelId}
+          aria-describedby={describedBy}
+          aria-invalid={field?.invalid || undefined}
+          aria-required={field?.required || undefined}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className={cn(FIELD_CLS, 'inline-flex items-center justify-between gap-2 text-left disabled:opacity-60')}
+          className={cn(FIELD_CLS, field?.inShell && 'gd-field__control--inline', 'inline-flex items-center justify-between gap-2 text-left disabled:opacity-60')}
         >
           <span className={cn('truncate', !value && 'text-[var(--gd-text-muted)]')}>
             {value ? (formatValue ? formatValue(value) : formatDateBR(value)) : placeholder}

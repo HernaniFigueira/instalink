@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { Field, Input, Segmented, Select, Tabs, Textarea } from '../ui';
+import { DatePicker, Field, Input, Segmented, Select, Tabs, Textarea } from '../ui';
 import { PhoneBRInput } from '../dashboard/PhoneBRInput';
 
 afterEach(cleanup);
@@ -99,6 +99,10 @@ describe('Field — accessible labeling through existing consumers', () => {
     expect(input.hasAttribute('required')).toBe(false); // no new form validation policy
     expect(input.getAttribute('aria-describedby')!.split(' ').map(id => document.getElementById(id)?.textContent))
       .toEqual(['Formato original', 'Nome completo', 'Revise o nome']);
+    const visibleLabel = screen.getByText('Nome', { selector: '.gd-field__label' });
+    expect(visibleLabel.closest('.gd-field__box')).toBeNull();
+    expect(visibleLabel.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(input.closest('.gd-field__box')?.querySelectorAll('.gd-field__label')).toHaveLength(0);
   });
 
   it('works through PhoneBRInput without changing its mask/value contract', async () => {
@@ -119,6 +123,13 @@ describe('Field — accessible labeling through existing consumers', () => {
     expect(new Set(controls.map(c => c.id)).size).toBe(3);
     expect(controls.every(c => !!c.id)).toBe(true);
     expect(controls[2].hasAttribute('required')).toBe(true);
+  });
+
+  it('keeps the DatePicker label outside and forwards its accessible name through the Field', () => {
+    render(<Field label="Data do agendamento"><DatePicker value="2026-10-08" onChange={() => {}} label="Data interna" /></Field>);
+    const trigger = screen.getByRole('button', { name: 'Data do agendamento' });
+    expect(trigger.closest('.gd-field__box')).not.toBeNull();
+    expect(trigger.closest('.gd-field__box')?.querySelector('.gd-field__label')).toBeNull();
   });
 
   it('does not replace explicit accessible names/errors and removes stale descriptions on rerender', () => {

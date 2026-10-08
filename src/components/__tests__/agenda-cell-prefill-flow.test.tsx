@@ -148,6 +148,7 @@ vi.mock('@/components/dashboard/usePanelPermissions', () => ({
 vi.mock('@/components/dashboard/use-revalidate', () => ({ useRevalidateOnFocus: () => {} }));
 
 import AgendaPage from '@/app/(dashboard)/agenda/page';
+import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 
 const slotsApi = vi.hoisted(() => ({
   slots: ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30'],
@@ -569,6 +570,30 @@ describe('P2 — unavailable whole day', () => {
     await waitFor(() => expect(screen.getAllByText(/Este profissional não está disponível neste intervalo/)).toHaveLength(1));
     expect(screen.queryByText('Nenhum horário disponível.')).toBeNull();
     expect((within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(slotsApi.posts).toBe(0);
+  });
+});
+
+describe('Duplicar agendamento — contato sem vínculo CRM', () => {
+  it('mostra nome e WhatsApp copiados sem simular seleção de contato', async () => {
+    slotsApi.posts = 0;
+    render(<NewBookingSheet
+      businessId={BUSINESS}
+      services={FIXTURE.state.services as any}
+      pros={FIXTURE.state.professionals as any}
+      timezone={TZ}
+      horizonDays={60}
+      initial={{ name: 'Ana paciente sintética', phone: '21987654321', date: DATE, time: '10:30', professionalId: HERNANI, serviceId: SVC_CARDIO }}
+      onClose={vi.fn()}
+      onCreated={vi.fn()}
+    />);
+
+    const prefill = await screen.findByText('Ana paciente sintética');
+    expect(prefill.closest('[data-unlinked-client-prefill]')).toBeTruthy();
+    expect(screen.getByText('21987654321')).toBeTruthy();
+    expect(screen.getByText('Dados copiados · sem vínculo CRM')).toBeTruthy();
+    expect(screen.queryByText('Cadastro vinculado')).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: 'Buscar cliente' })).toBeNull();
     expect(slotsApi.posts).toBe(0);
   });
 });

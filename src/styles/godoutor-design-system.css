@@ -295,25 +295,23 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   FIELD SHELL — OUTLINED + FLOATING LABEL (DS 1.1)
+   FIELD — rótulo externo + contorno contínuo (DS GoDoutor)
    ═══════════════════════════════════════════════════════════════
-   Comportamento absorvido do Material 3 (Outlined text field), adaptado aos
-   tokens GoDoutor:
-
-     • vazio, sem foco  → o rótulo mora DENTRO do campo, no lugar da leitura;
-     • foco             → o rótulo sobe e NOTCHA a linha do contorno;
-     • preenchido       → o rótulo permanece acima (nunca desaparece);
-     • erro             → contorno + rótulo + texto de apoio no par de danger;
-     • disabled/readonly→ superfícies distintas, sem "cara de erro".
-
-   Por que um shell: o rótulo precisa de uma CAIXA para flutuar sobre a borda.
-   Sem isso, cada tela inventa seu jeito (e foi o que aconteceu: rótulo acima em
-   uma tela, placeholder-como-rótulo em outra). O rótulo do GoDoutor nunca é
-   substituído por placeholder: o placeholder é EXEMPLO e só aparece no foco. */
+   O rótulo é conteúdo de primeira classe: permanece visível acima da caixa,
+   mesmo com foco, valor, erro, disabled ou somente leitura. Placeholder é
+   apenas instrução/exemplo; não substitui rótulo, não flutua e não abre notch.
+   A caixa desenha o único contorno do campo; controles compostos compartilham
+   essa mesma superfície e recebem nome/descrição via FieldContext/ARIA. */
 .gd-field { display: block; min-width: 0; }
+.gd-field__label {
+  display: block; max-width: 100%; margin: 0 0 var(--gd-space-1);
+  color: var(--gd-text-secondary);
+  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+  font-weight: var(--gd-weight-semibold);
+}
 .gd-field__box {
   position: relative; display: flex; align-items: center; gap: var(--gd-space-2);
-  min-height: var(--control-h);
+  min-height: var(--control-h); min-width: 0;
   padding: 0 var(--gd-space-3);
   background: var(--gd-bg-surface);
   border: 1px solid var(--gd-border-strong);
@@ -322,7 +320,8 @@
               box-shadow var(--gd-motion-fast) var(--gd-ease),
               background-color var(--gd-motion-fast) var(--gd-ease);
 }
-/* A caixa é o CONTROLE: quem está dentro não desenha borda própria. */
+/* A caixa desenha um ÚNICO contorno contínuo; os controles internos nunca
+   acrescentam segunda borda nem cortam a linha para acomodar o rótulo. */
 .gd-field__box > .il-field-control,
 .gd-field__box > input,
 .gd-field__box > select,
@@ -334,83 +333,38 @@
   font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
   color: var(--gd-text);
 }
+/* Componentes de controle compostos (telefone, DatePicker) ocupam a linha sem
+   abrir um segundo contorno. */
+.gd-field__box > .gd-field__control-host,
+.gd-field__box > div { flex: 1 1 auto; min-width: 0; width: 100%; }
+.gd-field__box .il-field-control,
+.gd-field__box > .gd-field__control--inline {
+  border: 0; border-radius: 0; background-color: transparent; box-shadow: none;
+}
+.gd-field--multiline .gd-field__box { align-items: flex-start; }
 .gd-field__box > textarea { min-height: 76px; padding: var(--gd-space-2) 0; resize: vertical; }
-/* O `Select` canônico tem UM desenho de seta (o do DS), colado à direita. A
-   regra acima zera o `background` do controle e isso apagava repeat/size/position
-   que vinham das utilities — a seta inline, sem elas, TILHAVA pela largura do
-   campo (defeito real, achado ao olhar o catálogo na revisão do §4/§10). A seta
-   é desenho do DS: fica declarada aqui, junto do resto da métrica do campo. */
-/* A especificidade importa: o grupo acima casa `.gd-field__box > .il-field-control`
-   (0,2,0), então a regra da seta precisa casar o select TAMBÉM com a classe do
-   controle (0,2,1) — senão o `background: transparent` do grupo continuaria
-   apagando repeat/size/position e a seta voltaria a tilhar. */
+/* A seta do Select é única e fica à direita, sem tilhar pela largura. */
 .gd-field__box > select.il-field-control,
 .gd-field__box > select {
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-size: 14px auto;
-  background-position: right var(--gd-space-3) center;
+  background-color: transparent; background-repeat: no-repeat;
+  background-size: 14px auto; background-position: right var(--gd-space-3) center;
   padding-right: calc(14px + var(--gd-space-3) + var(--gd-space-1));
 }
-.gd-field__box > input:focus, .gd-field__box > select:focus, .gd-field__box > textarea:focus,
-.gd-field__box > .il-field-control:focus { outline: none; box-shadow: none; border-color: transparent; }
-/* Textarea não centraliza: o shell vira coluna. */
-.gd-field--multiline .gd-field__box { align-items: flex-start; }
-
-/* Rótulo: ponto de partida DENTRO do campo… */
-.gd-field__label {
-  position: absolute; left: var(--gd-space-3); top: 50%;
-  transform: translateY(-50%);
-  max-width: calc(100% - (2 * var(--gd-space-3)));
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
-  font-weight: var(--gd-weight-regular); color: var(--gd-text-muted);
-  pointer-events: none;
-  transition: top var(--gd-motion-fast) var(--gd-ease),
-              font-size var(--gd-motion-fast) var(--gd-ease),
-              color var(--gd-motion-fast) var(--gd-ease);
+.gd-field__box > input:focus, .gd-field__box > select:focus,
+.gd-field__box > textarea:focus, .gd-field__box .il-field-control:focus {
+  outline: none; box-shadow: none; border-color: transparent;
 }
-/* …e vai para a LINHA do contorno quando o campo está em uso (foco, valor ou
-   rótulo sempre-flutuante de select/data). O `background` da superfície cria o
-   NOTCH, exatamente como o outline do Material. */
-.gd-field__box:focus-within .gd-field__label,
-.gd-field__box:has(input:not(:placeholder-shown)) .gd-field__label,
-.gd-field__box:has(textarea:not(:placeholder-shown)) .gd-field__label,
-.gd-field--float .gd-field__label {
-  top: 0; transform: translateY(-50%);
-  padding: 0 5px; margin-left: -5px;
-  background: var(--gd-bg-surface);
-  border-radius: var(--gd-radius-xs);
-  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
-  font-weight: var(--gd-weight-medium); color: var(--gd-text-secondary);
-}
-/* PLACEHOLDER é EXEMPLO, nunca rótulo (§4). Com o campo vazio e fora de foco,
-   o lugar do texto é do RÓTULO — então o exemplo fica invisível e só aparece
-   quando o rótulo já subiu (foco) ou quando há valor digitado. Sem esta regra,
-   rótulo e placeholder se sobrepunham dentro da caixa. */
-.gd-field__box > input::placeholder,
-.gd-field__box > textarea::placeholder { color: transparent; }
-.gd-field__box:focus-within > input::placeholder,
-.gd-field__box:focus-within > textarea::placeholder { color: var(--gd-text-faint); }
-
-/* Hover: o contorno escurece um degrau (não é sombra, é contraste). */
+.gd-field:focus-within > .gd-field__label { color: var(--gd-accent-fg); }
+/* Placeholder continua sendo instrução/exemplo, nunca ocupa o lugar do rótulo. */
+.gd-field__box input::placeholder, .gd-field__box textarea::placeholder { color: var(--gd-text-faint); }
 .gd-field__box:hover { border-color: var(--gd-text-faint); }
-/* Foco: um único anel, o mesmo do sistema. */
-.gd-field__box:focus-within {
-  border-color: var(--gd-accent);
-  box-shadow: var(--gd-focus-ring);
-}
-.gd-field__box:focus-within .gd-field__label { color: var(--gd-accent-fg); }
-/* Erro: contorno + rótulo + texto no par de danger (nunca só a cor: o texto
-   de apoio diz o que corrigir). */
+.gd-field__box:focus-within { border-color: var(--gd-accent); box-shadow: var(--gd-focus-ring); }
+.gd-field[data-invalid='true'] > .gd-field__label { color: var(--gd-danger-fg); }
 .gd-field[data-invalid='true'] .gd-field__box { border-color: var(--gd-danger); }
 .gd-field[data-invalid='true'] .gd-field__box:focus-within { box-shadow: 0 0 0 3px var(--gd-danger-bg); }
-.gd-field[data-invalid='true'] .gd-field__label,
-.gd-field[data-invalid='true'] .gd-field__box:focus-within .gd-field__label { color: var(--gd-danger-fg); }
-/* Desabilitado × somente-leitura: superfícies DIFERENTES. Desabilitado não
-   recebe foco; leitura continua legível e selecionável. */
+/* Desabilitado × somente-leitura: superfícies distintas e texto legível. */
 .gd-field[data-disabled='true'] .gd-field__box { background: var(--gd-bg-subtle); border-color: var(--gd-border); }
-.gd-field[data-disabled='true'] .gd-field__box > * { color: var(--gd-text-disabled); cursor: not-allowed; }
+.gd-field[data-disabled='true'] .gd-field__box * { color: var(--gd-text-disabled); cursor: not-allowed; }
 .gd-field[data-readonly='true'] .gd-field__box { background: var(--gd-bg-inset); border-color: var(--gd-border); }
 .gd-field__hint, .gd-field__error {
   display: block; margin-top: var(--gd-space-1);
@@ -418,16 +372,13 @@
 }
 .gd-field__hint { color: var(--gd-text-muted); font-weight: var(--gd-type-helper-weight); }
 .gd-field__error { color: var(--gd-danger-fg); font-weight: var(--gd-weight-medium); }
-/* Ajuda com erro presente: fora da tela, dentro da árvore de acessibilidade. */
 .gd-field__hint--off {
   position: absolute; width: 1px; height: 1px; margin: -1px;
   padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
-/* Ícones do campo (busca, limpar, erro) entram na MESMA caixa, sem virar um
-   segundo controle com métrica própria. */
 /* Controles que ADOTAM a caixa (Combobox/Autocomplete dentro de um Field):
-   o wrapper ocupa a linha e o controle não desenha um segundo contorno — o
-   rótulo flutuante e o anel de foco continuam sendo os do shell. */
+   o wrapper ocupa a linha e o controle não desenha um segundo contorno; o
+   anel de foco continua sendo o da caixa externa. */
 .gd-field__control-host { flex: 1 1 auto; min-width: 0; }
 .gd-field__box .gd-field__control--inline {
   padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
@@ -436,7 +387,9 @@
 .gd-field__box > svg, .gd-field__icon { flex-shrink: 0; color: var(--gd-text-muted); }
 @media (pointer: coarse), (max-width: 767px) {
   .gd-field__box { min-height: var(--control-h-touch); }
-  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select { min-height: calc(var(--control-h-touch) - 2px); }
+  /* O controle nativo também precisa manter o alvo de 44px; a caixa cresce
+     pelos 2px da borda em vez de reduzir a área clicável para 42px. */
+  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select { min-height: var(--gd-control-h-touch); }
   .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select, .gd-field__box > textarea { font-size: 16px; }
 }
 
@@ -480,6 +433,9 @@
 }
 .gd-disclosure__trigger:hover { color: var(--gd-text); }
 .gd-disclosure__trigger:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+@media (pointer: coarse), (max-width: 767px) {
+  .gd-disclosure__trigger { min-height: var(--gd-control-h-touch); }
+}
 .gd-disclosure__caret { flex: none; }
 .gd-disclosure__label {
   font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line);
@@ -544,6 +500,12 @@
 /* Bloco de leitura com respiro próprio (substitui o par rótulo+controle). */
 .gd-ro--block { padding: 10px 0; border-bottom: 1px solid var(--gd-border-soft); }
 .gd-ro--block:last-child { border-bottom: 0; }
+
+/* Resumo somente-leitura em um formulário central: tipografia e limite claros,
+   sem imitar controles habilitados nem introduzir borda de campo editável. */
+.gd-readonly-summary { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--gd-border-soft); }
+.gd-readonly-summary > span { color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-weight-medium); }
+.gd-readonly-summary > strong { color: var(--gd-text); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-medium); overflow-wrap: anywhere; }
 
 
 /* ═══════════════════════════════════════════════════════════════

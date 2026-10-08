@@ -1,0 +1,109 @@
+{
+  "captureDate": "2026-10-08T18:38:43.590Z",
+  "fixtureDate": "2026-10-09",
+  "viewport": "1440x900",
+  "browser": "Chromium (local isolated fixture)",
+  "dataScope": "local JSON database only; no Supabase/DATABASE_URL; no messaging or external communication sent",
+  "results": [
+    {
+      "check": "fixture-loaded",
+      "status": "PASS",
+      "date": "2026-10-09",
+      "viewport": "1440x900",
+      "bookingCount": 6
+    },
+    {
+      "check": "resize-preview-escape-cleanup",
+      "status": "PASS",
+      "before": {
+        "time": "09:00–09:15",
+        "height": "32px",
+        "hint": "",
+        "dragging": false
+      },
+      "preview": {
+        "time": "09:00–09:15",
+        "height": "64px",
+        "hint": "09:00–09:30 · 30 min",
+        "dragging": false
+      },
+      "afterEscape": {
+        "time": "09:00–09:15",
+        "height": "32px",
+        "hint": "",
+        "dragging": false
+      },
+      "visibleDialogsAfterEscape": 0
+    },
+    {
+      "check": "resize-confirm-and-persist",
+      "status": "PASS",
+      "endTime": "09:30",
+      "patchStatus": 200,
+      "apiOk": true,
+      "durationMin": 30,
+      "afterReload": {
+        "time": "09:00–09:30",
+        "height": "64px",
+        "hint": "",
+        "dragging": false
+      }
+    },
+    {
+      "check": "resize-fixture-restored",
+      "status": "PASS",
+      "endTime": "09:15",
+      "patchStatus": 200,
+      "apiOk": true,
+      "durationMin": 15,
+      "afterReload": {
+        "time": "09:00–09:15",
+        "height": "32px",
+        "hint": "",
+        "dragging": false
+      }
+    },
+    {
+      "check": "valid-reschedule-confirm-and-persist",
+      "status": "PASS",
+      "targetTime": "11:00",
+      "slotsStatus": 200,
+      "patchStatus": 200,
+      "apiOk": true,
+      "durationMin": 15,
+      "afterReloadTime": "11:00–11:15"
+    },
+    {
+      "check": "reschedule-fixture-restored",
+      "status": "PASS",
+      "targetTime": "09:00",
+      "slotsStatus": 200,
+      "patchStatus": 200,
+      "apiOk": true,
+      "durationMin": 15,
+      "afterReloadTime": "09:00–09:15"
+    },
+    {
+      "check": "invalid-outside-left-drop-recovery",
+      "status": "PASS",
+      "state": {
+        "dialogs": 0,
+        "draggingCards": 0,
+        "ghostDisplay": "none",
+        "message": "Nenhum horário livre perto de onde você soltou. Escolha outro ponto da grade."
+      }
+    },
+    {
+      "check": "drag-escape-cleanup",
+      "status": "PASS",
+      "state": {
+        "dialogs": 0,
+        "draggingCards": 0,
+        "ghostDisplay": "none",
+        "selectedRange": 0,
+        "detailPanels": 0
+      },
+      "slotsStatus": 200
+    }
+  ]
+}

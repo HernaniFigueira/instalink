@@ -164,38 +164,27 @@ describe('§3 · uma fonte, um token (Geist não pode voltar como fonte do corpo
   });
 });
 
-describe('§4 · o rótulo do campo mora DENTRO da caixa quando o campo está vazio', () => {
-  it('o shell reconhece os PRIMITIVES do produto, não só o elemento nativo', () => {
+describe('§4 · o rótulo do campo fica sempre FORA e acima da caixa', () => {
+  it('Field associa Input/Textarea/Select sem sonda de placeholder nem label flutuante', () => {
     const ui = read('components/ui.tsx');
     const campo = ui.slice(ui.indexOf('export function Field'), ui.indexOf('export function ReadOnlyField'));
-    // A classificação precisa citar Input/Textarea/Select (senão `<Input>` cai
-    // em "outro" e o rótulo flutua desde o repouso).
     expect(campo).toMatch(/child\?\.type === Input/);
     expect(campo).toMatch(/child\?\.type === Textarea/);
     expect(campo).toMatch(/child\?\.type === Select/);
-    // A sonda de vazio (`placeholder=" "`) só existe para campo de TEXTO.
-    expect(campo).toMatch(/const isTextKind = kind === 'input' \|\| kind === 'textarea'/);
-    expect(campo).toMatch(/kindsQueFlutuamSempre|alwaysFloat/);
+    expect(campo).toMatch(/<span id=\{field\.labelId\} className="gd-field__label">/);
+    expect(campo).toMatch(/<span className="gd-field__box">\{control\}<\/span>/);
+    expect(campo).not.toMatch(/placeholder: ' '/);
+    expect(campo).not.toMatch(/alwaysFloat|gd-field--float|placeholder-shown/);
   });
 
-  it('select e campos desenhados pelo navegador flutuam sempre (não existe vazio)', () => {
-    const ui = read('components/ui.tsx');
-    const campo = ui.slice(ui.indexOf('export function Field'), ui.indexOf('export function ReadOnlyField'));
-    expect(campo).toMatch(/const alwaysFloat = kind === 'select' \|\| selfDrawn \|\| kind === 'other'/);
-    expect(campo).toMatch(/\['date', 'time', 'datetime-local', 'month', 'week', 'color', 'file'\]/);
-  });
-
-  it('o CSS tem os três estados do Material Outlined', () => {
+  it('CSS posiciona o rótulo externo e mantém contorno contínuo, sem notch', () => {
     const ds = read('styles/godoutor-design-system.css');
-    // rótulo dentro por padrão
-    expect(ds).toMatch(/\.gd-field__label \{[^}]*top: 50%/);
-    // foco OU valor OU sempre-flutuante → sobe e notcha
-    expect(ds).toMatch(/\.gd-field__box:focus-within \.gd-field__label,/);
-    expect(ds).toMatch(/:has\(input:not\(:placeholder-shown\)\)/);
-    expect(ds).toMatch(/\.gd-field--float \.gd-field__label/);
-    // placeholder só aparece com o rótulo já fora do caminho
-    expect(ds).toMatch(/\.gd-field__box > input::placeholder,[\s\S]{0,120}color: transparent/);
-    expect(ds).toMatch(/\.gd-field__box:focus-within > input::placeholder,[\s\S]{0,120}color: var\(--gd-text-faint\)/);
+    expect(ds).toMatch(/\.gd-field__label \{[^}]*display: block[^}]*margin: 0 0/);
+    expect(ds).toMatch(/\.gd-field__box \{[^}]*border: 1px solid var\(--gd-border-strong\)/);
+    expect(ds).toMatch(/\.gd-field:focus-within > \.gd-field__label/);
+    expect(ds).not.toMatch(/gd-field--float|placeholder-shown|<legend|fieldset/i);
+    expect(ds).not.toMatch(/\.gd-field__box:focus-within \.gd-field__label/);
+    expect(ds).toMatch(/\.gd-field__box input::placeholder[\s\S]{0,100}var\(--gd-text-faint\)/);
   });
 
   it('a ajuda continua no DOM quando há erro (aria-describedby não fica pendurado)', () => {
@@ -206,7 +195,6 @@ describe('§4 · o rótulo do campo mora DENTRO da caixa quando o campo está va
   });
 });
 
-// ═══════════════════════════════════════════════════════════════
 // §11 · PRONTUÁRIO EM LEITURA É DOCUMENTO (superfície VIVA do workspace)
 // ═══════════════════════════════════════════════════════════════
 // O contrato é de código-fonte porque o defeito era exatamente de ESTRUTURA:

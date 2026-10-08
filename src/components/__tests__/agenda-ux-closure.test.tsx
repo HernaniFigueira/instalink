@@ -3,9 +3,8 @@
 // AGENDA + DESIGN SYSTEM — CONTRATOS DA MISSÃO UX CLOSURE
 // ═══════════════════════════════════════════════════════════════
 // O que este arquivo protege (itens 3, 4, 5, 6 da missão):
-//   3A · o resumo do evento é CONTEXTUAL (HoverCard) com "Ver detalhes" e
-//        "Reagendar" quando a REGRA autoriza, e NÃO existe tooltip nativo na
-//        grade;
+//   3A · o resumo do evento é CONTEXTUAL (HoverCard) com "Editar" central e
+//        "Ver detalhes" lateral, sem tooltip nativo e sem camadas concorrentes;
 //   3B · "Ver detalhes" abre o MODAL LATERAL canônico (DetailSideModal ~460px),
 //        não um sheet de 620px nem um 95% da viewport;
 //   3C · criar/editar agendamento é MODAL CENTRAL (mesmo overlay system);
@@ -41,23 +40,28 @@ describe('3A · resumo contextual do evento (HoverCard)', () => {
 
   it('o resumo traz horário, paciente, serviço, profissional e status', () => {
     const content = agenda.slice(agenda.indexOf('<div className="ag-hover__card">'), agenda.indexOf('</div>\n            }\n          >'));
+    expect(content).toContain('{b.dateLabel}');
     expect(content).toContain('{b.timeRange}');
-    expect(content).toContain('{b.name}');
+    expect(content).toContain('{b.petName || b.customerName}');
+    expect(content).toContain('{b.customerName}');
     expect(content).toContain('{b.service}');
     expect(content).toContain('{b.pro}');
     expect(content).toContain('{b.statusLabel}');
+    expect(content).toContain('{b.observation}');
   });
 
-  it('tem ação explícita "Ver detalhes" e secundária "Reagendar" só quando autorizado', () => {
+  it('tem ações Editar central e Ver detalhes lateral, sem confundir com Reagendar', () => {
+    expect(agenda).toContain('>Editar<');
     expect(agenda).toContain('>Ver detalhes<');
-    // `b.editable` vem de rescheduleDecision(status).kind === 'move' — a REGRA
-    // decide, o resumo só oferece o atalho.
-    expect(agenda).toMatch(/b\.editable && \(/);
-    expect(agenda).toContain('>Reagendar<');
+    // Só estados que permitem mover expõem a edição operacional; a ação não
+    // chama o fluxo lateral Reagendar.
+    expect(agenda).toContain('{b.editable && <Button size="sm" variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}');
     expect(agenda).toContain('editable: rescheduleDecision(b.status).kind === \'move\'');
-    // A ação secundária reusa o fluxo existente (nunca um caminho paralelo).
-    expect(agenda).toContain('const onBlockReschedule = useCallback');
-    expect(agenda).toMatch(/rescheduleDecision\(booking\.status\)\.kind !== 'move'/);
+    expect(agenda).toContain('const onBlockEdit = useCallback');
+    expect(agenda).toContain('<BookingEditDialog');
+    expect(agenda).toContain('setDetail(null);');
+    expect(agenda).toContain('setEditBooking(booking);');
+    expect(agenda).toContain("label: 'Reagendar'"); // fluxo próprio permanece no detalhe/context menu
   });
 
   it('nenhum elemento da GRADE carrega `title` nativo (bloqueio, marcas, handle)', () => {
@@ -137,9 +141,28 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
     expect(ui).toMatch(/style=\{width \? \(\{ '--gd-detail-w': width \}/);
   });
 
-  it('o detalhe abre com o fluxo de reagendamento quando veio do resumo', () => {
+  it('o detalhe mantém Reagendar como fluxo próprio, sem ser o destino de Editar', () => {
     expect(read('src/components/dashboard/BookingDetailSheet.tsx')).toContain('startRescheduling');
     expect(agenda).toContain('startRescheduling={detailReschedule}');
+    expect(agenda).toMatch(/const onBlockEdit = useCallback[\s\S]*?setEditBooking\(booking\)/);
+    expect(agenda).not.toContain('const onBlockReschedule = useCallback');
+  });
+
+  it('hover, detalhe e editor central são mutuamente exclusivos e devolvem foco ao evento', () => {
+    expect(agenda).toContain('hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null');
+    expect(agenda).toContain('returnFocus={detailTriggerRef}');
+    expect(read('src/components/dashboard/BookingEditDialog.tsx')).toContain('returnFocus={returnFocus}');
+  });
+
+  it('o editor declara os campos atualmente não persistíveis em leitura, sem inventar PATCH', () => {
+    const editor = read('src/components/dashboard/BookingEditDialog.tsx');
+    expect(editor).toContain('Paciente / tutor');
+    expect(editor).toContain('Serviço');
+    expect(editor).toContain('Duração');
+    expect(editor).toContain('Observação');
+    expect(editor).toContain("method: 'PATCH'");
+    expect(editor).toContain('gestureBookingId: booking.id');
+    expect(editor).not.toContain('answers:');
   });
 });
 
@@ -292,7 +315,7 @@ describe('6 · métricas canônicas (a régua é do controle, não da página)',
     const bloco = touch.slice(0, touch.indexOf('prefers-reduced-motion'));
     expect(bloco).toContain('.il-platform .il-field-control { min-height: var(--control-h-touch); }');
     expect(bloco).toContain('.il-segmented { min-height: var(--control-h-touch); }');
-    expect(bloco).toContain('.il-segmented__item { height: calc(var(--control-h-touch) - 8px); }');
+    expect(bloco).toContain('.il-segmented__item { height: var(--control-h-touch); }');
   });
 
   it('nenhum nível de ação fora da escala: lg tem régua explícita (44)', () => {
@@ -354,13 +377,13 @@ describe('P0 · rodada 2 — seleção de intervalo é estado de gesto', () => {
   it('Escape limpa o gesto pendente (mesmo sem arraste em andamento)', () => {
     const esc = agenda.slice(agenda.indexOf('const onKey = (e: KeyboardEvent) => {'), agenda.indexOf('window.addEventListener(\'keydown\', onKey)'));
     expect(esc).toContain("e.key !== 'Escape'");
-    expect(esc).toContain('if (dragId) { endDrag(); clearPendingSelection(); }');
+    expect(esc).toContain('if (dragId || dropChecking) { e.preventDefault(); endDrag(); clearPendingSelection(); setFlash(null); }');
     // Sem drag/filtro/ajuda, o ESC ainda encerra a seleção pendente.
     expect(esc).toContain('else clearPendingSelection();');
     // …e o listener existe enquanto houver gesto pendente (o estado entra nas
     // dependências: sem ele o handler desmontaria antes do ESC).
-    expect(agenda).toContain('if (!dragId && !filterOpen && !helpOpen && !selectedRange) return;');
-    expect(agenda).toMatch(/\}, \[dragId, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection\]\)/);
+    expect(agenda).toContain('if (!dragId && !dropChecking && !filterOpen && !helpOpen && !selectedRange) return;');
+    expect(agenda).toMatch(/\}, \[dragId, dropChecking, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection\]\)/);
   });
 
   it('o popover ancorado limpa a seleção em QUALQUER fechamento', () => {
@@ -381,5 +404,32 @@ describe('P0 · rodada 2 — seleção de intervalo é estado de gesto', () => {
     // vê); nenhum outro caminho a mantém viva depois do cancelamento.
     expect(agenda).toContain('data-testid="agenda-selected-range"');
     expect(agenda).toMatch(/\{selectedRange && <div data-testid="agenda-selected-range"/);
+  });
+});
+
+describe('Fechamento — queda inválida, Fila e toque compacto', () => {
+  it('drop horizontal fora da grade continua inválido em vez de cair na primeira coluna', () => {
+    const drop = agenda.slice(agenda.indexOf('const planDropAt ='), agenda.indexOf('const acceptDrop ='));
+    const hover = agenda.slice(agenda.indexOf('const computeHover ='), agenda.indexOf('const scheduleHover ='));
+    expect(drop).toMatch(/point:\s*\{\s*x:\s*point\.x,\s*y:\s*Math\.max\(point\.y, geo\.minY\)\s*\}/);
+    expect(hover).toMatch(/const point: Point = \{ x: at\.x, y: Math\.max\(at\.y, geo\.minY\) \}/);
+    expect(agenda).not.toContain('geo.minX');
+  });
+
+  it('Escape durante resize suprime o clique sintético que abriria Quick Create', () => {
+    const cleanup = agenda.slice(agenda.indexOf('const cleanup = () =>'), agenda.indexOf('const onMove = (ev: PointerEvent) =>'));
+    expect(cleanup).toContain('lastGridPressAt = Date.now();');
+    expect(cleanup).toContain('releasePointerCapture');
+  });
+
+  it('Fila mantém rail largo e Drawer próprio compacto, sem virar detalhe lateral', () => {
+    const dock = read('src/components/dashboard/QueueDock.tsx');
+    const panel = read('src/components/dashboard/QueuePanel.tsx');
+    expect(dock).toContain('wide ? <aside data-queue-rail');
+    expect(dock).toContain('<Drawer open title="Fila de atendimento"');
+    expect(dock).toContain('dialogClassName="queue-dock-modal"');
+    expect(dock).not.toContain('DetailSideModal');
+    expect(panel).toContain('data-queue-panel-title="true"');
+    expect(css).toContain('.il-drawer.queue-dock-modal [data-queue-panel-title]');
   });
 });
