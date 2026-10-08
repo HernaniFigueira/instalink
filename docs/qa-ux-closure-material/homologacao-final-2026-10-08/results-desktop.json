@@ -1,0 +1,211 @@
+{
+  "captureDate": "2026-10-08T20:56:04.518Z",
+  "viewport": "1440x900",
+  "results": [
+    {
+      "check": "login",
+      "status": "PASS",
+      "detail": "status 200"
+    },
+    {
+      "check": "agenda-data-alvo",
+      "status": "PASS",
+      "detail": "carregada em 2026-10-10"
+    },
+    {
+      "check": "hover-conteudo",
+      "status": "PASS",
+      "detail": "{\"titulo\":true,\"dataHora\":true,\"paciente\":true,\"tutor\":true,\"servico\":true,\"profissional\":true,\"status\":true,\"observacao\":true,\"acaoEditar\":true,\"acaoVerDetalhes\":true}"
+    },
+    {
+      "check": "hover-posicao-ancorada",
+      "status": "PASS",
+      "detail": "hover(798,387) evento(135,374)"
+    },
+    {
+      "check": "hover-fecha-ao-sair",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "detalhe-lateral-fullheight-direita",
+      "status": "PASS",
+      "detail": "{\"x\":979.634765625,\"y\":0,\"width\":460,\"height\":900}"
+    },
+    {
+      "check": "hover-silenciado-com-detalhe",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "detalhe-conteudo",
+      "status": "PASS",
+      "detail": "Detalhe do agendamento | 10/10/2026 · 09:00–09:30 | Confirmado |  | Consulta veterinária |  | 10/10 · 30 min |  | Registrar chegada | Não "
+    },
+    {
+      "check": "detalhe-escape-fecha",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "detalhe-foco-volta-ao-evento",
+      "status": "PASS",
+      "detail": "activeElement=ag-event absolute rounded-lg border border-l-4 px-2 py-1 tex"
+    },
+    {
+      "check": "editar-modal-titulo",
+      "status": "PASS",
+      "detail": "Editar agendamento"
+    },
+    {
+      "check": "editar-modal-central",
+      "status": "PASS",
+      "detail": "{\"x\":420,\"y\":193,\"width\":600,\"height\":514}"
+    },
+    {
+      "check": "hover-silenciado-com-editar",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "editar-somente-leitura-corretos",
+      "status": "PASS",
+      "detail": "summaries=5 {\"pacienteTutor\":true,\"servico\":true,\"duracao\":true,\"observacao\":true}"
+    },
+    {
+      "check": "editar-campos-data-prof-horario",
+      "status": "PASS",
+      "detail": "dateBtn=1 selects=2"
+    },
+    {
+      "check": "editar-labels-externos",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "editar-salva",
+      "status": "PASS",
+      "detail": "novo horário 09:15"
+    },
+    {
+      "check": "editar-persiste-apos-reload",
+      "status": "PASS",
+      "detail": "09:15–09:45 Rex QA Consulta veterinária"
+    },
+    {
+      "check": "editar-restaura-0900",
+      "status": "PASS",
+      "detail": "09:00–09:30 Rex QA Consulta veterinária"
+    },
+    {
+      "check": "drag-confirmacao",
+      "status": "PASS",
+      "detail": "alvo anunciado 10:00"
+    },
+    {
+      "check": "drag-persiste-apos-reload",
+      "status": "PASS",
+      "detail": "esperado 10:00 · card=10:00–10:30 Rex QA Consulta veterinária"
+    },
+    {
+      "check": "drag-fixture-restaurado",
+      "status": "PASS",
+      "detail": "09:00–09:30 Rex QA Consulta veterinária"
+    },
+    {
+      "check": "drop-invalido-sem-movimento",
+      "status": "PASS",
+      "detail": "antes=09:00–09:30 Rex QA Consulta veterinária depois=09:00–09:30 Rex QA Consulta veterinária dialogo=false flash=true"
+    },
+    {
+      "check": "drag-escape-limpa-tudo",
+      "status": "PASS",
+      "detail": "ghosts=0 dialogs=0 selected=0 flashResidual=false"
+    },
+    {
+      "check": "drag-intencao-retida-carregando",
+      "status": "PASS",
+      "detail": "interceptações=1 dialogo=1 flash=false"
+    },
+    {
+      "check": "resize-preview",
+      "status": "PASS",
+      "detail": "hint='09:00–09:45 · 45 min'"
+    },
+    {
+      "check": "resize-escape-restaura-altura",
+      "status": "PASS",
+      "detail": "altura=64"
+    },
+    {
+      "check": "resize-escape-sem-dialogo",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "resize-confirmacao",
+      "status": "PASS",
+      "detail": "hint='09:00–09:45 · 45 min' Confirmar duração\n\n09:00–09:45 · 45 min\n\nO serviço não será alterado. Somente es"
+    },
+    {
+      "check": "resize-persiste-apos-reload",
+      "status": "PASS",
+      "detail": "altura=96"
+    },
+    {
+      "check": "resize-cancela-sem-mudanca",
+      "status": "PASS",
+      "detail": "altura=96"
+    },
+    {
+      "check": "resize-restaura-30min",
+      "status": "PASS",
+      "detail": "altura=64"
+    },
+    {
+      "check": "ctx-menu-pendente-itens",
+      "status": "PASS",
+      "detail": "Ver detalhes | Editar | Confirmado | Registrar chegada | Reagendar | Duplicar agendamento | Cancelar agendamento"
+    },
+    {
+      "check": "ctx-menu-tem-registrar-chegada",
+      "status": "PASS",
+      "detail": "Ver detalhes | Editar | Confirmado | Registrar chegada | Reagendar | Duplicar agendamento | Cancelar agendamento"
+    },
+    {
+      "check": "ctx-menu-agrupamento",
+      "status": "PASS",
+      "detail": "separators=4"
+    },
+    {
+      "check": "ctx-menu-concluido-compativel",
+      "status": "PASS",
+      "detail": "Ver detalhes | Duplicar agendamento"
+    },
+    {
+      "check": "ctx-menu-teclado-abre",
+      "status": "PASS",
+      "detail": "Ver detalhes | Editar | Concluído | Faltou | Pendente (reabrir) | Registrar chegada | Reagendar | Duplicar agendamento |"
+    },
+    {
+      "check": "ctx-menu-escape-foco-volta",
+      "status": "PASS",
+      "detail": "activeElement=ag-event absolute rounded-lg border border-l-4 px-"
+    },
+    {
+      "check": "duplicar-prefill",
+      "status": "PASS",
+      "detail": "{\"pet\":true,\"obs\":true,\"tutor\":true}"
+    },
+    {
+      "check": "duplicar-fechado-sem-salvar",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "cancelar-persiste",
+      "status": "PASS",
+      "detail": "status=cancelled"
+    }
+  ]
+}

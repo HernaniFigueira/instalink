@@ -1,0 +1,125 @@
+{
+  "captureDate": "2026-10-08T21:06:38.720Z",
+  "results": [
+    {
+      "vp": "390x844",
+      "checks": [
+        {
+          "check": "agenda-renderiza",
+          "status": "PASS",
+          "detail": "cards na grade"
+        },
+        {
+          "check": "toolbar-setas-visiveis",
+          "status": "PASS",
+          "detail": "next=true prev=true"
+        },
+        {
+          "check": "setas-navegam-periodo",
+          "status": "PASS",
+          "detail": "CV\nClínica Veterinár → CV\nClínica Veterinár"
+        },
+        {
+          "check": "periodo-visivel",
+          "status": "PASS",
+          "detail": "indicador de data"
+        },
+        {
+          "check": "touch-abre-detalhe",
+          "status": "PASS",
+          "detail": "drawer/detalhe visível"
+        },
+        {
+          "check": "detalhe-sem-clipping",
+          "status": "PASS",
+          "detail": "scrollW=390 clientW=390 wide="
+        },
+        {
+          "check": "footer-whatsapp-presente",
+          "status": "PASS",
+          "detail": "link/botão WhatsApp"
+        },
+        {
+          "check": "whatsapp-sem-clipping",
+          "status": "PASS",
+          "detail": "box={\"x\":115,\"w\":97}"
+        },
+        {
+          "check": "preview-cliente-whatsapp",
+          "status": "PASS",
+          "detail": "mensagem pré-composta (https://wa.me/5521999991111?text=Ol%C3%A1%2C%20Tut…)"
+        },
+        {
+          "check": "ctx-menu-mobile-itens",
+          "status": "PASS",
+          "detail": "Ver detalhes | Editar | Concluído | Faltou | Pendente (reabrir) | Registrar chegada | Reagendar | Duplicar agendamento | Cancelar agendament"
+        },
+        {
+          "check": "modal-editar-cabe",
+          "status": "PASS",
+          "detail": "box={\"x\":16,\"w\":358}"
+        },
+        {
+          "check": "modal-editar-labels",
+          "status": "PASS",
+          "detail": "labels=6"
+        },
+        {
+          "check": "modal-sem-clipping",
+          "status": "PASS",
+          "detail": "scrollW=390"
+        },
+        {
+          "check": "viewport-sem-clipping",
+          "status": "PASS",
+          "detail": "scrollW=390 wide="
+        },
+        {
+          "check": "hit-areas-toolbar",
+          "status": "PASS",
+          "detail": "total=18 abaixo-de-32=[]"
+        }
+      ]
+    },
+    {
+      "vp": "1024x768",
+      "checks": [
+        {
+          "check": "agenda-renderiza",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "check": "agenda-sem-clipping",
+          "status": "PASS",
+          "detail": "scrollW=1024 wide="
+        },
+        {
+          "check": "detalhe-cabe",
+          "status": "PASS",
+          "detail": "box={\"x\":0,\"w\":1024}"
+        }
+      ]
+    },
+    {
+      "vp": "1366x768",
+      "checks": [
+        {
+          "check": "agenda-renderiza",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "check": "agenda-sem-clipping",
+          "status": "PASS",
+          "detail": "scrollW=1366 wide="
+        },
+        {
+          "check": "hover-desktop-funciona",
+          "status": "PASS",
+          "detail": "popover de hover"
+        }
+      ]
+    }
+  ]
+}
