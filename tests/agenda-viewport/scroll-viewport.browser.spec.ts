@@ -189,8 +189,12 @@ test('CTA “Novo agendamento” abre o fluxo de criação existente (sem gravar
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=day`);
   await page.waitForSelector('[data-agenda-main] .ws-scroll', { timeout: 20000 });
   await page.getByRole('button', { name: 'Novo agendamento' }).click();
-  await expect(page.getByRole('dialog', { name: 'Novo agendamento' })).toBeVisible();
-  await expect(page.getByText(/Paciente → serviço → data e horário/)).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Novo agendamento' });
+  await expect(dialog).toBeVisible();
+  // O contrato do fluxo completo é o campo canônico, não uma cópia opcional
+  // de subtítulo que pode mudar sem afetar criação/validação.
+  await expect(dialog.getByRole('searchbox', { name: 'Buscar cliente' })).toBeVisible();
+  await expect(dialog.getByLabel(/Serviço/)).toBeVisible();
   // Fecha sem criar — nenhum dado é escrito.
   await page.getByRole('button', { name: 'Fechar', exact: true }).click();
 });
@@ -209,13 +213,14 @@ test('Filtros e Fila abrem na Linha 1; modos e data continuam operáveis', async
   await header.getByRole('button', { name: /Fila/ }).click();
   await expect(page.locator('[data-queue-panel="true"]')).toBeVisible();
   await header.getByRole('button', { name: /Fila/ }).click();
-  // Navegação de data + modos (correção cirúrgica: sem “Hoje”, sem “Mês”).
+  // Navegação de data + modos: “Hoje” é uma ação canônica e Mês permanece
+  // fora do conjunto enxuto de modos.
   const before = new URL(page.url()).searchParams.get('data');
   await page.getByRole('button', { name: /Próximo dia/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('data')).not.toBe(before);
   await page.getByRole('button', { name: /Dia anterior/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('data')).toBe(before);
-  await expect(page.getByRole('button', { name: 'Hoje', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hoje', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: /Mês/ })).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /Semana/ })).toBeVisible();
   await page.getByRole('tab', { name: /Semana/ }).click();

@@ -256,13 +256,14 @@ async function moreOptions() {
  * abaixo provam o comportamento do FLUXO COMPLETO, que continua sendo o dono da
  * validação e da gravação. `full: false` para logo no popover ancorado.
  */
-async function clickEmptyCell(professionalId: string, time: string, opts: { full?: boolean } = {}) {
+async function clickEmptyCell(professionalId: string, time: string, opts: { full?: boolean; serviceId?: string } = {}) {
   // Respect the grid's post-drag click suppression between independently mounted test cases.
   await new Promise(resolve => setTimeout(resolve, 510));
   const start = gridStartMinute();
   const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
   await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
+  if (opts.serviceId) fireEvent.change(within(quick()).getByLabelText(/^Serviço/), { target: { value: opts.serviceId } });
   if (opts.full !== false) await moreOptions();
   return start;
 }
@@ -315,7 +316,7 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
 
   it('o clique é só prefill: nenhum booking é criado', async () => {
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     expect(slotsApi.posts).toBe(0);
     expect(document.querySelector('[data-booking-created="true"]')).toBeNull();
@@ -323,12 +324,44 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-describe('2–3 · a intenção é preservada: serviço único, profissional elegível e horário válido', () => {
-  it('Hernani tem EXATAMENTE UM serviço elegível → entra pré-selecionado e o horário aparece', async () => {
+describe('A1 · handoff do Quick Create sem serviço escolhido', () => {
+  it('não inventa o único serviço elegível ao abrir “Mais opções”', async () => {
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    // Hernani tem apenas svc-cardio elegível. A pessoa não o escolheu no Quick.
+    await clickEmptyCell(HERNANI, '10:00', { full: false });
+    await moreOptions();
 
-    // catálogo real: svc-cardio é o único de Hernani (o inativo não conta).
+    expect(seed().initial).toMatchObject({
+      date: DATE, time: '10:00', professionalId: HERNANI,
+      serviceId: '', allowSingleEligibleServicePrefill: false,
+    });
+    expect(serviceSelect().value).toBe('');
+    expect(slotsApi.calls.some((url) => url.includes(`serviceId=${SVC_CARDIO}`))).toBe(false);
+  });
+
+  it('mantém a conveniência somente quando um chamador de célula a declara', async () => {
+    render(<NewBookingSheet
+      businessId={BUSINESS}
+      services={FIXTURE.state.services as any}
+      pros={FIXTURE.state.professionals as any}
+      timezone={TZ}
+      horizonDays={60}
+      initial={{ name: '', phone: '', date: DATE, time: '10:00', professionalId: HERNANI, allowSingleEligibleServicePrefill: true }}
+      onClose={vi.fn()}
+      onCreated={vi.fn()}
+    />);
+    await waitFor(() => expect(screen.getByLabelText(/^2\. Serviço/)).toBeTruthy());
+    expect((screen.getByLabelText(/^2\. Serviço/) as HTMLSelectElement).value).toBe(SVC_CARDIO);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+describe('2–3 · a intenção explícita é preservada: serviço, profissional elegível e horário válido', () => {
+  it('serviço escolhido no Quick chega ao fluxo completo e o horário aparece', async () => {
+    await renderAgenda();
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
+
+    // Serviço escolhido no Quick: svc-cardio é o único de Hernani (o inativo não conta).
     expect(serviceSelect().value).toBe(SVC_CARDIO);
     // Com serviço escolhido o bloco de horários existe e a intenção aparece.
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
@@ -339,9 +372,9 @@ describe('2–3 · a intenção é preservada: serviço único, profissional ele
     expect(slotsApi.posts).toBe(0);
   });
 
-  it('Orlando (1 elegível) também abre com o serviço e a hora já visíveis', async () => {
+  it('Orlando mantém o serviço que foi escolhido no Quick e a hora já visível', async () => {
     await renderAgenda();
-    await clickEmptyCell(ORLANDO, '09:30');
+    await clickEmptyCell(ORLANDO, '09:30', { serviceId: SVC_ODONTO });
     expect(serviceSelect().value).toBe(SVC_ODONTO);
     await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
     expect(slotButton('09:30')!.getAttribute('aria-pressed')).toBe('true');
@@ -349,7 +382,7 @@ describe('2–3 · a intenção é preservada: serviço único, profissional ele
 
   it('o formulário NÃO nasce sujo por causa do prefill (abrir e fechar não pede confirmação)', async () => {
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     fireEvent.click(sheet().querySelector('[aria-hidden="true"]')!);
     await new Promise((r) => setTimeout(r, 0));
@@ -358,7 +391,7 @@ describe('2–3 · a intenção é preservada: serviço único, profissional ele
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-describe('4 · serviço só é pré-escolhido com EXATAMENTE UM elegível (sem vínculo textual)', () => {
+describe('4 · o serviço só é levado ao fluxo completo por intenção explícita', () => {
   it('Michelle tem DOIS elegíveis → serviço fica sem seleção', async () => {
     await renderAgenda();
     await clickEmptyCell(MICHELLE, '11:00');
@@ -389,14 +422,14 @@ describe('4 · serviço só é pré-escolhido com EXATAMENTE UM elegível (sem v
     expect(options).toContain(SVC_CARDIO);
   });
 
-  it('com UM ÚNICO serviço sem vínculo no catálogo, ele entra pré-selecionado', async () => {
+  it('com UM ÚNICO serviço sem vínculo, a escolha explícita continua sendo preservada', async () => {
     // Serviço sem `professionalIds` aceita todos — e, sendo o único agendável,
     // é o elegível único de qualquer coluna (conveniência, não palpite).
     FIXTURE.state.services = [
       { id: 'svc-unico', businessId: 'biz-clinica', name: 'Atendimento', durationMin: 30, price: 0, active: true, bookable: true, professionalIds: [] },
     ];
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: 'svc-unico' });
     expect(serviceSelect().value).toBe('svc-unico');
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     expect(slotButton('10:00')!.getAttribute('aria-pressed')).toBe('true');
@@ -425,7 +458,7 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
   it('horário indisponível permanece no resumo com motivo e opções válidas, nunca reserva silenciosa', async () => {
     slotsApi.slots = ['14:00', '14:30'];
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
     await waitFor(() => expect(slotButton('14:00')).toBeTruthy());
     expect(slotButton('10:00')).toBeNull();
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
@@ -536,7 +569,7 @@ describe('Final pré-F1 intent preservation', () => {
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
   });
   it('past intent stays visible and explains the interval has passed',async()=>{
-    await renderAgenda(`?b=${BUSINESS}&view=day&data=2026-01-01`);await clickEmptyCell(HERNANI,'10:00');
+    await renderAgenda(`?b=${BUSINESS}&view=day&data=2026-01-01`);await clickEmptyCell(HERNANI,'10:00', { serviceId: SVC_CARDIO });
     expect(screen.getByText('Esse intervalo já passou. Escolha um horário futuro.')).toBeTruthy();
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
     expect(screen.queryByText('Escolha serviço, data e horário.')).toBeNull();
@@ -566,7 +599,7 @@ describe('P2 — unavailable whole day', () => {
   it('empty slot result has only one interval warning and cannot submit', async () => {
     slotsApi.slots = [];
     await renderAgenda();
-    await clickEmptyCell(HERNANI, '10:00');
+    await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
     await waitFor(() => expect(screen.getAllByText(/Este profissional não está disponível neste intervalo/)).toHaveLength(1));
     expect(screen.queryByText('Nenhum horário disponível.')).toBeNull();
     expect((within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement).disabled).toBe(true);

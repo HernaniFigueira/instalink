@@ -37,8 +37,15 @@ const customer={name:'Marina · paciente sintética',phone:'21987654321',email:`
 await api('/api/customer/register',{...customer,businessId:b},'POST','');
 const booking=await api('/api/bookings',{businessId:b,serviceId,date,time:'09:00',professionalId:p1,customerName:customer.name,customerPhone:customer.phone,customerEmail:customer.email});
 await api('/api/bookings',{businessId:b,serviceId,date,time:'09:30',professionalId:p2,customerName:'Rafael · paciente sintético',customerPhone:'21987654322'});
-const encounter=(await api('/api/encounters',{businessId:b,bookingId:booking.bookingId})).encounter;
-await api('/api/encounters',{businessId:b,id:encounter.id,expectedVersion:encounter.version,complaint:'Registro sintético para testar apresentação e impressão.',evolution:'Conteúdo da via do paciente. '+('Linha de orientação sintética, sem conteúdo clínico real.\n'.repeat(70)),guidance:'MARCADOR-PUBLICO-FINAL',internalNote:'SEGREDO-INTERNO-NAO-IMPRIMIR'},'PATCH');
+// "Chegou" é um workflow próprio, não um BookingStatus. O fixture precisa
+// registrar a chegada antes de iniciar o Encounter, como o fluxo real exige.
+await api('/api/bookings',{businessId:b,id:booking.bookingId,action:'check-in'},'PATCH');
+// Owner/Admin pode administrar a unidade, mas não ganha autoria clínica. O
+// fixture entra com o Professional vinculado a p1 para iniciar e preencher o
+// Encounter como o fluxo real exige.
+const professionalToken=(await api('/api/auth/login',{email:roles.PROFISSIONAL.email,password},'POST','')).token;
+const encounter=(await api('/api/encounters',{businessId:b,bookingId:booking.bookingId},'POST',professionalToken)).encounter;
+await api('/api/encounters',{businessId:b,id:encounter.id,expectedVersion:encounter.version,complaint:'Registro sintético para testar apresentação e impressão.',evolution:'Conteúdo da via do paciente. '+('Linha de orientação sintética, sem conteúdo clínico real.\n'.repeat(70)),guidance:'MARCADOR-PUBLICO-FINAL',internalNote:'SEGREDO-INTERNO-NAO-IMPRIMIR'},'PATCH',professionalToken);
 await fs.mkdir(new URL('.',`file://${file}`).pathname,{recursive:true});
 await fs.writeFile(file,JSON.stringify({base,b,other:other.businessId,slug:business.slug,owner,roles,customer,serviceId,p1,p2,date,bookingId:booking.bookingId,encounterId:encounter.id},null,2),{mode:0o600});
 console.log('Synthetic fixture ready:',file);

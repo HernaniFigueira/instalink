@@ -534,12 +534,12 @@ describe('MISSÃO UX CLOSURE · o rail (só ícones, tooltip, sem submenu inline
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
   });
 
-  it('a extensão do grupo contém os destinos do dia a dia da área (contrato do P0)', async () => {
+  it('a extensão do grupo contém os destinos persistentes da área, sem promover Atendimento', async () => {
     const u = userEvent.setup();
     setup({ activePath: '/configuracoes' });
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     for (const [group, expected] of [
-      ['Clínica', ['Serviços', 'Disponibilidade', 'Equipe', 'Atendimento']],
+      ['Clínica', ['Serviços', 'Disponibilidade', 'Equipe']],
       ['Automação', ['Automações', 'Follow-up', 'Campanhas']],
       ['Gestão', ['Resultados', 'Financeiro', 'Oportunidades']],
       ['Configurações', ['Canais & Integrações']],
@@ -552,7 +552,7 @@ describe('MISSÃO UX CLOSURE · o rail (só ícones, tooltip, sem submenu inline
       }
       // P0 · RODADA 2 — nenhuma linha de MENU traz comércio/diagnóstico nem o
       // rótulo interno "contextual" que existia para explicar o item.
-      for (const banned of ['Produtos', 'Recursos', 'Execuções', 'contextual', 'CONTEXTUAL']) {
+      for (const banned of ['Produtos', 'Recursos', 'Execuções', 'Atendimento', 'contextual', 'CONTEXTUAL']) {
         expect(panel.textContent, `${group} → ${banned}`).not.toContain(banned);
       }
       // Nenhum alias de compatibilidade duplica porta.

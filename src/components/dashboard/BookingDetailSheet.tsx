@@ -130,6 +130,15 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
         : can('open_care') ? 'open_care'
           : can('confirm') ? 'confirm'
             : 'close_retro';
+  // Rótulo puramente visual da próxima ação que o SERVIDOR já declarou
+  // elegível. Em especial, "Chegou" não vira BookingStatus: permanece uma
+  // etapa operacional cuja continuidade é "Iniciar atendimento".
+  const nextActionLabel = can('check_in') ? 'Registrar chegada'
+    : can('start_care') ? 'Iniciar atendimento'
+      : can('open_care') ? 'Retomar atendimento'
+        : can('confirm') ? 'Confirmar agendamento'
+          : can('close_retro') ? 'Concluir atendimento'
+            : '';
   const rescheduleDirty = rescheduling && (date !== booking.date || time !== '' || cancelSeries);
   const dismissReschedule = () => rescheduleDismiss.requestClose('close-button', { dirty: rescheduleDirty, saving: !!acting, context: 'edit' }, () => {
     setRescheduling(false); setConfirming(false); setCancelSeries(false); setDate(booking.date); setTime(''); setError('');
@@ -278,10 +287,19 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
-              <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              {/* Status persistido do agendamento e etapa operacional são
+                  informações diferentes. "Chegou" é workflow/check-in, nunca
+                  um novo BookingStatus. */}
+              <span className="inline-flex items-center gap-1" data-booking-status>
+                <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Agendamento</span>
+                <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              </span>
               {booking.bookingKind === 'fit_in' && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
               {(wf.state === 'arrived' || wf.state === 'in_care') && (
-                <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
+                <span className="inline-flex items-center gap-1" data-workflow-stage>
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Etapa operacional</span>
+                  <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
+                </span>
               )}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
@@ -310,7 +328,12 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
               demais NEUTRAS: antes a linha misturava azul + verde + âmbar +
               vermelho e disputava a leitura. Só o destrutivo mantém tintura. */}
           {!rescheduling && (
-            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state}>
+            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
+              {nextActionLabel && (
+                <p className="mb-2 text-xs text-[var(--text-muted)]" data-workflow-next-action>
+                  Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
+                </p>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {/*
                   §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:

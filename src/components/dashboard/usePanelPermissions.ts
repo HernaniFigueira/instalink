@@ -14,15 +14,17 @@
 // (requireBusiness em cada API). Nunca confie neste hook para proteger dado.
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { resolveActiveBusinessId } from '@/lib/business-context';
+import { readLastBusinessId, resolveActiveBusinessId } from '@/lib/business-context';
 import { loadMe } from '@/lib/session-me';
 import type { PermissionId } from '@/lib/types';
 
 interface MePayload {
+  user?: { id?: string };
   businesses?: Array<{
     id: string;
     role?: string;
     professionalId?: string;
+    professionalName?: string;
     permissions?: Partial<Record<PermissionId, boolean>>;
   }>;
 }
@@ -49,14 +51,22 @@ export interface PanelPermissions {
    * quem é o agendamento antes de oferecer a ação que o servidor negaria.
    */
   professionalId: string;
+  /** Nome do profissional vinculado na unidade ativa, quando houver. */
+  professionalName: string;
+  /**
+   * Unidade ativa já validada contra a sessão. Vazio significa que a pessoa
+   * ainda precisa escolher uma unidade; nunca é inferida pela ordem da lista.
+   */
+  businessId: string;
   /** false enquanto /api/auth/me não chega. */
   ready: boolean;
 }
 
 /**
- * Permissões da unidade ativa (?b= quando válido; senão a primeira unidade da
- * conta — a mesma resolução do DashboardShell e do useBusinessId). Um `?b=`
- * que não pertence à conta NUNCA concede nada: cai para unidade própria.
+ * Permissões da unidade ativa: `?b=` válido, depois a última unidade lembrada
+ * desta conta e, por fim, a única unidade acessível. Com várias unidades sem
+ * escolha válida, devolve contexto vazio — nunca assume `businesses[0]`.
+ * Um `?b=` que não pertence à conta também nunca concede nada.
  */
 export function usePanelPermissions(): PanelPermissions {
   // Null-safe: fora de um provider de router (ex.: render estático de teste,
@@ -64,18 +74,24 @@ export function usePanelPermissions(): PanelPermissions {
   // UI cai no padrão conservador do consumidor (não derruba o render).
   const params = useSearchParams();
   const requested = params?.get('b') || '';
-  const [state, setState] = useState<PanelPermissions>({ permissions: {}, role: '', ready: false, professionalId: '' });
+  const [state, setState] = useState<PanelPermissions>({
+    permissions: {}, role: '', ready: false, professionalId: '', professionalName: '', businessId: '',
+  });
 
   useEffect(() => {
     let cancelled = false;
     fetchMe().then((d) => {
       if (cancelled) return;
       const list = Array.isArray(d?.businesses) ? d!.businesses! : [];
-      const id = resolveActiveBusinessId(requested, list);
+      // A unidade lembrada é por usuário. Sem ela (e com 2+ unidades), a
+      // projeção permanece vazia até uma escolha explícita — igual ao shell.
+      const id = resolveActiveBusinessId(requested, list, readLastBusinessId(d?.user?.id));
       const biz = list.find((b) => b.id === id);
       setState({
         permissions: biz?.permissions || {}, role: biz?.role || '', ready: true,
         professionalId: biz?.professionalId || '',
+        professionalName: biz?.professionalName || '',
+        businessId: biz?.id || '',
       });
     });
     return () => { cancelled = true; };

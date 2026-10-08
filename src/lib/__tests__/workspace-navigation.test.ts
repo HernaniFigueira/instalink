@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { PANEL_ROUTES, panelNavigation } from '../panel';
 import {
   workspaceAreas, switchUnitHref, routeBreadcrumb, workspaceSections,
-  workspaceRailItems, workspacePanelItems, OFF_MENU_ROUTES,
+  workspaceRailItems, workspacePanelItems, OFF_MENU_ROUTES, CONTEXTUAL_ONLY_ROUTES,
 } from '../workspace-navigation';
 
 describe('360 navigation is an authorized projection', () => {
@@ -36,12 +36,10 @@ describe('360 navigation is an authorized projection', () => {
       expect(projected.map(r => r.href).sort()).toEqual(nav.allowed.map(r => r.href).sort());
     });
   }
-  it('MISSÃO UX CLOSURE · P0 — /atendimento autorizado NUNCA desaparece: vive no painel do grupo dono', () => {
-    // Antes: /atendimento era autorizado mas não pertencia a nenhuma ÁREA, então
-    // caía num grupo de rede de segurança que a coluna não desenhava — na
-    // prática, era rota só-por-URL. A correção é de PROJEÇÃO (apresentação),
-    // nunca de permissão: a rota continua fora da LINHA do rail (a régua é
-    // frequência de uso) e passa a ser apresentada no painel do grupo Clínica.
+  it('A2 · /atendimento continua autorizado e contextual, mas não ocupa navegação persistente', () => {
+    // A rota clínica continua declarada e com área dona (breadcrumb/filhas),
+    // porém só deve abrir a partir da entidade que a contextualiza: Agenda,
+    // Fila ou Cliente 360. Não é uma porta fixa de menu.
     const nav = panelNavigation({ permissions: { atendimento: true }, modes: ['services', 'bookings'], features: {} });
     expect(nav.allowed.some((r) => r.href === '/atendimento')).toBe(true);
     expect(nav.sidebar.some((r) => r.href === '/atendimento')).toBe(false);
@@ -50,13 +48,10 @@ describe('360 navigation is an authorized projection', () => {
     const clinica = areas.find((a) => a.id === 'clinica')!;
     expect(clinica.items.some((r) => r.href === '/atendimento')).toBe(true);
     expect(workspaceRailItems(clinica).map((r) => r.href)).not.toContain('/atendimento');
-    expect(workspacePanelItems(clinica).map((r) => r.href)).toContain('/atendimento');
-    // INVARIANTE GERAL (o que a homologação cobra): TODA rota autorizada
-    // aparece em ALGUM painel de grupo — inclusive as contextuais/legadas.
-    const surfaced = areas.flatMap((a) => workspacePanelItems(a).map((r) => r.href));
-    expect(surfaced.sort()).toEqual(nav.allowed.filter((r) => r.href !== '/pagina').map((r) => r.href).sort());
-    // O alias de compatibilidade (/profissionais → /equipe) não duplica porta.
-    expect(surfaced).not.toContain('/profissionais');
+    expect(workspacePanelItems(clinica).map((r) => r.href)).not.toContain('/atendimento');
+    // A flag legada também não pode reintroduzir essa porta persistente.
+    expect(workspacePanelItems(clinica, { legacyPages: true }).map((r) => r.href)).not.toContain('/atendimento');
+    expect(CONTEXTUAL_ONLY_ROUTES).toContain('/atendimento');
     expect(areas.some((a) => a.id === 'mais')).toBe(false);
   });
 
@@ -77,13 +72,13 @@ describe('360 navigation is an authorized projection', () => {
     // alcançável DENTRO da tela que a explica).
     expect(panel.sort()).toEqual(
       nav.allowed
-        .filter((r) => r.href !== '/pagina' && r.href !== '/profissionais' && !OFF_MENU_ROUTES.includes(r.href))
+        .filter((r) => r.href !== '/pagina' && r.href !== '/profissionais' && !OFF_MENU_ROUTES.includes(r.href) && !CONTEXTUAL_ONLY_ROUTES.includes(r.href))
         .map((r) => r.href)
         .sort(),
     );
     // Contrato da supressão: os destinos suprimidos são EXATAMENTE os
     // declarados — nada de supressão implícita decidida na tela.
-    for (const href of OFF_MENU_ROUTES) {
+    for (const href of [...OFF_MENU_ROUTES, ...CONTEXTUAL_ONLY_ROUTES]) {
       if (!nav.allowed.some((r) => r.href === href)) continue;
       expect(panel, href).not.toContain(href);
       expect(rail, href).not.toContain(href);
@@ -91,7 +86,7 @@ describe('360 navigation is an authorized projection', () => {
     expect(new Set(panel).size).toBe(panel.length);
     expect(new Set(rail).size).toBe(rail.length);
     for (const href of rail) expect(panel, href).toContain(href);
-    expect(rail).not.toContain('/atendimento'); // contextual: painel, não linha
+    expect(rail).not.toContain('/atendimento'); // contextual: não é porta persistente
     expect(rail).not.toContain('/execucoes');
   });
 

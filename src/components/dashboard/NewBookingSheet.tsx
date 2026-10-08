@@ -11,6 +11,7 @@ import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { nowHM, todayISO } from '@/lib/tz';
 import { fitInPastError } from '@/lib/fit-in';
+import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
@@ -50,6 +51,14 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     contactId?: string; name: string; phone: string; email?: string;
     /** A3.4: agenda pré-preenchida ao clicar num horário vago da grade. */
     date?: string; time?: string; professionalId?: string; serviceId?: string; selectedDurationMin?: number;
+    /** Termo vindo do Quick Create sem contato selecionado; continua sendo busca, não contato. */
+    searchQuery?: string;
+    /** CTA explícito do Quick Create: abre o cadastro real dentro do fluxo completo. */
+    openRegistration?: boolean;
+    /** Tipo da unidade já resolvido pela Agenda; é apenas terminologia do cadastro. */
+    vetMode?: boolean;
+    /** Só o chamador que veio DIRETAMENTE da célula pode pedir conveniência de serviço único. */
+    allowSingleEligibleServicePrefill?: boolean;
     /** Prefill permitido ao duplicar agendamento (não inclui respostas/histórico). */
     petId?: string; note?: string;
   };
@@ -58,32 +67,38 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 }) {
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
   /**
-   * Clique na grade (modo DIA): a coluna identifica o profissional. Quando o
-   * catálogo só oferece UM serviço elegível para ele, esse serviço entra
-   * pré-selecionado como conveniência — sem isso o bloco de horários (que só
-   * existe com `date && serviceId`) nem aparecia e a intenção do clique ficava
-   * invisível. Com 0 ou 2+ elegíveis nada é escolhido. Sem profissional
-   * (colunas de DIA na Semana) nunca se inventa vínculo.
-   * Decisão pelos vínculos reais (`professionalIds`) — nunca por nome/cargo.
+   * Serviço só chega pré-escolhido por duas intenções explícitas:
+   *   1. `serviceId` que a pessoa de fato escolheu (Quick Create, duplicação,
+   *      fila ou CRM); ou
+   *   2. clique DIRETO de célula que declarou a conveniência de serviço único.
+   *
+   * Um handoff do Quick Create com serviço vazio NÃO pode cair no fallback de
+   * um serviço elegível único: isso era o "serviço fantasma" observado ao abrir
+   * "Mais opções". O vínculo continua decidido pelos ids reais do catálogo.
    */
-  const presetServiceId = initial?.serviceId || uniqueEligibleServiceId(bookable, initial?.professionalId || '');
-  const [query, setQuery] = useState('');
+  const presetServiceId = initial?.serviceId || (initial?.allowSingleEligibleServicePrefill
+    ? uniqueEligibleServiceId(bookable, initial?.professionalId || '') : '');
+  const initialSearchQuery = initial?.searchQuery || '';
+  const initialSearchDigits = onlyDigits(initialSearchQuery);
+  const initialRegistrationName = initial?.openRegistration && initialSearchDigits.length < 10 ? initialSearchQuery.trim() : '';
+  const initialRegistrationPhone = initial?.openRegistration && initialSearchDigits.length >= 10 ? initialSearchQuery.trim() : '';
+  const [query, setQuery] = useState(initialSearchQuery);
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
   const [contactId, setContactId] = useState(initial?.contactId || '');
-  const [name, setName] = useState(initial?.name || '');
-  const [phone, setPhone] = useState(initial?.phone || '');
+  const [name, setName] = useState(initial?.name || initialRegistrationName);
+  const [phone, setPhone] = useState(initial?.phone || initialRegistrationPhone);
   const [email, setEmail] = useState(initial?.email || '');
   // A duplicação pode vir de um agendamento sem vínculo CRM. Preservamos e
   // mostramos os dados copiados como dados informados (não fingimos um contato
   // selecionado); a gravação segue o fluxo normal de criação.
-  const [unlinkedPrefill, setUnlinkedPrefill] = useState(!initial?.contactId && !!(initial?.name || initial?.phone));
+  const [unlinkedPrefill, setUnlinkedPrefill] = useState(!initial?.contactId && !initial?.searchQuery && !!(initial?.name || initial?.phone));
   // HOMOLOGAÇÃO · fechamento — SEM cadastro temporário: "+ Cadastrar" abre o
   // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
   // agendamento depois NÃO apaga o paciente.
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(!!initial?.openRegistration);
   const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
-  const [vetMode, setVetMode] = useState(false);
+  const [vetMode, setVetMode] = useState(!!initial?.vetMode);
   const [serviceId, setServiceId] = useState(presetServiceId);
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
@@ -93,7 +108,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [advanced, setAdvanced] = useState(false);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
-  const [isVet, setIsVet] = useState(false);
+  const [isVet, setIsVet] = useState(!!initial?.vetMode);
   const [petId, setPetId] = useState(initial?.petId || '');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
@@ -130,7 +145,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const seq = useRef(0);
   const slotSeq = useRef(0);
   const initialBookingSnapshot = useRef(JSON.stringify({
-    query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
+    query: initialSearchQuery, contactId: initial?.contactId || '', name: initial?.name || initialRegistrationName, phone: initial?.phone || initialRegistrationPhone, email: initial?.email || '',
     serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
     note: initial?.note || '', staffDuration: initial?.selectedDurationMin || '', petId: initial?.petId || '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
   }));
@@ -159,8 +174,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const orderedServices = [...bookable].sort((a, b) => Number(!!proId && professionalServesService(b as any, proId, pros)) - Number(!!proId && professionalServesService(a as any, proId, pros)));
   const slotKey = `${serviceId}|${date}|${proId}|${staffDuration}`;
   const [checkedSlotKey, setCheckedSlotKey] = useState('');
-  const pastIssue = date && time && (date < today || (date === today && time < nowHM(new Date(), timezone || undefined)))
-    ? 'Esse intervalo já passou. Escolha um horário futuro.' : '';
+  // Quick Create e formulário completo chamam esta mesma regra visual. O
+  // POST em `booking-create.ts` continua revalidando a data no fuso da unidade.
+  const pastIssue = bookingPastTimeError(date, time, today, nowHM(new Date(), timezone || undefined));
   const slotIssue = !proIssue && (pastIssue || (!incompatiblePro && time && checkedSlotKey === slotKey && !loadingSlots && !slotsError && !slots.includes(time)
     ? dayState?.reason === 'no_windows' ? 'O horário não está dentro da disponibilidade deste profissional.'
       : 'Este profissional não está disponível neste intervalo. Confira a disponibilidade, os atendimentos e os bloqueios.' : ''));
@@ -224,7 +240,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       `/api/pets?businessId=${encodeURIComponent(businessId)}`,
       { scope: 'area', area: 'Agenda' },
     ).then((r) => { if (on) { setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); } })
-      .catch(() => { if (on) { setVetMode(false); setIsVet(false); } });
+      .catch(() => { if (on) {
+        // Se a leitura auxiliar falhar, preserva a informação já resolvida
+        // pela Agenda; nunca infere veterinária a partir do contato.
+        setVetMode(!!initial?.vetMode); setIsVet(!!initial?.vetMode);
+      } });
     return () => { on = false; };
   }, [businessId]);
 

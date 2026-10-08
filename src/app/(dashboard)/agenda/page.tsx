@@ -631,6 +631,10 @@ export default function AgendaPage() {
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
+    /** Busca do Quick sem contato real e CTA de cadastro são intenções distintas. */
+    searchQuery?: string; openRegistration?: boolean; vetMode?: boolean;
+    /** Só clique direto de célula pode habilitar a conveniência de serviço único. */
+    allowSingleEligibleServicePrefill?: boolean;
     /** Duplicação copia só os campos operacionais autorizados; nunca histórico clínico/pagamentos. */
     petId?: string; note?: string;
   } | null>(null);
@@ -709,6 +713,17 @@ export default function AgendaPage() {
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [rawBizTz, setBizTz] = useState('');
+  // A linguagem do Quick Create vem da unidade ativa. É só apresentação do
+  // cadastro (tutor/pet), nunca uma permissão ou um modo inferido do contato.
+  const [vetMode, setVetMode] = useState(false);
+  useEffect(() => {
+    if (!businessId) { setVetMode(false); return; }
+    let active = true;
+    apiGet<{ vet?: boolean }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
+      .then((r) => { if (active) setVetMode(!!r.data?.vet); })
+      .catch(() => { if (active) setVetMode(false); });
+    return () => { active = false; };
+  }, [businessId]);
   const bizTz = bookingTimezone(rawBizTz);
   // "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do navegador).
   const today = todayISO(new Date(), bizTz);
@@ -2468,6 +2483,7 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           timezone={bizTz}
+          vetMode={vetMode}
           /* Cancelar/fechar (ESC, clique fora, botão) encerra o gesto: a
              seleção sai da grade na mesma hora (P0 · rodada 2). */
           onClose={clearPendingSelection}
@@ -2485,6 +2501,12 @@ export default function AgendaPage() {
               contactId: seed.contactId,
               name: seed.customerName,
               phone: seed.customerPhone,
+              searchQuery: seed.searchQuery,
+              openRegistration: seed.openRegistration,
+              vetMode,
+              // Handoff do Quick é SEMPRE explícito: serviço vazio continua
+              // vazio; o formulário completo não aplica o fallback de célula.
+              allowSingleEligibleServicePrefill: false,
             });
           }}
         />

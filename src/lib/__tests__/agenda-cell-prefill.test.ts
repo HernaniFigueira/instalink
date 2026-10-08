@@ -86,7 +86,11 @@ describe('elegibilidade de serviço por vínculo real do catálogo', () => {
   it('o NewBookingSheet usa o preset do serviço (não o initial cru) e não nasce sujo', () => {
     const booking = fs.readFileSync(path.join(root, 'src/components/dashboard/NewBookingSheet.tsx'), 'utf8');
     expect(booking).toContain('uniqueEligibleServiceId');
-    expect(booking).toContain('const presetServiceId = initial?.serviceId || uniqueEligibleServiceId(bookable');
+    expect(booking).toContain('initial?.allowSingleEligibleServicePrefill');
+    expect(booking).toContain("? uniqueEligibleServiceId(bookable, initial?.professionalId || '') : ''");
+    // Quick Create declara explicitamente que NÃO pediu o atalho de célula.
+    const agenda = fs.readFileSync(path.join(root, 'src/app/(dashboard)/agenda/page.tsx'), 'utf8');
+    expect(agenda).toContain('allowSingleEligibleServicePrefill: false');
     expect(booking).toContain('const [serviceId, setServiceId] = useState(presetServiceId)');
     // Abrir pela grade não pode deixar o formulário sujo.
     expect(booking).toContain('serviceId: presetServiceId');

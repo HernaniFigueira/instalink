@@ -32,7 +32,8 @@
 // A arquitetura de informação vem de lib/workspace-navigation.ts
 // (apresentação) sobre o catálogo lib/panel.ts (rotas + permissões + módulos).
 // Nenhuma rota é criada nem apagada aqui: item com `sidebar: false` continua
-// existindo por URL e aparece no painel do grupo dono.
+// existindo por URL; registros declarados como contextuais abrem apenas pela
+// entidade que lhes dá sentido, não por um painel persistente.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';

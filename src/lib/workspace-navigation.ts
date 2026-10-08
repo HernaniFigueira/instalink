@@ -80,13 +80,10 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // de vez em quando) — por isso vivem atrás de uma porta, não soltas no
     // menu. `/produtos` e `/pedidos` só existem quando o módulo está ativo.
     //
-    // MISSÃO UX CLOSURE · P0 — `/atendimento` (registro clínico) veio para
-    // cá: ele é destino CLÍNICO autorizado por permissão própria
-    // (`atendimento`), e antes ficava fora da coluna E fora de todo grupo, o
-    // que o deixava alcançável apenas por URL. `sidebar: false` continua
-    // valendo (não ocupa linha no rail — a régua é frequência), mas o painel
-    // do grupo agora o apresenta. Nenhuma permissão nova é inventada: quem
-    // não tem `atendimento` simplesmente não o vê.
+    // A2 · `/atendimento` continua tendo esta área dona para breadcrumb e
+    // rota filha, mas não ocupa navegação persistente: é aberto no contexto da
+    // Agenda, Fila e Cliente 360. A supressão visual não altera a permissão,
+    // deep-link nem o construtor `encounterWorkspaceHref`.
     id: 'clinica', label: 'Clínica', icon: 'grid', color: 'var(--brand)',
     routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/atendimento', '/equipe', '/produtos', '/pedidos'],
   },
@@ -191,12 +188,15 @@ export const WORKSPACE_SECTIONS: WorkspaceSectionDef[] = [
 //   • COLUNA (rail): só destinos com `sidebar !== false` — a régua é
 //     FREQUÊNCIA de uso, não importância;
 //   • PAINEL DO GRUPO: os destinos autorizados do grupo, inclusive os de
-//     `sidebar: false` (o painel é a superfície de atalho contextual). É isto
-//     que garante o P0 da missão: nenhuma rota CLÍNICA autorizada desaparece
-//     por causa da arquitetura visual. Exceção declarada: os destinos de
-//     comércio/diagnóstico em `OFF_MENU_ROUTES` não ocupam menu nenhum com a
-//     experiência padrão (continuam autorizados, vivos por URL e alcançáveis
-//     DENTRO da tela que os explica);
+//     `sidebar: false`, exceto os que declaram ser puramente contextuais. O
+//     painel é um atalho persistente; um registro clínico individual não deve
+//     parecer porta de navegação.
+//   • `CONTEXTUAL_ONLY_ROUTES` segue autorizado, vivo por URL/deep-link e é
+//     aberto apenas pela superfície que conhece a entidade (Agenda, Fila ou
+//     Cliente 360). Não altera permissões nem os contratos de Encounter.
+//   • comércio/diagnóstico em `OFF_MENU_ROUTES` também não ocupa menu nenhum
+//     com a experiência padrão (continuam autorizados, vivos por URL e
+//     alcançáveis DENTRO da tela que os explica);
 //   • ALIAS DE COMPATIBILIDADE (`compatOnly`) nunca aparece — duas portas
 //     para a mesma tela é ruído, e a rota segue viva por URL;
 //   • a Página legada segue fora das duas superfícies quando
@@ -228,6 +228,14 @@ export interface MenuProjectionOptions {
  */
 export const OFF_MENU_ROUTES: readonly string[] = ['/produtos', '/pedidos', '/recursos', '/execucoes'];
 
+/**
+ * Registros que só fazem sentido a partir de uma entidade operacional já
+ * conhecida. Não aparecem nem no rail nem nos painéis persistentes — mesmo
+ * com a experiência legada ligada — mas a rota, o deep-link e as permissões
+ * continuam declarados no catálogo.
+ */
+export const CONTEXTUAL_ONLY_ROUTES: readonly string[] = ['/atendimento'];
+
 /** Itens que ocupam linha na coluna de navegação. */
 export function workspaceRailItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
   return area.items.filter((item) => item.sidebar !== false && !item.compatOnly && !isHidden(item, opts));
@@ -240,8 +248,11 @@ export function workspacePanelItems(area: WorkspaceArea, opts: MenuProjectionOpt
 
 function isHidden(route: PanelRouteDef, opts: MenuProjectionOptions): boolean {
   if (opts.hidden?.(route)) return true;
+  // A2: registro clínico não volta ao menu quando a flag da experiência legada
+  // é ligada. Ele nasce com entidade/contexto, não como destino persistente.
+  if (CONTEXTUAL_ONLY_ROUTES.includes(route.href)) return true;
   // Só a Página legada e os destinos de comércio/diagnóstico são decisão de
-  // PRODUTO (a rota segue viva por URL). Módulos (`features`) e permissões já
+  // PRODUTO (a rota segue viva por URL). Módulos (`modes`) e permissões já
   // foram filtrados ANTES, em `panelNavigation` — a apresentação nunca esconde
   // destino por conta própria.
   const legacyPages = opts.legacyPages ?? isLegacyPagesEnabled();

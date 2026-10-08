@@ -81,7 +81,7 @@ vi.mock('@/components/dashboard/use-revalidate', () => ({ useRevalidateOnFocus: 
 
 import AgendaPage from '@/app/(dashboard)/agenda/page';
 
-const net = vi.hoisted(() => ({ posts: [] as any[], postStatus: 200, postBody: {} as any }));
+const net = vi.hoisted(() => ({ posts: [] as any[], postStatus: 200, postBody: {} as any, contacts: [] as any[] }));
 
 beforeAll(() => {
   window.matchMedia = ((query: string) => ({
@@ -105,6 +105,7 @@ beforeEach(() => {
   net.posts = [];
   net.postStatus = 200;
   net.postBody = {};
+  net.contacts = [CONTACT];
   global.fetch = vi.fn(async (input: any, init?: any) => {
     const url = String(input?.url || input);
     if (init?.method === 'POST') {
@@ -119,7 +120,7 @@ beforeEach(() => {
       return { ok: true, status: 200, json: async () => ({ slots: ['09:00', '10:00', '11:00'], state: 'open', full: false, closed: false }) } as unknown as Response;
     }
     if (url.includes('/api/contacts')) {
-      return { ok: true, status: 200, json: async () => ({ contacts: [CONTACT] }) } as unknown as Response;
+      return { ok: true, status: 200, json: async () => ({ contacts: net.contacts }) } as unknown as Response;
     }
     return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
   }) as unknown as typeof fetch;
@@ -207,6 +208,41 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     expect(within(layer).getByRole('button', { name: 'Mais opções' })).toBeTruthy();
     // O horário clicado já vem escolhido (intenção do gesto preservada).
     expect((within(layer).getByLabelText(/^Hora/) as HTMLSelectElement).value).toBe('10:00');
+  });
+
+  it('A1 · X acessível fecha o Quick e limpa a seleção visual do gesto', async () => {
+    render(<AgendaPage />);
+    await clickSlot('10:00');
+    expect(screen.getByTestId('agenda-selected-range')).toBeTruthy();
+
+    fireEvent.click(within(quick()).getByRole('button', { name: 'Fechar criação rápida' }));
+    await waitFor(() => expect(hasQuick()).toBe(false));
+    expect(screen.queryByTestId('agenda-selected-range')).toBeNull();
+  });
+
+  it('A1 · busca sem resultado oferece cadastro e entrega termo, não contato ou serviço fantasma', async () => {
+    net.contacts = [];
+    render(<AgendaPage />);
+    await clickSlot('10:00');
+    const layer = quick();
+    fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Pessoa nova' } });
+
+    await waitFor(() => expect(layer.querySelector('[data-quick-create-empty-search]')).toBeTruthy());
+    const empty = layer.querySelector<HTMLElement>('[data-quick-create-empty-search]')!;
+    expect(within(empty).getByText(/Nenhum paciente encontrado/)).toBeTruthy();
+    fireEvent.click(within(empty).getByRole('button', { name: '+ Cadastrar paciente' }));
+
+    await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });
+    const seed = spy.props[spy.props.length - 1].initial;
+    expect(seed).toMatchObject({
+      date: DATE, time: '10:00', professionalId: PRO,
+      contactId: '', name: '', phone: '', serviceId: '',
+      searchQuery: 'Pessoa nova', openRegistration: true,
+      allowSingleEligibleServicePrefill: false,
+    });
+    // O cadastro real já abre no painel aninhado, sem transformar a busca em
+    // um contato sintético no agendamento.
+    expect(screen.getByText('Cadastrar novo paciente')).toBeTruthy();
   });
 
   it('2 · abrir o popover NÃO cria agendamento (nenhum POST antes da confirmação)', async () => {
