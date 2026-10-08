@@ -158,14 +158,19 @@ describe('P0.5/P1.10 · rail, largura e identidade no mesmo eixo', () => {
 describe('P0.2 · hover da Agenda é RESUMO colado no evento (não painel)', () => {
   it('o cartão é compacto e as ações não são duas caixas esticadas', () => {
     const card = ruleBody('.ag-hover__card {');
-    expect(card).toContain('width: 244px');
-    expect(card).toContain('padding: 10px 12px');
-    expect(card).toContain('gap: 5px');
+    // Hover ENRIQUECIDO (item 3A da missão UX closure + homologação pós-Rodada 4):
+    // cabeçalho "Agendamento", data/horário, paciente/tutor, serviço,
+    // profissional e observação pedem mais respiro que o resumo antigo.
+    // 288px com clamp de viewport continua COMPACTO — a auditoria Clínica
+    // Experts sugere 320–390px como teto desktop, nunca painel lateral.
+    expect(card).toContain('width: 288px');
+    expect(card).toContain('max-width: min(288px, calc(100vw - 24px))');
+    expect(card).toContain('padding: 12px');
+    expect(card).toContain('gap: 7px');
     const actions = ruleBody('.ag-hover__actions {');
     expect(actions).toContain('border-top: 1px solid var(--gd-border-soft)');
-    // O CTA "Ver detalhes" ocupa a linha; o resto fica do tamanho do rótulo.
-    expect(css).toContain('.ag-hover__actions > :first-child { flex: 1; }');
-    expect(css).toContain('.ag-hover__actions > :not(:first-child) { flex: 0 0 auto; }');
+    // Ações no tamanho do rótulo, com alvo de toque de 34px; nada esticado.
+    expect(css).toContain('.ag-hover__actions > button { flex: 0 0 auto; min-height: 34px; }');
     expect(css).not.toContain('.ag-hover__actions > * { flex: 1; }');
   });
 
@@ -258,10 +263,13 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
     expect(ui).toContain('suppress?: boolean;');
     expect(ui).toContain('if (suppress || !canHover()) return;');
     expect(ui).toContain('if (!suppress) return;');
-    // E a Agenda usa o silêncio enquanto o menu estiver aberto.
+    // E a Agenda usa o silêncio enquanto o menu estiver aberto. A condição
+    // cobre um SUPERCONJUNTO (menu + detalhe + edição + diálogos), que é a
+    // recomendação da auditoria ("silenciar hover ao abrir leitura/edição");
+    // o requisito é que o menu contextual SEMPRE silencie o resumo.
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain('suppress={hoverSuppressed}');
-    expect(agenda).toContain('hoverSuppressed={ctxMenu !== null}');
+    expect(agenda).toMatch(/hoverSuppressed=\{ctxMenu !== null/);
   });
 
 describe('AUDITORIA · rodada 2 — rótulos de navegação e resumo do cliente', () => {

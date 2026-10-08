@@ -36,11 +36,15 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
-  // Ação secundária da identidade GoDoutor: preenchimento suave em repouso,
-  // sem contorno pesado; hover/active reforçam a mesma família da marca. A
-  // borda transparente mantém a métrica e o foco segue no anel global.
+  // P1 · RODADA 2 — AÇÃO SECUNDÁRIA SEM CONTORNO EM REPOUSO. A borda cheia na
+  // cor da marca fazia de TODO botão secundário (setas da data, "Hoje",
+  // "Filtros", "Fila", ações internas de card) um contorno que competia com o
+  // CTA primário. Agora o repouso é texto na cor do sistema e o ESTADO é que dá
+  // o contorno: hover/active preenchem com o suave da própria família. A
+  // `border` continua declarada (transparente) para a métrica não mudar de
+  // caixa entre variantes, e o foco segue no `shadow-focus` global.
   secondary:
-    'bg-[var(--brand-soft)] text-[var(--brand-fg)] border border-transparent hover:brightness-[0.98] active:brightness-[0.96]',
+    'bg-transparent text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)] active:bg-[var(--brand-soft)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
