@@ -1508,6 +1508,29 @@ export default function AgendaPage() {
     } finally { setCtxBusy(''); }
   }, [businessId, ctxBusy, load]);
 
+  /**
+   * Check-in pelo menu contextual — MESMA porta do detalhe
+   * (PATCH /api/bookings { action: 'check-in' }); não altera o status da reserva.
+   */
+  const checkIn = useCallback(async (id: string) => {
+    if (!bookingsRef.current.get(id) || ctxBusy) return;
+    setCtxBusy('check-in'); setCtxError(''); setCtxSuccess('');
+    try {
+      const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id, action: 'check-in' }),
+      }, { scope: 'action', area: 'Agenda' });
+      if (!res.ok) {
+        setCtxError(res.message || 'Não foi possível registrar a chegada.');
+        return;
+      }
+      setCtxSuccess('Chegada registrada.');
+      void load();
+    } catch (cause) {
+      setCtxError(cause instanceof Error ? cause.message : 'Não foi possível registrar a chegada.');
+    } finally { setCtxBusy(''); }
+  }, [businessId, ctxBusy, load]);
+
   /** Itens do menu do atendimento — derivados do estado ATUAL do registro. */
   const ctxItems: MenuItem[] = (() => {
     const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
@@ -1533,12 +1556,23 @@ export default function AgendaPage() {
         onSelect: () => void changeStatus(b.id, to),
       });
     }
+    // Grupo de OPERAÇÕES (chegada/reagendar): um único separador no início do grupo.
+    const ops: MenuItem[] = [];
+    const wf = (b as { workflow?: { allowed?: string[] } }).workflow;
+    if (Array.isArray(wf?.allowed) && wf.allowed!.includes('check_in')) {
+      ops.push({
+        id: 'chegada', label: 'Registrar chegada', icon: 'check',
+        disabled: !!ctxBusy,
+        onSelect: () => void checkIn(b.id),
+      });
+    }
     if (rescheduleDecision(b.status).kind === 'move') {
-      items.push({
-        id: 'reagendar', label: 'Reagendar', icon: 'sync', separatorBefore: true,
+      ops.push({
+        id: 'reagendar', label: 'Reagendar', icon: 'sync',
         onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); setDetail(b); },
       });
     }
+    ops.forEach((item, i) => items.push({ ...item, separatorBefore: i === 0 }));
     items.push({
       id: 'duplicar', label: 'Duplicar agendamento', icon: 'copy', separatorBefore: true,
       onSelect: () => {

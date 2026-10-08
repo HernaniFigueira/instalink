@@ -228,6 +228,26 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     return () => { on = false; };
   }, [businessId]);
 
+  /**
+   * MISSÃO HOMOLOGAÇÃO · duplicação: o booking pode trazer petId SEM customerId
+   * (agenda interna cria reserva pelo fluxo do profissional). Quando o contato
+   * não veio, recupera o vínculo REAL do tutor pelo pet (`pet.tutorId`) — sem
+   * simular seleção quando não há vínculo (contrato "sem vínculo CRM").
+   */
+  const initialPetRef = useRef(initial?.petId || '');
+  useEffect(() => {
+    if (contactId || !initialPetRef.current) return;
+    let on = true;
+    apiGet<{ pets: Pet[] }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
+      .then((r) => {
+        if (!on) return;
+        const pet = (r.data?.pets || []).find((p) => p.id === initialPetRef.current && p.active !== false);
+        if (pet?.tutorId) setContactId(pet.tutorId);
+      })
+      .catch(() => {});
+    return () => { on = false; };
+  }, [businessId, contactId]);
+
   useEffect(() => {
     setPetId('');
     if (!contactId) { setPets([]); return; }
@@ -238,7 +258,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     ).then((r) => {
       if (!on) return;
       setIsVet(!!r.data?.vet);
-      setPets(r.data?.pets?.filter((p) => p.active !== false) || []);
+      const list = r.data?.pets?.filter((p) => p.active !== false) || [];
+      setPets(list);
+      // Prefill de duplicação: restaura o pet semeado quando ele pertence ao tutor.
+      const seeded = initialPetRef.current;
+      if (seeded && list.some((p) => p.id === seeded)) setPetId(seeded);
     }).catch(() => { if (on) setPets([]); });
     return () => { on = false; };
   }, [contactId, businessId]);
