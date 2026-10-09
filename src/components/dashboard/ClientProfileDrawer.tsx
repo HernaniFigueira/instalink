@@ -631,11 +631,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             que está preenchido, para a ficha não virar formulário vazio.
             Não é prontuário: é dado administrativo. */}
         {hasCadastre && (
-          <SubCard className="mt-3 p-3.5">
+          <SubCard className="mt-4 p-4">
             <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
                 <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
-              </p>
+              </h3>
               {!clinicalView && (
                 <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
                   <Icon n="pencil" size={12} /> Editar
@@ -694,7 +694,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 
         {/* ═══ EDIÇÃO DOS DADOS CADASTRAIS ═══ */}
         {editing && (
-          <div className="mt-3 ws-panel p-4">
+          <div className="mt-4 ws-panel p-4">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--text)]">Dados cadastrais</h3>
@@ -901,10 +901,10 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
           {tab === 'overview' && (
-            <div className="p-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Próximo agendamento</p>
+            <div className="p-5 space-y-5">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-[var(--border)] p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo agendamento</h3>
                   {nextBooking ? (
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
@@ -913,8 +913,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
                 </div>
-                <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Último atendimento</p>
+                <div className="rounded-lg border border-[var(--border)] p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Último atendimento</h3>
                   {lastEncounter ? (
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
@@ -923,8 +923,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
                 </div>
-                <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Retorno previsto</p>
+                <div className="rounded-lg border border-[var(--border)] p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Retorno previsto</h3>
                   {pendingReturn ? (
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
@@ -934,9 +934,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-3">
-                  <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Observação importante</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação importante</h3>
                   {lastNote ? (
                     <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
                   ) : profile.adminNote ? (
@@ -945,8 +945,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
                 </div>}
                 {canFinance ? (
-                  <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Financeiro do paciente</p>
+                  <div className="rounded-lg border border-[var(--border)] p-4">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Financeiro do paciente</h3>
                     {!financeLoaded ? <p className="text-[13px] text-[var(--text-muted)] mt-1">Carregando…</p> : (
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
@@ -956,8 +956,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
                   </div>
                 ) : !clinicalView && (
-                  <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">Status</p>
+                  <div className="rounded-lg border border-[var(--border)] p-4">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Status</h3>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
                       {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
@@ -1289,9 +1289,11 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
 }
 
 /**
- * GAVETA-RESUMO (§11) — o que se precisa saber para decidir, não a ficha toda.
- * Sem abas e sem carregar atendimentos/financeiro: quem quer o histórico
- * completo segue para a página, e é isso que a ação primária oferece.
+ * GAVETA-RESUMO (§11) — prévia rápida, EMPILHADA na vertical (uma coluna de
+ * leitura, de cima para baixo): identificação → próximo atendimento → últimos
+ * atendimentos → última conversa → nota de rodapé. Nada de "perfil de um lado,
+ * conteúdo do outro": a ordem de leitura é a mesma em qualquer largura.
+ * Sem abas e sem carregar atendimentos/financeiro: a ficha completa é página.
  */
 function ClientQuickPreview({ person, tags, clinicalView }: {
   person: Person360;
@@ -1307,16 +1309,13 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
   const lastTalk = (person.conversations || []).slice(0, 1)[0] || null;
 
   return (
-    /* AUDITORIA · rodada 2 — DUAS COLUNAS: quem é (avatar, nome, contato,
-       etiquetas) à ESQUERDA; o que decide (próximo atendimento, últimos
-       atendimentos, última conversa) à DIREITA. Em tela estreita empilha na
-       mesma ordem — nenhuma informação muda de lugar sem necessidade. */
-    <div className="p-4 grid gap-4 sm:grid-cols-[minmax(0,168px)_minmax(0,1fr)] sm:items-start">
-      <div className="min-w-0 space-y-3">
-        <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={56} />
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
-          <p className="text-[13px] text-[var(--text-muted)] mt-0.5 break-words">
+    <div className="client-preview p-4 flex flex-col gap-4">
+      {/* 1 · Identificação */}
+      <section aria-labelledby="client-preview-identity" className="flex items-start gap-3.5 min-w-0">
+        <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={52} />
+        <div className="min-w-0 flex-1">
+          <h3 id="client-preview-identity" className="text-[17px] font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h3>
+          <p className="text-[13px] text-[var(--text-muted)] mt-1 break-words">
             {person.phone ? formatPhoneBR(person.phone) : 'Sem telefone'}
             {!clinicalView && person.email ? ` · ${person.email}` : ''}
           </p>
@@ -1324,57 +1323,66 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
             {age !== null ? `${age} anos` : 'Idade não informada'}
             {person.customerSince ? ` · cliente desde ${person.customerSince.slice(0, 10).split('-').reverse().join('/')}` : ''}
           </p>}
+          {!clinicalView && <div className="flex flex-wrap gap-1.5 mt-2.5">
+            {tags.length ? tags.map((t) => (
+              <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
+            )) : <Badge tone="zinc">Sem etiquetas</Badge>}
+          </div>}
         </div>
-        {!clinicalView && <div className="flex flex-wrap gap-1.5">
-          {tags.length ? tags.map((t) => (
-            <span key={t.id} title={t.hint}><Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge></span>
-          )) : <Badge tone="zinc">Sem etiquetas</Badge>}
-        </div>}
-      </div>
+      </section>
 
-      <div className="min-w-0 space-y-3.5">
-      <div className="rounded-[var(--radius-md)] border border-[var(--border)] divide-y divide-[var(--border)]">
-        <div className="px-3.5 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo atendimento</p>
-          {next ? (
-            <p className="text-[13px] text-[var(--text)] mt-1">
-              <span className="font-semibold">{humanDay(next.date)}{next.time ? ` às ${next.time}` : ''}</span>
-              {next.service ? <span className="text-[var(--text-muted)]"> · {next.service}</span> : null}
-            </p>
-          ) : (
-            <p className="text-[13px] text-[var(--text-muted)] mt-1">Nada agendado.</p>
-          )}
-        </div>
-        <div className="px-3.5 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Últimos atendimentos</p>
-          {recent.length ? (
-            <ul className="mt-1 space-y-1">
-              {recent.map((b) => (
-                <li key={b.id} className="text-[13px] text-[var(--text)] flex items-baseline justify-between gap-3">
-                  <span className="truncate">{b.service || 'Atendimento'}</span>
-                  <span className="shrink-0 text-[12px] text-[var(--text-muted)] tabular-nums">{eventDay(b.date)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem histórico ainda.</p>
-          )}
-        </div>
-        {lastTalk && (
-          <div className="px-3.5 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Última conversa</p>
-            <p className="text-[13px] text-[var(--text-muted)] mt-1">{lastTalk.preview || 'Sem mensagens.'}</p>
-          </div>
+      {/* 2 · Próximo atendimento */}
+      <PreviewBlock title="Próximo atendimento">
+        {next ? (
+          <p className="text-[14px] text-[var(--text)]">
+            <span className="font-semibold">{humanDay(next.date)}{next.time ? ` às ${next.time}` : ''}</span>
+            {next.service ? <span className="text-[var(--text-muted)]"> · {next.service}</span> : null}
+          </p>
+        ) : (
+          <p className="text-[14px] text-[var(--text-muted)]">Nada agendado.</p>
         )}
-      </div>
+      </PreviewBlock>
 
-      <p className="text-[12px] text-[var(--text-faint)]">
+      {/* 3 · Últimos atendimentos */}
+      <PreviewBlock title="Últimos atendimentos">
+        {recent.length ? (
+          <ul className="divide-y divide-[var(--border-soft)] -my-1">
+            {recent.map((b) => (
+              <li key={b.id} className="py-1.5 text-[14px] text-[var(--text)] flex items-baseline justify-between gap-3">
+                <span className="truncate">{b.service || 'Atendimento'}</span>
+                <span className="shrink-0 text-[12px] text-[var(--text-muted)] tabular-nums">{eventDay(b.date)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[14px] text-[var(--text-muted)]">Sem histórico ainda.</p>
+        )}
+      </PreviewBlock>
+
+      {/* 4 · Última conversa (só quando existe) */}
+      {lastTalk && (
+        <PreviewBlock title="Última conversa">
+          <p className="text-[14px] text-[var(--text-muted)] line-clamp-3">{lastTalk.preview || 'Sem mensagens.'}</p>
+        </PreviewBlock>
+      )}
+
+      {/* 5 · Nota de rodapé — a ação de ficha completa fica no cabeçalho/rodapé */}
+      <p className="text-[12px] text-[var(--text-faint)] pt-1 border-t border-[var(--border-soft)]">
         {person.contactId
           ? 'A ficha completa (agenda, atendimentos, arquivos e financeiro) abre em página própria — a lista continua onde estava.'
           : 'Esta pessoa ainda não tem cadastro no CRM.'}
       </p>
-      </div>
     </div>
+  );
+}
+
+/** Bloco da prévia: título pequeno em caixa-alta + conteúdo, empilhado. */
+function PreviewBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1.5">{title}</h3>
+      {children}
+    </section>
   );
 }
 

@@ -2623,7 +2623,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
      precisa viver nele (não apenas no filho), senão o max-width genérico de
      320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
-  width: 360px; max-width: min(360px, calc(100vw - 24px)); padding: 0;
+  width: 340px; max-width: min(340px, calc(100vw - 24px)); padding: 0;
   border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
   background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
 }
@@ -2633,12 +2633,15 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   width: 100%; max-width: 100%; padding: var(--gd-space-4);
   display: flex; flex-direction: column; gap: var(--gd-space-2);
 }
+/* Hierarquia da prévia: horário é a informação principal (semibold, ink);
+   paciente/serviço/profissional vêm em pares rótulo→valor; "Ver detalhes" é a
+   única ação primária, "Editar" fica secundário e nunca compete com ela. */
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
 .ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
-.ag-hover__date { margin: 0; color: var(--gd-text-secondary); font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line); font-weight: var(--gd-type-label-weight); }
+.ag-hover__date { margin: 0; color: var(--gd-text); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); }
 .ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
 .ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
-.ag-hover__rows dt { flex: 0 0 80px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
+.ag-hover__rows dt { flex: 0 0 76px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
 .ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
 .ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
@@ -2773,14 +2776,22 @@ dialog.ws-sheet {
 }
 dialog.ws-sheet:not([open]) { display: none; }
 dialog.ws-sheet::backdrop { background: var(--overlay); }
+/* MOVIMENTO DO SHEET (contrato único com o DetailSideModal): a folha nasce
+   FORA da borda direita e desliza para dentro (direita → esquerda) e sai pela
+   MESMA borda, deslizando para a direita (esquerda → direita). Sem scale — o
+   scale fazia a folha parecer surgir do centro. O backdrop acompanha a folha
+   (fade de entrada e de saída), sem véu que sobra depois que a folha saiu. */
 dialog.ws-sheet[open] { animation: ws-sheet-in var(--gd-motion-sheet) var(--gd-ease); }
-dialog.ws-sheet[data-closing] { animation: ws-sheet-out var(--gd-motion-sheet-out) var(--gd-ease) forwards; }
+dialog.ws-sheet[data-closing] { animation: ws-sheet-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+dialog.ws-sheet[open]::backdrop { animation: gd-fade-in var(--gd-motion-sheet) var(--gd-ease); }
+dialog.ws-sheet[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes ws-sheet-in {
-  from { opacity: 0; transform: translateX(40px) scale(.985); }
+  from { opacity: 0; transform: translateX(calc(100% + var(--sheet-gap, 14px))); }
   to { opacity: 1; transform: none; }
 }
 @keyframes ws-sheet-out {
-  to { opacity: 0; transform: translateX(40px) scale(.985); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(calc(100% + var(--sheet-gap, 14px))); }
 }
 
 .ws-sheet__inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }

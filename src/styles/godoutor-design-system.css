@@ -797,8 +797,10 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 .il-drawer[data-closing]::backdrop { animation: none; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:
    é uma folha presa à lateral, não um card que aparece. */
+/* Contrato único de folha lateral: ENTRA da borda direita (direita → esquerda)
+   e SAI pela mesma borda (esquerda → direita), com opacidade estável. */
 @keyframes gd-detail-in { from { transform: translateX(100%); } to { transform: none; } }
-@keyframes gd-detail-out { to { transform: translateX(100%); } }
+@keyframes gd-detail-out { from { transform: none; } to { transform: translateX(100%); } }
 .gd-detail__header {
   display: flex; align-items: flex-start; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;

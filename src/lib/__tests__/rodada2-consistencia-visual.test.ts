@@ -207,8 +207,8 @@ describe('P0.2 · hover da Agenda é RESUMO colado no evento (não painel)', () 
     // O conteúdo clínico pede uma largura legível e hierarquia própria, sem
     // virar side sheet nem cobrir o evento que o abriu. A largura fica no
     // wrapper posicionado para o algoritmo de flip/clamp medir 360px reais.
-    expect(positionedLayer).toContain('width: 360px');
-    expect(positionedLayer).toContain('max-width: min(360px, calc(100vw - 24px))');
+    expect(positionedLayer).toContain('width: 340px');
+    expect(positionedLayer).toContain('max-width: min(340px, calc(100vw - 24px))');
     expect(card).toContain('width: 100%');
     expect(card).toContain('max-width: 100%');
     expect(card).toContain('padding: var(--gd-space-4)');
@@ -341,8 +341,13 @@ describe('AUDITORIA · rodada 2 — rótulos de navegação e resumo do cliente'
     expect(titulo).not.toContain('--gd-font-size-metadata');
   });
 
-  it('a prévia do cliente separa resumo (esquerda) de conteúdo (direita)', () => {
+  it('a prévia do cliente é EMPILHADA na vertical (sem colunas perfil/conteúdo)', () => {
     const drawer = read('src/components/dashboard/ClientProfileDrawer.tsx');
-    expect(drawer).toContain('sm:grid-cols-[minmax(0,168px)_minmax(0,1fr)]');
+    expect(drawer).not.toContain('sm:grid-cols-[minmax(0,168px)_minmax(0,1fr)]');
+    const preview = drawer.slice(drawer.indexOf('function ClientQuickPreview'), drawer.indexOf('function PreviewBlock'));
+    expect(preview).toContain('flex flex-col gap-4');
+    expect(preview).not.toContain('grid-cols');
+    expect(preview.indexOf('Próximo atendimento')).toBeLessThan(preview.indexOf('Últimos atendimentos'));
+    expect(preview.indexOf('Últimos atendimentos')).toBeLessThan(preview.indexOf('Última conversa'));
   });
 });
