@@ -626,7 +626,7 @@ export default function EquipePage() {
                 )}
                 {/* IDENTIFICAÇÃO */}
             <div>
-              <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Identificação</p>
+              <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Perfil</p>
               {editEntry?.kind === 'owner' ? (
                 <div className="space-y-3">
                   <div className="rounded-md border border-[var(--gd-border-soft)] bg-[var(--gd-bg-subtle)] p-3 space-y-2">
@@ -773,7 +773,7 @@ export default function EquipePage() {
                   return (
                     <>
                       <div>
-                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Papel</p>
+                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Papel de acesso</p>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5" role="group" aria-label="Papel de acesso">
                           {primary.map((r)=> (
                             <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
@@ -810,7 +810,7 @@ export default function EquipePage() {
                         </Notice>
                       )}
                       <div data-testid="preset-summary">
-                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-1">Acesso padrão do papel</p>
+                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-1">Permissões do papel</p>
                         <p className="text-sm text-[var(--text)]">{summary.length ? summary.join(' · ') : 'Somente leitura do resumo'}</p>
                         <div className="mt-2 flex items-center gap-2">
                           <button type="button" aria-expanded={fCustomize} aria-controls="personalizar-acesso" onClick={()=> setFCustomize((v)=> !v)} className={buttonCls('secondary', 'sm')}>
@@ -856,7 +856,7 @@ export default function EquipePage() {
                   <Input value={fFuncao} onChange={(e)=> setFFuncao(e.target.value)} placeholder="Clínico Geral" />
                 </Field>
                 <div>
-                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Registro profissional</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Vínculo clínico</p>
                   <div className="grid grid-cols-[110px_90px_1fr] gap-2">
                     <Field label="Conselho">
                       <div className="h-[38px] flex items-center px-3 rounded-sm border border-[var(--border-strong)] bg-[var(--surface-3)] text-sm font-medium text-[var(--text)]">CRMV</div>
@@ -875,7 +875,7 @@ export default function EquipePage() {
                   <p className="text-[11px] text-[var(--gd-text-faint)] mt-1">CPF ≠ CRMV. Não exigimos CRMV para equipe não-veterinária.</p>
                 </div>
                 <div>
-                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Atendimentos e procedimentos habilitados</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Atuação e serviços</p>
                   {fServiceIds.length === 0 && fPendingServices.length === 0 && <Notice tone="warning">Este profissional será criado sem procedimentos habilitados e não receberá agendamentos até que um serviço seja vinculado.</Notice>}<p className="text-xs text-[var(--gd-text-muted)] mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
                   <div className="flex gap-2">
                     <Input value={fServiceQuery} onChange={(e)=> { setFServiceQuery(e.target.value); setFShowServiceCreate(false); }} placeholder="Buscar serviço (ex.: Consulta, Vacinação)" className="flex-1" />
