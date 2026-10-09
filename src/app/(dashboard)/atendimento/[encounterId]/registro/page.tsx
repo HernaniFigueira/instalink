@@ -110,6 +110,8 @@ export default function EncounterLegacyRecordPage() {
       layout="page"
       businessId={businessId}
       existing={existing}
+      workspaceHref={`/atendimento/${encodeURIComponent(encounterId)}?b=${encodeURIComponent(businessId)}&returnTo=${encodeURIComponent(returnTo)}`}
+      onOpenWorkspace={(href) => router.push(href)}
       canReopen={canReopen}
       onClose={leave}
       onScheduleReturn={scheduleReturn}

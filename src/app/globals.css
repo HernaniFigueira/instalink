@@ -3904,3 +3904,114 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .encounter-workspace__footer-actions > * { flex: 1 1 auto; min-height: 40px; }
   .encounter-workspace__block { margin-top: 22px; }
 }
+
+/* ── CONVERGÊNCIA ESTRUTURAL (Cliente · Atendimento · Registro) ───────────
+   Princípio do MASTER: rail global → contexto da entidade/sessão → workspace
+   → drawers pela direita. O contexto persiste à ESQUERDA (260–300px no
+   desktop/tablet); o trabalho rola à direita; navegação fica acessível no
+   scroll. Em largura estreita o rail vira faixa de topo (sem sticky). */
+
+/* Cliente / Paciente — Entity Context Rail */
+.entity-panel { overflow: clip; }
+.entity-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+}
+.entity-rail {
+  position: sticky;
+  top: calc(var(--topbar-h, 64px) + 12px);
+  max-height: calc(100dvh - var(--topbar-h, 64px) - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 20px;
+  border-right: 1px solid var(--border-soft, #eef2ef);
+  background: var(--surface, #fff);
+  scrollbar-width: thin;
+}
+.entity-rail__name { margin: 12px 0 0; font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.entity-rail__age { margin: 4px 0 0; font-size: 13px; color: var(--text-muted, #66736c); }
+.entity-rail__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.entity-rail__data { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.entity-rail__data > div { min-width: 0; }
+.entity-main { min-width: 0; padding: 24px 28px; }
+
+/* Atendimento / Registro — Session Context Rail + workspace */
+.encounter-session {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+  margin: -1px 0 0;
+}
+.encounter-session__main { min-width: 0; display: flex; flex-direction: column; }
+.encounter-session > .encounter-rail {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  height: calc(100dvh - var(--topbar-h, 64px));
+  overflow-y: auto;
+  padding: 24px 20px;
+  gap: 18px;
+  border-right: 1px solid var(--border, #e3e9e5);
+  background: var(--surface, #fff);
+  scrollbar-width: thin;
+}
+.encounter-rail__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.encounter-rail__back { flex: none; }
+.encounter-rail__identity { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.encounter-rail__eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--text-faint, #8b9a92); }
+.encounter-rail__patient { margin: 2px 0 0; font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-rail__line { margin: 0; font-size: 14px; font-weight: 600; color: var(--text, #1c2822); }
+.encounter-rail__tutor { margin: 0; font-size: 13px; color: var(--text-muted, #66736c); overflow-wrap: anywhere; }
+.encounter-rail__facts { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+.encounter-rail__facts > div { min-width: 0; }
+.encounter-rail__facts dt { font-size: 12px; color: var(--text-faint, #8b9a92); }
+.encounter-rail__facts dd { margin: 2px 0 0; font-size: 14px; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-rail__booking { margin: 0; font-size: 12.5px; color: var(--text-muted, #66736c); }
+.encounter-rail__nav { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; border-top: 1px solid var(--border-soft, #eef2ef); }
+.encounter-rail__nav-item {
+  text-align: left; min-height: 36px; padding: 6px 10px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: var(--text-muted, #66736c); background: transparent; border: 0; cursor: pointer;
+}
+.encounter-rail__nav-item:hover { background: var(--surface-hover, #f4f6f5); color: var(--text, #1c2822); }
+.encounter-rail__nav-item[data-active='true'] { background: var(--surface-hover, #f4f6f5); color: var(--text, #1c2822); font-weight: 600; }
+.encounter-rail__nav-item:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+/* Navegação clínica permanece visível durante o scroll do workspace. */
+.encounter-session__main > .encounter-workspace__nav {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 25;
+}
+
+/* Tablet e largura estreita: rail vira faixa de topo, sem sticky. */
+@media (max-width: 1023px) {
+  .entity-shell { grid-template-columns: minmax(0, 1fr); }
+  .entity-rail {
+    position: static; max-height: none; overflow: visible;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px;
+    border-right: 0; border-bottom: 1px solid var(--border-soft, #eef2ef);
+  }
+  .entity-rail__identity { grid-column: 1 / -1; }
+  .entity-main { padding: 20px 20px; }
+  .encounter-session { grid-template-columns: minmax(0, 1fr); }
+  .encounter-session > .encounter-rail {
+    position: static; height: auto; overflow: visible;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px;
+    border-right: 0; border-bottom: 1px solid var(--border, #e3e9e5); padding: 18px 20px;
+  }
+  .encounter-session > .encounter-rail .encounter-rail__top,
+  .encounter-session > .encounter-rail .encounter-rail__identity,
+  .encounter-session > .encounter-rail .encounter-rail__nav { grid-column: 1 / -1; }
+  .encounter-rail__nav { flex-direction: row; flex-wrap: wrap; padding-top: 0; border-top: 0; }
+  .encounter-session__main > .encounter-workspace__nav { top: var(--topbar-h, 64px); }
+}
+@media (max-width: 640px) {
+  .entity-rail { grid-template-columns: minmax(0, 1fr); }
+  .entity-main { padding: 16px; }
+  .encounter-session > .encounter-rail { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encounter-rail__nav-item { transition: none; }
+}

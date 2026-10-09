@@ -49,7 +49,8 @@ describe('P0-3 · veterinária exige pet quando o tutor já tem pets', () => {
     const enc = read('src/lib/encounters.ts');
     expect(enc).toContain('petName: pet?.name');
     // O cabeçalho do workspace mostra PET primeiro e o tutor como contexto.
-    expect(read('src/components/dashboard/EncounterWorkspace.tsx')).toContain('Tutor:');
+    // O rail de contexto (EncounterSessionRail) é compartilhado com o registro.
+    expect(read('src/components/dashboard/EncounterSessionRail.tsx')).toContain('Tutor:');
     const sheet = read('src/components/dashboard/EncounterSheet.tsx');
     expect(sheet).toContain('row.petName || row.customerName');
     expect(sheet).toContain('Tutor:');

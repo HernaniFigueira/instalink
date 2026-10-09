@@ -98,7 +98,7 @@ describe('Cabeçalho da sessão (workspace)', () => {
     get.mockResolvedValue(ok(row()));
     render(createElement(EncounterWorkspace, { businessId: 'b1', encounterId: 'e-s1', returnTo: '/agenda' }));
     const heading = await screen.findByRole('heading', { level: 1, name: 'Mel' });
-    const header = heading.closest('header')!;
+    const header = heading.closest('aside')!; // rail de contexto persistente (F-convergência)
     expect(header.textContent).toContain('Cachorro · SRD · 2 anos · Fêmea');
     expect(header.textContent).toContain('Tutor: Isabelle · 11999990001');
     expect(header.textContent).toContain('Consulta clínica');
@@ -114,7 +114,7 @@ describe('Cabeçalho da sessão (workspace)', () => {
     get.mockResolvedValue(ok(row({ context: { ...base.context!, patient: { ...patient, sex: '' as const } } } as never)));
     render(createElement(EncounterWorkspace, { businessId: 'b1', encounterId: 'e-s1', returnTo: '/agenda' }));
     const heading = await screen.findByRole('heading', { level: 1, name: 'Mel' });
-    expect(heading.closest('header')!.textContent).not.toMatch(/Macho|Fêmea/);
+    expect(heading.closest('aside')!.textContent).not.toMatch(/Macho|Fêmea/);
   });
 });
 

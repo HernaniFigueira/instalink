@@ -23,7 +23,8 @@
 // Agenda caem no MESMO `encounterId` — o workspace apenas LÊ por id.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PageBackAction, Skeleton, StatusBadge } from '@/components/ui';
+import { PageBackAction, Skeleton } from '@/components/ui';
+import { EncounterSessionRail } from './EncounterSessionRail';
 import type { DismissReason } from './OverlayDismissGuard';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
@@ -185,38 +186,28 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   const bookingLabel = bookingStatus && BOOKING_STATUS[bookingStatus] ? BOOKING_STATUS[bookingStatus].panel : '';
 
   return (
-    <main className="encounter-workspace" data-clinical-state={state.id} data-encounter-id={row.id}>
-      {/* ── Cabeçalho contextual persistente: paciente é protagonista ── */}
-      <header className="encounter-workspace__header">
-        <PageBackAction className="encounter-workspace__back" onClick={leave} label="Voltar" />
-        <div className="encounter-workspace__heading">
-          <div className="encounter-workspace__identity">
-            <p className="encounter-workspace__eyebrow">
-              {row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
-            </p>
-            <h1 className="encounter-workspace__patient">{headline}</h1>
-            {patientLine && <p className="encounter-workspace__subtitle">{patientLine}</p>}
-            {tutorName && (
-              <p className="encounter-workspace__tutor">
-                Tutor: {tutorName}{tutorPhone ? ` · ${tutorPhone}` : ''}
-              </p>
-            )}
-            {(serviceName || professionalName || when) && (
-              <dl className="encounter-workspace__facts">
-                {serviceName && <div><dt>Serviço</dt><dd>{serviceName}</dd></div>}
-                {professionalName && <div><dt>Profissional</dt><dd>{professionalName}</dd></div>}
-                {when && <div><dt>Agendado</dt><dd className="tabular-nums">{when}</dd></div>}
-              </dl>
-            )}
-          </div>
-          <div className="encounter-workspace__status">
-            {/* Estado clínico SEMPRE textual: a cor acompanha, nunca substitui. */}
-            <StatusBadge tone={state.tone}>{state.label.toUpperCase()}</StatusBadge>
-            {bookingLabel && <span className="encounter-workspace__booking-status">Agendamento: {bookingLabel}</span>}
-          </div>
-        </div>
-      </header>
+    <main className="encounter-workspace encounter-session" data-clinical-state={state.id} data-encounter-id={row.id}>
+      {/* ── Contexto PERSISTENTE à esquerda (rail): paciente protagonista,
+          tutor e fatos do atendimento ficam visíveis durante todo o scroll.
+          O cabeçalho alto deixou de ser o eixo da página. ── */}
+      <EncounterSessionRail
+        onBack={leave}
+        eyebrow={row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
+        headline={headline}
+        patientLine={patientLine}
+        tutor={tutorName}
+        tutorPhone={tutorPhone}
+        facts={[
+          { label: 'Serviço', value: serviceName },
+          { label: 'Profissional', value: professionalName },
+          { label: 'Agendado', value: when },
+        ]}
+        statusLabel={state.label.toUpperCase()}
+        statusTone={state.tone}
+        bookingLabel={bookingLabel}
+      />
 
+      <div className="encounter-session__main">
       {/* ── Corpo: SEÇÕES REAIS sobre UMA autoridade de persistência ──
           É o `EncounterWorkspaceBody` (e não o `EncounterSheet` legado, que
           continua vivo na rota `/registro` com os módulos de F1B2/F1C). */}
@@ -228,6 +219,7 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         fullRecordHref={`/atendimento/${encodeURIComponent(row.id)}/registro?returnTo=${encodeURIComponent(returnTo)}`}
         onNavigate={(href) => router.push(href)}
       />
+      </div>
     </main>
   );
 }

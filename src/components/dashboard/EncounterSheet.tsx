@@ -33,6 +33,9 @@ import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Badge, Button, Disclosure, Field, Input, Notice, PageBackAction, ReadOnlyField, Textarea } from '@/components/ui';
+import { EncounterSessionRail } from './EncounterSessionRail';
+import { BOOKING_STATUS } from '@/lib/status';
+import type { BookingStatus } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -74,6 +77,10 @@ export interface FollowUpSeed {
 }
 
 interface Props {
+  /** Rota do workspace da MESMA sessão (aba "Atendimento" do rail). */
+  workspaceHref?: string;
+  /** Navegação para o workspace; passa pela guarda de saída do registro. */
+  onOpenWorkspace?: (href: string) => void;
   businessId: string;
   /** Agendamento de origem (o registro é 1:1 com ele). */
   bookingId?: string;
@@ -123,6 +130,7 @@ const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? cryp
 
 export function EncounterSheet({
   businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
+  workspaceHref, onOpenWorkspace,
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [compactHeader, setCompactHeader] = useState(false);
@@ -928,18 +936,43 @@ export function EncounterSheet({
     : 'Registro clínico do atendimento';
 
   return layout === 'page' ? (
-    <main className="encounter-page" data-persistence-state={persistence}>
+    <main className="encounter-page encounter-session" data-persistence-state={persistence}>
+      {/* Mesmo rail do workspace (/atendimento/[id]): contexto do paciente
+          fica à esquerda durante todo o registro. Só dados reais da linha. */}
+      {row && (
+        <EncounterSessionRail
+          onBack={() => { void requestClose('navigation'); }}
+          eyebrow="Registro completo"
+          headline={row.petName || row.customerName || 'Paciente'}
+          tutor={row.petName ? row.customerName : ''}
+          tutorPhone={row.customerPhone || ''}
+          facts={[
+            { label: 'Serviço', value: row.serviceName || '' },
+            { label: 'Profissional', value: row.professionalName || '' },
+            { label: 'Agendado', value: `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` },
+          ]}
+          statusLabel={statusDef!.label.toUpperCase()}
+          statusTone={statusDef!.tone === 'green' ? 'emerald' : 'amber'}
+          bookingLabel={row.bookingStatus && BOOKING_STATUS[row.bookingStatus as BookingStatus] ? BOOKING_STATUS[row.bookingStatus as BookingStatus].panel : ''}
+          nav={[
+            ...(workspaceHref && onOpenWorkspace ? [{
+              key: 'atendimento', label: 'Atendimento', current: false,
+              onSelect: () => { void requestClose('navigation', () => onOpenWorkspace(workspaceHref)); },
+            }] : []),
+            { key: 'registro', label: 'Registro completo', current: true, onSelect: () => {} },
+          ]}
+        />
+      )}
+      <div className="encounter-session__main">
       <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
       <header className="encounter-page__header" data-compact={compactHeader || undefined}>
         <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
         <div className="encounter-page__heading">
           <div className="encounter-page__heading-copy">
-            <h1>Atendimento</h1>
-            <p className="encounter-page__patient">{patientContext}</p>
+            <h2 className="encounter-page__title">Registro completo</h2>
             <p className="encounter-page__meta encounter-page__meta--normal">{encounterMeta}</p>
             <p className="encounter-page__meta encounter-page__meta--compact">{compactEncounterMeta}</p>
           </div>
-          {row && <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>}
         </div>
       </header>
       <section className="encounter-page__content">{encounterContent}</section>
@@ -955,6 +988,7 @@ export function EncounterSheet({
         )}
         {encounterFooter}
       </footer>
+      </div>
       {routeDismiss.dialog}
       {closeDismiss.dialog}
     </main>

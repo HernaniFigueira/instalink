@@ -575,49 +575,46 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       {routeDismiss.dialog}
       {editDismiss.dialog}
       {variant === 'page' ? (<>
-      {/* ═══ QUEM É A PESSOA — carteirinha ═══ */}
-      <div className="p-4">
-        <div className="il-idcard rounded-2xl border border-[var(--border)] shadow-sm p-5 client360-idcard">
-          <div className="client360-idcard__identity relative flex flex-wrap items-start gap-4">
-            {/* Avatar de conta e perfil rico pertencem somente à visão administrativa. */}
-            <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={64} />
-            <div className="client360-idcard__primary min-w-0 flex-1">
-              <h2 className="text-xl font-semibold text-[var(--text)] leading-tight break-words">{person.name || 'Sem nome'}</h2>
-              {!clinicalView && <>
-                <p className="text-sm text-[var(--text-muted)] mt-0.5">
-                  {age !== null ? `${age} anos` : 'Idade não informada'}
-                  {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
-                </p>
-                <div className="client360-idcard__tags flex flex-wrap items-center gap-1.5 mt-2.5">
-                  {tags.map((t) => (
-                    <span key={t.id} title={t.hint}>
-                      <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
-                    </span>
-                  ))}
-                  {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
-                </div>
-              </>}
-            </div>
-
+      {/* ═══ ENTITY CONTEXT RAIL ═══
+          Quem é a pessoa fica FIXO à esquerda (identidade, contato e dados
+          essenciais). O workspace à direita muda de seção sem levar o contexto
+          embora. Em largura estreita o rail vira o bloco de topo da página. */}
+      <div className="entity-shell">
+        <aside className="entity-rail" aria-label="Contexto do cliente">
+          <div className="entity-rail__identity">
+            <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={56} />
+            <h2 className="entity-rail__name">{person.name || 'Sem nome'}</h2>
+            {!clinicalView && (
+              <p className="entity-rail__age">
+                {age !== null ? `${age} anos` : 'Idade não informada'}
+                {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
+              </p>
+            )}
+            {!clinicalView && (
+              <div className="entity-rail__tags">
+                {tags.map((t) => (
+                  <span key={t.id} title={t.hint}>
+                    <Badge tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>
+                  </span>
+                ))}
+                {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
+              </div>
+            )}
           </div>
-
-          {/* Grade de dados — sempre legível, mesmo com campos vazios. */}
-          <dl className="client360-idcard__data relative grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-4 pt-4 border-t border-[var(--border)]">
+          <dl className="entity-rail__data">
             <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
               action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
             {!clinicalView && <>
               <Data label="E-mail" value={person.email || '—'} />
               <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
-              <Data label="Data de nascimento" value={profile.birthDate ? profile.birthDate.split('-').reverse().join('/') : '—'} />
-              <Data label="Idade" value={age !== null ? `${age} anos` : '—'} />
               <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
-              <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
               <Data label="Origem" value={person.source || '—'} />
               <Data label="Atendimentos" value={String(person.bookings.length)} />
+              <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
             </>}
           </dl>
-        </div>
-
+        </aside>
+        <div className="entity-main">
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
         {person.contactId && (
           <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
@@ -1223,6 +1220,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           )}
         </div>
       </div>
+      </div>
       </>) : (
         <ClientQuickPreview person={person} tags={tags} clinicalView={clinicalView} />
       )}
@@ -1259,7 +1257,7 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
           <PageBackAction href={backHref} label="Voltar para clientes" />
           <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
         </header>
-        <div className="ws-panel overflow-hidden">{children}</div>
+        <div className="ws-panel entity-panel">{children}</div>
       </div>
     );
   }
