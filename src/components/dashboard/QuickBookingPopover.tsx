@@ -14,7 +14,7 @@
 // `DatePicker`, `Button`, `Notice`, `StatusBadge`). Nenhum controle desenhado
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, DatePicker, Field, IconButton, Input, Notice, Popover, Select } from '@/components/ui';
+import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { durationLabel } from '@/lib/duration-label';
 import { nowHM, todayISO } from '@/lib/tz';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
@@ -246,27 +246,22 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
         )}
 
         <Field label="Serviço" required>
-          <Select value={serviceId} disabled={saving} onChange={(e) => { setServiceId(e.target.value); setTime(anchor.time); }}>
-            <option value="">Selecione…</option>
-            {bookable.map((s) => (
-              <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}</option>
-            ))}
-          </Select>
+          {/* DS · Combobox canônico (lista do DS, não o select nativo do navegador). */}
+          <Combobox label="Serviço" value={serviceId} disabled={saving} placeholder="Selecione…"
+            onChange={(v) => { setServiceId(String(v)); setTime(anchor.time); }}
+            options={[{ value: '', label: 'Selecione…' }, ...bookable.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
         </Field>
 
         <div className="grid grid-cols-2 gap-2">
           <Field label="Profissional">
-            <Select value={professionalId} disabled={saving} onChange={(e) => setProfessionalId(e.target.value)}>
-              <option value="">Automático</option>
-              {pros.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+            <Combobox label="Profissional" value={professionalId} disabled={saving} placeholder="Automático"
+              onChange={(v) => setProfessionalId(String(v))}
+              options={[{ value: '', label: 'Automático' }, ...pros.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name }))]} />
           </Field>
           <Field label="Duração">
-            <Select value={durationMin ?? ''} disabled={saving}
-              onChange={(e) => setDurationMin(e.target.value === '' ? undefined : Number(e.target.value))}>
-              <option value="">Padrão do serviço</option>
-              {DURATIONS.map((d) => <option key={d} value={d}>{durationLabel(d)}</option>)}
-            </Select>
+            <Combobox label="Duração" value={durationMin != null ? String(durationMin) : ''} disabled={saving}
+              onChange={(v) => { const x = String(v); setDurationMin(x === '' ? undefined : Number(x)); }}
+              options={[{ value: '', label: 'Padrão do serviço' }, ...DURATIONS.map((d) => ({ value: String(d), label: durationLabel(d) }))]} />
           </Field>
         </div>
 
@@ -281,20 +276,17 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
             label="Hora"
             hint={!serviceId ? 'Escolha o serviço' : slots.empty ? 'Nenhum horário livre' : undefined}
           >
-            <Select
-              value={time}
+            {/* O horário do gesto (clique/arraste) continua visível mesmo fora
+                da lista: o servidor decide se ele vale como encaixe. */}
+            <Combobox label="Hora" value={time}
               disabled={saving || !serviceId || slots.loading || slots.times.length === 0}
-              onChange={(e) => setTime(e.target.value)}
-            >
-              {/* O horário do gesto (clique/arraste) continua visível mesmo fora
-                  da lista: o servidor decide se ele vale como encaixe. */}
-              {time && (!serviceId || !slots.times.includes(time)) && (
-                <option value={time}>{time} · na grade</option>
-              )}
-              {slots.loading && <option value="">Carregando…</option>}
-              {!slots.loading && serviceId && slots.times.length === 0 && <option value="">Sem horários</option>}
-              {slots.times.map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
+              onChange={(v) => setTime(String(v))}
+              options={[
+                ...(time && (!serviceId || !slots.times.includes(time)) ? [{ value: time, label: time, hint: 'na grade' }] : []),
+                ...(slots.loading ? [{ value: '', label: 'Carregando…' }] : []),
+                ...(!slots.loading && serviceId && slots.times.length === 0 ? [{ value: '', label: 'Sem horários' }] : []),
+                ...slots.times.map((t) => ({ value: t, label: t })),
+              ]} />
           </Field>
         </div>
 

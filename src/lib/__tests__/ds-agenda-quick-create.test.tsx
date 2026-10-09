@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event';
 // @vitest-environment jsdom
 // ═══════════════════════════════════════════════════════════════
 // DS 1.0 · §5 — QUICK CREATE ANCORADO NO SLOT (AGENDA)
@@ -175,6 +176,18 @@ beforeEach(async () => {
   window.history.replaceState(null, '', `/agenda?b=${BUSINESS}&view=day&data=${DATE}`);
 });
 
+
+/** DS · Combobox: escolhe pela UI (clique + opção), sem select nativo. */
+async function pickQuick(layer: HTMLElement, label: string, value: string) {
+  await userEvent.click(within(layer).getByLabelText(new RegExp('^' + label)));
+  const opt = await waitFor(() => {
+    const o = document.querySelector<HTMLElement>(`[role="option"][data-value="${value}"]`);
+    if (!o) throw new Error(`opção ausente: ${value}`);
+    return o;
+  });
+  await userEvent.click(opt);
+}
+
 describe('DS 1.0 §5 · quick create ancorado no slot', () => {
   it('1 · clique abre o popover canônico ancorado, com os SEIS campos e "Mais opções"', async () => {
     render(<AgendaPage />);
@@ -257,7 +270,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     render(<AgendaPage />);
     await clickSlot('10:00');
     const layer = quick();
-    fireEvent.change(within(layer).getByLabelText(/^Serviço/), { target: { value: 'svc-1' } });
+    await pickQuick(layer, 'Serviço', 'svc-1');
     fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
 
     expect(await within(layer).findByText(/Escolha um paciente já cadastrado/)).toBeTruthy();
@@ -290,7 +303,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     const layer = quick();
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     fireEvent.click(await within(layer).findByRole('button', { name: /Ana Tutora/ }));
-    fireEvent.change(within(layer).getByLabelText(/^Serviço/), { target: { value: 'svc-1' } });
+    await pickQuick(layer, 'Serviço', 'svc-1');
     fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
 
     expect(await within(layer).findByText('Este horário já está ocupado.')).toBeTruthy();
@@ -305,7 +318,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     const layer = quick();
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     fireEvent.click(await within(layer).findByRole('button', { name: /Ana Tutora/ }));
-    fireEvent.change(within(layer).getByLabelText(/^Serviço/), { target: { value: 'svc-1' } });
+    await pickQuick(layer, 'Serviço', 'svc-1');
     fireEvent.click(within(layer).getByRole('button', { name: 'Mais opções' }));
 
     await waitFor(() => expect(document.querySelector('dialog.il-drawer')).toBeTruthy(), { timeout: 5000 });

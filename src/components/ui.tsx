@@ -1358,6 +1358,15 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
       // próprio elemento posicionado. Sem isso, a única forma de conferir a
       // geometria num teste é re-medir por fora — que foi justamente como o
       // defeito do flip/stale passou. Não muda layout: é atributo de dado.
+      // Camada dentro de um <dialog> modal (top layer, com transform): o
+      // `position:fixed` é relativo ao dialog — o offset do próprio dialog sai
+      // das coordenadas da viewport. Sem transform, nada muda.
+      const hostEl = layerRef?.current?.closest('dialog[open]') as HTMLElement | null | undefined;
+      if (hostEl && getComputedStyle(hostEl).transform !== 'none') {
+        const hr = hostEl.getBoundingClientRect();
+        top -= hr.top + hostEl.clientTop;
+        left -= hr.left + hostEl.clientLeft;
+      }
       const posNode = layerRef?.current;
       if (posNode) posNode.dataset.place = `l${Math.round(left)},t${Math.round(top)},w${Math.round(w)},h${Math.round(h)}`;
       setStyle({ top, left });
@@ -1400,6 +1409,10 @@ function LayerPortal({ children, style, className, role, label, id, positionRef 
   positionRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   if (typeof document === 'undefined') return null;
+  // Dialog modal aberto (showModal = top layer) cobre qualquer coisa no body:
+  // a camada de Combobox/DatePicker/Popover monta DENTRO do dialog mais recente.
+  const dialogs = document.querySelectorAll('dialog[open]');
+  const host = (dialogs.length ? dialogs[dialogs.length - 1] : document.body) as HTMLElement;
   return createPortal(
     <div
       id={id}
@@ -1416,7 +1429,7 @@ function LayerPortal({ children, style, className, role, label, id, positionRef 
     >
       {children}
     </div>,
-    document.body,
+    host,
   );
 }
 
@@ -2507,10 +2520,15 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         value={displayLabel}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
           else if (e.key === 'Enter' && open && filtered[active]) { e.preventDefault(); pick(filtered[active]); }
+          // Escape com a lista aberta fecha SÓ a lista. preventDefault avisa o
+          // Drawer (dialog modal) que a tecla já foi consumida — sem isso o
+          // dialog inteiro fechava junto e perdia a edição do bloqueio.
+          else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }
           else if (e.key === 'Backspace' && multi && !query && selected.length) {
             onChange(selected.slice(0, -1));
           }

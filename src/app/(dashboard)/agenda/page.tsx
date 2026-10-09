@@ -79,6 +79,14 @@ const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
 const CLICK_SNAP_MIN = 15;
+/** Horários do bloqueio no DS (Combobox): passos de 15 min, sempre com o valor
+ *  atual presente. O valor enviado continua `HH:MM` — mesmo contrato da API. */
+function blockTimeOptions(current: string) {
+  const out: { value: string; label: string }[] = [];
+  for (let m = 0; m < 24 * 60; m += 15) out.push({ value: minToTime(m), label: minToTime(m) });
+  if (current && !out.some((o) => o.value === current)) { out.push({ value: current, label: current }); out.sort((x, y) => x.value.localeCompare(y.value)); }
+  return out;
+}
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
 const VIEWPORT_BOTTOM_PAD = 16;
@@ -2448,13 +2456,19 @@ export default function AgendaPage() {
             <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Indisponibilidade temporária</h3>
             <p className="mt-1 text-[var(--gd-font-size-body)] text-[var(--gd-text-muted)]">Use para períodos em que normalmente haveria atendimento, mas a clínica, um profissional ou um recurso ficará indisponível.</p>
           </div>
-          <DatePicker value={blockDate} onChange={setBlockDate} label="Data do bloqueio" max="2100-12-31" />
+          {/* DS · data e horas do bloqueio: DatePicker e Combobox canônicos (sem
+              <input type="date|time">). O valor enviado segue HH:MM / ISO. */}
+          <Field label="Data">
+            <DatePicker value={blockDate} onChange={setBlockDate} label="Data do bloqueio" max="2100-12-31" />
+          </Field>
           <div className="flex gap-2">
             <div className="flex-1"><Field label="Início">
-              <Input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} />
+              <Combobox label="Início" value={blockStart} disabled={blockBusy} placeholder="Horário"
+                onChange={(v) => setBlockStart(String(v))} options={blockTimeOptions(blockStart)} />
             </Field></div>
             <div className="flex-1"><Field label="Fim">
-              <Input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} />
+              <Combobox label="Fim" value={blockEnd} disabled={blockBusy} placeholder="Horário"
+                onChange={(v) => setBlockEnd(String(v))} options={blockTimeOptions(blockEnd)} />
             </Field></div>
           </div>
           <Field label="Escopo" hint={blockScope === 'business' ? 'Impede novos agendamentos para toda a clínica neste período.' : blockScope === 'professional' ? 'Bloqueia apenas a agenda do profissional selecionado.' : 'Impede que esse recurso seja reservado por outro atendimento.'}>

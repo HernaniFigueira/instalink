@@ -263,7 +263,16 @@ async function clickEmptyCell(professionalId: string, time: string, opts: { full
   const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
   await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
-  if (opts.serviceId) fireEvent.change(within(quick()).getByLabelText(/^Serviço/), { target: { value: opts.serviceId } });
+  // DS · Serviço do Quick é Combobox: escolhe-se pela UI (clique + opção), sem select nativo.
+  if (opts.serviceId) {
+    await userEvent.click(within(quick()).getByLabelText(/^Serviço/));
+    const opt = await waitFor(() => {
+      const o = document.querySelector<HTMLElement>(`[role="option"][data-value="${opts.serviceId}"]`);
+      if (!o) throw new Error(`opção ausente: ${opts.serviceId}`);
+      return o;
+    });
+    await userEvent.click(opt);
+  }
   if (opts.full !== false) await moreOptions();
   return start;
 }
