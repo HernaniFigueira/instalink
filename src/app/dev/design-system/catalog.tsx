@@ -7,7 +7,7 @@
 // referência visual do sistema — e o lugar de olhar antes de inventar algo.
 import { useState } from 'react';
 import {
-  A, ActionSection, Avatar, Badge, Button, Calendar, Checkbox, CloseButton, Combobox, DatePicker,
+  A, ActionSection, Avatar, Badge, Button, Calendar, Checkbox, CloseButton, Combobox, ContextMenu, DatePicker,
   Dialog, Drawer, DropdownMenu, EmptyState, Field, FilterPill, HoverCard, HoursChips, IconButton,
   Input, Kpi, ListSkeleton, Notice, PageActionBar, Pagination, Popover, Radio, SearchField,
   Segmented, Select, Skeleton, Stat, StatusBadge, Switch, Table, TableBody, TableCell, TableHead,
@@ -60,6 +60,13 @@ export function DesignSystemCatalog() {
   const [dialog, setDialog] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const { toasts, push, dismiss } = useToasts();
+  const [iconPressed, setIconPressed] = useState(false);
+  const [matrixNote, setMatrixNote] = useState('');
+  const [matrixText, setMatrixText] = useState('');
+  const [matrixCombo, setMatrixCombo] = useState<string>('p2');
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const [matrixPopover, setMatrixPopover] = useState(false);
+  const [matrixDrawer, setMatrixDrawer] = useState(false);
 
   const options = [
     { value: 'svc-1', label: 'Consulta clínica', hint: '30 min · R$ 120' },
@@ -241,6 +248,84 @@ export function DesignSystemCatalog() {
               </ActionSection>
             </div>
           </Drawer>
+        </Section>
+
+        <Section id="estados" title="Matriz de estados · CP1" rule="Cada componente mostra só os estados que se aplicam a ele. “—” = não se aplica (não é falta de acessibilidade). Hover, foco e ativo são exercitados com ponteiro/teclado reais na evidência.">
+          <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-[var(--gd-font-size-caption)] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">IconButton</p>
+              <div className="flex flex-wrap items-center gap-3" data-cp1="icon">
+                <IconButton icon="settings" label="Default" />
+                <IconButton icon="filter" label="Selecionado (toggle)" aria-pressed={iconPressed} onClick={() => setIconPressed((v) => !v)} />
+                <IconButton icon="x" label="Desabilitado" disabled />
+              </div>
+              <p className="mt-2 text-[var(--gd-font-size-caption)] text-[var(--gd-text-muted)]">loading — não se aplica (ação instantânea) · error — não se aplica (erro vai ao contexto do formulário)</p>
+            </div>
+            <div>
+              <p className="mb-2 text-[var(--gd-font-size-caption)] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">Textarea</p>
+              <Field label="Default" hint="min. 96px · autosave externo">
+                <Textarea value={matrixText} onChange={(e) => setMatrixText(e.target.value)} placeholder="Digite a observação…" data-cp1="textarea-default" />
+              </Field>
+              <div className="mt-3 grid gap-3">
+                <Field label="Erro" error="Escreva ao menos uma frase"><Textarea defaultValue="" data-cp1="textarea-error" /></Field>
+                <Field label="Desabilitado"><Textarea disabled defaultValue="Conteúdo preservado e legível" /></Field>
+              </div>
+              <p className="mt-2 text-[var(--gd-font-size-caption)] text-[var(--gd-text-muted)]">selected — não se aplica (texto livre) · loading — externo (autosave no contexto)</p>
+            </div>
+            <div>
+              <p className="mb-2 text-[var(--gd-font-size-caption)] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">Combobox</p>
+              <Field label="Profissional (selecionado = valor)">
+                <Combobox label="Profissional" value={matrixCombo} onChange={(v) => setMatrixCombo(String(v))} options={[
+                  { value: 'p1', label: 'Dra. Michele', hint: 'Clínica geral' },
+                  { value: 'p2', label: 'Dr. Orlando', hint: 'Veterinário' },
+                  { value: 'p3', label: 'Dra. Ana Lúcia', hint: 'Indisponível', disabled: true },
+                ]} />
+              </Field>
+              <div className="mt-3 grid gap-3">
+                <Field label="Vazio ≠ falha"><Combobox label="Busca vazia" value="" onChange={() => {}} emptyLabel="Nenhum profissional para este filtro" options={[]} placeholder="Digite para buscar…" /></Field>
+                <Field label="Erro" error="Escolha um profissional"><Combobox label="Com erro" value="" onChange={() => {}} options={[{ value: 'p1', label: 'Dra. Michele' }]} /></Field>
+                <Field label="Desabilitado"><Combobox label="Desabilitado" value="p1" onChange={() => {}} disabled options={[{ value: 'p1', label: 'Dra. Michele' }]} /></Field>
+              </div>
+              <p className="mt-2 text-[var(--gd-font-size-caption)] text-[var(--gd-text-muted)]">loading — não se aplica (opções locais) · hover/ativo: destaque de teclado (data-active), separado de selecionado (aria-selected)</p>
+            </div>
+            <div>
+              <p className="mb-2 text-[var(--gd-font-size-caption)] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">ContextMenu · HoverCard · Popover · Drawer</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  data-cp1="context-zone"
+                  tabIndex={0}
+                  className="flex h-14 w-44 items-center justify-center rounded-[var(--gd-radius-sm)] border border-dashed border-[var(--gd-border)] text-[var(--gd-font-size-secondary)] text-[var(--gd-text-muted)]"
+                  onContextMenu={(e) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY }); }}
+                >Botão direito aqui</div>
+                <ContextMenu
+                  open={!!ctx}
+                  point={ctx}
+                  onClose={() => setCtx(null)}
+                  label="Ações do item"
+                  header="Bloqueio · 14:00–15:00"
+                  items={[
+                    { id: 'edit', label: 'Editar', icon: 'pencil' },
+                    { id: 'dup', label: 'Duplicar', icon: 'copy' },
+                    { id: 'del', label: 'Excluir', icon: 'x', danger: true, separatorBefore: true },
+                    { id: 'off', label: 'Indisponível', disabled: true },
+                  ]}
+                />
+                <HoverCard content={<div><p className="font-semibold">Thor QA · Ana Tutora</p><p className="text-[var(--gd-text-muted)]">Consulta clínica · 14:00</p></div>}>
+                  <Button variant="secondary" size="sm" data-cp1="hovercard">HoverCard</Button>
+                </HoverCard>
+                <Popover open={matrixPopover} onClose={() => setMatrixPopover(false)} label="Popover de estado" trigger={<Button size="sm" variant="secondary" aria-expanded={matrixPopover} onClick={() => setMatrixPopover((v) => !v)} data-cp1="popover-trigger">Popover</Button>}>
+                  <p className="gd-layer__label">Popover</p>
+                  <p className="text-[var(--gd-font-size-secondary)]">Fecha com Escape ou clique fora.</p>
+                </Popover>
+                <Button size="sm" variant="secondary" onClick={() => setMatrixDrawer(true)} data-cp1="drawer-trigger">Drawer</Button>
+              </div>
+              <Drawer open={matrixDrawer} onClose={() => setMatrixDrawer(false)} title="Drawer de estado" subtitle="Saída pela direita, foco devolvido" width="max-w-[520px]">
+                <p className="p-1 text-[var(--gd-font-size-body)]">Painel montado até o fim da saída.</p>
+              </Drawer>
+              <p className="mt-2 text-[var(--gd-font-size-caption)] text-[var(--gd-text-muted)]">ContextMenu: desabilitado e destrutivo separados · HoverCard: hover/foco · Popover/Drawer: aberto, fechado · loading/error — não se aplicam a overlays de ação</p>
+            </div>
+          </div>
+          {matrixNote && <p className="mt-3 text-[var(--gd-font-size-caption)] text-[var(--gd-text-muted)]">{matrixNote}</p>}
         </Section>
 
         <Section id="dados" title="Dados e listas" rule="Tabela canônica, paginação, estados vazios e carregamento.">

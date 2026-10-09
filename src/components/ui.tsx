@@ -303,7 +303,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const { className, ...rest } = useFieldControl(props);
-  return <textarea className={cn(FIELD_CLS, 'min-h-[72px]', className)} {...rest} />;
+  return <textarea className={cn(FIELD_CLS, className)} {...rest} />;
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
@@ -937,12 +937,31 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
   const expanded = !!side;
+  /* CP1 · motion: a superfície permanece MONTADA durante a saída (token
+     --gd-motion-sheet-out) e só desmonta quando a transição termina. Sem isto a
+     saída era um corte: o nó sumia no primeiro quadro (Blueprint §23). */
+  const [present, setPresent] = useState(open);
+  const [closing, setClosing] = useState(false);
   const dismiss = useOverlayDismissGuard();
-  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, onClose);
+  const requestClose = (reason: DismissReason) => {
+    if (closing) return;
+    dismiss.requestClose(reason, dismissGuard, onClose);
+  };
   const requestSideClose = (reason: DismissReason) => dismiss.requestClose(reason, sideDismissGuard, onSideClose || onClose);
+  // Presença: abre já; ao fechar, mantém a superfície por `closing` até o fim da saída.
+  useEffect(() => {
+    if (open) { setPresent(true); setClosing(false); return; }
+    if (!present) return;
+    const ms = overlayMotionMs('--gd-motion-sheet-out', 170);
+    if (ms === 0) { setPresent(false); return; }
+    setClosing(true);
+    const t = window.setTimeout(() => { setClosing(false); setPresent(false); }, ms);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!present || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll(dialog);
     if (modal) dialog.showModal(); else dialog.show();
@@ -953,11 +972,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open, modal]);
+  }, [present, modal]);
 
-  if (!open) return null;
+  if (!present) return null;
   return (
     <dialog ref={dialogRef}
+      data-closing={closing ? 'true' : undefined}
       className={cn("il-drawer fixed inset-0 z-50", variant === 'dialog' && 'il-drawer--dialog', dialogClassName)}
       style={variant === 'dialog' ? ({ '--il-dialog-w': dialogWidth } as React.CSSProperties) : undefined}
       aria-modal={modal || undefined}
@@ -2508,9 +2528,11 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
                 type="button"
                 role="option"
                 data-value={o.value}
-                aria-selected={idx === active}
+                /* ativo (teclado/hover) ≠ selecionado (valor): aria-selected é o valor. */
+                aria-selected={selected.includes(o.value)}
                 disabled={o.disabled}
                 data-active={idx === active}
+                data-selected={selected.includes(o.value) || undefined}
                 onMouseEnter={() => setActive(idx)}
                 onClick={() => pick(o)}
                 className="gd-menu__item"

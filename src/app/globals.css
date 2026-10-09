@@ -1032,7 +1032,7 @@ input[type='color'] { @apply cursor-pointer; }
    regra é do controle — não de um `h-[38px]` de página. */
 .il-field-control { min-height: var(--control-h); }
 .il-platform .il-field-control { min-height: var(--control-h); }
-.il-platform textarea.il-field-control { min-height: 76px; }
+.il-platform textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 /* Tabs: o nível vem do tamanho pedido (md = régua de ação, sm = régua densa).
    O `scale-95` que existia no `il-tabbar--sm` saiu: escalar controle é
    métrica falsa (34px × 0.95 = 32,3px) e borra tipografia. */

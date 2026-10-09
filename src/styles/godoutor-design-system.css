@@ -230,6 +230,7 @@
   --gd-control-h-sm: 34px;
   --gd-control-h-xs: 28px;
   --gd-control-h-touch: 44px;
+  --gd-textarea-min-h: 96px;     /* contrato Blueprint §14: Textarea min 96px (token único) */
   --gd-control-h-icon: var(--gd-control-h);
 
   /* ── SETS DE INTERAÇÃO (o que NÃO pode ser inventado por página) ───────
@@ -353,7 +354,10 @@
   border: 0; border-radius: 0; background-color: transparent; box-shadow: none;
 }
 .gd-field--multiline .gd-field__box { align-items: flex-start; }
-.gd-field__box > textarea { min-height: 76px; padding: var(--gd-space-2) 0; resize: vertical; }
+/* Textarea: altura mínima é do token (96px). O seletor com `.il-field-control`
+   vence a régua genérica do controle (38px) que antes engolia esta regra. */
+.gd-field__box > textarea.il-field-control { min-height: var(--gd-textarea-min-h); padding: var(--gd-space-2) 0; resize: vertical; }
+textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 /* A seta do Select é única e fica à direita, sem tilhar pela largura. */
 .gd-field__box > select.il-field-control,
 .gd-field__box > select {
@@ -576,6 +580,9 @@
 .gd-menu__item:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 .gd-menu__item[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
 .gd-menu__item--danger { color: var(--gd-danger-fg); }
+/* CP1 · Combobox/Listbox: selecionado (valor) ≠ ativo (teclado/hover). */
+.gd-menu__item[data-selected='true'] { color: var(--gd-accent-fg); font-weight: var(--gd-weight-semibold); }
+.gd-menu__item[data-selected='true'][data-active='true'] { background: var(--gd-accent-soft); }
 .gd-menu__separator { height: 1px; margin: var(--gd-space-1) 0; background: var(--gd-border-soft); }
 /* MENU DE CONTEXTO (rodada 2 · auditoria da Agenda): mesmo painel do menu do
    sistema, com um CABEÇALHO de uma linha que diz SOBRE O QUE se está agindo —
@@ -724,6 +731,13 @@
 .gd-icon-control:focus-visible, .gd-icon-control--sm:focus-visible, .gd-icon-control--xs:focus-visible {
   background: var(--gd-bg-hover);
 }
+.gd-icon-control:active, .gd-icon-control--sm:active, .gd-icon-control--xs:active {
+  background: var(--gd-bg-subtle);
+}
+/* CP1 · IconButton como toggle real (aria-pressed): superfície suave + cor de acento. */
+.gd-icon-control[aria-pressed='true'], .gd-icon-control--sm[aria-pressed='true'], .gd-icon-control--xs[aria-pressed='true'] {
+  background: var(--gd-accent-soft); color: var(--gd-accent-fg);
+}
 @media (pointer: coarse), (max-width: 767px) {
   .gd-icon-control, .gd-icon-control--sm, .gd-icon-control--xs {
     width: var(--gd-control-h-touch); height: var(--gd-control-h-touch); min-width: var(--gd-control-h-touch);
@@ -774,6 +788,13 @@
 }
 .gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-side-modal) var(--gd-ease); }
 .gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* CP1 · Drawer genérico: entra pela direita (24px→0) e sai simétrico (0→24px),
+   com opacidade pareada. A saída roda com o painel MONTADO (data-closing). */
+@keyframes gd-drawer-strip-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes gd-drawer-strip-out { from { transform: none; opacity: 1; } to { transform: translateX(24px); opacity: 0; } }
+.il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
+.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.il-drawer[data-closing]::backdrop { animation: none; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:
    é uma folha presa à lateral, não um card que aparece. */
 @keyframes gd-detail-in { from { transform: translateX(100%); } to { transform: none; } }
@@ -832,6 +853,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .gd-detail[open] .gd-detail__panel, .gd-detail[data-closing] .gd-detail__panel { animation: none; }
+  .il-drawer__strip, .il-drawer[data-closing] .il-drawer__strip { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
