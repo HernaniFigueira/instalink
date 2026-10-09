@@ -200,7 +200,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
             como LEITURA (já escolhidos pelo slot), não como campos a preencher. */}
         <div className="flex items-start justify-between gap-2 pb-2.5">
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-[var(--gd-text)]">Novo agendamento</p>
+            <p className="gd-ovl__title">Novo agendamento</p>
             <p className="mt-0.5 truncate text-[12px] tabular-nums text-[var(--gd-text-muted)]">
               {formatDayLabel(date)} · {time || 'escolha o horário'}{professionalId ? ` · ${pros.find((p) => p.id === professionalId)?.name ?? ''}` : ''}
             </p>

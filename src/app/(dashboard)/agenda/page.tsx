@@ -1858,10 +1858,10 @@ export default function AgendaPage() {
 
             {filterOpen && (
               <div role="dialog" aria-label="Filtros da agenda" data-agenda-filters="compact"
-                className="gd-ovl absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left">
+                className="gd-ovl gd-ovl--enter absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left">
                 {/* Cabeçalho: título + contagem aplicada + limpar (ghost). Sem caixa-alta. */}
                 <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2">
-                  <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--gd-text)]">
+                  <p className="gd-ovl__title flex items-center gap-1.5">
                     Filtros
                     {activeFilterCount > 0 && (
                       <span className="rounded-full bg-[var(--gd-bg-subtle)] px-1.5 text-[11px] font-semibold tabular-nums text-[var(--gd-text-secondary)]">{activeFilterCount}</span>

@@ -3773,12 +3773,14 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   border: 1px solid var(--gd-border-soft);
   border-radius: var(--gd-radius-md);
   box-shadow: var(--gd-shadow-md);
-  animation: gd-ovl-in 160ms ease-out both;
 }
-.gd-ovl__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 4px; }
-.gd-ovl__title { font-size: 14px; font-weight: 600; line-height: 20px; color: var(--gd-text); }
-.gd-ovl__label { margin: 0 0 6px; font-size: 12px; font-weight: 500; line-height: 16px; color: var(--gd-text-muted); }
-.gd-ovl__body { display: flex; flex-direction: column; gap: 12px; padding: 8px 14px 12px; }
-.gd-ovl__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--gd-border-soft); }
+/* Entrada própria só para painéis montados diretamente (Filtros). HoverCard e
+   Popover já animam pela camada do DS (gd-layer-in): não duplicar a motion. */
+.gd-ovl--enter { animation: gd-ovl-in var(--gd-motion-fast) var(--gd-ease) both; }
+.gd-ovl__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); padding: 12px 14px 4px; }
+.gd-ovl__title { margin: 0; font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
+.gd-ovl__label { margin: 0 0 6px; font-size: var(--gd-font-size-secondary); line-height: var(--gd-leading-normal); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
+.gd-ovl__body { display: flex; flex-direction: column; gap: var(--gd-space-3); padding: var(--gd-space-2) 14px 12px; }
+.gd-ovl__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); padding: 10px 12px; border-top: 1px solid var(--gd-border-soft); }
 @keyframes gd-ovl-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .gd-ovl { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-ovl--enter { animation: none; } }
