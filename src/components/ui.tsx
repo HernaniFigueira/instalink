@@ -1837,6 +1837,26 @@ export function ContextMenu({ open, onClose, point, items, label = 'Ações', he
 // por cima (ex.: cadastro de paciente) fecha sozinho, sem derrubar o de baixo.
 
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
+/**
+ * Duração de um motion TOKEN do DS (`--gd-motion-*`, em ms). Fonte única: o JS
+ * não repete o número do CSS — o timer de desmontagem da saída usa o MESMO valor
+ * da animação de saída. `prefers-reduced-motion` ⇒ 0 (desmonta já, sem espera).
+ * Sem stylesheet carregado (jsdom/SSR) cai no `fallback`.
+ */
+export function overlayMotionMs(token: string, fallback: number): number {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return 0;
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    if (!raw) return fallback;
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return raw.endsWith('ms') ? n : n * 1000;
+  } catch {
+    return fallback;
+  }
+}
+
 export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
@@ -1855,9 +1875,29 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
   // Dialog do DS não pode ser a porta de fuga de um formulário sujo.
   const guard = useOverlayDismissGuard();
   const token = useRef({});
-  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, onClose);
+  // SAÍDA ANIMADA (contrato único de overlay): o dialog fica montado com
+  // `data-closing` durante `--gd-motion-dialog-out` e só então avisa o pai.
+  // Sem isso a saída era um corte seco (CE/GD: "nada pode simplesmente sumir").
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const animatedClose = () => {
+    if (closeTimer.current) return;
+    const ms = overlayMotionMs('--gd-motion-dialog-out', 150);
+    if (ms === 0) { onClose(); return; }
+    setClosing(true);
+    closeTimer.current = setTimeout(() => { closeTimer.current = undefined; setClosing(false); onClose(); }, ms);
+  };
+  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, animatedClose);
+  // Escape/teclado leem SEMPRE o requestClose da renderização atual (o efeito
+  // de abertura roda uma vez por `open`; sem ref, lia um onClose/guard antigos).
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
   useEffect(() => {
     if (!open) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = undefined;
+    setClosing(false);
     const prev = document.activeElement as HTMLElement | null;
     lockBodyScroll(token.current);
     const node = ref.current;
@@ -1867,7 +1907,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
     (first || headingRef.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
       // Só o overlay do TOPO responde ao Escape (o de baixo continua aberto).
-      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestClose('escape'); }
+      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestCloseRef.current('escape'); }
       if (e.key === 'Tab' && node && isTopOverlay(entry)) wrapDialogFocus(e, node, headingRef.current);
     };
     window.addEventListener('keydown', onKey, true);
@@ -1884,6 +1924,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
   return createPortal(
     <div
       className="gd-dialog-backdrop"
+      data-closing={closing || undefined}
       onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
     >
       <div
@@ -1891,6 +1932,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
         role="dialog"
         aria-modal="true"
         aria-label={label || title}
+        data-closing={closing || undefined}
         className="gd-dialog"
         style={width ? ({ '--gd-dialog-w': width } as React.CSSProperties) : undefined}
       >
@@ -1979,13 +2021,12 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
-  const motion = () => {
-    try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 170; } catch { return 170; }
-  };
   function closeNow() {
     if (closing) return;
+    const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
+    if (ms === 0) { onClose(); return; }
     setClosing(true);
-    timer.current = setTimeout(() => { setClosing(false); onClose(); }, motion());
+    timer.current = setTimeout(() => { setClosing(false); onClose(); }, ms);
   }
   useEffect(() => {
     const dialog = dialogRef.current;
