@@ -444,3 +444,16 @@ página (`amber-*`/`zinc-*`) para os tokens do DS.
    salvo) fica **no fluxo** onde a ação aconteceu; toast é para o que acontece
    fora do contexto da tela (403 global). Material permite ambos; a escolha é
    pela distância entre a ação e o olhar de quem opera.
+
+## 10. Overlays compactos e foco de erro (Bloco 1 — regras definitivas)
+
+Validado em renderização real (1440, 1366, 1024, 768; smoke 390).
+
+- **Família `gd-ovl`** (`src/app/globals.css`): painel flutuante de contexto (Filtros da Agenda, resumo de hover) usa borda `--gd-border-soft`, raio `--gd-radius-md`, sombra `--gd-shadow-md`, fundo `--gd-bg-surface`. Subelementos: `gd-ovl__head`, `gd-ovl__title` (14px semibold), `gd-ovl__label` (13px medium, muted), `gd-ovl__body`, `gd-ovl__foot` (rodapé com régua superior). Nenhum valor literal de cor, raio ou sombra.
+- **Motion:** entrada própria só em `gd-ovl--enter` (painel montado diretamente). Popover e HoverCard animam pela camada do DS (`gd-layer-in`); não duplicar. `prefers-reduced-motion` desliga.
+- **DetailSideModal:** mantém a geometria de borda (sem raio, sem sombra, `--gd-detail-w`) conforme §9.4. Tokens de borda, fundo, espaçamento e motion já são os da família `gd-ovl`. Não é exceção de cor ou tipografia.
+- **Título do HoverCard** (nome da entidade) permanece no tamanho de seção (`--gd-type-section-size`); títulos de painéis compactos usam `gd-ovl__title`.
+- **Bloqueio:** subtítulo do Drawer é uma frase curta (cabe em uma linha a 480px). Não repetir a explicação no corpo.
+- **Foco no primeiro erro:** em validação local de formulário, o foco vai para o **campo inválido** (por `id`) e o bloco de erro segue com `role="alert"`. Sem campo mapeado, o foco cai no bloco de erro.
+- **Campo somente leitura de valor fixo** (ex.: Conselho = CRMV): `Input readOnly` dentro de `Field`, com a mesma altura de controle (40px). Não usar `div` com estilo próprio.
+- **Toolbar da Agenda (desktop ≥1024):** linha de controles sem moldura, separada da grade por régua de 1px; sem caixa dentro de caixa.
