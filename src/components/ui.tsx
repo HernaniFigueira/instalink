@@ -2525,10 +2525,10 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
           else if (e.key === 'Enter' && open && filtered[active]) { e.preventDefault(); pick(filtered[active]); }
-          // Escape com a lista aberta fecha SÓ a lista. preventDefault avisa o
-          // Drawer (dialog modal) que a tecla já foi consumida — sem isso o
-          // dialog inteiro fechava junto e perdia a edição do bloqueio.
-          else if (e.key === 'Escape' && open) { e.preventDefault(); setOpen(false); }
+          // Escape com a lista aberta fecha SÓ a lista (ver abaixo).
+          // stopPropagation: a tecla não chega ao Popover/Drawer que contém o
+          // campo (nem ao listener de window deles). Fecha SÓ a lista.
+          else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
           else if (e.key === 'Backspace' && multi && !query && selected.length) {
             onChange(selected.slice(0, -1));
           }
