@@ -487,8 +487,8 @@ export default function EquipePage() {
               <span className="text-xs text-[var(--gd-text-faint)] hidden sm:inline">Uma lista — sem duplicar quem tem acesso e quem atende</span>
             </div>
             {/* Header desktop */}
-            <div className="hidden sm:grid grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 px-4 py-2 border-b border-[var(--gd-border-soft)] bg-[var(--gd-bg-subtle)] text-[11px] font-semibold tracking-wide uppercase text-[var(--gd-text-muted)]">
-              <span>Pessoa</span><span>Função / Papel</span><span>Atendimento</span><span>Agenda</span><span>Acesso</span><span className="text-right">Ações</span>
+            <div className="hidden sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 px-4 py-2 border-b border-[var(--gd-border-soft)] bg-[var(--gd-bg-subtle)] text-[11px] font-semibold tracking-wide uppercase text-[var(--gd-text-muted)]">
+              <span>Pessoa</span><span>Função / Papel</span><span className="hidden lg:block">Atendimento</span><span className="hidden lg:block">Agenda</span><span>Acesso</span><span className="text-right">Ações</span>
             </div>
             <div className="divide-y divide-[var(--gd-border-soft)]">
               {unified.map((entry) => {
@@ -496,7 +496,7 @@ export default function EquipePage() {
                   const op = entry.professional;
                   const ownerRoleLabel = entry.professional ? (entry.professional.role || roleLabel(entry.role)) : roleLabel(entry.role);
                   return (
-                    <div key="owner" className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center bg-[var(--gd-bg-subtle)]/50">
+                    <div key="owner" className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center bg-[var(--gd-bg-subtle)]/50">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Avatar name={entry.name} src={op?.photo || undefined} size={32} />
                         <div className="min-w-0">
@@ -506,8 +506,8 @@ export default function EquipePage() {
                         </div>
                       </div>
                       <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{op?.role || roleLabel(entry.role)}</span>
-                      <span className="hidden sm:block">{op ? (atende(op) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>) : <span className="text-xs text-[var(--gd-text-muted)]">—</span>}</span>
-                      <span className="hidden sm:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(op)}</Link> : '—'}</span>
+                      <span className="hidden lg:block">{op ? (atende(op) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>) : <span className="text-xs text-[var(--gd-text-muted)]">—</span>}</span>
+                      <span className="hidden lg:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(op)}</Link> : '—'}</span>
                       <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span></span>
                       <span className="hidden sm:block text-right flex items-center justify-end gap-1.5">
                         <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
@@ -524,7 +524,7 @@ export default function EquipePage() {
                   const pro = entry.professional;
                   const role = roleLabel(m.role);
                   return (
-                    <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
+                    <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Avatar name={m.name} src={m.professionalPhoto || (pro?.photo as string) || undefined} size={32} />
                         <div className="min-w-0">
@@ -538,8 +538,8 @@ export default function EquipePage() {
                         </div>
                       </div>
                       <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{pro?.role || role}</span>
-                      <span className="hidden sm:block">{atende(pro) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>}</span>
-                      <span className="hidden sm:block text-xs">{pro ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${pro.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(pro)}</Link> : <span className="text-[var(--gd-text-muted)]">—</span>}</span>
+                      <span className="hidden lg:block">{atende(pro) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>}</span>
+                      <span className="hidden lg:block text-xs">{pro ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${pro.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(pro)}</Link> : <span className="text-[var(--gd-text-muted)]">—</span>}</span>
                       <span className="hidden sm:block">{m.active ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Inativo</span>}</span>
                       <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
                         <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
@@ -553,7 +553,7 @@ export default function EquipePage() {
                 // professional solo sem acesso
                 const p = entry.professional;
                 return (
-                  <div key={p.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
+                  <div key={p.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <Avatar name={p.name} src={p.photo || undefined} size={32} />
                       <div className="min-w-0">
@@ -566,8 +566,8 @@ export default function EquipePage() {
                       </div>
                     </div>
                     <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{p.role || 'Profissional'}</span>
-                    <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span></span>
-                    <span className="hidden sm:block text-xs"><Link href={`/disponibilidade?b=${businessId}&professionalId=${p.id}`} className={cn('px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'bg-[var(--gd-bg-surface-2)] border-[var(--gd-border-soft)] text-[var(--gd-text-secondary)]' : 'bg-blue-50 border-blue-200 text-blue-700')}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</Link></span>
+                    <span className="hidden lg:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span></span>
+                    <span className="hidden lg:block text-xs"><Link href={`/disponibilidade?b=${businessId}&professionalId=${p.id}`} className={cn('px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'bg-[var(--gd-bg-surface-2)] border-[var(--gd-border-soft)] text-[var(--gd-text-secondary)]' : 'bg-blue-50 border-blue-200 text-blue-700')}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</Link></span>
                     <span className="hidden sm:block"><span className="text-xs font-medium bg-white border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Sem acesso</span></span>
                     <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
                       <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
