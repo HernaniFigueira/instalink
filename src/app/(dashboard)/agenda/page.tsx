@@ -2034,9 +2034,10 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="gd-toolbar min-w-0">
+          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto">
             <Button
               variant="secondary"
+              className="min-h-11 sm:min-h-0"
               onClick={() => setFocus(today)}
               aria-pressed={focus === today}
               title={focus === today ? 'Você já está em hoje' : 'Ir para hoje'}
@@ -2050,16 +2051,16 @@ export default function AgendaPage() {
               label={`Escolher data (${focusRange})`}
               formatValue={() => focusLabel}
               max="2100-12-31"
-              className="min-w-0 max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
+              className="min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
             />
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
-          <div className="sm:ml-auto min-w-0 max-w-full gd-toolbar justify-end">
+          <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
             {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
                 saiu da UI — a lógica do modo mês segue intacta para links
                 diretos com view=month; nada foi destruído). */}
-            <Segmented
+                        <Segmented
               items={[
                 { id: 'day' as View, label: 'Dia', icon: 'calendar' },
                 { id: 'week' as View, label: 'Semana', icon: 'grid' },
@@ -2071,8 +2072,8 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
-            <Button variant="primary" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+            <Button variant="secondary" className="w-full sm:w-auto" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
+            <Button variant="primary" className="w-full sm:w-auto" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
           </div>

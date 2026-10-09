@@ -3687,3 +3687,18 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
    horários alinhada igual à fonte anterior. */
 .il-platform .ag-event, .il-platform .ag-time, .il-platform .ag-list__time { font-variant-numeric: tabular-nums; }
 .il-platform table th { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); text-transform: none; letter-spacing: normal; }
+
+/* Agenda · toolbar responsiva (CP3 homologação). Até 639px a barra vira duas
+   linhas intencionais: navegação de data em largura total; segmentado Dia/
+   Semana/Lista em largura total; "Bloquear horário" e "Novo agendamento"
+   divididos em duas colunas. Alvos de toque de 44px. A partir de 640px volta
+   ao layout horizontal (sem breakpoint frágil: nada depende de largura fixa). */
+@media (max-width: 639px) {
+  .ag-page .ag-toolbar-nav { flex-wrap: nowrap; gap: 6px; }
+  .ag-page .ag-toolbar-nav button,
+  .ag-page .ag-toolbar-nav .il-field-control { min-height: 44px; height: 44px; }
+  .ag-page .ag-toolbar-nav button[aria-label] { min-width: 44px; }
+  .ag-page .ag-toolbar-actions > .il-segmented { grid-column: 1 / -1; display: flex; width: 100%; }
+  .ag-page .ag-toolbar-actions > .il-segmented .il-segmented__item { flex: 1 1 0; justify-content: center; height: 44px; min-height: 44px; }
+  .ag-page .ag-toolbar-actions > button { width: 100%; height: 44px; min-height: 44px; justify-content: center; }
+}
