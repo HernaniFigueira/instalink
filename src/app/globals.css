@@ -1870,6 +1870,9 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   padding: 0; justify-content: center; gap: 0;
 }
 .workspace-sidebar:not(.is-expanded) .workspace-section__rule { display: none; }
+/* Blueprint · rail recolhida: espaçamento de 4px entre itens do mesmo grupo
+   (o expandido mantém 2px). Agrupamento segue por espaço, sem separadores. */
+.workspace-sidebar:not(.is-expanded) .workspace-section { gap: 4px; }
 .workspace-sidebar:not(.is-expanded) .workspace-foot { border-top: 0; }
 .workspace-foot__item {
   /* MISSÃO UX CLOSURE · item 6 — o rodapé do rail é feito de CONTROLES
