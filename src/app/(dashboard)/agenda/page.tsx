@@ -35,7 +35,7 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
@@ -2453,26 +2453,27 @@ export default function AgendaPage() {
             </Field></div>
           </div>
           <Field label="Escopo" hint={blockScope === 'business' ? 'Impede novos agendamentos para toda a clínica neste período.' : blockScope === 'professional' ? 'Bloqueia apenas a agenda do profissional selecionado.' : 'Impede que esse recurso seja reservado por outro atendimento.'}>
-            <Select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)}>
-              <option value="business">Clínica</option>
-              <option value="professional">Profissional</option>
-              <option value="resource">Sala ou equipamento</option>
-            </Select>
+            {/* CP3 · Combobox do DS (mode select) no lugar do select nativo. */}
+            <Combobox label="Escopo" value={blockScope} disabled={blockBusy}
+              onChange={(v) => setBlockScope(String(v) as typeof blockScope)}
+              options={[
+                { value: 'business', label: 'Clínica' },
+                { value: 'professional', label: 'Profissional' },
+                { value: 'resource', label: 'Sala ou equipamento' },
+              ]} />
           </Field>
           {blockScope === 'professional' && (
             <Field label="Profissional">
-              <Select value={blockPro} onChange={e => setBlockPro(e.target.value)}>
-                <option value="">Selecione</option>
-                {pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox label="Profissional" value={blockPro} disabled={blockBusy} placeholder="Buscar profissional…"
+                onChange={(v) => setBlockPro(String(v))}
+                options={[{ value: '', label: 'Selecione' }, ...pros.map(p => ({ value: p.id, label: p.name }))]} />
             </Field>
           )}
           {blockScope === 'resource' && (
             <Field label="Recurso">
-              <Select value={blockResource} onChange={e => setBlockResource(e.target.value)}>
-                <option value="">Selecione</option>
-                {scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </Select>
+              <Combobox label="Recurso" value={blockResource} disabled={blockBusy} placeholder="Buscar recurso…"
+                onChange={(v) => setBlockResource(String(v))}
+                options={[{ value: '', label: 'Selecione' }, ...scheduleResources.map(r => ({ value: r.id, label: r.name }))]} />
             </Field>
           )}
           <Field label="Motivo" hint="Opcional · aparece na grade e no histórico">

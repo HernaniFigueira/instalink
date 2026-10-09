@@ -564,7 +564,7 @@ describe('Clinical UX Closure — range and block mode', () => {
     await screen.findByText('Indisponibilidade temporária');
     expect((screen.getByLabelText('Início') as HTMLInputElement).value).toBe('09:00');
     expect((screen.getByLabelText('Fim') as HTMLInputElement).value).toBe('13:00');
-    expect((screen.getByLabelText('Profissional') as HTMLSelectElement).value).toBe(ORLANDO); // bloqueio: select nativo (fora do escopo do Quick Create)
+    expect(val(screen.getByLabelText('Profissional'))).toBe(ORLANDO); // bloqueio: Combobox do DS
     expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
     fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());
