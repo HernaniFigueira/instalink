@@ -410,6 +410,8 @@ body {
   border-color: var(--brand);
   color: #fff;
 }
+/* CP3 · filtros: foco por teclado com anel do DS (antes sem foco visível). */
+.il-chip:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 
 /* Tooltip simples (sidebar recolhida, ícones sem rótulo). */
 .il-tip { position: relative; }
@@ -2040,30 +2042,23 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   .ws-topbar { gap: 6px; padding: 0 8px; }
   .ws-topbar__right { gap: 4px; }
   .il-platform .ws-topbar [data-topbar-secondary] { display: none; }
-  /* Identidade RÍGIDA (o nome completo da clínica manda) e busca ELÁSTICA:
-     em telas estreitas a busca recolhe para o ícone e volta à largura total
-     quando tem foco. */
-  .il-platform .ws-topbar__left { flex: 0 1 auto; min-width: 50%; }
-  /* DS 1.1 — no estreito a logo encolhe um degrau (32px) mas continua SOLTA e
-     proporcional; o NOME não é cortado: a busca é quem cede. */
-  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
-  /* §5 — em tela estreita a IDENTIDADE não encolhe: logo no tamanho do token e
-     nome COMPLETO (pode quebrar em duas linhas, nunca virar "Andri…"). Quem
-     cede espaço é a busca, que recolhe para o ícone. */
-  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .il-platform .global-search { width: var(--control-h); max-width: none; flex: 0 0 auto; }
-  .il-platform .global-search__field { padding: 0; gap: 0; justify-content: center; cursor: pointer; }
-  .il-platform .global-search__input { width: 0; flex: 0 0 auto; padding: 0; }
-  .il-platform .global-search__clear,
-  .il-platform .global-search__kbd { display: none; }
-  /* Com foco, a busca ocupa a linha inteira da topbar (por cima dos vizinhos,
-     sem mexer no layout do rail nem no conteúdo). */
-  .il-platform .global-search:focus-within {
-    position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; width: auto;
-    display: flex; align-items: center; z-index: 60;
+  /* REFINAMENTO RESPONSIVO (CP3 · Shell 390): a topbar vira DUAS linhas.
+     Linha 1 = navegação + identidade completa (logo + nome, que pode quebrar em
+     duas linhas — Blueprint §6: nome prioritário, nunca “Andri…”) + ações.
+     Linha 2 = busca em LARGURA TOTAL, com campo visível e legível (não mais
+     recolhida para um ícone espremido). Regra genérica por largura, não por nome. */
+  .ws-topbar {
+    height: auto; min-height: var(--topbar-h);
+    flex-wrap: wrap; align-content: center; row-gap: 8px;
+    padding-top: 8px; padding-bottom: 8px;
   }
-  .il-platform .global-search:focus-within .global-search__field { padding: 0 6px 0 11px; gap: 8px; justify-content: flex-start; }
-  .il-platform .global-search:focus-within .global-search__input { width: auto; flex: 1 1 auto; }
+  .il-platform .ws-topbar__left { flex: 1 1 0; min-width: 0; }
+  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
+  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+  .ws-topbar__center { order: 3; flex: 0 0 100%; width: 100%; justify-content: stretch; }
+  .il-platform .global-search { width: 100%; max-width: none; flex: 1 1 auto; }
+  .il-platform .global-search__field { padding: 0 10px; gap: 8px; }
+  .il-platform .global-search__input { width: auto; flex: 1 1 auto; min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }

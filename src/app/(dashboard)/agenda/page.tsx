@@ -238,11 +238,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
+    <div className="relative shrink-0 select-none border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
       style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
       data-agenda-column={column.key}
       data-agenda-column-date={column.date}
       data-agenda-column-professional={column.professionalId || ''}
+      // Sem arraste nativo: após Escape o navegador podia iniciar drag do
+      // espaço livre e cancelar o pointer, impedindo o próximo intervalo.
+      onDragStart={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
         const origin = snapY(e);
@@ -606,6 +609,8 @@ export default function AgendaPage() {
   const [blockMode, setBlockMode] = useState(false);
   const [selectedRange, setSelectedRange] = useState<{ columnKey: string; time: string; durationMin: number } | null>(null);
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
+  /** CP3 · exclusão de bloqueio exige confirmação destrutiva explícita (segunda etapa). */
+  const [blockDeleteConfirm, setBlockDeleteConfirm] = useState(false);
   const [blockForm, setBlockForm] = useState(false);
   const [blockDate, setBlockDate] = useState('');
   const [blockStart, setBlockStart] = useState('');
@@ -1329,14 +1334,14 @@ export default function AgendaPage() {
   }, [blockMode]);
 
   function openBlock(seed: { date: string; time: string; professionalId: string; selectedDurationMin?: number }, existing?: ScheduleBlock) {
-    setEditingBlock(existing || null);
+    setEditingBlock(existing || null); setBlockDeleteConfirm(false);
     setBlockDate(seed.date); setBlockStart(seed.time || '09:00');
     setBlockEnd(seed.time ? minToTime(Math.min(1439, timeToMin(seed.time) + (seed.selectedDurationMin ?? 60))) : '10:00');
     setBlockScope(existing?.resourceId ? 'resource' : existing?.professionalId || seed.professionalId ? 'professional' : 'business');
     setBlockPro(existing?.professionalId || seed.professionalId || ''); setBlockResource(existing?.resourceId || '');
     setBlockReason(existing?.reason || ''); setBlockNote(existing?.note || ''); setBlockError(''); setBlockForm(true);
   }
-  function closeBlock() { setBlockForm(false); setBlockMode(false); setSelectedRange(null); }
+  function closeBlock() { setBlockForm(false); setBlockMode(false); setSelectedRange(null); setBlockDeleteConfirm(false); }
   async function saveBlock(remove = false) {
     if (blockBusy) return;
     setBlockError('');
@@ -1824,7 +1829,7 @@ export default function AgendaPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
                   {activeFilterCount > 0 && (
                     <button type="button" onClick={clearFilters}
-                      className="text-[12px] font-semibold text-[var(--danger-fg)] hover:underline">
+                      className="rounded-sm px-1 text-[12px] font-semibold text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text)] hover:underline focus-visible:outline-none focus-visible:shadow-focus">
                       Limpar filtros
                     </button>
                   )}
@@ -2431,7 +2436,7 @@ export default function AgendaPage() {
           overlay system (Drawer), geometria de MODAL CENTRAL — a faixa lateral
           fica reservada para superfícies de trabalho longas. Nada de regra de
           agenda muda aqui: mesmos campos, mesma validação, mesma API. */}
-      {blockForm && <Drawer open variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      <Drawer open={blockForm} variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
         {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
             canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
             foco e dropdown do resto do sistema. O `<select>` cru e o
@@ -2480,16 +2485,27 @@ export default function AgendaPage() {
             <Input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" />
           </Field>
           <Field label="Observação">
-            <Input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" />
+            <Input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Detalhes internos (opcional)" />
           </Field>
           {blockError && <Notice tone="error" title="Não foi possível salvar">{blockError}</Notice>}
-          <PageActionBar hint="O bloqueio não cria atendimento — só reserva o período.">
-            <Button variant="ghost" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button>
-            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}
-            <Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
-          </PageActionBar>
+          {blockDeleteConfirm && editingBlock ? (
+            <div role="alertdialog" aria-labelledby="block-delete-title" className="rounded-[var(--gd-radius-sm)] border border-[var(--gd-danger)] bg-[var(--gd-bg-surface)] p-3 space-y-3">
+              <p id="block-delete-title" className="text-[var(--gd-font-size-body)] font-semibold text-[var(--gd-text)]">Excluir este bloqueio?</p>
+              <p className="text-[var(--gd-font-size-secondary)] text-[var(--gd-text-muted)]">O período volta a aceitar agendamentos. Esta ação não pode ser desfeita.</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" disabled={blockBusy} onClick={() => setBlockDeleteConfirm(false)}>Voltar</Button>
+                <Button variant="destructive" disabled={blockBusy} onClick={() => void saveBlock(true)}>{blockBusy ? 'Excluindo…' : 'Confirmar exclusão'}</Button>
+              </div>
+            </div>
+          ) : (
+            <PageActionBar hint="O bloqueio não cria atendimento — só reserva o período.">
+              <Button variant="ghost" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button>
+              {editingBlock && <Button variant="destructive-soft" disabled={blockBusy} onClick={() => setBlockDeleteConfirm(true)}>Excluir bloqueio</Button>}
+              <Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+            </PageActionBar>
+          )}
         </div>
-      </Drawer>}
+      </Drawer>
       {quickCreate && (
         <QuickBookingPopover
           anchor={quickCreate}

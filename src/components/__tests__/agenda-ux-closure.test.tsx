@@ -179,7 +179,8 @@ describe('3C · criar/editar agendamento é MODAL CENTRAL', () => {
   });
 
   it('o formulário de bloqueio (curto) segue a mesma geometria; o par 50/50 é preservado', () => {
-    expect(agenda).toMatch(/<Drawer open variant="dialog" dialogWidth="560px"/);
+    expect(agenda).toMatch(/<Drawer open=\{blockForm\} variant="dialog" dialogWidth="560px"/);
+    // Drawer sempre montado (open controlado): a saída animada não é cortada.
     // Cadastro aninhado continua no MESMO overlay (nunca sheet dentro de sheet).
     expect(css).toContain(".il-drawer__strip[data-expanded='true'] .il-drawer__panels {");
     expect(css).toMatch(/dialog\.il-drawer--dialog\[data-expanded='true'\] \{[\s\S]*?width: min\(1280px/);
