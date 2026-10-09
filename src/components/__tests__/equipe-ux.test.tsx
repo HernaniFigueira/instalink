@@ -203,7 +203,9 @@ describe('Equipe UX — erros do formulário (render)', () => {
     const block = await screen.findByTestId('person-form-error');
     expect(block.textContent).toMatch(/CPF inválido/);
     expect(scroll).toHaveBeenCalled();
-    expect(document.activeElement).toBe(block);
+    // Foco no PRIMEIRO erro = o campo inválido (não o bloco de erro). O bloco segue com role=alert.
+    expect(document.activeElement).toBe(dialog().querySelector('#pessoa-cpf'));
+    expect(block.getAttribute('role')).toBe('alert');
     expect(dialog().querySelector('#pessoa-cpf')!.getAttribute('aria-invalid')).toBe('true');
     expect(apiSend).not.toHaveBeenCalled();
   });

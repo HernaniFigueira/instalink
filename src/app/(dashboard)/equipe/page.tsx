@@ -317,9 +317,11 @@ export default function EquipePage() {
   }
 
   // Scroll + foco no bloco de erro a cada falha (mesmo texto repetido → tick novo).
+  // Foco no PRIMEIRO erro: o campo inválido (por id) recebe o foco; sem campo mapeado, cai no bloco de erro.
   useEffect(() => {
     if (!fError) return;
-    const el = fErrorRef.current;
+    const field = fErrorField ? document.getElementById(fErrorField) : null;
+    const el = (field as HTMLElement | null) ?? fErrorRef.current;
     if (!el) return;
     if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.focus({ preventScroll: true });
@@ -859,7 +861,7 @@ export default function EquipePage() {
                   <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Vínculo clínico</p>
                   <div className="grid grid-cols-[110px_90px_1fr] gap-2">
                     <Field label="Conselho">
-                      <div className="h-[38px] flex items-center px-3 rounded-sm border border-[var(--border-strong)] bg-[var(--surface-3)] text-sm font-medium text-[var(--text)]">CRMV</div>
+                      <Input value="CRMV" readOnly aria-readonly="true" />
                     </Field>
                     <Field label="UF">
                       <Select value={fUf} onChange={(e)=> setFUf(e.target.value)}>

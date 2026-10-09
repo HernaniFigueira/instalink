@@ -147,7 +147,7 @@ describe('Integridade A-F — provas comportamentais além de grep', () => {
     expect(catalog).toContain('Informe o número do CRMV');
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).not.toContain('CRMV-SP');
-    expect(equipe).toContain('>CRMV</div>');
+    expect(equipe).toContain('<Input value="CRMV" readOnly');
     expect(equipe).toContain('formatCrmvDisplay');
     function validateCrmv(uf: string, num: string) {
       if (uf || num) {
