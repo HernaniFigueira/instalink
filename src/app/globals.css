@@ -3152,7 +3152,10 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
    (F1A tem uma). Nada de aba desabilitada nem módulo decorativo. */
 .encounter-workspace__nav {
   display: flex;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 22px;
+  overflow-x: auto;
+  scrollbar-width: thin;
   padding: 0 var(--encounter-page-gutter);
   border-bottom: 1px solid var(--border-soft, #eef2ef);
   background: var(--surface, #fff);
@@ -3784,3 +3787,109 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 .gd-ovl__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); padding: 10px 12px; border-top: 1px solid var(--gd-border-soft); }
 @keyframes gd-ovl-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .gd-ovl--enter { animation: none; } }
+
+/* ── F1 · SESSÃO CLÍNICA (workspace canônico) ─────────────────────────────
+   Composição: identidade do paciente em destaque, contexto em fatos curtos,
+   estado à direita; navegação agrupada por intenção clínica; blocos com
+   respiro (sem caixa dentro de caixa); rodapé persistente com estado real,
+   tempo do atendimento e ações. Tokens e primitivas do DS (sem família nova). */
+.encounter-workspace__status {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+.encounter-workspace__booking-status { font-size: 12px; color: var(--text-muted, #66736c); }
+.encounter-workspace__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 6px 0 0;
+}
+.encounter-workspace__facts > div { min-width: 0; }
+.encounter-workspace__facts dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint, #8b9a92);
+}
+.encounter-workspace__facts dd { margin: 1px 0 0; font-size: 13px; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-workspace__nav-group { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.encounter-workspace__nav-label {
+  padding: 10px 12px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint, #8b9a92);
+  white-space: nowrap;
+}
+.encounter-workspace__nav-items { display: flex; gap: 2px; flex-wrap: nowrap; }
+.encounter-workspace__nav-items .encounter-workspace__nav-item { white-space: nowrap; }
+
+.encounter-workspace__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft, #eef2ef);
+  max-width: 76ch;
+}
+.encounter-workspace__block-title { margin: 0; font-size: var(--gd-font-size-section, 15px); font-weight: 700; color: var(--text, #1c2822); }
+.encounter-workspace__block-hint, .encounter-workspace__block-empty { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-muted, #66736c); }
+.encounter-workspace__files { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.encounter-workspace__file { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.encounter-workspace__file-name { min-width: 0; font-size: 13px; font-weight: 600; color: var(--brand-fg, #276347); overflow-wrap: anywhere; }
+.encounter-workspace__file-meta { font-size: 12px; color: var(--text-muted, #66736c); }
+
+.encounter-workspace__closing { margin-top: 8px; scroll-margin-top: 140px; }
+.encounter-workspace__closing > section { margin-top: 0; }
+
+/* Rodapé persistente: sticky no fim da sessão, nunca cobre o conteúdo final. */
+.encounter-workspace__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: auto;
+  padding: 12px var(--encounter-page-gutter) max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-workspace__footer-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; }
+.encounter-workspace__timer { font-size: 12.5px; font-weight: 600; color: var(--text-muted, #66736c); }
+.encounter-workspace__footer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.encounter-workspace__footer .encounter-page__save-state { font-size: 12px; }
+
+/* Revisão de finalização: hierarquia por grupos, sem caixa dentro de caixa. */
+.encounter-review { display: flex; flex-direction: column; gap: 14px; }
+.encounter-review__group { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-soft, #eef2ef); }
+.encounter-review__group:first-child { padding-top: 0; border-top: 0; }
+.encounter-review__group-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted, #66736c); }
+.encounter-review__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 18px; }
+.encounter-review__label { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint, #8b9a92); }
+.encounter-review__value { margin: 4px 0 0; font-size: var(--gd-font-size-body, 14px); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text, #1c2822); }
+.encounter-review__pending { margin: 4px 0 0; padding-left: 18px; font-size: var(--gd-font-size-body, 14px); color: var(--warning-fg, #8a5b00); }
+
+@media (max-width: 1024px) {
+  .encounter-workspace__heading { flex-wrap: wrap; }
+  .encounter-workspace__status { align-items: flex-start; text-align: left; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .encounter-workspace__footer { flex-wrap: wrap; }
+}
+@media (max-width: 767px) {
+  .encounter-workspace__facts { flex-direction: column; gap: 6px; }
+  .encounter-workspace__nav { gap: 12px; }
+  .encounter-workspace__nav-label { padding-top: 8px; }
+  .encounter-workspace__footer { flex-direction: column; align-items: stretch; gap: 8px; padding-inline: 16px; }
+  .encounter-workspace__footer-actions { justify-content: stretch; }
+  .encounter-workspace__footer-actions > * { flex: 1 1 auto; min-height: 40px; }
+  .encounter-workspace__block { margin-top: 22px; }
+}

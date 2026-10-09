@@ -23,13 +23,14 @@
 // Agenda caem no MESMO `encounterId` — o workspace apenas LÊ por id.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@/components/icons';
 import { PageBackAction, Skeleton, StatusBadge } from '@/components/ui';
 import type { DismissReason } from './OverlayDismissGuard';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
 import { ENCOUNTER_CLINICAL_STATE } from '@/lib/encounters';
+import { BOOKING_STATUS } from '@/lib/status';
+import type { BookingStatus } from '@/lib/types';
 import { EncounterWorkspaceBody } from './EncounterWorkspaceBody';
 import type { EncounterAuthorityRow } from './useEncounterAuthority';
 import { formatDateBR } from '@/lib/tz';
@@ -171,18 +172,21 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   const patient = ctx?.patient || null;
   // Vet primeiro: o PACIENTE é o pet; o humano é o responsável/contexto.
   const headline = patient?.name || ctx?.responsible?.name || row.customerName || row.petName || 'Paciente';
-  const subtitle = patient
-    ? joinParts([patient.speciesLabel, patient.breed, patient.ageLabel])
-    : '';
-  const meta = joinParts([
-    ctx?.service?.name || row.serviceName || '',
-    ctx?.professional?.name || row.professionalName || '',
-    row.date ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` : '',
-  ]);
+  // Só dados que EXISTEM no cadastro do pet (espécie, raça, idade, sexo).
+  const sexLabel = patient?.sex === 'M' ? 'Macho' : patient?.sex === 'F' ? 'Fêmea' : '';
+  const patientLine = patient ? joinParts([patient.speciesLabel, patient.breed, patient.ageLabel, sexLabel]) : '';
+  const tutorName = ctx?.responsible?.name || row.customerName || '';
+  const tutorPhone = ctx?.responsible?.phone || '';
+  const serviceName = ctx?.service?.name || row.serviceName || '';
+  const professionalName = ctx?.professional?.name || row.professionalName || '';
+  const when = row.date ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` : '';
+  // Status do AGENDAMENTO é um eixo separado do estado CLÍNICO do atendimento.
+  const bookingStatus = ctx?.booking?.status as BookingStatus | undefined;
+  const bookingLabel = bookingStatus && BOOKING_STATUS[bookingStatus] ? BOOKING_STATUS[bookingStatus].panel : '';
 
   return (
     <main className="encounter-workspace" data-clinical-state={state.id} data-encounter-id={row.id}>
-      {/* ── Cabeçalho contextual persistente ── */}
+      {/* ── Cabeçalho contextual persistente: paciente é protagonista ── */}
       <header className="encounter-workspace__header">
         <PageBackAction className="encounter-workspace__back" onClick={leave} label="Voltar" />
         <div className="encounter-workspace__heading">
@@ -191,16 +195,25 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
               {row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
             </p>
             <h1 className="encounter-workspace__patient">{headline}</h1>
-            {subtitle && <p className="encounter-workspace__subtitle">{subtitle}</p>}
-            {patient && (ctx?.responsible?.name || row.customerName) && (
+            {patientLine && <p className="encounter-workspace__subtitle">{patientLine}</p>}
+            {tutorName && (
               <p className="encounter-workspace__tutor">
-                Tutor: {ctx?.responsible?.name || row.customerName}
+                Tutor: {tutorName}{tutorPhone ? ` · ${tutorPhone}` : ''}
               </p>
             )}
-            {meta && <p className="encounter-workspace__meta">{meta}</p>}
+            {(serviceName || professionalName || when) && (
+              <dl className="encounter-workspace__facts">
+                {serviceName && <div><dt>Serviço</dt><dd>{serviceName}</dd></div>}
+                {professionalName && <div><dt>Profissional</dt><dd>{professionalName}</dd></div>}
+                {when && <div><dt>Agendado</dt><dd className="tabular-nums">{when}</dd></div>}
+              </dl>
+            )}
           </div>
-          {/* Estado clínico SEMPRE textual: a cor acompanha, nunca substitui. */}
-          <StatusBadge tone={state.tone}>{state.label.toUpperCase()}</StatusBadge>
+          <div className="encounter-workspace__status">
+            {/* Estado clínico SEMPRE textual: a cor acompanha, nunca substitui. */}
+            <StatusBadge tone={state.tone}>{state.label.toUpperCase()}</StatusBadge>
+            {bookingLabel && <span className="encounter-workspace__booking-status">Agendamento: {bookingLabel}</span>}
+          </div>
         </div>
       </header>
 
@@ -212,14 +225,9 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         row={row}
         onRow={syncRow}
         registerLeave={registerLeave}
+        fullRecordHref={`/atendimento/${encodeURIComponent(row.id)}/registro?returnTo=${encodeURIComponent(returnTo)}`}
+        onNavigate={(href) => router.push(href)}
       />
-
-      {row.status === 'finalized' && (
-        <p className="encounter-workspace__hint">
-          <Icon n="lock" size={13} /> Registro finalizado: a finalização completa e a revisão clínica
-          entram no F1B2/F1C.
-        </p>
-      )}
     </main>
   );
 }

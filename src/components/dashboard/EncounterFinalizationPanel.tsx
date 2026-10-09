@@ -17,6 +17,9 @@ interface Props {
   reopenEvents: Array<{ at: string; actorUserId: string; meta?: Record<string, unknown> }>;
   canReopen: boolean;
   canAddendum: boolean;
+  /** Revisão de finalização é controlada pelo corpo: o rodapé do workspace abre o mesmo diálogo. */
+  reviewOpen?: boolean;
+  onReviewOpenChange?: (open: boolean) => void;
 }
 
 function fmt(value: string) {
@@ -24,27 +27,87 @@ function fmt(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
+function ReviewBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <h4 className="encounter-review__label">{label}</h4>
+      <p className="encounter-review__value">{value || 'Não preenchido'}</p>
+    </div>
+  );
+}
+
+/** Retorno estruturado (F2 P3) lido como texto humano — sem inventar data. */
+function followUpText(row: EncounterAuthorityRow): string {
+  const mode = row.followUpMode || (row.followUp ? 'custom' : 'none');
+  if (mode === 'date' && row.followUpDate) {
+    return `Retorno em ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(`${row.followUpDate}T12:00:00`))}`;
+  }
+  if (mode === 'interval' && row.followUpDays) return `Retorno em ${row.followUpDays} dias`;
+  if (mode === 'custom' && row.followUp) return row.followUp;
+  return 'Sem retorno definido';
+}
+
+/** Monta a revisão a partir do que EXISTE no Encounter (nenhum campo novo). */
+function buildReview(row: EncounterAuthorityRow, professionalFallback: string) {
+  const physicalExam = row.clinical?.assessment?.veterinary?.physicalExam || '';
+  const problems = (row.clinical?.problems || []).map((item) => item.label).filter(Boolean).join(', ');
+  const conduct = row.clinical?.plan?.conduct || '';
+  const procedures = (row.clinical?.procedures || []).map((item) => item.name).filter(Boolean).join(', ');
+  const pending = [
+    ['Queixa principal', row.complaint],
+    ['Avaliação', physicalExam],
+    ['Problemas', problems],
+    ['Conduta', conduct],
+  ].filter(([, value]) => !String(value || '').trim()).map(([label]) => label);
+  return {
+    clinical: [
+      { label: 'Queixa principal', value: row.complaint },
+      { label: 'Avaliação', value: physicalExam },
+      { label: 'Problemas', value: problems },
+      { label: 'Conduta', value: conduct },
+      { label: 'Procedimentos', value: procedures },
+    ],
+    followUp: followUpText(row),
+    pending,
+    authorship: row.signedBy
+      ? `Assinado por ${row.signedBy}`
+      : `Será registrado como ${row.professionalName || professionalFallback}, profissional responsável.`,
+    other: [
+      { label: 'Evolução clínica', value: row.evolution },
+      { label: 'Anamnese', value: row.clinical?.anamnesis?.history || '' },
+      { label: 'Orientações ao tutor', value: row.guidance },
+      { label: 'Nota interna', value: row.internalNote },
+      { label: 'Etiquetas', value: (row.tags || []).join(', ') },
+    ],
+  };
+}
+
 /** F1C: revisão explícita, sem finalizar às cegas. */
-export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush, authority, revisions, addenda, reopenEvents, canReopen, canAddendum }: Props) {
-  const [reviewOpen, setReviewOpen] = useState(false);
+export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush, authority, revisions, addenda, reopenEvents, canReopen, canAddendum, reviewOpen: controlledOpen, onReviewOpenChange }: Props) {
+  // Controlado pelo corpo (rodapé) quando fornecido; autônomo caso contrário.
+  const [localOpen, setLocalOpen] = useState(false);
+  const reviewOpen = controlledOpen ?? localOpen;
+  const setReviewOpen = onReviewOpenChange ?? setLocalOpen;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Erro da FINALIZAÇÃO aparece dentro da revisão (é onde o humano está agindo).
+  const [reviewError, setReviewError] = useState('');
   const [message, setMessage] = useState('');
   const [addendum, setAddendum] = useState('');
   const [reason, setReason] = useState('');
   const operation = useRef('');
 
   async function finalize() {
-    setError(''); setMessage(''); setBusy(true);
+    setReviewError(''); setMessage(''); setBusy(true);
     try {
       // A autoridade flushes every registered clinical section first. Any
       // failure leaves the review open and never sends the transition.
-      if (!(await flush())) { setError('Não foi possível persistir todas as seções. O atendimento não foi finalizado.'); return; }
+      if (!(await flush())) { setReviewError('Não foi possível persistir todas as seções. O atendimento não foi finalizado.'); return; }
       const key = operation.current || (operation.current = crypto.randomUUID());
       const res = await apiSend<{ encounter: EncounterAuthorityRow }>('/api/encounters', 'PATCH', {
         businessId, id: row.id, action: 'finalize', expectedVersion: authority.version(), idempotencyKey: key,
       }, { scope: 'action', area: 'Atendimento' });
-      if (!res.ok) { setError(res.message || 'Não foi possível finalizar.'); return; }
+      if (!res.ok) { setReviewError(res.message || 'Não foi possível finalizar.'); return; }
       authority.publish(res.data!.encounter); setReviewOpen(false); setMessage('Atendimento finalizado.');
     } finally { setBusy(false); }
   }
@@ -75,6 +138,7 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
   }
 
   const finalRevision = revisions[revisions.length - 1];
+  const review = buildReview(row, 'profissional responsável');
   const scheduledDate = row.context?.booking?.date || row.date;
   const scheduledTime = row.context?.booking?.time || row.time;
   const scheduledAt = scheduledDate ? `${scheduledDate}T${scheduledTime || '00:00'}:00` : '';
@@ -94,7 +158,7 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
         hint={row.status === 'finalized' ? 'FINALIZADO · somente leitura' : 'Revise o atendimento antes de criar a fronteira clínica.'}
       >
         {row.status === 'draft' && (
-          <Button type="button" onClick={() => { setError(''); setReviewOpen(true); }} disabled={!canFinalize}>
+          <Button type="button" onClick={() => { setError(''); setReviewError(''); setReviewOpen(true); }} disabled={!canFinalize}>
             Revisar e finalizar
           </Button>
         )}
@@ -149,7 +213,10 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
       {error && <Notice tone="error" className="mt-3">{error}</Notice>}
 
       {/* §43 — a confirmação é o Dialog CANÔNICO (Escape, foco contido, scroll
-          lock e guarda de descarte do sistema). Nada de modal artesanal. */}
+          lock e guarda de descarte do sistema). Nada de modal artesanal.
+          Hierarquia da revisão: o que o profissional precisa CONFERIR primeiro
+          (avaliação, problemas, conduta, procedimentos, retorno), depois o que
+          falta preencher, a autoria e, por último, os demais dados reais. */}
       <Dialog
         open={reviewOpen}
         onClose={() => { if (!busy) setReviewOpen(false); }}
@@ -160,24 +227,43 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
           <>
             <Button type="button" variant="ghost" onClick={() => setReviewOpen(false)} disabled={busy}>Voltar</Button>
             {/* Ação destrutiva/final: Danger SOLID só aqui — a fronteira clínica
-                exige confirmação explícita. */}
+                exige confirmação explícita. Em repouso, o CTA do rodapé é primário. */}
             <Button type="button" variant="destructive" onClick={() => { void finalize(); }} disabled={busy || !canFinalize}>
               {busy ? 'Finalizando…' : 'Finalizar atendimento'}
             </Button>
           </>
         }
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            ['Queixa principal', row.complaint], ['Evolução clínica', row.evolution], ['Anamnese', row.clinical?.anamnesis?.history],
-            ['Avaliação', row.clinical?.assessment?.veterinary?.physicalExam], ['Problemas', row.clinical?.problems?.map((item) => item.label).join(', ')],
-            ['Conduta', row.clinical?.plan?.conduct], ['Procedimentos', row.clinical?.procedures?.map((item) => item.name).join(', ')], ['Orientações', row.guidance],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]">{label}</h3>
-              <p className="mt-1 whitespace-pre-wrap text-[var(--gd-font-size-body)] text-[var(--gd-text)]">{value || 'Não preenchido'}</p>
+        {reviewError && <Notice tone="error" className="mb-3">{reviewError}</Notice>}
+        <div className="encounter-review" data-testid="encounter-review">
+          <section className="encounter-review__group" aria-label="Avaliação e plano">
+            <h3 className="encounter-review__group-title">Avaliação e plano</h3>
+            <div className="encounter-review__grid">
+              {review.clinical.map((block) => <ReviewBlock key={block.label} label={block.label} value={block.value} />)}
             </div>
-          ))}
+          </section>
+          <section className="encounter-review__group" aria-label="Retorno e pendências">
+            <h3 className="encounter-review__group-title">Retorno e pendências</h3>
+            <div className="encounter-review__grid">
+              <ReviewBlock label="Retorno" value={review.followUp} />
+              <div>
+                <h4 className="encounter-review__label">Pendências de preenchimento</h4>
+                {review.pending.length === 0
+                  ? <p className="encounter-review__value">Nenhuma pendência de preenchimento.</p>
+                  : <ul className="encounter-review__pending">{review.pending.map((item) => <li key={item}>{item}</li>)}</ul>}
+              </div>
+            </div>
+          </section>
+          <section className="encounter-review__group" aria-label="Autoria">
+            <h3 className="encounter-review__group-title">Autoria</h3>
+            <p className="encounter-review__value">{review.authorship}</p>
+          </section>
+          <section className="encounter-review__group" aria-label="Demais dados">
+            <h3 className="encounter-review__group-title">Demais dados do atendimento</h3>
+            <div className="encounter-review__grid">
+              {review.other.map((block) => <ReviewBlock key={block.label} label={block.label} value={block.value} />)}
+            </div>
+          </section>
         </div>
         <Notice tone="warning" className="mt-4">
           Ao finalizar, esta versão será registrada em snapshot e o conteúdo ficará somente para leitura.
