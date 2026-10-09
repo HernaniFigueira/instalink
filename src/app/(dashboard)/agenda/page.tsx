@@ -1858,7 +1858,7 @@ export default function AgendaPage() {
 
             {filterOpen && (
               <div role="dialog" aria-label="Filtros da agenda" data-agenda-filters="compact"
-                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left bg-[var(--gd-bg-surface)] border border-[var(--gd-border-soft)] rounded-[var(--gd-radius-md)] shadow-[var(--gd-shadow-md)]">
+                className="gd-ovl absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left">
                 {/* Cabeçalho: título + contagem aplicada + limpar (ghost). Sem caixa-alta. */}
                 <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2">
                   <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--gd-text)]">
@@ -2460,18 +2460,14 @@ export default function AgendaPage() {
           overlay system (Drawer), geometria de MODAL CENTRAL — a faixa lateral
           fica reservada para superfícies de trabalho longas. Nada de regra de
           agenda muda aqui: mesmos campos, mesma validação, mesma API. */}
-      <Drawer open={blockForm} variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      <Drawer open={blockForm} variant="dialog" dialogWidth="480px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} subtitle="Período indisponível. Não conta como atendimento." width="max-w-md">
         {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
             canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
             foco e dropdown do resto do sistema. O `<select>` cru e o
             `<input type="date">` saíram daqui — nenhuma tela desenha controle
             próprio. Regras de negócio intactas: mesmos campos, mesma validação,
             mesma chamada de API. */}
-        <div className="p-4 space-y-4">
-          <div>
-            <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Indisponibilidade temporária</h3>
-            <p className="mt-1 text-[var(--gd-font-size-body)] text-[var(--gd-text-muted)]">Use para períodos em que normalmente haveria atendimento, mas a clínica, um profissional ou um recurso ficará indisponível.</p>
-          </div>
+        <div className="p-4 space-y-4" data-block-form="compact">
           {/* DS · data e horas do bloqueio: DatePicker e Combobox canônicos (sem
               <input type="date|time">). O valor enviado segue HH:MM / ISO. */}
           <Field label="Data">

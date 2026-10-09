@@ -3749,3 +3749,36 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .ag-page .ag-blocks-bar__items > button { flex: 0 0 auto; }
   .ag-page .ag-blocks-bar__label, .ag-page .ag-blocks-bar__hint { flex: 0 0 auto; white-space: nowrap; }
 }
+
+/* ── AGENDA · COMPOSIÇÃO FINAL (desktop ≥1024) ────────────────────────────
+   Decisão de composição: título + aviso de bloqueio + Filtros/Fila formam a
+   linha 1; a toolbar (Hoje ‹ data ›, Dia|Semana|Lista, Bloquear, Novo) é uma
+   linha de controles SEM moldura, separada da grade por uma régua de 1px. A
+   grade começa logo abaixo, sem caixas sucessivas. (Uma linha única com
+   rótulos não cabe em 1024 sem perder controles — por isso duas linhas.) */
+@media (min-width: 1024px) {
+  .ag-page .relative.z-40.ws-panel {
+    background: transparent; border: 0; border-radius: 0; box-shadow: none;
+    border-bottom: 1px solid var(--gd-border-soft);
+  }
+  .ag-page .relative.z-40.ws-panel > .gd-toolbar { padding: 6px 0 8px; }
+}
+
+/* ── OVERLAYS · LINGUAGEM ÚNICA GODOUTOR ─────────────────────────────────
+   Padrão compartilhado para painéis flutuantes de contexto (Filtros, resumo
+   de hover, criação rápida). Mesmo raio, borda, sombra, cabeçalho, rótulos e
+   rodapé — funções diferentes, mesma gramática. */
+.gd-ovl {
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border-soft);
+  border-radius: var(--gd-radius-md);
+  box-shadow: var(--gd-shadow-md);
+  animation: gd-ovl-in 160ms ease-out both;
+}
+.gd-ovl__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 4px; }
+.gd-ovl__title { font-size: 14px; font-weight: 600; line-height: 20px; color: var(--gd-text); }
+.gd-ovl__label { margin: 0 0 6px; font-size: 12px; font-weight: 500; line-height: 16px; color: var(--gd-text-muted); }
+.gd-ovl__body { display: flex; flex-direction: column; gap: 12px; padding: 8px 14px 12px; }
+.gd-ovl__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--gd-border-soft); }
+@keyframes gd-ovl-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-ovl { animation: none; } }
