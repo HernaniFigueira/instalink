@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { apiSend } from '@/lib/api-client';
-import { ActionSection, Button, Dialog, Field, Notice, PageActionBar, StatusBadge, Textarea } from '@/components/ui';
+import { ActionSection, Button, Dialog, Disclosure, Field, Notice, PageActionBar, StatusBadge, Textarea } from '@/components/ui';
 import type { EncounterFinalizationRevision, EncounterAddendum } from '@/lib/types';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 
@@ -168,44 +168,74 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
       </ActionSection>
 
       {row.status === 'finalized' && (
-        <div className="mt-3 space-y-4 text-sm">
-          <p className="text-[var(--gd-text-muted)]">
-            <strong className="text-[var(--gd-text)]">Finalização atual:</strong> revisão {finalRevision?.revisionNumber || '—'} · {fmt(row.finalizedAt)} · {row.signedBy || 'Profissional responsável'}
-          </p>
-          {canAddendum && (
-            <ActionSection
-              title="Adicionar nota complementar"
-              hint="Entra no prontuário sem alterar o conteúdo originalmente finalizado."
-            >
-              <div className="w-full space-y-2">
+        /* Estado finalizado em TRÊS faixas, de cima para baixo por tempo de
+           decisão: (1) Registro clínico — o que foi fechado; (2) Revisão-
+           finalização — a revisão vigente; (3) Pós-finalização — ações
+           subordinadas (nota complementar, reabertura, histórico). */
+        <div className="encounter-final mt-3" data-testid="encounter-final">
+          <section className="encounter-final__band encounter-final__band--record" aria-label="Registro clínico">
+            <h3 className="encounter-final__band-title">Registro clínico</h3>
+            <p className="encounter-final__band-text">Conteúdo finalizado e somente leitura. Alterações exigem reabertura.</p>
+          </section>
+          <section className="encounter-final__band encounter-final__band--review" aria-label="Revisão-finalização">
+            <h3 className="encounter-final__band-title">Revisão-finalização</h3>
+            <p className="encounter-final__band-text">
+              {finalRevision?.revisionNumber ? <><span className="encounter-final__label">Revisão vigente</span> <span className="tabular-nums">{finalRevision.revisionNumber}</span> · </> : null}
+              <span className="tabular-nums">{fmt(row.finalizedAt)}</span>
+              {' · '}{row.signedBy || 'Profissional responsável'}
+            </p>
+          </section>
+          <section className="encounter-final__band encounter-final__band--after" aria-label="Pós-finalização">
+            <h3 className="encounter-final__band-title">Pós-finalização</h3>
+            {canAddendum && (
+              <div className="encounter-final__addendum">
+                <h4 className="encounter-final__sub">Adicionar nota complementar</h4>
+                <p className="encounter-final__hint">Entra no prontuário sem alterar o conteúdo originalmente finalizado.</p>
                 <Field label="Nota complementar" htmlFor="encounter-addendum">
                   <Textarea id="encounter-addendum" value={addendum} onChange={(e) => setAddendum(e.target.value)} disabled={busy} />
                 </Field>
-                <Button type="button" size="sm" onClick={() => { void saveAddendum(); }} disabled={busy || !addendum.trim()}>Adicionar nota</Button>
+                <div className="encounter-final__actions">
+                  <Button type="button" size="sm" onClick={() => { void saveAddendum(); }} disabled={busy || !addendum.trim()}>Adicionar nota</Button>
+                </div>
               </div>
-            </ActionSection>
-          )}
-          <div>
-            <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Histórico</h3>
-            <ol className="mt-2 space-y-2" aria-label="Histórico de finalizações e notas">
-              {timeline.map((event) => (
-                <li key={event.id} className={`border-l-2 pl-3 ${event.kind === 'reopen' ? 'border-[var(--gd-warning)]' : event.kind === 'addendum' ? 'border-[var(--gd-info)]' : 'border-[var(--gd-border)]'}`}>
-                  <strong>{event.label}</strong> · <span className="tabular-nums">{fmt(event.at)}</span>
-                  <br />{event.detail}
-                </li>
-              ))}
-            </ol>
-          </div>
-          {canReopen && (
-            <PageActionBar hint="A reabertura fica registrada no histórico com o motivo.">
-              <div className="mr-auto w-full max-w-[520px]">
-                <Field label="Motivo da reabertura" htmlFor="encounter-reopen-reason">
-                  <Textarea id="encounter-reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} placeholder="Explique por que o registro precisa voltar ao estado editável." />
-                </Field>
+            )}
+            {addenda.length > 0 && (
+              <div className="encounter-final__notes" aria-label="Notas complementares">
+                <h4 className="encounter-final__sub">Notas complementares</h4>
+                <ul className="encounter-final__timeline">
+                  {addenda.map((note) => (
+                    <li key={note.id} className="encounter-final__event encounter-final__event--addendum">
+                      <span className="tabular-nums">{fmt(note.createdAt)}</span>
+                      <br />{note.text}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <Button type="button" variant="secondary" onClick={() => { void reopen(); }} disabled={busy || reason.trim().length < 3}>Reabrir atendimento</Button>
-            </PageActionBar>
-          )}
+            )}
+            {canReopen && (
+              <Disclosure label="Reabrir para editar" hint="Ação rara · registra motivo na auditoria">
+                <div className="encounter-final__reopen">
+                  <p className="encounter-final__hint">A reabertura fica registrada no histórico com o motivo.</p>
+                  <Field label="Motivo da reabertura" htmlFor="encounter-reopen-reason">
+                    <Textarea id="encounter-reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} placeholder="Explique por que o registro precisa voltar ao estado editável." />
+                  </Field>
+                  <div className="encounter-final__actions">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => { void reopen(); }} disabled={busy || reason.trim().length < 3}>Reabrir atendimento</Button>
+                  </div>
+                </div>
+              </Disclosure>
+            )}
+            <Disclosure label="Histórico de finalizações e notas" hint={`${timeline.length} ${timeline.length === 1 ? 'evento' : 'eventos'}`}>
+              <ol className="encounter-final__timeline" aria-label="Histórico de finalizações e notas">
+                {timeline.map((event) => (
+                  <li key={event.id} className={`encounter-final__event encounter-final__event--${event.kind}`}>
+                    <strong>{event.label}</strong> · <span className="tabular-nums">{fmt(event.at)}</span>
+                    <br />{event.detail}
+                  </li>
+                ))}
+              </ol>
+            </Disclosure>
+          </section>
         </div>
       )}
 

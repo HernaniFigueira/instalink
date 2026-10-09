@@ -380,6 +380,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
     if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { return; }
+    // Campos obrigatórios ANTES da conferência de intervalo: formulário vazio
+    // deve dizer o que falta (cliente/serviço), não "aguarde o intervalo".
+    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
+    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
+    if (!serviceId || !date) { setError('Escolha serviço, data e horário.'); return; }
     if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { setError(slotsError || 'Aguarde a conferência do intervalo.'); return; }
     if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
     if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }

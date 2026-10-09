@@ -4106,3 +4106,22 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 @media (max-width: 639px) {
   .encounter-session > .encounter-rail { position: static; }
 }
+
+/* ── Fechamento finalizado: três faixas (Registro clínico / Revisão / Pós) ── */
+.encounter-final { display: grid; gap: 12px; }
+.encounter-final__band { padding: 16px 0 0; border-top: 1px solid var(--gd-border, #e3e9e5); }
+.encounter-final__band:first-child { border-top: 0; padding-top: 0; }
+.encounter-final__band-title { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--gd-text-muted, #5b6b66); margin: 0 0 6px; text-transform: uppercase; }
+.encounter-final__band-text { font-size: 14px; color: var(--gd-text, #1f2d2a); margin: 0; line-height: 1.5; }
+.encounter-final__label { color: var(--gd-text-muted, #5b6b66); }
+.encounter-final__sub { font-size: 14px; font-weight: 600; margin: 0; color: var(--gd-text, #1f2d2a); }
+.encounter-final__hint { font-size: 12.5px; color: var(--gd-text-muted, #5b6b66); margin: 2px 0 10px; }
+.encounter-final__addendum { display: grid; gap: 4px; max-width: 640px; }
+.encounter-final__actions { display: flex; justify-content: flex-start; margin-top: 8px; }
+.encounter-final__reopen { display: grid; gap: 4px; max-width: 520px; padding-top: 8px; }
+.encounter-final__timeline { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; font-size: 13px; }
+.encounter-final__event { border-left: 2px solid var(--gd-border, #e3e9e5); padding-left: 12px; }
+.encounter-final__event--reopen { border-color: var(--gd-warning, #c98a1b); }
+.encounter-final__event--addendum { border-color: var(--gd-info, #3b7ddd); }
+.encounter-final__band--after { display: grid; gap: 12px; }
+.encounter-final__band-text .encounter-final__label + .tabular-nums { color: var(--gd-text, #1f2d2a); }

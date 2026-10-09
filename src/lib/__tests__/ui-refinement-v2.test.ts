@@ -138,7 +138,10 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     const ui = read('src/components/ui.tsx');
     expect(ui).toContain('export function PageBackAction');
     expect(page).toContain('<PageBackAction href={listHref} label="Voltar para clientes" />');
-    expect(read('src/components/dashboard/EncounterSheet.tsx')).toContain('<PageBackAction className="encounter-page__back"');
+    // G10 — Registro completo tem UM único "Voltar": o do rail (contexto).
+    // O cabeçalho não repete a saída (mesmo destino, dois botões = ruído).
+    expect(read('src/components/dashboard/EncounterSheet.tsx')).not.toContain('<PageBackAction className="encounter-page__back"');
+    expect(read('src/components/dashboard/EncounterSessionRail.tsx')).toContain('encounter-rail__back');
   });
 
   it('agent visual-only migration and selected controls share tokens without changing agent calls', () => {
