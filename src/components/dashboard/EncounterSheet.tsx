@@ -576,12 +576,18 @@ export function EncounterSheet({
             </Button>
           )}
           {row && !isDraft && canReopen && (
-            <div className="w-full sm:w-auto">
-              <label className="mb-1 block text-xs text-[var(--text-muted)]" htmlFor="legacy-reopen-reason">Motivo da reabertura</label>
-              <Textarea id="legacy-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} disabled={!!busy} className="mb-2 min-h-16" />
-              <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy || reopenReason.trim().length < 3} className="w-full sm:w-auto">
-                {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
-              </Button>
+            /* Reabertura é ação rara: fica recolhida (disclosure fechado) para não
+               competir com a leitura do documento finalizado. Mesma ação. */
+            <div className="w-full sm:w-auto sm:min-w-[260px]">
+              <Disclosure label="Reabrir para editar" hint="Ação rara · registra motivo na auditoria">
+                <div className="pt-2">
+                  <label className="mb-1 block text-xs text-[var(--text-muted)]" htmlFor="legacy-reopen-reason">Motivo da reabertura</label>
+                  <Textarea id="legacy-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} disabled={!!busy} className="mb-2 min-h-16" />
+                  <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy || reopenReason.trim().length < 3} className="w-full sm:w-auto">
+                    {busy === 'reopen' ? 'Reabrindo…' : 'Confirmar reabertura'}
+                  </Button>
+                </div>
+              </Disclosure>
             </div>
           )}
         </>
@@ -942,7 +948,7 @@ export function EncounterSheet({
       {row && (
         <EncounterSessionRail
           onBack={() => { void requestClose('navigation'); }}
-          eyebrow="Registro completo"
+          eyebrow={row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
           headline={row.petName || row.customerName || 'Paciente'}
           tutor={row.petName ? row.customerName : ''}
           tutorPhone={row.customerPhone || ''}

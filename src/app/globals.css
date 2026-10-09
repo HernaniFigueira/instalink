@@ -4125,3 +4125,28 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 .encounter-final__event--addendum { border-color: var(--gd-info, #3b7ddd); }
 .encounter-final__band--after { display: grid; gap: 12px; }
 .encounter-final__band-text .encounter-final__label + .tabular-nums { color: var(--gd-text, #1f2d2a); }
+
+/* G09 — identidade de página ÚNICA no Registro completo. Em desktop/tablet o
+   rail já é a identidade (paciente, serviço, profissional, status) e a aba
+   atual nomeia a página; o cabeçalho repetido vira só texto para leitor de
+   tela. Em 390 (rail sem fixação) o cabeçalho continua visível. */
+@media (min-width: 640px) {
+  .encounter-session__main > .encounter-page__header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* Rodapé legado do Registro: o disclosure de reabertura não quebra o rótulo. */
+.encounter-page__footer .gd-disclosure__trigger { white-space: nowrap; }
+/* Abaixo de 1200px o hint secundário da reabertura sai (evita overflow no rodapé). */
+@media (max-width: 1199px) {
+  .encounter-page__footer .gd-disclosure__hint { display: none; }
+}
