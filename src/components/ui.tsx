@@ -78,7 +78,7 @@ export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize =
     'gd-control il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
     `gd-control--${size}`,
     `il-control--${size}`,
-    'transition-[background-color,border-color,color] duration-150',
+    'transition-[background-color,border-color,color] duration-[var(--gd-motion-fast)]',
     'focus-visible:outline-none focus-visible:shadow-focus',
     'disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none',
     BTN_SIZE_CLS[size],
@@ -86,9 +86,21 @@ export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize =
   );
 }
 
-export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
-  const { variant = 'primary', size = 'md', className, ...rest } = props;
-  return <button className={cn(buttonCls(variant, size), className)} {...rest} />;
+export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean }) {
+  const { variant = 'primary', size = 'md', className, loading = false, disabled, children, ...rest } = props;
+  // Loading: o botão fica inerte e anuncia ocupado (aria-busy) sem trocar o
+  // rótulo — a largura da ação não pode pular durante a espera.
+  return (
+    <button
+      className={cn(buttonCls(variant, size), loading && 'cursor-progress', className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      data-loading={loading || undefined}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
@@ -243,7 +255,7 @@ export function ActionBar({ className, children, ...rest }: React.HTMLAttributes
 // ── Formulários ────────────────────────────────────────────────
 const FIELD_CLS =
   'il-field-control w-full rounded-sm border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
-  'placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] ' +
+  'placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] duration-[var(--gd-motion-fast)] ' +
   'focus:outline-none focus:shadow-focus focus:border-[var(--accent)] ' +
   'disabled:bg-[var(--surface-3)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed';
 
@@ -482,11 +494,12 @@ export function Checkbox({ label, hint, checked, onChange, disabled }: {
         <span
           aria-hidden="true"
           className={cn(
-            'w-[18px] h-[18px] rounded-[6px] border flex items-center justify-center transition-colors',
+            'w-[18px] h-[18px] rounded-[6px] border flex items-center justify-center transition-[background-color,border-color,box-shadow] duration-[var(--gd-motion-fast)]',
             checked
               ? 'bg-[var(--brand)] border-[var(--brand)] text-white'
-              : 'bg-white border-[var(--border-strong)] text-transparent',
-            'peer-focus-visible:shadow-focus',
+              : 'bg-white border-[var(--border-strong)] text-transparent hover:border-[var(--gd-text-faint)]',
+            'peer-focus-visible:shadow-[var(--gd-focus-ring)]',
+            disabled && 'bg-[var(--surface-3)]',
           )}
         >
           <Icon n="check" size={12} strokeWidth={3} />
@@ -513,7 +526,7 @@ export function Switch({ checked, onChange, label, disabled }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-200',
+        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-[var(--gd-motion-base)]',
         'focus-visible:outline-none focus-visible:shadow-focus',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         checked ? 'bg-[var(--accent)] border-[var(--accent)]' : 'bg-[var(--surface-3)] border-[var(--border-strong)]',
@@ -521,7 +534,7 @@ export function Switch({ checked, onChange, label, disabled }: {
     >
       <span
         className={cn(
-          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200',
+          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-[var(--gd-motion-base)]',
           checked && 'translate-x-5',
         )}
       />
@@ -2113,7 +2126,7 @@ export function Radio({ label, hint, name, value, checked, onChange, disabled }:
         checked={checked}
         disabled={disabled}
         onChange={() => onChange(value || '')}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--gd-accent)] focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)]"
+        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--gd-accent)] transition-shadow duration-[var(--gd-motion-fast)] focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)] disabled:cursor-not-allowed"
       />
       <span className="min-w-0">
         <span className="il-type-body block font-medium text-[var(--gd-text)]">{label}</span>

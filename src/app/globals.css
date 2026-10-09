@@ -1147,7 +1147,7 @@ dialog.il-drawer .il-actionbar {
   transform: translateX(-8px);
   filter: saturate(.85);
 }
-.il-drawer__panel--side { animation: il-drawer-side-in 200ms var(--ease-standard); }
+.il-drawer__panel--side { animation: il-drawer-side-in var(--gd-motion-side-modal) var(--gd-ease); }
 @keyframes il-drawer-side-in {
   from { opacity: 0; transform: translateX(24px); }
   to { opacity: 1; transform: none; }
@@ -1176,7 +1176,7 @@ dialog.il-drawer .il-actionbar {
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed { display: none; }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
     width: 100% !important; max-width: none !important; border-left: 0 !important;
-    animation: il-drawer-side-in-mobile 200ms var(--ease-standard);
+    animation: il-drawer-side-in-mobile var(--gd-motion-side-modal) var(--gd-ease);
   }
   @keyframes il-drawer-side-in-mobile {
     from { opacity: 0; transform: translateX(100%); }
@@ -2760,14 +2760,14 @@ dialog.ws-sheet {
   color: var(--text);
   overflow: hidden;
   box-shadow: 0 32px 64px -24px rgba(15, 23, 42, .38), 0 8px 24px -12px rgba(15, 23, 42, .16);
-  transition: width .2s cubic-bezier(.32,.72,.28,1), height .2s cubic-bezier(.32,.72,.28,1),
-    top .2s cubic-bezier(.32,.72,.28,1), bottom .2s cubic-bezier(.32,.72,.28,1),
-    border-radius .2s ease;
+  transition: width var(--gd-motion-sheet) var(--gd-ease), height var(--gd-motion-sheet) var(--gd-ease),
+    top var(--gd-motion-sheet) var(--gd-ease), bottom var(--gd-motion-sheet) var(--gd-ease),
+    border-radius var(--gd-motion-sheet) var(--gd-ease);
 }
 dialog.ws-sheet:not([open]) { display: none; }
 dialog.ws-sheet::backdrop { background: var(--overlay); }
-dialog.ws-sheet[open] { animation: ws-sheet-in 200ms cubic-bezier(.32,.72,.28,1); }
-dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; }
+dialog.ws-sheet[open] { animation: ws-sheet-in var(--gd-motion-sheet) var(--gd-ease); }
+dialog.ws-sheet[data-closing] { animation: ws-sheet-out var(--gd-motion-sheet-out) var(--gd-ease) forwards; }
 @keyframes ws-sheet-in {
   from { opacity: 0; transform: translateX(40px) scale(.985); }
   to { opacity: 1; transform: none; }

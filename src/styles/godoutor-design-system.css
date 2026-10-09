@@ -245,6 +245,8 @@
   --gd-motion-side-modal-out: 170ms;
   --gd-motion-dialog: 180ms;     /* Dialog: entrada opacity + Y 8px / scale .985 (janela 160–200) */
   --gd-motion-dialog-out: 150ms; /* Dialog: saída simétrica, sempre mais curta que a entrada */
+  --gd-motion-sheet: 200ms;      /* ws-sheet (painel lateral de workspace): entrada/redimensionamento */
+  --gd-motion-sheet-out: 170ms;  /* ws-sheet: saída sempre mais curta */
   --gd-nav-panel-attach: 0px;    /* o painel de grupo nasce COLADO no rail */
 
   /* ── LAYOUT DO APP SHELL ──────────────────────────────────────────────── */
@@ -878,4 +880,7 @@
 @media (prefers-reduced-motion: reduce) {
   .gd-layer, .gd-tooltip, .gd-dialog-backdrop, .gd-dialog, .gd-toast { animation: none; }
   .gd-detail[data-closing]::backdrop, .gd-detail::backdrop { animation: none; }
+  /* Painéis de workspace (ws-sheet, drawer lateral) seguem o mesmo contrato. */
+  dialog.ws-sheet, dialog.ws-sheet[open], dialog.ws-sheet[data-closing],
+  .il-drawer__panel--side, .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side { animation: none !important; transition: none !important; }
 }
