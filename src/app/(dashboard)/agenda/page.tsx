@@ -2072,9 +2072,13 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" className="w-full sm:w-auto" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
-            <Button variant="primary" className="w-full sm:w-auto" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
-              <Icon n="calendarPlus" size={15} /> Novo agendamento
+            {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
+                segmentado. Desktop mantém o rótulo visível. */}
+            <Button variant="secondary" className="ag-toolbar__block w-full sm:w-auto" aria-label="Bloquear horário" aria-pressed={blockMode} title="Bloquear horário" onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>
+              <Icon n="lock" size={15} /><span className="ag-toolbar__label">Bloquear horário</span>
+            </Button>
+            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+              <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>
           </div>
         </div>

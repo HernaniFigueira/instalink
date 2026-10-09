@@ -3701,7 +3701,12 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .ag-page .ag-toolbar-nav button,
   .ag-page .ag-toolbar-nav .il-field-control { min-height: 44px; height: 44px; }
   .ag-page .ag-toolbar-nav button[aria-label] { min-width: 44px; }
-  .ag-page .ag-toolbar-actions > .il-segmented { grid-column: 1 / -1; display: flex; width: 100%; }
-  .ag-page .ag-toolbar-actions > .il-segmented .il-segmented__item { flex: 1 1 0; justify-content: center; height: 44px; min-height: 44px; }
-  .ag-page .ag-toolbar-actions > button { width: 100%; height: 44px; min-height: 44px; justify-content: center; }
+  /* Uma linha só: [Dia|Semana|Lista] · [bloquear] · [novo], todos com 44px.
+     Rótulos das ações somem visualmente (aria-label permanece). */
+  .ag-page .ag-toolbar-actions { grid-template-columns: minmax(0, 1fr) 44px 44px; gap: 6px; }
+  .ag-page .ag-toolbar-actions > .il-segmented { grid-column: auto; display: flex; width: 100%; min-width: 0; }
+  .ag-page .ag-toolbar-actions > .il-segmented .il-segmented__item { flex: 1 1 0; justify-content: center; height: 44px; min-height: 44px; padding-inline: 4px; }
+  .ag-page .ag-toolbar-actions > button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  .ag-page .ag-toolbar-actions > button .ag-toolbar__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ag-page .ag-toolbar-actions > button { position: relative; }
 }
