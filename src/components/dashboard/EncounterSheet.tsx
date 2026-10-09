@@ -966,7 +966,7 @@ export function EncounterSheet({
       <div className="encounter-session__main">
       <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
       <header className="encounter-page__header" data-compact={compactHeader || undefined}>
-        <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
+        {/* Voltar único: fica no rail (contexto). Sem segundo botão de saída no cabeçalho. */}
         <div className="encounter-page__heading">
           <div className="encounter-page__heading-copy">
             <h2 className="encounter-page__title">Registro completo</h2>

@@ -604,17 +604,21 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <dl className="entity-rail__data">
             <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
               action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
-            {!clinicalView && <>
-              <Data label="E-mail" value={person.email || '—'} />
+            {!clinicalView && <Data label="E-mail" value={person.email || '—'} />}
+          </dl>
+        </aside>
+        <div className="entity-main">
+          {/* Dados administrativos saem do rail e ficam no workspace: não são
+              contexto persistente da sessão, são leitura de cadastro. */}
+          {!clinicalView && (
+            <dl className="entity-main__admin" aria-label="Dados administrativos">
               <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
               <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
               <Data label="Origem" value={person.source || '—'} />
               <Data label="Atendimentos" value={String(person.bookings.length)} />
               <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
-            </>}
-          </dl>
-        </aside>
-        <div className="entity-main">
+            </dl>
+          )}
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
         {person.contactId && (
           <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
@@ -875,7 +879,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </div>
           </div>
         )}
-      </div>
 
       {pet360 && (
         <Pet360Sheet
@@ -1219,6 +1222,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             </div>
           )}
         </div>
+      </div>
       </div>
       </div>
       </>) : (
