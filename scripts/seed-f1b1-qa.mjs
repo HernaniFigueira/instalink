@@ -85,6 +85,11 @@ const contacts = [
 ];
 
 const pets = [
+  // FIXTURE Quick Create: a tutora tem DOIS pets → o Quick Create exige escolha.
+  {
+    id: 'pet-thor', businessId: A, tutorId: 'ct-isabelle', name: 'Thor', photo: '',
+    species: 'cachorro', breed: 'SRD', sex: 'M', birthDate: '', weightKg: 18, notes: 'Paciente fictício de QA (2º pet)', active: true, createdAt: now, updatedAt: now,
+  },
   {
     id: 'pet-mel', businessId: A, tutorId: 'ct-isabelle', name: 'Mel', photo: '',
     species: 'cachorro', breed: 'SRD', sex: 'F', birthDate: `${Number(today.slice(0, 4)) - 2}-01-15`,

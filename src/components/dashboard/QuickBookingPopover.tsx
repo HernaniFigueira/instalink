@@ -14,6 +14,7 @@
 // `DatePicker`, `Button`, `Notice`, `StatusBadge`). Nenhum controle desenhado
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiGet } from '@/lib/api-client';
 import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
@@ -21,7 +22,7 @@ import { nowHM, todayISO } from '@/lib/tz';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { timeToMin } from '@/lib/utils';
 import {
-  fetchSlotTimes, searchContacts, submitBookingIntent, type Contact,
+  fetchSlotTimes, resolvePetSelection, searchContacts, submitBookingIntent, type Contact, type PetChoice,
 } from '@/lib/booking-quick-create';
 import type { Professional, Service } from '@/lib/types';
 
@@ -81,6 +82,24 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   // O contato escolhido é guardado por INTEIRO (a lista de resultados é
   // limpa ao escolher) — o nome/telefone vão no payload, como no fluxo completo.
   const [picked, setPicked] = useState<Contact | null>(null);
+  // PACIENTE (veterinária): o pet do tutor é campo de primeira classe — nunca
+  // escondido em "Mais opções". A regra (1 pet = automático; 2+ = escolha
+  // obrigatória) vive em `resolvePetSelection`, testada à parte.
+  const [pets, setPets] = useState<PetChoice[]>([]);
+  const [petChoice, setPetChoice] = useState('');
+  const petRule = resolvePetSelection(pets, petChoice);
+  useEffect(() => {
+    setPetChoice('');
+    setPets([]);
+    if (!vetMode || !contactId) return;
+    let on = true;
+    apiGet<{ pets: PetChoice[] }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
+      { scope: 'area', area: 'Agenda' },
+    ).then((r) => { if (on) setPets((r.data?.pets || []).filter((p) => p.active !== false)); })
+      .catch(() => { if (on) setPets([]); });
+    return () => { on = false; };
+  }, [businessId, contactId, vetMode]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
@@ -162,6 +181,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     if (saving) return;
     setError('');
     if (!contactId || !picked) { setError('Escolha um paciente já cadastrado — ou use "Mais opções" para cadastrar.'); return; }
+    if (petRule.missing) { setError(petRule.missing); return; }
     if (!serviceId) { setError('Escolha o serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
     if (pastIssue) { setError(pastIssue); return; }
@@ -172,6 +192,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
       customerPhone: picked.phone || '',
       serviceId, professionalId, date, time,
       ...(durationMin ? { durationMin } : {}),
+      ...(petRule.petId ? { petId: petRule.petId } : {}),
     });
     setSaving(false);
     if (!res.ok) {
@@ -221,6 +242,19 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
           {contactId && picked && (
             <p className="-mt-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">
               Selecionado: {picked.name || picked.phone}
+            </p>
+          )}
+          {contactId && picked && vetMode && pets.length > 0 && (
+            <Field label="Pet (paciente)" required={petRule.required}
+              hint={pets.length === 1 ? 'Único pet do tutor — selecionado automaticamente' : 'Quem será atendido'}>
+              <Combobox label="Pet (paciente)" value={petRule.petId} disabled={saving} placeholder="Escolha o pet…"
+                options={pets.map((p) => ({ value: p.id, label: p.name }))}
+                onChange={(v) => setPetChoice(String(v))} />
+            </Field>
+          )}
+          {contactId && picked && vetMode && pets.length === 0 && (
+            <p data-quick-create-no-pet="true" className="-mt-1.5 text-[12px] text-[var(--gd-text-muted)]">
+              Este tutor ainda não tem pet cadastrado. Use “Mais opções” para cadastrar o pet antes de agendar.
             </p>
           )}
           {!contactId && (searching || results.length > 0) && (

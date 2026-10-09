@@ -38,6 +38,35 @@ export interface BookingIntent {
   time: string;
   /** Duração específica deste atendimento (min) — opcional. */
   durationMin?: number;
+  /** Pet (paciente) do tutor — obrigatório em veterinária quando há pets. */
+  petId?: string;
+}
+
+/** Pet mínimo para a regra de seleção (formato de `GET /api/pets`). */
+export interface PetChoice { id: string; name: string; active?: boolean }
+
+/**
+ * REGRA DO PACIENTE NO QUICK CREATE (veterinária):
+ *   • 0 pets  → nada a escolher; o servidor decide (tutor sem pet não recebe
+ *               "só tutor" em veterinária: a tela oriente o cadastro do pet);
+ *   • 1 pet   → pré-seleciona o único pet (fica visível qual é);
+ *   • 2+ pets → exige escolha explícita; nunca cria booking sem paciente.
+ */
+export function resolvePetSelection(pets: PetChoice[], current: string): {
+  petId: string;
+  required: boolean;
+  /** Mensagem para o cliente quando a escolha ainda falta. */
+  missing: string;
+} {
+  const active = pets.filter((p) => p.active !== false);
+  if (active.length === 0) return { petId: '', required: false, missing: '' };
+  if (active.length === 1) return { petId: active[0].id, required: true, missing: '' };
+  const keep = active.some((p) => p.id === current) ? current : '';
+  return {
+    petId: keep,
+    required: true,
+    missing: keep ? '' : 'Escolha o pet (paciente) deste agendamento.',
+  };
 }
 
 /** Payload canônico do caso simples (mesmos nomes de campo do fluxo completo). */
@@ -53,6 +82,7 @@ export function bookingIntentPayload(businessId: string, intent: BookingIntent) 
     date: intent.date,
     time: intent.time,
     ...(intent.durationMin ? { staffDurationMin: intent.durationMin } : {}),
+    ...(intent.petId ? { petId: intent.petId } : {}),
   };
 }
 
