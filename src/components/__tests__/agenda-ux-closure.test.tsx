@@ -55,7 +55,8 @@ describe('3A · resumo contextual do evento (HoverCard)', () => {
     expect(agenda).toContain('>Ver detalhes<');
     // Só estados que permitem mover expõem a edição operacional; a ação não
     // chama o fluxo lateral Reagendar.
-    expect(agenda).toContain('{b.editable && <Button size="sm" variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}');
+    // A prévia rica tem alvos canônicos de 40px; não volta ao `sm` de 34px.
+    expect(agenda).toContain('{b.editable && <Button variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}');
     expect(agenda).toContain('editable: rescheduleDecision(b.status).kind === \'move\'');
     expect(agenda).toContain('const onBlockEdit = useCallback');
     expect(agenda).toContain('<BookingEditDialog');

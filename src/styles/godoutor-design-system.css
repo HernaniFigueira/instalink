@@ -160,7 +160,7 @@
        page-title · 20/26 600   — título de página (uma vez por tela)
        section    · 16/22 600   — título de seção/registro
        body       · 14/20 400   — corpo
-       label      · 13/20 500   — rótulo de campo/controle
+       label      · 14/20 500   — rótulo de campo/controle
        metadata   · 12/18 500   — metadado (status, horário, contagem)
        helper     · 12/18 400   — texto de apoio/ajuda (nunca competindo)
        button     · 14/20 500   — rótulo de botão
@@ -169,7 +169,7 @@
   --gd-type-page-title-size: 20px;   --gd-type-page-title-line: 26px;  --gd-type-page-title-weight: var(--gd-weight-semibold);
   --gd-type-section-size: 16px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
   --gd-type-body-size: 14px;         --gd-type-body-line: 20px;        --gd-type-body-weight: var(--gd-weight-regular);
-  --gd-type-label-size: 13px;        --gd-type-label-line: 20px;       --gd-type-label-weight: var(--gd-weight-medium);
+  --gd-type-label-size: 14px;        --gd-type-label-line: 20px;       --gd-type-label-weight: var(--gd-weight-medium);
   --gd-type-metadata-size: 12px;     --gd-type-metadata-line: 18px;    --gd-type-metadata-weight: var(--gd-weight-medium);
   --gd-type-helper-size: 12px;       --gd-type-helper-line: 18px;      --gd-type-helper-weight: var(--gd-weight-regular);
   --gd-type-button-size: 14px;       --gd-type-button-line: 20px;      --gd-type-button-weight: var(--gd-weight-medium);
@@ -196,7 +196,7 @@
 
   /* ── RADIUS (compacto e único) ────────────────────────────────────────── */
   --gd-radius-xs: 4px;
-  --gd-radius-sm: 6px;
+  --gd-radius-sm: 8px;
   --gd-radius-md: 8px;
   --gd-radius-lg: 8px;
   --gd-radius-xl: 8px;
@@ -250,7 +250,9 @@
   --gd-topbar-h: 60px;           /* top bar full-width, acima da sidebar */
   --gd-topbar-logo: 34px;        /* logo SOLTA (sem tile): altura de presença */
   --gd-topbar-logo-max: 124px;   /* largura máxima preservando proporção */
-  --gd-topbar-gutter-x: 18px;    /* guter esquerdo da topbar = eixo dos ícones do rail */
+  /* Rail de 60px: logo de 34px começa em 13px, então seu centro óptico fica
+     em x=30, o mesmo eixo dos ícones do rail. */
+  --gd-topbar-gutter-x: 13px;    /* gutter esquerdo da topbar = eixo do rail */
   --gd-rail-w: 60px;             /* rail recolhida (ícones) */
   --gd-nav-w: 236px;             /* navegação aberta (ícone + rótulo) */
   --gd-sidebar-w: 248px;         /* navegação fixada (pin) */
@@ -306,12 +308,12 @@
 .gd-field__label {
   display: block; max-width: 100%; margin: 0 0 var(--gd-space-1);
   color: var(--gd-text-secondary);
-  font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
-  font-weight: var(--gd-weight-semibold);
+  font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line);
+  font-weight: var(--gd-type-label-weight);
 }
 .gd-field__box {
   position: relative; display: flex; align-items: center; gap: var(--gd-space-2);
-  min-height: var(--control-h); min-width: 0;
+  min-height: var(--gd-control-h); min-width: 0;
   padding: 0 var(--gd-space-3);
   background: var(--gd-bg-surface);
   border: 1px solid var(--gd-border-strong);
@@ -327,7 +329,7 @@
 .gd-field__box > select,
 .gd-field__box > textarea {
   flex: 1 1 auto; min-width: 0; width: 100%;
-  min-height: calc(var(--control-h) - 2px);
+  min-height: calc(var(--gd-control-h) - 2px);
   padding: 0; margin: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
   font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line);
@@ -337,6 +339,10 @@
    abrir um segundo contorno. */
 .gd-field__box > .gd-field__control-host,
 .gd-field__box > div { flex: 1 1 auto; min-width: 0; width: 100%; }
+/* DatePicker/Combobox entram por um host no Field. O host e seu gatilho
+   precisam ocupar a altura da caixa inteira; caso contrário, o popover tem
+   borda de 40px mas apenas uma faixa interna de 20px clicável. */
+.gd-field__box > .gd-field__control-host { display: flex; align-self: stretch; }
 .gd-field__box .il-field-control,
 .gd-field__box > .gd-field__control--inline {
   border: 0; border-radius: 0; background-color: transparent; box-shadow: none;
@@ -381,15 +387,17 @@
    anel de foco continua sendo o da caixa externa. */
 .gd-field__control-host { flex: 1 1 auto; min-width: 0; }
 .gd-field__box .gd-field__control--inline {
+  width: 100%; min-height: calc(var(--gd-control-h) - 2px);
   padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
 }
 .gd-field__box .gd-field__control--inline:focus { outline: none; box-shadow: none; }
 .gd-field__box > svg, .gd-field__icon { flex-shrink: 0; color: var(--gd-text-muted); }
 @media (pointer: coarse), (max-width: 767px) {
-  .gd-field__box { min-height: var(--control-h-touch); }
+  .gd-field__box { min-height: var(--gd-control-h-touch); }
   /* O controle nativo também precisa manter o alvo de 44px; a caixa cresce
      pelos 2px da borda em vez de reduzir a área clicável para 42px. */
-  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select { min-height: var(--gd-control-h-touch); }
+  .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select,
+  .gd-field__box .gd-field__control--inline { min-height: var(--gd-control-h-touch); }
   .gd-field__box > .il-field-control, .gd-field__box > input, .gd-field__box > select, .gd-field__box > textarea { font-size: 16px; }
 }
 
@@ -671,6 +679,13 @@
 .gd-control { min-height: var(--gd-control-h); }
 .gd-control--sm { min-height: var(--gd-control-h-sm); }
 .gd-control--xs { min-height: var(--gd-control-h-xs); }
+.gd-control--lg { min-height: var(--gd-control-h-touch); }
+/* A camada portal (Quick Create, menus e popovers) não fica dentro de
+   `.il-platform`. O primitive leva sua própria régua para não perder o alvo
+   de toque quando sai do shell. */
+@media (pointer: coarse), (max-width: 767px) {
+  .gd-control, .gd-control--sm, .gd-control--xs { min-height: var(--gd-control-h-touch); }
+}
 /* Ícone é QUADRADO no nível escolhido — nunca "34 de alto e 40 de largo". */
 .gd-icon-control {
   display: inline-flex; align-items: center; justify-content: center;

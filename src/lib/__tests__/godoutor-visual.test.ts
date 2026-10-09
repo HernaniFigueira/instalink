@@ -83,16 +83,17 @@ describe('2 · DS 1.0 §13 — sidebar BRANCA com item ativo em acento suave', (
     expect(contrastHex(color('--il-nav-active-fg'), active)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('o ícone do item ATIVO tem poço preenchido da própria família, centrado no quadrado', () => {
+  it('o ícone do item ATIVO fica centrado, sem um segundo poço de seleção', () => {
     const icon = ruleOf('.workspace-link__icon {');
     expect(icon).toContain('border-radius: var(--radius-xs)');
     expect(icon).toContain('align-items: center');
     expect(icon).toContain('justify-content: center');
-    // P1 · rodada 2 — o glifo ativo ganha poço preenchido (antes ficava solto
-    // sobre o fundo do item e, no rail estreito, sem centro visual).
+    // A linha já carrega a superfície ativa; o ícone preserva só a cor para
+    // não criar dois planos preenchidos no rail.
     const active = ruleOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
     expect(active).toContain('color: var(--il-nav-active-fg)');
-    expect(active).toMatch(/background: color-mix\(in srgb, var\(--il-nav-active-fg\) 13%/);
+    expect(active).toContain('background: transparent');
+    expect(active).not.toContain('color-mix');
   });
 
   it('estado continua sendo aria-current (nunca só cor)', () => {

@@ -1278,10 +1278,9 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
   position: sticky; top: 0; z-index: 45;
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
-  /* P1 · RODADA 2 — IDENTIDADE NO MESMO EIXO DO RAIL: o guter esquerdo é
-     exatamente o começo da coluna de ícones da navegação (recuo do rail +
-     recuo do item), então logo, nome da clínica e ícones leem na MESMA linha
-     vertical. O lado direito mantém o guter de conteúdo (16px). */
+  /* Pass 2 — identidade no eixo do rail: logo de 34px + gutter 13px tem
+     centro x=30, o mesmo dos ícones no rail de 60px. O lado direito preserva
+     o gutter de conteúdo de 16px. */
   padding: 0 16px 0 var(--gd-topbar-gutter-x);
   background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
@@ -1760,13 +1759,9 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
               background-color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link[aria-current="page"] .workspace-link__icon {
-  /* P1 · RODADA 2 — ITEM ATIVO: o ícone ganha um POÇO preenchido da própria
-     família do estado, dentro do quadrado de 24px e com o glifo CENTRADO
-     (flex do container). Antes o glifo ficava solto sobre o fundo do item: em
-     rail estreito, o ícone ativo não tinha centro visual. A tinta é derivada do
-     `--il-nav-active-fg` (funciona em qualquer preset, claro ou escuro) e o
-     item continua sendo o `aria-current`, nunca só a cor. */
-  background: color-mix(in srgb, var(--il-nav-active-fg) 13%, transparent);
+  /* O item já é a superfície ativa. Deixar o ícone sem um segundo poço evita
+     dupla ênfase no rail estreito e preserva um único estado de seleção. */
+  background: transparent;
   color: var(--il-nav-active-fg);
   box-shadow: none;
 }
@@ -2617,27 +2612,36 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    Identifica paciente/tutor, data/horário, serviço, profissional, status e
    observação curta; Editar abre modal central e Ver detalhes abre leitura
    lateral. Hover e detalhe nunca ocupam a tela ao mesmo tempo. */
-.ag-hover .gd-hovercard {
-  padding: 0; border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
-  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-sm);
+.gd-hovercard.ag-hover {
+  /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
+     precisa viver nele (não apenas no filho), senão o max-width genérico de
+     320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
+  width: 360px; max-width: min(360px, calc(100vw - 24px)); padding: 0;
+  border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
+  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
 }
-.ag-hover__card { width: 288px; max-width: min(288px, calc(100vw - 24px)); padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+/* Prévia rica, ainda contextual: cresce para leitura confortável sem cobrir o
+   evento que a abriu e sem ganhar a sombra forte de um modal. */
+.ag-hover__card {
+  width: 100%; max-width: 100%; padding: var(--gd-space-4);
+  display: flex; flex-direction: column; gap: var(--gd-space-2);
+}
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
-.ag-hover__heading { font-size: 12px; font-weight: 600; color: var(--gd-text-muted); }
-.ag-hover__date { margin: 0; color: var(--gd-text); font-size: 13px; font-weight: 600; line-height: 1.35; }
-.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: 3px; }
-.ag-hover__rows > div { display: flex; align-items: baseline; gap: 8px; font-size: 12px; line-height: 1.4; }
-.ag-hover__rows dt { flex: 0 0 68px; color: var(--gd-text-muted); }
+.ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
+.ag-hover__date { margin: 0; color: var(--gd-text-secondary); font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line); font-weight: var(--gd-type-label-weight); }
+.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
+.ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
+.ag-hover__rows dt { flex: 0 0 80px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
 .ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
-.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.ag-hover__observation strong { color: var(--gd-text-secondary); }
-.ag-hover__flag { margin: 0; font-size: 11px; font-weight: 600; color: var(--gd-text-muted); }
+.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
+.ag-hover__flag { margin: 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
 .ag-hover__flag--attention { color: var(--attention-fg); }
 .ag-hover__actions {
-  display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 7px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--gd-space-2); padding-top: var(--gd-space-3); margin-top: var(--gd-space-1);
   border-top: 1px solid var(--gd-border-soft);
 }
-.ag-hover__actions > button { flex: 0 0 auto; min-height: 34px; }
+.ag-hover__actions > button { flex: 0 0 auto; min-height: var(--gd-control-h); font-weight: var(--gd-weight-semibold); }
 .ag-hover__actions > button:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 /* Resultado pós-PATCH (nunca otimista): sucesso e falha são avisos distintos. */
 .ag-ctx-success,
@@ -2984,10 +2988,10 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
 .overlay-confirm__action { min-height: var(--control-h); padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-/* Mesma régua do botão secundário do DS (P1 · rodada 2): sem contorno em
-   repouso, preenchimento suave no hover. */
-.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--brand-fg); }
-.overlay-confirm .il-control--secondary:hover { background: var(--brand-soft); }
+/* Mesma régua neutra do botão secundário do DS: sem contorno ou acento em
+   repouso; hover usa só a superfície suave do workspace. */
+.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--text); }
+.overlay-confirm .il-control--secondary:hover { background: var(--surface-3); }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
 .overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }
 @media (max-width: 480px) {

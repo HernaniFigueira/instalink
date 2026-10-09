@@ -144,6 +144,7 @@ describe('§3 · uma fonte, um token (Geist não pode voltar como fonte do corpo
   const css = read('app/globals.css');
   const layout = read('app/layout.tsx');
   const ds = read('styles/godoutor-design-system.css');
+  const tailwind = fs.readFileSync(path.resolve(SRC, '..', 'tailwind.config.js'), 'utf8');
 
   it('o corpo usa o token canônico e NÃO aponta para variável inexistente', () => {
     expect(css).toMatch(/body\s*\{[^}]*font-family: var\(--gd-font-sans\)/);
@@ -151,6 +152,10 @@ describe('§3 · uma fonte, um token (Geist não pode voltar como fonte do corpo
     // invalida a declaração e o navegador cai na fonte default da plataforma.
     expect(css).not.toMatch(/font-family: var\(--font-geist-sans\)/);
     expect(ds).toMatch(/--gd-font-sans: var\(--font-barlow\)/);
+    // `font-sans` também precisa resolver para o token Barlow: utilitárias
+    // Tailwind não podem introduzir uma segunda família/fallback inválido.
+    expect(tailwind).toMatch(/sans:\s*\["var\(--gd-font-sans\)"\]/);
+    expect(tailwind).not.toMatch(/sans:\s*\[[^\]]*font-geist-sans/);
   });
 
   it('a Barlow é servida pelo build (self-host), sem requisição ao Google', () => {

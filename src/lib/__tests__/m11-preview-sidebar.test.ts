@@ -74,19 +74,20 @@ describe('sidebar · ícones inativos legíveis (força ~70%, nunca lavados)', (
 });
 
 describe('sidebar · grupo ABERTO aceso, distinto da rota ativa', () => {
-  it('open = container sutil + ícone aceso (par nav-active) — current = accent cheio', () => {
+  it('open = container sutil + ícone aceso; current mantém uma única superfície ativa', () => {
     const open = css.slice(css.indexOf(".workspace-link--group[aria-expanded='true'] {"), css.indexOf(".workspace-link--group[aria-expanded='true'] {") + 700);
     // container sutil (não o par forte do current)
     expect(open).toContain('background: var(--il-nav-hover)');
     expect(open).toContain('color: var(--il-nav-fg)');
     // ícone ACESO no par ativo (contraste AA entre si)
     expect(open).toContain('background: transparent; color: var(--il-nav-active-fg)');
-    // current continua o mais forte: poço PREENCHIDO da família do estado
-    // (P1 · rodada 2) + glifo no par ativo — o dobro do grupo apenas aberto.
+    // Current continua mais forte pela superfície da LINHA. O glifo conserva
+    // apenas a tinta ativa — sem criar um segundo poço preenchido.
     const curAt = css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
     const cur = css.slice(css.indexOf('{', curAt) + 1, css.indexOf('}', curAt));
     expect(cur).toContain('color: var(--il-nav-active-fg)');
-    expect(cur).toMatch(/background: color-mix\(in srgb, var\(--il-nav-active-fg\) 13%/);
+    expect(cur).toContain('background: transparent');
+    expect(cur).not.toContain('color-mix');
   });
 
   it('par do ícone aceso é AA em todos os presets', () => {

@@ -519,7 +519,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               <div className="ag-hover__card">
                 <div className="ag-hover__head">
                   <span className="ag-hover__heading">Agendamento</span>
-                  <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
+                  <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
                 </div>
                 <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
                 <dl className="ag-hover__rows">
@@ -532,8 +532,8 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">
-                  {b.editable && <Button size="sm" variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}
-                  <Button size="sm" variant="ghost" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
+                  {b.editable && <Button variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}
+                  <Button variant="ghost" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
                 </div>
               </div>
             }

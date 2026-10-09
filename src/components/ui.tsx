@@ -36,15 +36,12 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
-  // P1 · RODADA 2 — AÇÃO SECUNDÁRIA SEM CONTORNO EM REPOUSO. A borda cheia na
-  // cor da marca fazia de TODO botão secundário (setas da data, "Hoje",
-  // "Filtros", "Fila", ações internas de card) um contorno que competia com o
-  // CTA primário. Agora o repouso é texto na cor do sistema e o ESTADO é que dá
-  // o contorno: hover/active preenchem com o suave da própria família. A
-  // `border` continua declarada (transparente) para a métrica não mudar de
-  // caixa entre variantes, e o foco segue no `shadow-focus` global.
+  // Ação secundária não é link: o acento fica reservado para primary e links
+  // reais. Em repouso ela é neutra, sem borda visível; hover/active só acendem
+  // uma superfície neutra. A borda transparente preserva a mesma métrica do
+  // primary e o foco continua no anel canônico.
   secondary:
-    'bg-transparent text-[var(--brand-fg)] border border-transparent hover:bg-[var(--brand-soft)] active:bg-[var(--brand-soft)]',
+    'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
@@ -78,7 +75,8 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
+    'gd-control il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
+    `gd-control--${size}`,
     `il-control--${size}`,
     'transition-[background-color,border-color,color] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',

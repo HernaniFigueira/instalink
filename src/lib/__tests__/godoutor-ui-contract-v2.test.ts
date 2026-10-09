@@ -82,7 +82,7 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   it('uses neutral panels, compact radius tokens, and flat workspace surfaces', () => {
     // Escala compacta na FONTE ÚNICA; globals só aliasa.
     expect(rawToken('--gd-radius-xs')).toBe('4px');
-    expect(rawToken('--gd-radius-sm')).toBe('6px');
+    expect(rawToken('--gd-radius-sm')).toBe('8px');
     expect(rawToken('--gd-radius-md')).toBe('8px');
     for (const tok of ['lg', 'xl', '2xl']) expect(rawToken(`--gd-radius-${tok}`), tok).toBe('8px');
     expect(rawToken('--radius-xs')).toBe('var(--gd-radius-xs)');

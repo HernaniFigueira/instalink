@@ -14,10 +14,19 @@ async function login(page: Page, account = f.owner) {
     }, cached.origins);
     await page.goto('/dashboard'); await expect(page.locator('.workspace-sidebar')).toBeAttached(); return;
   }
-  await page.goto('/login'); await page.getByLabel('E-mail', {exact:true}).fill(account.email);
+  await page.goto('/login');
+  // O submit é client-side; sem aguardar a hidratação, Chromium pode disparar
+  // o submit HTML nativo para `/login?` e mascarar a jornada real.
+  await page.waitForTimeout(500);
+  await page.getByLabel('E-mail', {exact:true}).fill(account.email);
   await page.getByLabel('Senha', {exact:true}).fill(account.password);
   await page.getByRole('button',{name:'Entrar',exact:true}).click();
-  await page.waitForURL(/dashboard/); await expect(page.locator('.workspace-sidebar')).toBeAttached();
+  // A rota de destino é corretamente baseada no papel/unidades: Agenda para
+  // alguns papéis e escolha explícita para quem possui duas clínicas. O helper
+  // só estabelece a sessão e então fixa a unidade sintética da jornada.
+  await page.waitForFunction(() => location.pathname !== '/login', undefined, { timeout: 30000 });
+  await page.goto(`/dashboard?b=${f.b}`);
+  await expect(page.locator('.workspace-sidebar')).toBeAttached();
   sessions.set(account.email, await page.context().storageState());
 }
 async function noOverflow(page: Page) { expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy(); }
@@ -71,7 +80,9 @@ for (const role of ['SECRETARIA','PROFISSIONAL','ADMIN','VIEWER']) test(`role na
     const status = await page.evaluate(async path => (await fetch(path)).status, `/api/results?businessId=${f.b}`); expect(status).toBe(403);
   }
   if(role==='PROFISSIONAL') {
-    await expect(page.getByRole('heading',{name:'Minha agenda e atendimentos'})).toBeVisible();
+    // O painel atual se apresenta como "Meu dia"; a garantia funcional é a
+    // mesma: Professional vê sua própria agenda antes de abrir a lista.
+    await expect(page.getByRole('heading',{name:/Meu dia,/})).toBeVisible();
     await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=list`);
     await expect(page.getByRole('region',{name:'Lista de atendimentos do dia'})).toBeVisible();
     await expect(page.getByRole('region',{name:'Lista de atendimentos do dia'})).not.toContainText('Rafael');

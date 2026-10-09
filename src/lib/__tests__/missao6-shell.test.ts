@@ -40,8 +40,8 @@ describe('shell · topbar neutra', () => {
 describe('missão 6 · 2 — radius controlado (menos bolha)', () => {
   it('escala de radius compacta vive na FONTE ÚNICA (DS 1.0)', () => {
     // valores menores que os antigos (xs6/sm9/md11/lg14/xl18/2xl24) e
-    // declarados UMA vez (`--gd-radius-*`); aqui só o alias chega.
-    for (const [tok, max] of [['--gd-radius-xs', 5], ['--gd-radius-sm', 7], ['--gd-radius-md', 8], ['--gd-radius-lg', 10], ['--gd-radius-xl', 12], ['--gd-radius-2xl', 16]] as const) {
+    // declarados UMA vez (`--gd-radius-*`); Pass 2 fixa sm/md em 8px.
+    for (const [tok, max] of [['--gd-radius-xs', 5], ['--gd-radius-sm', 8], ['--gd-radius-md', 8], ['--gd-radius-lg', 10], ['--gd-radius-xl', 12], ['--gd-radius-2xl', 16]] as const) {
       const v = Number(rawToken(tok).replace('px', ''));
       expect(v, tok).toBeLessThanOrEqual(max);
       expect(rawToken(tok.replace('--gd-', '--')), tok).toBe(`var(${tok})`);

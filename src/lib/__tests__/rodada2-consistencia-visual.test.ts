@@ -23,20 +23,55 @@ const ruleBody = (sel: string) => {
 };
 
 describe('P1 · botões e ícones sem contorno ocioso', () => {
-  it('secundário: repouso sem borda visível, hover/active com preenchimento do sistema', () => {
+  it('secundário: repouso neutro e sem borda, hover/active com superfície neutra', () => {
     const cls = buttonCls('secondary');
     expect(cls).toContain('border-transparent');
     expect(cls).not.toContain('border-[var(--brand)]');
-    expect(cls).toContain('hover:bg-[var(--brand-soft)]');
-    expect(cls).toContain('active:bg-[var(--brand-soft)]');
+    expect(cls).toContain('text-[var(--text)]');
+    expect(cls).toContain('hover:bg-[var(--surface-3)]');
+    expect(cls).toContain('active:bg-[var(--surface-3)]');
+    expect(cls).not.toMatch(/brand-fg|brand-soft/);
     // Foco e acessibilidade preservados (anel canônico do DS no buttonCls).
     expect(cls).toContain('focus-visible:shadow-focus');
     // A caixa não muda entre variantes (borda transparente mantém a métrica).
+    expect(cls).toContain('gd-control');
     expect(cls).toContain('il-control');
   });
 
-  it('o diálogo de confirmação segue a mesma régua (nada de borda só ali)', () => {
-    expect(css).toContain('.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--brand-fg); }');
+  it('o diálogo de confirmação segue a mesma régua neutra (nada de borda ou azul só ali)', () => {
+    expect(css).toContain('.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--text); }');
+    expect(css).toContain('.overlay-confirm .il-control--secondary:hover { background: var(--surface-3); }');
+  });
+});
+
+describe('Pass 2 · régua canônica de controles e Quick Create', () => {
+  it('define 40px no desktop, 44px no toque, raio 8 e rótulo 14/500 na fonte única', () => {
+    expect(ds).toMatch(/--gd-control-h: 40px/);
+    expect(ds).toMatch(/--gd-control-h-touch: 44px/);
+    expect(ds).toMatch(/--gd-radius-sm: 8px/);
+    expect(ds).toMatch(/--gd-type-label-size: 14px/);
+    expect(ds).toMatch(/\.gd-field__label \{[^}]*font-size: var\(--gd-type-label-size\)[^}]*font-weight: var\(--gd-type-label-weight\)/);
+    // Field também usa o token `gd-*` diretamente: popovers são portais fora
+    // de `.il-platform` e não podem depender do alias de altura do shell.
+    expect(ds).toMatch(/\.gd-field__box \{[^}]*min-height: var\(--gd-control-h\)/);
+    expect(ds).toMatch(/\.gd-field__box > \.il-field-control,[\s\S]*?min-height: calc\(var\(--gd-control-h\) - 2px\)/);
+    expect(ds).toMatch(/\.gd-field__box \.gd-field__control--inline \{\s*width: 100%; min-height: calc\(var\(--gd-control-h\) - 2px\)/);
+    expect(ds).not.toContain('var(--control-h-touch)');
+    // Button/A levam a classe canônica inclusive quando são renderizados em
+    // portal; assim o Quick Create não perde 44px fora de `.il-platform`.
+    const ui = read('src/components/ui.tsx');
+    expect(ui).toContain("'gd-control il-control inline-flex");
+    expect(ui).toContain('`gd-control--${size}`');
+    expect(ds).toContain('.gd-control, .gd-control--sm, .gd-control--xs { min-height: var(--gd-control-h-touch); }');
+  });
+
+  it('mantém o Quick enxuto, mas sem ações auxiliares de 34px', () => {
+    const quick = read('src/components/dashboard/QuickBookingPopover.tsx');
+    expect(quick).toContain('<Field label="Paciente"');
+    expect(quick).toContain('label="Fechar criação rápida"');
+    expect(quick).not.toMatch(/<Button[^>]*size="sm"/);
+    expect(quick).not.toMatch(/<IconButton[^>]*size="sm"/);
+    expect(quick).not.toMatch(/h-\[\d+px\]|min-h-\[\d+px\]/);
   });
 });
 
@@ -130,7 +165,8 @@ describe('P0.5/P1.10 · rail, largura e identidade no mesmo eixo', () => {
   });
 
   it('a identidade da topbar nasce no eixo dos ícones do rail e a logo é LIVRE (sem tile)', () => {
-    expect(ds).toMatch(/--gd-topbar-gutter-x: 18px/);
+    // Rail de 60px → centro x=30. Logo 34px → gutter 13px para o mesmo eixo.
+    expect(ds).toMatch(/--gd-topbar-gutter-x: 13px/);
     expect(css).toMatch(/padding: 0 16px 0 var\(--gd-topbar-gutter-x\)/);
     const logo = ruleBody('.ws-clinic__logo {');
     expect(logo).toContain('border: 0');
@@ -146,31 +182,40 @@ describe('P0.5/P1.10 · rail, largura e identidade no mesmo eixo', () => {
     expect(Number(ds.match(/--gd-topbar-logo-max:\s*(\d+)px/)?.[1])).toBeGreaterThan(logoH);
   });
 
-  it('o ícone do item ativo tem poço preenchido e o glifo é centrado', () => {
+  it('o item ativo usa uma única superfície: a linha, não um poço extra no ícone', () => {
     const icon = ruleBody('.workspace-link__icon {');
     expect(icon).toContain('align-items: center');
     expect(icon).toContain('justify-content: center');
     const active = ruleBody('.workspace-link[aria-current="page"] .workspace-link__icon {');
-    expect(active).toMatch(/background: color-mix\(in srgb, var\(--il-nav-active-fg\) 13%/);
+    expect(active).toContain('background: transparent');
+    expect(active).not.toContain('color-mix');
+    const link = ruleBody(".workspace-link[aria-current='page'] {");
+    expect(link).toContain('background: var(--il-nav-active)');
   });
 });
 
 describe('P0.2 · hover da Agenda é RESUMO colado no evento (não painel)', () => {
-  it('o cartão é compacto e as ações não são duas caixas esticadas', () => {
+  it('o cartão ganha leitura e respiro, mas continua um resumo ancorado', () => {
     const card = ruleBody('.ag-hover__card {');
-    // Hover ENRIQUECIDO (item 3A da missão UX closure + homologação pós-Rodada 4):
-    // cabeçalho "Agendamento", data/horário, paciente/tutor, serviço,
-    // profissional e observação pedem mais respiro que o resumo antigo.
-    // 288px com clamp de viewport continua COMPACTO — a auditoria Clínica
-    // Experts sugere 320–390px como teto desktop, nunca painel lateral.
-    expect(card).toContain('width: 288px');
-    expect(card).toContain('max-width: min(288px, calc(100vw - 24px))');
-    expect(card).toContain('padding: 12px');
-    expect(card).toContain('gap: 7px');
+    const positionedLayer = ruleBody('.gd-hovercard.ag-hover {');
+    // O conteúdo clínico pede uma largura legível e hierarquia própria, sem
+    // virar side sheet nem cobrir o evento que o abriu. A largura fica no
+    // wrapper posicionado para o algoritmo de flip/clamp medir 360px reais.
+    expect(positionedLayer).toContain('width: 360px');
+    expect(positionedLayer).toContain('max-width: min(360px, calc(100vw - 24px))');
+    expect(card).toContain('width: 100%');
+    expect(card).toContain('max-width: 100%');
+    expect(card).toContain('padding: var(--gd-space-4)');
+    expect(card).toContain('gap: var(--gd-space-2)');
+    expect(ruleBody('.ag-hover__heading {')).toContain('font-size: var(--gd-type-section-size)');
+    expect(ruleBody('.ag-hover__rows > div {')).toContain('font-size: var(--gd-type-body-size)');
+    expect(read('src/app/(dashboard)/agenda/page.tsx')).toContain('className="text-[12px]">{b.statusLabel}</StatusBadge>');
     const actions = ruleBody('.ag-hover__actions {');
     expect(actions).toContain('border-top: 1px solid var(--gd-border-soft)');
-    // Ações no tamanho do rótulo, com alvo de toque de 34px; nada esticado.
-    expect(css).toContain('.ag-hover__actions > button { flex: 0 0 auto; min-height: 34px; }');
+    // Ações permanecem no tamanho do rótulo, com alvo canônico de 40px.
+    const actionButton = ruleBody('.ag-hover__actions > button {');
+    expect(actionButton).toContain('min-height: var(--gd-control-h)');
+    expect(actionButton).toContain('font-weight: var(--gd-weight-semibold)');
     expect(css).not.toContain('.ag-hover__actions > * { flex: 1; }');
   });
 
