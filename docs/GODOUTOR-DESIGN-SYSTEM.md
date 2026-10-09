@@ -279,7 +279,7 @@ peso padrão de título).
 | Papel | Tamanho/linha | Peso | Token |
 | --- | --- | --- | --- |
 | Título de página | 20/26 | 600 | `--gd-type-page-title-*` |
-| Seção | 16/22 | 600 | `--gd-type-section-*` |
+| Seção | 18/22 | 600 | `--gd-type-section-*` |
 | Corpo | 14/20 | 400 | `--gd-type-body-*` |
 | Rótulo (campo, item) | 13/20 | 500 | `--gd-type-label-*` |
 | Metadado | 12/18 | 500 | `--gd-type-metadata-*` |

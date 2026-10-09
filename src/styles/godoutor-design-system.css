@@ -146,7 +146,8 @@
   --gd-weight-bold: 700;         /* só título de página/marca */
 
   --gd-font-size-page-title: 20px;   /* título de página */
-  --gd-font-size-section: 16px;      /* título de seção/registro */
+  /* Alias de compatibilidade: títulos antigos seguem o papel canônico abaixo. */
+  --gd-font-size-section: var(--gd-type-section-size);
   --gd-font-size-body: 14px;         /* corpo */
   --gd-font-size-secondary: 13px;    /* apoio/label */
   --gd-font-size-metadata: 12px;     /* metadado */
@@ -158,7 +159,7 @@
      Tamanho/altura-de-linha/peso por PAPEL, não por tela. Toda superfície usa
      um destes papéis; um `text-[15px]` solto é dívida, não estilo.
        page-title · 20/26 600   — título de página (uma vez por tela)
-       section    · 16/22 600   — título de seção/registro
+       section    · 18/22 600   — título de seção/registro
        body       · 14/20 400   — corpo
        label      · 14/20 500   — rótulo de campo/controle
        metadata   · 12/18 500   — metadado (status, horário, contagem)
@@ -167,7 +168,7 @@
      700 (`--gd-weight-bold`) só quando a hierarquia justifica (título de página
      e marca) — nunca em corpo, metadado ou botão. */
   --gd-type-page-title-size: 20px;   --gd-type-page-title-line: 26px;  --gd-type-page-title-weight: var(--gd-weight-semibold);
-  --gd-type-section-size: 16px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
+  --gd-type-section-size: 18px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
   --gd-type-body-size: 14px;         --gd-type-body-line: 20px;        --gd-type-body-weight: var(--gd-weight-regular);
   --gd-type-label-size: 14px;        --gd-type-label-line: 20px;       --gd-type-label-weight: var(--gd-weight-medium);
   --gd-type-metadata-size: 12px;     --gd-type-metadata-line: 18px;    --gd-type-metadata-weight: var(--gd-weight-medium);
@@ -765,8 +766,8 @@
   border-bottom: 1px solid var(--gd-border-soft);
 }
 .gd-detail__header h2 {
-  margin: 0; font-size: var(--gd-font-size-section); font-weight: var(--gd-weight-semibold);
-  color: var(--gd-text-strong); outline: none;
+  margin: 0; font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line);
+  font-weight: var(--gd-type-section-weight); color: var(--gd-text-strong); outline: none;
 }
 .gd-detail__sub { margin: 2px 0 0; font-size: var(--gd-font-size-secondary); color: var(--gd-text-muted); }
 /* Ícone do ASSUNTO (prévias/fichas laterais): mesmo chip do cabeçalho dos
