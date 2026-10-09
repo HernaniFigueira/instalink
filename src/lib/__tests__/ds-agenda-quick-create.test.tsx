@@ -189,7 +189,7 @@ async function pickQuick(layer: HTMLElement, label: string, value: string) {
 }
 
 describe('DS 1.0 §5 · quick create ancorado no slot', () => {
-  it('1 · clique abre o popover canônico ancorado, com os SEIS campos e "Mais opções"', async () => {
+  it('1 · clique abre o popover canônico ancorado, com os essenciais, data/duração recolhidos e "Mais opções"', async () => {
     render(<AgendaPage />);
     await clickSlot('10:00');
 
@@ -212,12 +212,19 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     expect(layer.style.left).toBeTruthy();
     expect(layer.style.top).toBeTruthy();
 
+    // Essenciais sempre visíveis (paciente, serviço, profissional, hora).
     expect(within(layer).getByLabelText(/Paciente/)).toBeTruthy();
     expect(within(layer).getByLabelText(/^Serviço/)).toBeTruthy();
     expect(within(layer).getByLabelText(/^Profissional/)).toBeTruthy();
-    expect(within(layer).getByLabelText(/^Duração/)).toBeTruthy();
-    expect(within(layer).getByRole('button', { name: /^Data/ })).toBeTruthy();
     expect(within(layer).getByLabelText(/^Hora/)).toBeTruthy();
+    // Progressive disclosure: data e duração ficam recolhidos com o resumo visível.
+    const toggle = within(layer).getByRole('button', { name: /Data e duração/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(within(layer).queryByLabelText(/^Duração/)).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(layer).getByLabelText(/^Duração/)).toBeTruthy();
+    expect(within(layer).getByRole('button', { name: /^Data$/ })).toBeTruthy();
     expect(within(layer).getByRole('button', { name: 'Mais opções' })).toBeTruthy();
     // O horário clicado já vem escolhido (intenção do gesto preservada).
     expect((within(layer).getByLabelText(/^Hora/) as HTMLSelectElement).value).toBe('10:00');

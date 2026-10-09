@@ -1857,78 +1857,86 @@ export default function AgendaPage() {
             </Button>
 
             {filterOpen && (
-              <div role="dialog" aria-label="Filtros da agenda"
-                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[310px] max-w-[calc(100vw-1.25rem)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-lg text-left">
-                <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
+              <div role="dialog" aria-label="Filtros da agenda" data-agenda-filters="compact"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left bg-[var(--gd-bg-surface)] border border-[var(--gd-border-soft)] rounded-[var(--gd-radius-md)] shadow-[var(--gd-shadow-md)]">
+                {/* Cabeçalho: título + contagem aplicada + limpar (ghost). Sem caixa-alta. */}
+                <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2">
+                  <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--gd-text)]">
+                    Filtros
+                    {activeFilterCount > 0 && (
+                      <span className="rounded-full bg-[var(--gd-bg-subtle)] px-1.5 text-[11px] font-semibold tabular-nums text-[var(--gd-text-secondary)]">{activeFilterCount}</span>
+                    )}
+                  </p>
                   {activeFilterCount > 0 && (
-                    <button type="button" onClick={clearFilters}
-                      className="rounded-sm px-1 text-[12px] font-semibold text-[var(--text-secondary)] underline-offset-2 hover:text-[var(--text)] hover:underline focus-visible:outline-none focus-visible:shadow-focus">
-                      Limpar filtros
-                    </button>
+                    <Button variant="ghost" className="h-7 px-2 text-[12px]" onClick={clearFilters}>Limpar</Button>
                   )}
                 </div>
 
-                <div className="px-3 pb-2.5">
-                  <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Status</p>
-                  <div className="flex flex-wrap gap-1">
-                    <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                    {statusOptions.map((st) => (
-                      <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
-                        {BOOKING_STATUS[st].panel}
-                      </FilterChip>
-                    ))}
-                  </div>
-                </div>
-
-                {specialties.length > 0 && (
-                  <div className="px-3 pb-2.5 border-t border-[var(--border-soft)] pt-2.5">
-                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Serviços</p>
+                <div className="space-y-3 px-3 pb-3">
+                  {/* Status: chips compactos, sem título redundante. */}
+                  <div>
+                    <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Status</p>
                     <div className="flex flex-wrap gap-1">
-                      <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
-                      {specialties.map((r) => (
-                        <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                          {r}
+                      <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                      {statusOptions.map((st) => (
+                        <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
+                          {BOOKING_STATUS[st].panel}
                         </FilterChip>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {activePros.length > 0 && (
-                  <div className="px-3 pb-3 border-t border-[var(--border-soft)] pt-2.5">
-                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Profissional</p>
-                    <div className="relative">
-                      <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                        placeholder="Pesquisar profissional…" aria-label="Pesquisar profissional"
-                        className="w-full text-[12.5px] bg-[var(--surface-subtle)] border border-[var(--border)] rounded-[var(--radius-sm)] pl-8 pr-2 py-1.5 focus:outline-none focus:border-[var(--brand)] focus:bg-white" />
+                  {specialties.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Serviços</p>
+                      <div className="flex flex-wrap gap-1">
+                        <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
+                        {specialties.map((r) => (
+                          <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                            {r}
+                          </FilterChip>
+                        ))}
+                      </div>
                     </div>
-                    <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                      <button type="button" onClick={() => pickPro('')}
-                        className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px] font-medium',
-                          !proFilter ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
-                        <span className="flex-1">Todos</span>
-                        {!proFilter && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
-                      </button>
-                      {prosInFilter.map((p) => (
-                        <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px]',
-                            proFilter === p.id ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
-                          <Avatar name={p.name} src={p.photo} size={20} />
-                          <span className="flex-1 min-w-0 truncate">
-                            <span className="font-semibold text-[var(--text-primary)]">{p.name}</span>
-                            {p.role && <span className="text-[var(--text-muted)]"> · {p.role}</span>}
-                          </span>
-                          {proFilter === p.id && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
-                        </button>
-                      ))}
-                      {prosInFilter.length === 0 && (
-                        <p className="text-[12.5px] text-[var(--text-muted)] px-2 py-1.5">Nenhum profissional encontrado.</p>
+                  )}
+
+                  {activePros.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Profissional</p>
+                      {activePros.length > 5 && (
+                        <div className="relative mb-1.5">
+                          <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--gd-text-muted)]" />
+                          <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                            placeholder="Buscar profissional" aria-label="Pesquisar profissional"
+                            className="h-8 w-full rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface)] pl-8 pr-2 text-[12.5px] focus:outline-none focus:shadow-[var(--gd-focus-ring)]" />
+                        </div>
                       )}
+                      <div className="max-h-36 space-y-px overflow-y-auto ws-scroll">
+                        <button type="button" onClick={() => pickPro('')} aria-pressed={!proFilter}
+                          className={cn('flex h-8 w-full items-center gap-2 rounded-[var(--gd-radius-sm)] px-2 text-left text-[12.5px] font-medium',
+                            !proFilter ? 'bg-[var(--gd-nav-hover)] text-[var(--gd-text)]' : 'text-[var(--gd-text-secondary)] hover:bg-[var(--gd-nav-hover)]')}>
+                          <span className="flex-1">Todos</span>
+                          {!proFilter && <Icon n="check" size={13} className="shrink-0 text-[var(--gd-success-fg)]" />}
+                        </button>
+                        {prosInFilter.map((p) => (
+                          <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)} aria-pressed={proFilter === p.id}
+                            className={cn('flex h-8 w-full items-center gap-2 rounded-[var(--gd-radius-sm)] px-2 text-left text-[12.5px]',
+                              proFilter === p.id ? 'bg-[var(--gd-nav-hover)] text-[var(--gd-text)]' : 'text-[var(--gd-text-secondary)] hover:bg-[var(--gd-nav-hover)]')}>
+                            <Avatar name={p.name} src={p.photo} size={18} />
+                            <span className="flex-1 min-w-0 truncate">
+                              <span className="font-semibold text-[var(--gd-text)]">{p.name}</span>
+                              {p.role && <span className="text-[var(--gd-text-muted)]"> · {p.role}</span>}
+                            </span>
+                            {proFilter === p.id && <Icon n="check" size={13} className="shrink-0 text-[var(--gd-success-fg)]" />}
+                          </button>
+                        ))}
+                        {prosInFilter.length === 0 && (
+                          <p className="px-2 py-1.5 text-[12.5px] text-[var(--gd-text-muted)]">Nenhum profissional encontrado.</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
