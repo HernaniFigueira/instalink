@@ -1817,6 +1817,32 @@ export default function AgendaPage() {
             <Icon n="calendar" size={19} />
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+          {/* Composição contínua (A1): o aviso de bloqueio fica na mesma linha
+              do título, em vez de uma faixa própria abaixo da toolbar. */}
+          {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+            de horário/escopo. A explicação vira a dica curta de uma linha, e o
+            clique continua abrindo o MESMO formulário do bloqueio. */}
+        <span className="ag-blocks-bar__label">
+          <Icon n="lock" size={13} aria-hidden="true" />
+          {blockCountLabel}
+        </span>
+        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
+        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+          }}>
+            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+            <span>{block.reason || block.note || 'Operacional'}</span>
+            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+          </button>
+        ))}</div>
+      </section>}
         </div>
         <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -2127,30 +2153,7 @@ export default function AgendaPage() {
       </div>
 
       {blockMode && <div role="status" className="mb-3 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
-      {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
-        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
-            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
-            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
-            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
-            de horário/escopo. A explicação vira a dica curta de uma linha, e o
-            clique continua abrindo o MESMO formulário do bloqueio. */}
-        <span className="ag-blocks-bar__label">
-          <Icon n="lock" size={13} aria-hidden="true" />
-          {blockCountLabel}
-        </span>
-        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
-        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
-          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
-            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
-            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
-            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-          }}>
-            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
-            <span>{block.reason || block.note || 'Operacional'}</span>
-            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
-          </button>
-        ))}</div>
-      </section>}
+
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll ag-list" aria-label="Lista de atendimentos do dia">
           <p className="ag-list__hint">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>

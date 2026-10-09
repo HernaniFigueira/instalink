@@ -3723,8 +3723,29 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .ag-page > header.gd-toolbar span[data-agenda-title-icon] { width: 32px; height: 32px; }
   .ag-page .relative.z-40.ws-panel { margin-bottom: 0; }
   .ag-page .relative.z-40.ws-panel > .gd-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  /* Aviso de bloqueio: indicador inline na linha do título (sem caixa). */
+  .ag-page header.gd-toolbar { flex-wrap: nowrap; }
+  .ag-page header.gd-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .ag-page .ag-blocks-bar { min-width: 0; overflow: hidden; }
+  .ag-page .ag-blocks-bar__hint { white-space: nowrap; }
+  @media (max-width: 1279px) { .ag-page .ag-blocks-bar__hint, .ag-page .ag-blocks-bar__scope { display: none; } }
   .ag-page .ag-blocks-bar {
-    margin: 0; border: 0; border-top: 1px solid var(--gd-border-soft); border-radius: 0;
-    background: transparent; padding: 6px 12px; min-height: 0;
+    margin: 0 0 0 4px; border: 0; border-radius: 0; background: transparent;
+    padding: 0; min-height: 0; flex-wrap: nowrap; gap: 8px;
   }
+  .ag-page .ag-blocks-bar__items { margin-left: 0; }
+}
+
+/* Tablet (640–1023): cabeçalho da Agenda em UMA linha — título + aviso de
+   bloqueio à esquerda (o aviso corta, nunca quebra), Filtros/Fila/ajuda à
+   direita. Antes o aviso quebrava em duas linhas e Filtros caía para uma
+   terceira faixa. */
+@media (min-width: 640px) {
+  .ag-page > header.gd-toolbar { flex-wrap: nowrap; }
+  .ag-page > header.gd-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .ag-page > header.gd-toolbar > div:last-child { flex: 0 0 auto; }
+  .ag-page .ag-blocks-bar { min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+  .ag-page .ag-blocks-bar__items { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+  .ag-page .ag-blocks-bar__items > button { flex: 0 0 auto; }
+  .ag-page .ag-blocks-bar__label, .ag-page .ag-blocks-bar__hint { flex: 0 0 auto; white-space: nowrap; }
 }
