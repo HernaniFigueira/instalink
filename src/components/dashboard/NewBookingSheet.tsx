@@ -21,7 +21,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
@@ -600,27 +600,46 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           )}
 
           <Field label="2. Serviço" required>
-            <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
-              <option value="">Selecione…</option>
-              {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}{eligibleProfessionalIds(s as any, pros).length === 0 ? ' — Sem profissional habilitado' : ''}</option>)}
-            </Select>
+            {/* CP3 · Combobox do DS (busca + teclado), no lugar do select nativo. */}
+            <Combobox
+              label="Serviço"
+              placeholder="Buscar serviço…"
+              emptyLabel="Nenhum serviço encontrado"
+              disabled={saving || reviewing}
+              value={serviceId}
+              onChange={(v) => setServiceId(String(v))}
+              options={[{ value: '', label: 'Selecione…' }, ...orderedServices.map((s) => ({
+                value: s.id,
+                label: `${s.name} · ${durationLabel(s.durationMin)}`,
+                hint: eligibleProfessionalIds(s as any, pros).length === 0 ? 'Sem profissional habilitado' : undefined,
+              }))]}
+            />
           </Field>
 
 
 
           {(eligiblePros.length > 0 || incompatiblePro) && (
             <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
-              <Select value={activeProId} disabled={saving || reviewing} onChange={(e) => setProId(e.target.value)}>
-                <option value="">Automático (equilibrar equipe)</option>
-                {incompatiblePro && <option value={proId}>{pros.find(p => p.id === proId)?.name} — não realiza este serviço</option>}
-                {eligiblePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox
+                label="Profissional"
+                placeholder="Buscar profissional…"
+                emptyLabel="Nenhum profissional encontrado"
+                disabled={saving || reviewing}
+                value={activeProId}
+                onChange={(v) => setProId(String(v))}
+                options={[
+                  { value: '', label: 'Automático (equilibrar equipe)' },
+                  ...(incompatiblePro ? [{ value: proId, label: `${pros.find(p => p.id === proId)?.name} — não realiza este serviço` }] : []),
+                  ...eligiblePros.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
             </Field>
           )}
 
           {proIssue && <Notice tone="warning">{proIssue}</Notice>}
           <Field label="3. Data" required>
-            <Input type="date" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(e) => setDate(e.target.value)} />
+            {/* CP3 · DatePicker do DS: o input date nativo não é mais usado no produto. */}
+            <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => setDate(iso)} />
           </Field>
 
           {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}

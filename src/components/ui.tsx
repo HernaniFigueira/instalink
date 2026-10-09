@@ -2357,6 +2357,7 @@ export function DatePicker({ value, onChange, label = 'Data', placeholder = 'Sel
         <button
           id={field?.controlId}
           type="button"
+          data-value={value}
           disabled={disabled}
           aria-label={field?.inShell ? undefined : label}
           aria-labelledby={field?.labelId}
@@ -2476,6 +2477,7 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         {...repoProps}
         type="text"
         role="combobox"
+        data-value={multi ? selected.join(',') : (selected[0] ?? '')}
         aria-label={inShell ? undefined : label}
         aria-expanded={open}
         aria-controls={listId}
@@ -2505,6 +2507,7 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
                 key={o.value}
                 type="button"
                 role="option"
+                data-value={o.value}
                 aria-selected={idx === active}
                 disabled={o.disabled}
                 data-active={idx === active}

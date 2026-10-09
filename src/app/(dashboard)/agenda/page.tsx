@@ -1385,7 +1385,16 @@ export default function AgendaPage() {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving || dropChecking) return;
+    if (!booking || saving || dropChecking) return;
+    // CP3 · clique simples abre o detalhe em QUALQUER status (inclusive
+    // concluído, falta e cancelado). Arrastar esses status continua vedado:
+    // o movimento é ignorado em onPressMove, então o pressionamento vira clique.
+    if (rescheduleDecision(booking.status).kind === 'recreate') {
+      interactionRef.current = reduceInteraction(interactionRef.current, {
+        type: 'down', id, at: { x: e.clientX, y: e.clientY },
+      }).state;
+      return;
+    }
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
@@ -1397,6 +1406,10 @@ export default function AgendaPage() {
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
     if (state.phase === 'idle' || state.id !== id) return;
+    // Status que só recria (recreate) não arrasta: ignora o movimento e mantém
+    // o pressionamento como clique simples (detalhe).
+    const movedBooking = bookingsRef.current.get(id);
+    if (movedBooking && rescheduleDecision(movedBooking.status).kind === 'recreate') return;
     const at: Point = { x: e.clientX, y: e.clientY };
     const wasDragging = state.phase === 'dragging';
     const step = reduceInteraction(state, { type: 'move', at });
