@@ -699,7 +699,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.complaint}>
                 <Textarea value={form.complaint} maxLength={600}
-                  onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, complaint: e.target.value })}
                   placeholder="Descreva o motivo do atendimento" />
               </Field>
             ) : (
@@ -708,7 +708,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
                 <Textarea value={form.evolution} maxLength={4000}
-                  onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, evolution: e.target.value })}
                   placeholder="Registre o que foi realizado neste atendimento" />
               </Field>
             ) : (
@@ -719,7 +719,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
                 <Textarea value={form.guidance} maxLength={2000}
-                  onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, guidance: e.target.value })}
                   placeholder="Registre as orientações fornecidas" />
               </Field>
             ) : (
@@ -752,13 +752,13 @@ export function EncounterSheet({
               {form.followUpMode === 'date' && (
                 <div className="mt-2">
                   <Input type="date" aria-label="Data do retorno" value={form.followUpDate}
-                    onChange={(e) => updateForm({ ...form, followUpDate: e.target.value })} className="max-w-[200px]" />
+                    onChange={(e) => updateForm({ ...latest.current.form, followUpDate: e.target.value })} className="max-w-[200px]" />
                 </div>
               )}
               {form.followUpMode === 'interval' && (
                 <div className="mt-2 flex items-center gap-2">
                   <Input type="number" aria-label="Intervalo em dias" min={1} max={730} value={form.followUpDays || ''}
-                    onChange={(e) => updateForm({ ...form, followUpDays: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateForm({ ...latest.current.form, followUpDays: Number(e.target.value) || 0 })}
                     className="max-w-[110px]" />
                   <span className="text-xs text-[var(--text-muted)]">dias após o atendimento</span>
                 </div>
@@ -766,11 +766,11 @@ export function EncounterSheet({
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={ENCOUNTER_LABELS.followUp} hint="Texto livre que sai na via do cliente.">
                   <Input value={form.followUp} maxLength={200}
-                    onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
+                    onChange={(e) => updateForm({ ...latest.current.form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
                 </Field>
                 <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
                   <Input value={form.tags}
-                    onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
+                    onChange={(e) => updateForm({ ...latest.current.form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
                 </Field>
               </div>
             </Field>
@@ -778,7 +778,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
                 <Textarea value={form.internalNote} maxLength={2000}
-                  onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, internalNote: e.target.value })}
                   placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
               </Field>
             ) : (

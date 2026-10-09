@@ -270,6 +270,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
           businessId={businessId}
           encounter={current}
           authority={authority}
+          adoptToken={adoptToken}
           canEdit={canEditCore}
           onSaved={onCoreSaved}
           readOnlyHint={readOnlyHint}
