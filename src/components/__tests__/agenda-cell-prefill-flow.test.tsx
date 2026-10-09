@@ -570,7 +570,7 @@ describe('Clinical UX Closure — range and block mode', () => {
     await renderAgenda();
     fireEvent.click(screen.getByRole('button', { name: 'Bloquear horário' }));
     pointerRange(ORLANDO, '09:00', '13:00');
-    await screen.findByText('Indisponibilidade temporária');
+    await screen.findByText('Período indisponível. Não conta como atendimento.');
     expect((screen.getByLabelText('Início') as HTMLInputElement).value).toBe('09:00');
     expect((screen.getByLabelText('Fim') as HTMLInputElement).value).toBe('13:00');
     expect(val(screen.getByLabelText('Profissional'))).toBe(ORLANDO); // bloqueio: Combobox do DS

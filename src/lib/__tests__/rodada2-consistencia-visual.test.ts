@@ -302,7 +302,7 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
     expect(agenda).toContain('{resizeAsk && <Drawer open variant="dialog" dialogWidth="460px"');
     expect(agenda).toContain('<Drawer open variant="dialog" dialogWidth="520px"');
     // O formulário completo de bloqueio já era central e continua sendo.
-    expect(agenda).toContain('<Drawer open={blockForm} variant="dialog" dialogWidth="560px"');
+    expect(agenda).toContain('<Drawer open={blockForm} variant="dialog" dialogWidth="480px"');
   });
 });
 
