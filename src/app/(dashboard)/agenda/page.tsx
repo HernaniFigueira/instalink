@@ -2594,6 +2594,10 @@ export default function AgendaPage() {
           initial={{
             name: creating.name || '', phone: creating.phone || '',
             contactId: creating.contactId, serviceId: creating.serviceId,
+            searchQuery: creating.searchQuery,
+            openRegistration: creating.openRegistration,
+            vetMode: creating.vetMode,
+            allowSingleEligibleServicePrefill: creating.allowSingleEligibleServicePrefill,
             date: creating.date || focus,
             time: creating.time,
             professionalId: creating.professionalId,
