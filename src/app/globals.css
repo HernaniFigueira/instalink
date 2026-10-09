@@ -3710,3 +3710,21 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .ag-page .ag-toolbar-actions > button .ag-toolbar__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .ag-page .ag-toolbar-actions > button { position: relative; }
 }
+
+/* ── AGENDA · COMPOSIÇÃO CONTÍNUA (desktop ≥1024) ─────────────────────────
+   Antes: título, painel de toolbar, faixa de bloqueio e cabeçalho da grade
+   eram quatro caixas empilhadas e a grade começava ~250px abaixo do topo.
+   Agora: o título fica em linha livre (sem caixa), a toolbar é a única
+   moldura de controles e a faixa de bloqueio encosta nela como linha de
+   apoio. A grade ganha altura sem perder nenhum controle ou aviso. */
+@media (min-width: 1024px) {
+  .ag-page > header.gd-toolbar { margin-bottom: 4px; padding: 0 2px; min-height: 40px; }
+  .ag-page > header.gd-toolbar h1 { font-size: 18px; }
+  .ag-page > header.gd-toolbar span[data-agenda-title-icon] { width: 32px; height: 32px; }
+  .ag-page .relative.z-40.ws-panel { margin-bottom: 0; }
+  .ag-page .relative.z-40.ws-panel > .gd-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  .ag-page .ag-blocks-bar {
+    margin: 0; border: 0; border-top: 1px solid var(--gd-border-soft); border-radius: 0;
+    background: transparent; padding: 6px 12px; min-height: 0;
+  }
+}
