@@ -78,16 +78,27 @@ Título, descrição contextual opcional, ícone em chip neutro/acento e área d
 | Arquétipo | Largura máxima | Gutter / uso oficial |
 |---|---:|---|
 | `workspace` | sem limite | Conteúdo operacional denso em largura disponível: agenda, conversas, tabelas, kanban e resultados. Não estreitar Agenda/Conversas. |
-| `record` | `80rem` (1280px) | Um registro de operação, mantendo área útil para formulário clínico, histórico e ações; `/atendimento` preserva o layout de registro já existente. |
-| `detail` | `90rem` (1440px) | Ficha 360, com navegação de retorno e módulos relacionados; `/clientes/[id]` herda permissão de Clientes, mas recebe este frame. |
+| `context` | sem limite | Superfície de **entidade/sessão** com rail de contexto + workspace flexível: `/clientes/[id]` (Cliente 360), `/atendimento/[id]` e `/atendimento/[id]/registro`. Mesma largura operacional e mesmos gutters da lista de origem (Clientes/Agenda); nunca um `max-width` estreito. Herda a permissão da rota-mãe. |
+| `record` | `80rem` (1280px) | Um registro de operação sem rail de contexto. |
+| `detail` | `90rem` (1440px) | Detalhe com navegação de retorno e módulos relacionados que não usa rail de contexto. |
 | `form` | `60rem` (960px) | Dados de leitura/edição centralizados: Perfil, Configurações e Assistente. |
 | `hub` | `80rem` (1280px) | Administração estrutural expansível em seções e listas: Estrutura, Equipe, Serviços, Profissionais, Disponibilidade e capacidades. |
+
+Arquétipos legados emitem o modificador `il-page-frame--<tipo>`; arquétipos novos (como `context`) emitem `gd-page-frame--<tipo>` — nenhum identificador `il-*` novo.
 
 O `PageFrame` fixa `width`, `min-width`, centralização, padding e gutters através de tokens CSS (`--page-width-*`, `--page-gutter-*`). Seu tipo é o único seletor de max-width. `flush` só é permitido para manter a composição já homologada de Agenda e Conversas: essas telas operacionais mantêm gutter próprio e nunca recebem o frame estreito de formulário. A rota `/pagina` é `workspace` pela necessidade técnica de suas três colunas, mas editor/renderer legado permanece fora de redesign. `/alterar-senha` é uma tela autenticada `form` em rota independente; console `/master/*` conserva shell administrativo próprio (`max-w-7xl`) e não é módulo do `DashboardShell`; aliases `/admin/*` redirecionam para esse console. Essas fronteiras devem ser registradas como exceções, sem alterar autenticação.
 
 Unidades estruturais reutilizáveis: `PageFrame` contém o frame; `PageHeader` identifica página e ação principal; `Toolbar` agrupa filtros/controles operacionais; `SectionHeader` nomeia subseções; `FormSection` agrupa campos; `ActionBar` concentra submissão/ações finais. Prefira esses componentes e tokens a wrappers/margens independentes. Em formulários, ação **Primary** é a submissão principal; **Secondary** altera contexto ou navega; **Ghost** é auxiliar; **Destructive** remove/cancela. Não igualar as intenções visualmente.
 
 Role de acesso e cargo/função profissional são dados separados: role usa os rótulos oficiais (`roleLabel`/`Badge`); cargo permanece identidade profissional. Perfil preserva User → Professional como vínculo, sem unir entidades nem duplicar autenticação.
+
+### Superfícies de contexto (Cliente 360, Atendimento, Registro completo)
+
+- **Shell:** `rail de contexto | workspace`. Rail com largura de token (`--gd-context-rail-w`, 260–300px) e divisor vertical de altura total; workspace `minmax(0, 1fr)`. Sem toolbar sticky própria acima do conteúdo.
+- **Sticky:** só a partir de 1024px. `top: var(--gd-context-sticky-top)` (= altura da topbar + 16px) e `max-height` = altura útil abaixo da topbar menos a reserva do fim da página (`--gd-context-bottom-reserve`). Se o conteúdo for maior, o rail rola por dentro. Nenhum ancestral do rail pode ter `overflow` que crie contêiner de rolagem (`hidden`/`clip`). Abaixo de 1024px, o rail vira faixa estática no topo (3 colunas em 768–1023; 1 coluna abaixo de 768).
+- **Voltar:** é o primeiro item do rail, no mesmo lugar nas três superfícies. Sempre com destino: "Voltar para clientes", "Voltar para <nome do tutor>" ou "Voltar para agenda". Nunca um "Voltar" genérico.
+- **`returnTo`:** quem abre o Atendimento passa a URL de origem (`pathname + search`). O destino é validado: só caminho interno, nunca URL absoluta. A Agenda preserva `data`, `view`, `professionalId` e filtros. O switcher Atendimento ⇄ Registro repassa o mesmo `returnTo`. Sem `returnTo` válido, o destino é a agenda.
+- **Switcher de superfície:** controle segmentado "Atendimento | Registro completo" no rail, logo abaixo da identidade, com o mesmo lugar, estilo e comportamento nas duas superfícies. A superfície ativa fica marcada (`aria-current`). Não é "Voltar" e não muda o `returnTo`. A troca passa pela guarda de saída (o autosave grava antes).
 
 ## 5. Arquitetura e fronteira de migração
 

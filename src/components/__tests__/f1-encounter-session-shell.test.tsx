@@ -10,7 +10,7 @@
 //   3. rodapé persistente: CTA "Finalizar atendimento" só para o responsável em
 //      rascunho; leitura para os demais; finalizado sem CTA;
 //   4. timer só a partir de `startedAt` PERSISTIDO — nunca criado no cliente;
-//      início de outro dia não conta ao vivo;
+//      fora da janela de 24 h não conta ao vivo (Entrega 2: mora no RAIL);
 //   5. o CTA do rodapé abre a MESMA revisão (Dialog canônico);
 //   6. revisão em hierarquia (avaliação/plano → retorno/pendências → autoria →
 //      demais dados) com dados reais; pendências = blocos vazios;
@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { EncounterWorkspaceBody } from '../dashboard/EncounterWorkspaceBody';
 import { EncounterWorkspace } from '../dashboard/EncounterWorkspace';
-import { encounterTimeLabel } from '../dashboard/EncounterSessionFooter';
+import { encounterTimer } from '@/lib/encounter-timer';
 import type { EncounterAuthorityRow } from '../dashboard/useEncounterAuthority';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { readFileSync } from 'node:fs';
@@ -135,13 +135,14 @@ describe('Navegação contextual agrupada', () => {
 });
 
 describe('Rodapé persistente', () => {
-  it('rascunho do responsável: estado de gravação, timer e CTA "Finalizar atendimento" no rodapé', () => {
+  it('rascunho do responsável: estado de gravação e CTA "Finalizar atendimento" — timer e switcher ficam no rail', () => {
     renderBody(row());
     const footer = screen.getByTestId('encounter-session-footer');
     expect(within(footer).getByRole('button', { name: 'Finalizar atendimento' })).toBeTruthy();
-    expect(within(footer).getByRole('button', { name: 'Registro completo' })).toBeTruthy();
+    // Entrega 2: o rodapé não duplica o switcher nem o timer do rail.
+    expect(within(footer).queryByRole('button', { name: 'Registro completo' })).toBeNull();
+    expect(within(footer).queryByTestId('encounter-timer')).toBeNull();
     expect(screen.getByTestId('encounter-workspace-save-state')).toBeTruthy();
-    expect(within(footer).getByTestId('encounter-timer').textContent).toMatch(/Em atendimento há \d+ min · início às \d{2}:\d{2}/);
   });
 
   it('o CTA do rodapé abre a MESMA revisão de finalização (sem finalizar sozinho)', () => {
@@ -174,25 +175,28 @@ describe('Rodapé persistente', () => {
 describe('Timer: somente a partir de timestamp persistido', () => {
   const now = new Date('2026-10-09T15:00:00.000Z');
 
-  it('início do dia corrente: contagem ao vivo a partir do startedAt gravado', () => {
-    expect(encounterTimeLabel('2026-10-09T14:30:00.000Z', now)).toMatch(/^Em atendimento há 30 min · início às \d{2}:\d{2}$/);
+  it('início recente: relógio HH:MM:SS ao vivo a partir do startedAt gravado', () => {
+    const t = encounterTimer('2026-10-09T14:57:46.000Z', now);
+    expect(t).toMatchObject({ kind: 'live', clock: '00:02:14' });
   });
 
-  it('início de outro dia (ex.: legado derivado de createdAt): NÃO conta ao vivo', () => {
-    const label = encounterTimeLabel('2026-10-07T12:00:00.000Z', now);
-    expect(label).toMatch(/^Iniciado em \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}$/);
-    expect(label).not.toMatch(/Em atendimento há/);
+  it('início fora da janela de 24 h (registro esquecido aberto): NÃO conta ao vivo', () => {
+    const t = encounterTimer('2026-10-07T12:00:00.000Z', now);
+    expect(t?.kind).toBe('stale');
+    expect(t && t.kind === 'stale' ? t.label : '').toMatch(/^Iniciado em \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}$/);
   });
 
   it('sem timestamp válido: não há timer', () => {
-    expect(encounterTimeLabel(undefined, now)).toBeNull();
-    expect(encounterTimeLabel('isto-não-é-data', now)).toBeNull();
+    expect(encounterTimer(undefined, now)).toBeNull();
+    expect(encounterTimer('isto-não-é-data', now)).toBeNull();
   });
 
-  it('o rodapé não cria timestamp de início no cliente (sem Date.now / migration)', () => {
-    const src = readFileSync(join(process.cwd(), 'src/components/dashboard/EncounterSessionFooter.tsx'), 'utf8');
-    expect(src).not.toMatch(/Date\.now\(/);
-    expect(src).toMatch(/startedAt/);
+  it('nem o rodapé nem o timer criam timestamp de início no cliente', () => {
+    const footer = readFileSync(join(process.cwd(), 'src/components/dashboard/EncounterSessionFooter.tsx'), 'utf8');
+    const timer = readFileSync(join(process.cwd(), 'src/lib/encounter-timer.ts'), 'utf8');
+    expect(footer).not.toMatch(/Date\.now\(|encounter-timer/);
+    expect(timer).not.toMatch(/Date\.now\(/);
+    expect(timer).toMatch(/startedAt/);
   });
 });
 

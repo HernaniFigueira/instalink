@@ -328,6 +328,20 @@ describe('F1B2 · seção Procedimentos (custom, sem efeito colateral)', () => {
     expect(JSON.stringify(body)).not.toMatch(/price|amount|stock|commission|orderId/i);
   });
 
+  it('estado vazio: texto e "Adicionar procedimento" no mesmo bloco; com itens, a ação fica logo após a lista', () => {
+    renderProcedures();
+    const empty = screen.getByTestId('procedures-empty-state');
+    expect(within(empty).getByText('Nenhum procedimento registrado neste atendimento.')).toBeTruthy();
+    expect(within(empty).getByRole('button', { name: 'Adicionar procedimento' })).toBeTruthy();
+    expect(screen.queryByTestId('procedures-list')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar procedimento' }));
+    expect(screen.queryByTestId('procedures-empty-state')).toBeNull();
+    const list = screen.getByTestId('procedures-list');
+    const actions = list.nextElementSibling as HTMLElement;
+    expect(actions.className).toContain('encounter-clinical__actions');
+    expect(within(actions).getByRole('button', { name: 'Adicionar procedimento' })).toBeTruthy();
+  });
+
   it('sugestões de catálogo existem mas o texto livre continua valendo (autocomplete opcional)', () => {
     renderProcedures();
     const list = document.getElementById('procedure-suggestions');

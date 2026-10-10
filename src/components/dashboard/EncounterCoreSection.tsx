@@ -33,7 +33,7 @@
 // Persistência: a MESMA do domínio (PATCH /api/encounters com `expectedVersion`),
 // com autosave depois de o dedo parar e trava otimista — o texto de quem digita
 // nunca é sobrescrito pela resposta de um save anterior.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '@/components/icons';
 import { Button, ClinicalRecordSection, Disclosure, Field, Input, ReadOnlyField, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -88,6 +88,12 @@ interface Props {
   canEdit?: boolean;
   /** §11 — motivo da LEITURA (o documento mostra uma vez, sem virar aviso). */
   readOnlyHint?: string;
+  /**
+   * Entrega 2 — o RETORNO ESTRUTURADO (outra fatia, outra seção na autoridade)
+   * entra imediatamente antes do texto de orientação de retorno: um lugar só
+   * para decidir o retorno. Só apresentação; a persistência do núcleo não muda.
+   */
+  beforeFollowUp?: ReactNode;
 }
 
 /**
@@ -119,8 +125,10 @@ const CORE_FIELDS: Array<{
     placeholder: 'Registre as orientações fornecidas',
   },
   {
-    capability: 'followUp', label: ENCOUNTER_LABELS.followUp, kind: 'input', maxLength: 200,
-    hint: 'Texto livre sobre o retorno sugerido.',
+    // O retorno ESTRUTURADO (data/intervalo) fica logo acima; este é o TEXTO
+    // que sai na via do tutor — rótulo próprio para não parecer dado duplicado.
+    capability: 'followUp', label: 'Orientação de retorno', kind: 'input', maxLength: 200,
+    hint: 'Texto livre que sai na via do tutor.',
     placeholder: 'Ex: retorno em 30 dias',
   },
   {
@@ -159,6 +167,7 @@ const SAVED: SaveOutcome = { ok: true, conflict: false, message: '' };
 
 export function EncounterCoreSection({
   businessId, encounter, onSaved, registerLeave, authority, canEdit, readOnlyHint, adoptToken = 0,
+  beforeFollowUp,
 }: Props) {
   const [row, setRow] = useState<EncounterCoreRow>(encounter);
   const [form, setForm] = useState<CoreForm>(() => formOf(encounter));
@@ -490,14 +499,16 @@ export function EncounterCoreSection({
         <div className="encounter-workspace__content">
           <ClinicalRecordSection title="Registro do atendimento">
             {principal.map((f) => (
-              <ReadOnlyField
-                key={f.capability}
-                label={f.label}
-                value={valor(f.capability)}
-                multiline={f.kind === 'textarea'}
-                block={f.kind === 'textarea'}
-                className={f.kind === 'textarea' ? undefined : 'sm:col-span-1'}
-              />
+              <Fragment key={f.capability}>
+                {f.capability === 'followUp' && beforeFollowUp}
+                <ReadOnlyField
+                  label={f.label}
+                  value={valor(f.capability)}
+                  multiline={f.kind === 'textarea'}
+                  block={f.kind === 'textarea'}
+                  className={f.kind === 'textarea' ? undefined : 'sm:col-span-1'}
+                />
+              </Fragment>
             ))}
           </ClinicalRecordSection>
           {notaInterna && (
@@ -550,7 +561,9 @@ export function EncounterCoreSection({
         )}
 
         {fields.map((f) => (
-          <Field key={f.capability} label={f.label} hint={f.hint}>
+          <Fragment key={f.capability}>
+          {f.capability === 'followUp' && beforeFollowUp}
+          <Field label={f.label} hint={f.hint}>
             {f.kind === 'textarea' ? (
               <Textarea
                 value={(form as Record<string, string>)[f.capability]}
@@ -569,6 +582,7 @@ export function EncounterCoreSection({
               />
             )}
           </Field>
+          </Fragment>
         ))}
 
         {/* Um ÚNICO bloco de erro (nada de eco): o que falhou e o que

@@ -14,7 +14,8 @@
 // seção Atendimento. Aqui eles aparecem apenas como CONTEXTO EM LEITURA, para
 // o profissional ver o plano completo sem existir um segundo lugar de edição.
 import { useMemo } from 'react';
-import { ClinicalRecordSection, ReadOnlyField, Textarea } from '@/components/ui';
+import { Button, ClinicalRecordSection, ReadOnlyField, Textarea } from '@/components/ui';
+import { followUpSummary } from './EncounterFollowUpPlanner';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import { CLINICAL_PLAN_LIMITS, normalizeEncounterClinical, type ClinicalCarePlan } from '@/lib/encounter-clinical';
@@ -27,6 +28,8 @@ interface Props {
   blocked: boolean;
   editable: boolean;
   readOnlyHint: string;
+  /** Leva à seção Atendimento, onde orientações e retorno são EDITADOS. */
+  onEditInAtendimento?: () => void;
 }
 
 const rowForm = (row: EncounterAuthorityRow): ClinicalCarePlan => ({
@@ -36,7 +39,7 @@ const rowForm = (row: EncounterAuthorityRow): ClinicalCarePlan => ({
 const keyOf = (form: ClinicalCarePlan): string => JSON.stringify([form.conduct]);
 
 export function EncounterCarePlanSection({
-  businessId, row, authority, adoptToken, blocked, editable, readOnlyHint,
+  businessId, row, authority, adoptToken, blocked, editable, readOnlyHint, onEditInAtendimento,
 }: Props) {
   const patchOf = useMemo(() => (form: ClinicalCarePlan) => ({
     // Só a fatia DESTA seção vai no payload.
@@ -50,9 +53,7 @@ export function EncounterCarePlanSection({
   const disabled = !editable;
   // Contexto em LEITURA (fonte única continua na seção Atendimento).
   const guidance = row.guidance || '';
-  const followUpText = row.followUp
-    || (row.followUpMode === 'interval' && Number(row.followUpDays) > 0 ? `Em ${row.followUpDays} dias` : '')
-    || (row.followUpMode === 'date' && row.followUpDate ? `Em ${row.followUpDate}` : '');
+  const followUpText = followUpSummary(row);
 
   // §11 — LEITURA = documento: a conduta é o texto que o profissional escreveu;
   // o contexto complementar continua em bloco, agora com valores de leitura.
@@ -60,12 +61,11 @@ export function EncounterCarePlanSection({
     return (
       <section className="encounter-workspace__section" aria-label="Conduta" data-section="conduta" data-readonly="true">
         <div className="encounter-workspace__content">
-          <ClinicalRecordSection title="Conduta">
+          <ClinicalRecordSection title="Decisão clínica">
             <ReadOnlyField label="Plano / conduta clínica" value={form.conduct} multiline block
               empty="Sem conduta registrada neste atendimento." />
-            <ReadOnlyField label="Orientações ao tutor" value={guidance} />
-            <ReadOnlyField label="Retorno" value={followUpText} />
           </ClinicalRecordSection>
+          <PlanSummary guidance={guidance} followUp={followUpText} />
           <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
         </div>
       </section>
@@ -100,22 +100,34 @@ export function EncounterCarePlanSection({
           </span>
         </label>
 
-        <div className="encounter-clinical__context" data-testid="plan-context">
-          <p className="il-type-label text-xs font-semibold text-[var(--text-muted)]">
-            Complementos do plano (editados na seção Atendimento — mesma fonte de dados)
-          </p>
-          <dl className="encounter-clinical__context-list">
-            <div>
-              <dt>Orientações ao tutor</dt>
-              <dd>{guidance || '—'}</dd>
-            </div>
-            <div>
-              <dt>Retorno</dt>
-              <dd>{followUpText || '—'}</dd>
-            </div>
-          </dl>
-        </div>
+        <PlanSummary guidance={guidance} followUp={followUpText} onEdit={onEditInAtendimento} />
       </div>
     </section>
+  );
+}
+
+/**
+ * RESUMO em leitura do que o tutor leva (orientações + retorno). Fonte única:
+ * seção Atendimento — aqui é só contexto do plano, rotulado como resumo e com
+ * o caminho explícito para editar no lugar canônico. Nunca um segundo editor.
+ */
+function PlanSummary({ guidance, followUp, onEdit }: { guidance: string; followUp: string; onEdit?: () => void }) {
+  return (
+    <div className="encounter-plan-summary" data-testid="plan-context">
+      <div className="encounter-plan-summary__head">
+        <p className="encounter-plan-summary__title">Resumo · editado em Atendimento</p>
+        {onEdit && <Button type="button" variant="ghost" size="xs" onClick={onEdit}>Editar em Atendimento</Button>}
+      </div>
+      <dl className="encounter-plan-summary__list">
+        <div>
+          <dt>Orientações ao tutor</dt>
+          <dd>{guidance || 'Não informado'}</dd>
+        </div>
+        <div>
+          <dt>Retorno</dt>
+          <dd>{followUp || 'Sem retorno definido'}</dd>
+        </div>
+      </dl>
+    </div>
   );
 }

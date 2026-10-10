@@ -107,6 +107,18 @@ export function EncounterClinicalProceduresSection({
     );
   }
 
+  const addButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      onClick={addItem}
+      disabled={disabled || items.length >= CLINICAL_LIST_LIMITS.procedures.maxItems}
+    >
+      Adicionar procedimento
+    </Button>
+  );
+
   return (
     <section className="encounter-workspace__section" aria-label="Procedimentos realizados" data-section="procedimentos">
       <div className="encounter-workspace__content">
@@ -121,12 +133,16 @@ export function EncounterClinicalProceduresSection({
           {SUGGESTIONS.map((item) => <option key={item.id} value={item.name} />)}
         </datalist>
 
-        {items.length === 0 && (
-          <p className="encounter-section__hint" data-testid="procedures-empty">
-            Nenhum procedimento registrado neste atendimento.
-          </p>
-        )}
-
+        {/* Estado vazio: texto + CTA no MESMO bloco, alinhados à esquerda (sem
+            card). Com itens, a lista vem antes e a ação fica logo abaixo dela. */}
+        {items.length === 0 ? (
+          <div className="encounter-clinical__empty" data-testid="procedures-empty-state">
+            <p className="encounter-section__hint" data-testid="procedures-empty">
+              Nenhum procedimento registrado neste atendimento.
+            </p>
+            {addButton}
+          </div>
+        ) : (<>
         <ul className="encounter-clinical__list" data-testid="procedures-list">
           {items.map((item, index) => {
             const confirming = confirmingId === item.id;
@@ -180,20 +196,15 @@ export function EncounterClinicalProceduresSection({
           })}
         </ul>
 
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={addItem}
-          disabled={disabled || items.length >= CLINICAL_LIST_LIMITS.procedures.maxItems}
-        >
-          Adicionar procedimento
-        </Button>
-        {items.length >= CLINICAL_LIST_LIMITS.procedures.maxItems && (
-          <p className="encounter-section__hint" role="status">
-            Limite técnico de {CLINICAL_LIST_LIMITS.procedures.maxItems} itens por atendimento.
-          </p>
-        )}
+        <div className="encounter-clinical__actions">
+          {addButton}
+          {items.length >= CLINICAL_LIST_LIMITS.procedures.maxItems && (
+            <p className="encounter-section__hint" role="status">
+              Limite técnico de {CLINICAL_LIST_LIMITS.procedures.maxItems} itens por atendimento.
+            </p>
+          )}
+        </div>
+        </>)}
       </div>
     </section>
   );

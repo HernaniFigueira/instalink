@@ -97,3 +97,33 @@ export function encounterLegacyRecordHref(encounterId: string, businessId: strin
 export function encounterReturnHref(value: string | null, businessId: string): string {
   return value && isSafeInternalHref(value) ? value : `/agenda?b=${encodeURIComponent(businessId)}`;
 }
+
+/**
+ * RÓTULO do Voltar (Entrega 2). A volta é PREVISÍVEL: diz para onde leva.
+ *   /clientes/…  → "Voltar para <Nome>" (a ficha de onde a pessoa veio);
+ *   /agenda…     → "Voltar para agenda" (a URL já carrega data/visão/
+ *                  profissional/filtros — nada se perde na volta);
+ *   sem origem   → a Agenda da unidade (mesma regra de `encounterReturnHref`).
+ */
+export function encounterReturnLabel(returnTo: string | null | undefined, clientName?: string): string {
+  const href = returnTo && isSafeInternalHref(returnTo) ? returnTo : '/agenda';
+  const path = href.split(/[?#]/)[0];
+  if (path.startsWith('/clientes/')) {
+    const name = String(clientName || '').trim().split(/\s+/)[0];
+    return name ? `Voltar para ${name}` : 'Voltar para o cliente';
+  }
+  if (path === '/clientes') return 'Voltar para clientes';
+  if (path === '/agenda' || path.startsWith('/agenda/')) return 'Voltar para agenda';
+  if (path === '/fila' || path.startsWith('/fila/')) return 'Voltar para a fila';
+  return 'Voltar';
+}
+
+/** Superfícies da MESMA sessão clínica (switcher do rail). */
+export type EncounterSurface = 'atendimento' | 'registro';
+
+/** Rota de cada superfície, sempre com unidade (`b`) e a MESMA origem de volta. */
+export function encounterSurfaceHref(surface: EncounterSurface, encounterId: string, businessId: string, returnTo?: string): string {
+  return surface === 'registro'
+    ? encounterLegacyRecordHref(encounterId, businessId, returnTo)
+    : encounterHref(encounterId, businessId, returnTo);
+}

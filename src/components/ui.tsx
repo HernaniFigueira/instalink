@@ -172,9 +172,12 @@ export function PageFrame({ type, flush = false, className, children, ...rest }:
   type: PageType;
   flush?: boolean;
 }) {
+  // Arquétipos legados mantêm o modificador `il-*`; arquétipos novos (a
+  // partir da Entrega 2: `context`) usam `gd-*` — nenhum identificador `il-*` novo.
+  const modifier = type === 'context' ? 'gd-page-frame--context' : `il-page-frame--${type}`;
   return (
     <div data-page-type={type}
-      className={cn('il-page-frame', `il-page-frame--${type}`, flush && 'il-page-frame--flush', className)}
+      className={cn('il-page-frame', modifier, flush && 'il-page-frame--flush', className)}
       {...rest}>
       {children}
     </div>
@@ -695,6 +698,114 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
           )}
         </button>
       ))}
+    </div>
+  );
+}
+
+function TabInner<T extends string>({ item, selected }: { item: TabItem<T>; selected: boolean }) {
+  return (
+    <>
+      {item.icon && <Icon n={item.icon} size={14} />}
+      {item.label}
+      {typeof item.count === 'number' && (
+        <span className={cn(
+          'ml-0.5 min-w-[18px] h-[18px] px-1 rounded-pill text-[10px] font-semibold inline-flex items-center justify-center',
+          selected ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-[var(--border)] text-[var(--text-muted)]',
+        )}>{item.count}</span>
+      )}
+    </>
+  );
+}
+
+/**
+ * Abas com OVERFLOW EXPLÍCITO (Entrega 2 · contrato de abas).
+ *
+ *   • as abas que cabem ficam visíveis; o excedente vai para o menu canônico
+ *     "Mais" (DropdownMenu: teclado completo, Escape, foco devolvido);
+ *   • a aba SELECIONADA está sempre visível — se ela mora no excedente, toma o
+ *     último lugar visível;
+ *   • nunca há scroll horizontal escondido com fade: a medição usa a largura
+ *     REAL de cada aba (régua invisível) e reage a resize (ResizeObserver);
+ *   • teclado: setas/Home/End entre as abas visíveis (Tabs), Tab chega ao
+ *     "Mais", Enter/↓ abre o menu.
+ */
+export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais' }: {
+  items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; className?: string; moreLabel?: string;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const rulerRef = useRef<HTMLDivElement>(null);
+  // null = todas cabem. Senão, os ids visíveis (a selecionada sempre entre eles).
+  const [shown, setShown] = useState<string[] | null>(null);
+  const signature = items.map((item) => `${item.id}:${item.label}:${item.count ?? ''}`).join('|');
+  useEffect(() => {
+    const host = hostRef.current;
+    const ruler = rulerRef.current;
+    if (!host || !ruler) return undefined;
+    const measure = () => {
+      const tabs = Array.from(ruler.querySelectorAll<HTMLElement>('[data-ruler-tab]'));
+      const more = ruler.querySelector<HTMLElement>('[data-ruler-more]');
+      const available = host.clientWidth;
+      if (!available || tabs.length !== items.length) return;
+      const gap = 2;
+      const chrome = 8; // padding + borda da barra
+      const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
+      const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1) + chrome;
+      if (total <= available) { setShown(null); return; }
+      const budget = available - ((more?.getBoundingClientRect().width || 72) + 8) - 4; // 4px de folga contra arredondamento
+      const selectedIndex = Math.max(0, items.findIndex((item) => item.id === value));
+      // A selecionada entra primeiro (reserva o lugar dela); as demais, na ordem.
+      let used = chrome + widths[selectedIndex];
+      const keep = new Set<number>([selectedIndex]);
+      for (let i = 0; i < items.length; i += 1) {
+        if (i === selectedIndex) continue;
+        const next = used + gap + widths[i];
+        if (next > budget) break;
+        used = next;
+        keep.add(i);
+      }
+      setShown(items.filter((_, i) => keep.has(i)).map((item) => item.id));
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(host);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, value]);
+
+  const visible = shown ? items.filter((item) => shown.includes(item.id)) : items;
+  const visibleIds = new Set(visible.map((item) => item.id));
+  const overflow = items.filter((item) => !visibleIds.has(item.id));
+
+  return (
+    <div ref={hostRef} className={cn('gd-overflow-tabs', className)} data-overflow-count={overflow.length || undefined}>
+      <div className="gd-overflow-tabs__row">
+        <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} className="gd-overflow-tabs__list" />
+        {overflow.length > 0 && (
+          <DropdownMenu
+            label={`${moreLabel}: outras seções`}
+            align="end"
+            items={overflow.map((item) => ({
+              id: item.id,
+              label: typeof item.count === 'number' ? `${item.label} (${item.count})` : item.label,
+              icon: item.icon,
+              disabled: item.disabled,
+              onSelect: () => onChange(item.id),
+            }))}
+            trigger={(
+              <button type="button" className="il-tab gd-overflow-tabs__more" aria-label={`${moreLabel} — ${overflow.length} ${overflow.length === 1 ? 'seção' : 'seções'}`}>
+                {moreLabel} <span className="gd-overflow-tabs__more-count">{overflow.length}</span> <Icon n="chevD" size={13} />
+              </button>
+            )}
+          />
+        )}
+      </div>
+      <div ref={rulerRef} className="gd-overflow-tabs__ruler" aria-hidden="true">
+        {items.map((item) => (
+          <span key={item.id} data-ruler-tab className="il-tab"><TabInner item={item} selected={item.id === value} /></span>
+        ))}
+        <span data-ruler-more className="il-tab gd-overflow-tabs__more">{moreLabel} <span className="gd-overflow-tabs__more-count">{items.length}</span> <Icon n="chevD" size={13} /></span>
+      </div>
     </div>
   );
 }

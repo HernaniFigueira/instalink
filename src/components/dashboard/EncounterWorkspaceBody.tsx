@@ -18,7 +18,8 @@
 //   • um único indicador de persistência (Salvando… · Salvo agora · Erro ao
 //     salvar) e um único bloco de conflito para o atendimento inteiro.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/components/ui';
+import { Button, ReadOnlyField } from '@/components/ui';
+import { EncounterFollowUpPlanner, followUpPlanLabel } from './EncounterFollowUpPlanner';
 import { EncounterCoreSection } from './EncounterCoreSection';
 import { EncounterVisitAnamnesisSection } from './EncounterVisitAnamnesisSection';
 import { EncounterVeterinaryAssessmentSection } from './EncounterVeterinaryAssessmentSection';
@@ -57,29 +58,46 @@ const SECTION_GROUPS: Array<{ label: string; ids: string[] }> = [
 
 const FILE_DATE = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
 
-/** Histórico e arquivos — SOMENTE LEITURA aqui. Upload fica no registro completo. */
-function EncounterHistoryBlock({ files }: { files: NonNullable<EncounterAuthorityRow['files']> }) {
+/**
+ * Histórico e arquivos — conteúdo COMPARTILHADO da sessão (não pertence à aba
+ * ativa). Fica numa faixa própria, separada do conteúdo da seção, e é a mesma
+ * em todas as abas. Somente leitura aqui; anexar é no Registro completo.
+ */
+function EncounterHistoryBlock({ files, onOpenRecord }: {
+  files: NonNullable<EncounterAuthorityRow['files']>;
+  onOpenRecord?: () => void;
+}) {
   return (
-    <section className="encounter-workspace__block" aria-labelledby="encounter-history-title" data-testid="encounter-history">
-      <h2 id="encounter-history-title" className="encounter-workspace__block-title">Histórico e arquivos</h2>
-      <p className="encounter-workspace__block-hint">
-        O histórico de todos os atendimentos do paciente fica na ficha do paciente, em Clientes.
-      </p>
-      {files.length === 0 ? (
-        <p className="encounter-workspace__block-empty">Nenhum arquivo neste atendimento. Para anexar, use o registro completo.</p>
-      ) : (
-        <ul className="encounter-workspace__files" aria-label="Arquivos do atendimento">
-          {files.map((file) => (
-            <li key={file.id} className="encounter-workspace__file">
-              <a href={file.url} target="_blank" rel="noreferrer" className="encounter-workspace__file-name">{file.name}</a>
-              <span className="encounter-workspace__file-meta tabular-nums">
-                {Math.max(1, Math.round((Number(file.size) || 0) / 1024))} KB
-                {file.createdAt ? ` · ${FILE_DATE.format(new Date(file.createdAt))}` : ''}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <section className="encounter-workspace__block encounter-shared" aria-labelledby="encounter-history-title" data-testid="encounter-history">
+      <div className="encounter-shared__inner">
+        <p className="encounter-shared__eyebrow">Da sessão · comum a todas as seções</p>
+        <h2 id="encounter-history-title" className="encounter-workspace__block-title">Histórico e arquivos</h2>
+        <p className="encounter-workspace__block-hint">
+          O histórico de todos os atendimentos do paciente fica na ficha do paciente, em Clientes.
+        </p>
+        {files.length === 0 ? (
+          <p className="encounter-workspace__block-empty">Nenhum arquivo neste atendimento.</p>
+        ) : (
+          <ul className="encounter-workspace__files" aria-label="Arquivos do atendimento">
+            {files.map((file) => (
+              <li key={file.id} className="encounter-workspace__file">
+                <a href={file.url} target="_blank" rel="noreferrer" className="encounter-workspace__file-name">{file.name}</a>
+                <span className="encounter-workspace__file-meta tabular-nums">
+                  {Math.max(1, Math.round((Number(file.size) || 0) / 1024))} KB
+                  {file.createdAt ? ` · ${FILE_DATE.format(new Date(file.createdAt))}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Sem botão: anexar é no Registro completo, alcançado pelo switcher
+            do rail (um só caminho, no mesmo lugar nas duas telas). */}
+        {onOpenRecord && (
+          <p className="encounter-workspace__block-hint">
+            Para anexar exames, laudos ou imagens, use <strong>Registro completo</strong> no contexto da sessão.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -127,13 +145,12 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
   /** Troca de seção: grava antes; falhou → permanece com o texto na tela. */
   const goToSection = useCallback(async (id: string) => {
     if (id === sectionId) return;
-    const active = authority.registeredSection(sectionId);
-    if (active?.dirty()) {
-      const ok = await active.flush();
-      if (!ok) return;                       // conflito/erro: a seção continua aberta
-    }
+    // Grava TUDO o que está pendente (a seção Atendimento tem duas fatias:
+    // núcleo e retorno estruturado). Falhou → a seção continua aberta.
+    const ok = await flushAll();
+    if (!ok) return;
     setSectionId(id);
-  }, [authority, sectionId]);
+  }, [flushAll, sectionId]);
 
   const requestLeave = useCallback(async (reason: DismissReason, proceed: () => void) => {
     if (leaving.current) return;
@@ -148,6 +165,15 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
   }, [flushAll]);
 
   useEffect(() => { registerLeave(requestLeave); }, [registerLeave, requestLeave]);
+
+  // Registro completo → "Ir para o fechamento": chega com #encounter-closing.
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== '#encounter-closing') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('encounter-closing')?.scrollIntoView({ block: 'start' });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const { dialog, requestClose, allowNavigation } = useUnsavedChangesGuard(
     {
@@ -213,6 +239,9 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
     return 'Somente o profissional responsável vinculado edita o conteúdo clínico deste atendimento.';
   }, [access?.reason]);
 
+  const activeSection = sectionsAvailable.length > 1 ? sectionsAvailable.find((section) => section.id === sectionId) : undefined;
+  const activeGroup = SECTION_GROUPS.find((group) => group.ids.includes(sectionId))?.label || 'Outras seções';
+
   // Falhou gravar: o texto fica e a saída só acontece por escolha explícita.
   const blockedLeave = Boolean(pendingLeave) && saveState === 'error' && !conflictMessage;
 
@@ -265,6 +294,16 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
         />
       )}
 
+      {activeSection && (
+        <header className="encounter-section-head" data-group={activeGroup}>
+          {/* O grupo só aparece quando acrescenta algo ("Atendimento › Atendimento" não). */}
+          {activeGroup.toLowerCase() !== activeSection.label.toLowerCase() && (
+            <p className="encounter-section-head__group">{activeGroup}</p>
+          )}
+          <h2 className="encounter-section-head__title">{activeSection.label}</h2>
+        </header>
+      )}
+
       {sectionId === 'atendimento' && (
         <EncounterCoreSection
           businessId={businessId}
@@ -274,6 +313,18 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
           canEdit={canEditCore}
           onSaved={onCoreSaved}
           readOnlyHint={readOnlyHint}
+          beforeFollowUp={canEditCore ? (
+            <EncounterFollowUpPlanner
+              businessId={businessId}
+              row={current}
+              authority={authority}
+              adoptToken={adoptToken}
+              blocked={Boolean(conflictMessage)}
+              editable={canEditCore}
+            />
+          ) : (
+            <ReadOnlyField label="Retorno" value={followUpPlanLabel(current)} empty="Sem retorno definido" />
+          )}
         />
       )}
 
@@ -323,6 +374,9 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
           blocked={Boolean(conflictMessage)}
           editable={canEditCarePlan}
           readOnlyHint={readOnlyHint}
+          onEditInAtendimento={sectionsAvailable.some((section) => section.id === 'atendimento')
+            ? () => { void goToSection('atendimento'); }
+            : undefined}
         />
       )}
 
@@ -338,7 +392,12 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
         />
       )}
 
-      <EncounterHistoryBlock files={current.files || []} />
+      <EncounterHistoryBlock
+        files={current.files || []}
+        onOpenRecord={fullRecordHref && onNavigate && current.status === 'draft'
+          ? () => { void requestLeave('navigation', () => onNavigate(fullRecordHref)); }
+          : undefined}
+      />
 
       <div id="encounter-closing" className="encounter-workspace__closing">
         <EncounterFinalizationPanel
@@ -372,7 +431,6 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
           fechamento já dizem o estado do registro. */}
       <EncounterSessionFooter
         status={current.status === 'finalized' ? 'finalized' : 'draft'}
-        startedAt={current.startedAt}
         finalizedAt={current.finalizedAt}
         canEdit={canEditCore}
         canFinalize={canEditCore && current.status === 'draft'}
@@ -384,7 +442,6 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
         onShowClosing={() => {
           document.getElementById('encounter-closing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }}
-        onFullRecord={fullRecordHref && onNavigate ? () => { void requestLeave('navigation', () => onNavigate(fullRecordHref)); } : undefined}
       />
 
       {dialog}

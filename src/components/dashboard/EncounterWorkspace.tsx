@@ -29,12 +29,10 @@ import type { DismissReason } from './OverlayDismissGuard';
 import { AccessDenied } from './AccessNotice';
 import { usePanelPermissions } from './usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
-import { ENCOUNTER_CLINICAL_STATE } from '@/lib/encounters';
-import { BOOKING_STATUS } from '@/lib/status';
-import type { BookingStatus } from '@/lib/types';
+import { encounterReturnLabel, encounterSurfaceHref, type EncounterSurface } from '@/lib/encounter-workspace';
+import { encounterSessionModel } from './encounter-session-model';
 import { EncounterWorkspaceBody } from './EncounterWorkspaceBody';
 import type { EncounterAuthorityRow } from './useEncounterAuthority';
-import { formatDateBR } from '@/lib/tz';
 
 export type EncounterWorkspaceRow = EncounterAuthorityRow & {
   /**
@@ -66,11 +64,6 @@ interface Props {
   encounterId: string;
   /** Para onde "Voltar" leva (já saneado: só rota interna). */
   returnTo: string;
-}
-
-/** Linha do cabeçalho: só mostra o que EXISTE (nada de "—" decorativo). */
-function joinParts(parts: Array<string | undefined | null>, sep = ' · '): string {
-  return parts.map((p) => String(p || '').trim()).filter(Boolean).join(sep);
 }
 
 export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props) {
@@ -168,43 +161,35 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
   }
   if (!row) return null;
 
-  const ctx = row.context;
-  const state = ENCOUNTER_CLINICAL_STATE[ctx?.clinicalState || 'in_progress'] || ENCOUNTER_CLINICAL_STATE.in_progress;
-  const patient = ctx?.patient || null;
-  // Vet primeiro: o PACIENTE é o pet; o humano é o responsável/contexto.
-  const headline = patient?.name || ctx?.responsible?.name || row.customerName || row.petName || 'Paciente';
-  // Só dados que EXISTEM no cadastro do pet (espécie, raça, idade, sexo).
-  const sexLabel = patient?.sex === 'M' ? 'Macho' : patient?.sex === 'F' ? 'Fêmea' : '';
-  const patientLine = patient ? joinParts([patient.speciesLabel, patient.breed, patient.ageLabel, sexLabel]) : '';
-  const tutorName = ctx?.responsible?.name || row.customerName || '';
-  const tutorPhone = ctx?.responsible?.phone || '';
-  const serviceName = ctx?.service?.name || row.serviceName || '';
-  const professionalName = ctx?.professional?.name || row.professionalName || '';
-  const when = row.date ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` : '';
-  // Status do AGENDAMENTO é um eixo separado do estado CLÍNICO do atendimento.
-  const bookingStatus = ctx?.booking?.status as BookingStatus | undefined;
-  const bookingLabel = bookingStatus && BOOKING_STATUS[bookingStatus] ? BOOKING_STATUS[bookingStatus].panel : '';
+  // Rail: MESMO modelo do Registro completo (identidade não diverge).
+  const model = encounterSessionModel(row);
+  const registroHref = encounterSurfaceHref('registro', row.id, businessId, returnTo);
+  const openSurface = (surface: EncounterSurface) => {
+    if (surface !== 'registro') return;
+    const guard = guardedLeave.current;
+    if (guard) guard('navigation', () => router.push(registroHref));
+    else router.push(registroHref);
+  };
 
   return (
-    <main className="encounter-workspace encounter-session" data-clinical-state={state.id} data-encounter-id={row.id}>
+    <main className="encounter-workspace encounter-session" data-clinical-state={model.stateId} data-encounter-id={row.id}>
       {/* ── Contexto PERSISTENTE à esquerda (rail): paciente protagonista,
           tutor e fatos do atendimento ficam visíveis durante todo o scroll.
           O cabeçalho alto deixou de ser o eixo da página. ── */}
       <EncounterSessionRail
         onBack={leave}
-        eyebrow={row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
-        headline={headline}
-        patientLine={patientLine}
-        tutor={tutorName}
-        tutorPhone={tutorPhone}
-        facts={[
-          { label: 'Serviço', value: serviceName },
-          { label: 'Profissional', value: professionalName },
-          { label: 'Agendado', value: when },
-        ]}
-        statusLabel={state.label.toUpperCase()}
-        statusTone={state.tone}
-        bookingLabel={bookingLabel}
+        backLabel={encounterReturnLabel(returnTo, model.clientName)}
+        eyebrow={model.eyebrow}
+        headline={model.headline}
+        patientLine={model.patientLine}
+        tutor={model.tutor}
+        tutorPhone={model.tutorPhone}
+        facts={model.facts}
+        statusLabel={model.statusLabel}
+        statusTone={model.statusTone}
+        bookingLabel={model.bookingLabel}
+        timer={model.live ? { startedAt: row.startedAt } : null}
+        surfaces={{ current: 'atendimento', onSelect: openSurface }}
       />
 
       <div className="encounter-session__main">
@@ -216,7 +201,7 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         row={row}
         onRow={syncRow}
         registerLeave={registerLeave}
-        fullRecordHref={`/atendimento/${encodeURIComponent(row.id)}/registro?returnTo=${encodeURIComponent(returnTo)}`}
+        fullRecordHref={registroHref}
         onNavigate={(href) => router.push(href)}
       />
       </div>

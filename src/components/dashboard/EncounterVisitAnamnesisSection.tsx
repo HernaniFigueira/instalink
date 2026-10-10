@@ -214,3 +214,9 @@ export function EncounterVisitAnamnesisSection({
     </section>
   );
 }
+
+/** Entrega 2 — o Registro completo lê a anamnese com os MESMOS rótulos. */
+export {
+  TEXT_FIELDS as ANAMNESIS_TEXT_FIELDS, STATUS_FIELDS as ANAMNESIS_STATUS_FIELDS,
+  CHANGE_OPTIONS as ANAMNESIS_CHANGE_OPTIONS, YES_NO_OPTIONS as ANAMNESIS_YES_NO_OPTIONS,
+};

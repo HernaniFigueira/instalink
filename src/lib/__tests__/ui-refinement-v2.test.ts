@@ -118,7 +118,7 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(css).toContain('.il-page-frame--form { max-width:var(--page-width-form); }');
     expect(css).toContain('--page-width-form:60rem');
     expect(css).toContain('margin-inline:auto');
-    for (const [route, type] of [['/agenda', 'workspace'], ['/conversas', 'workspace'], ['/atendimento', 'record'], ['/configuracoes', 'form']]) {
+    for (const [route, type] of [['/agenda', 'workspace'], ['/conversas', 'workspace'], ['/atendimento', 'context'], ['/configuracoes', 'form']]) {
       const index = routes.indexOf(`href: '${route}'`);
       expect(index, route).toBeGreaterThanOrEqual(0);
       expect(routes.slice(index, index + 240)).toContain(`pageType: '${type}'`);

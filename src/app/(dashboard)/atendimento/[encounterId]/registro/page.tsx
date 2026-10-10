@@ -20,7 +20,7 @@ import { AccessDenied } from '@/components/dashboard/AccessNotice';
 import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { apiGet } from '@/lib/api-client';
-import { encounterReturnHref } from '@/lib/encounter-workspace';
+import { encounterReturnHref, encounterSurfaceHref } from '@/lib/encounter-workspace';
 import { canReopenEncounter } from '@/lib/encounters';
 import { Skeleton } from '@/components/ui';
 
@@ -110,7 +110,8 @@ export default function EncounterLegacyRecordPage() {
       layout="page"
       businessId={businessId}
       existing={existing}
-      workspaceHref={`/atendimento/${encodeURIComponent(encounterId)}?b=${encodeURIComponent(businessId)}&returnTo=${encodeURIComponent(returnTo)}`}
+      workspaceHref={encounterSurfaceHref('atendimento', encounterId, businessId, returnTo)}
+      returnTo={returnTo}
       onOpenWorkspace={(href) => router.push(href)}
       canReopen={canReopen}
       onClose={leave}

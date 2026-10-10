@@ -153,7 +153,12 @@ export function panelRoutesIn(section: PanelSectionId): PanelRouteDef[] {
 }
 
 // ── Definição de destino ───────────────────────────────────────
-export type PageType = 'workspace' | 'record' | 'detail' | 'form' | 'hub';
+/**
+ * Arquétipos de página. `context` = rail de contexto + workspace flexível
+ * (Cliente 360, Atendimento, Registro): mesma largura operacional da lista
+ * de origem (sem max-width de documento) e os mesmos gutters do workspace.
+ */
+export type PageType = 'workspace' | 'context' | 'record' | 'detail' | 'form' | 'hub';
 
 /**
  * Rotas autenticadas que usam um shell diferente de DashboardShell ou são
@@ -281,7 +286,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
   {
     // Fluxo clínico longo: destino contextual da Agenda/Cliente, fora do menu principal.
     href: '/atendimento', label: 'Atendimento', icon: 'fileText', section: 'operacao',
-    pageType: 'record',
+    pageType: 'context',
     permission: 'atendimento', area: 'atendimento', sidebar: false,
     description: 'Registro clínico vinculado a um agendamento ou à fila.',
   },
@@ -502,10 +507,13 @@ export const FULL_WIDTH_PATHS = PANEL_ROUTES
   .filter((r) => r.pageType === 'workspace')
   .map((r) => r.href);
 
-/** Arquétipo da rota ativa, incluindo a ficha filha /clientes/[id]. */
+/**
+ * Arquétipo da rota ativa, incluindo a ficha filha /clientes/[id]. A ficha é
+ * `context` (rail + workspace na largura operacional da lista de Clientes).
+ */
 export function pageTypeForPath(pathname: string): PageType | undefined {
   const clean = normalizePanelPath(pathname);
-  if (clean.startsWith('/clientes/')) return 'detail';
+  if (clean.startsWith('/clientes/')) return 'context';
   return activePanelRoute(clean)?.pageType;
 }
 
