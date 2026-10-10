@@ -49,6 +49,7 @@ import { periodLabel } from '@/lib/periods';
 import { ComparisonBadge } from '@/components/dashboard/results-view';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
 import { ORDER_STATUS, BOOKING_STATUS, LEAD_STATUS, toneCls, type StatusDef } from '@/lib/status';
+import { WORKFLOW_LABEL, type WorkflowState } from '@/lib/appointment-workflow';
 
 interface Modules {
   bookings: boolean; services: boolean; products: boolean; orders: boolean;
@@ -110,7 +111,9 @@ interface Overview {
   } | null;
   intelligenceHealth?: Record<string, { state: string; reason: string }> | null;
   hasBookingsModule?: boolean;
-  upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; service: string; professional: string }>;
+  upcoming: Array<{ id: string; customerName: string; date: string; time: string; status: string; professionalId?: string; service: string; professional: string }>;
+  /** E3 · fluxo de hoje (etapa canônica do workflow, já filtrado pelo escopo). */
+  todayFlow?: Array<{ id: string; customerName: string; date: string; time: string; status: string; workflowState: WorkflowState; professionalId?: string; service: string }>;
   checklist: Array<{ done: boolean; label: string; href: string; id?: string; optional?: boolean }>;
   pct: number;
   pendingSetup?: number;
@@ -368,6 +371,14 @@ export default function DashboardPage() {
   // Same OR permission contract as /tarefas and /api/tasks, not a missing overview link flag.
   const canOpenTasks = panelPerms.agenda || panelPerms.clientes || panelPerms.leads || panelPerms.config;
   const q = `?b=${business.id}`;
+  // E3 · Link da Agenda NA data do evento (nunca "hoje" por omissão): a Agenda
+  // abre o dia, a visão de dia e, quando o evento tem profissional, o filtro dele.
+  const agendaHrefFor = (date?: string, professionalId?: string) => {
+    const parts = [`b=${encodeURIComponent(business.id)}`, 'view=day'];
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) parts.push(`data=${date}`);
+    if (professionalId) parts.push(`professionalId=${encodeURIComponent(professionalId)}`);
+    return `/agenda?${parts.join('&')}`;
+  };
   const hasSetupPending = operationalChecklist.some((c) => !c.done);
   // Defesa em camadas: a API já entrega recent.orders [] no OFF, mas a UI
   // também não conta pedido para "existe atividade" com a flag desligada.
@@ -404,6 +415,53 @@ export default function DashboardPage() {
   const showSetup = hasSetupPending && !setupHidden && !proView && canAdminUnit;
   const showConnectChannel = !!whatsapp && !canalConnected && links.canais === true;
   const hasWhereToAct = showSetup || showConnectChannel;
+
+  // E3 · bloco do fluxo de hoje (renderizado antes ou depois dos KPIs, conforme o papel).
+  const flowSection = (modules.bookings && Array.isArray(data.todayFlow)) ? (
+    <section className="dsh-card min-w-0 mb-4" aria-label={proView ? 'Meu dia · agora' : 'Fluxo de hoje'} data-dashboard-flow={proView ? 'profissional' : operational ? 'operacao' : 'gestao'}>
+          <div className="dsh-card__head">
+            <h3 className="dsh-card__title">{proView ? 'Meu dia · agora' : 'Fluxo de hoje'}</h3>
+            {(data.needsClosure || []).length > 0 && links.agenda === true && (
+              <Link href={agendaHrefFor(data.needsClosure?.[0]?.date)} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">
+                {data.needsClosure?.length} precisam de registro →
+              </Link>
+            )}
+          </div>
+          <div className="dsh-card__body pt-2 grid gap-3 md:grid-cols-3">
+            {([
+              { state: 'arrived' as WorkflowState, title: proView ? 'Paciente aguardando' : 'Chegou · aguardando', empty: 'Ninguém aguardando agora.' },
+              { state: 'in_care' as WorkflowState, title: 'Em atendimento', empty: 'Nenhum atendimento em andamento.' },
+              { state: 'scheduled' as WorkflowState, title: 'Próximos hoje', empty: 'Nenhum horário pendente hoje.' },
+            ]).map((g) => {
+              const rows = data.todayFlow!.filter((f) => f.workflowState === g.state);
+              return (
+                <div key={g.state} className="min-w-0" data-flow-group={g.state}>
+                  <p className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    {g.title} <span className="tabular-nums">· {rows.length}</span>
+                  </p>
+                  {rows.length === 0 ? (
+                    <p className="text-[12.5px] text-[var(--text-muted)] py-2">{g.empty}</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {rows.slice(0, 4).map((f) => (
+                        <li key={f.id}>
+                          <ListRow allowed={links.agenda === true} href={agendaHrefFor(f.date, f.professionalId)}
+                            className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] px-2.5 py-2 text-[12.5px]">
+                            <span className="w-[42px] shrink-0 text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">{f.time}</span>
+                            <span className="min-w-0 flex-1 truncate font-semibold text-[var(--text-primary)]">
+                              {f.customerName} <span className="font-normal text-[var(--text-muted)]">· {f.service}</span>
+                            </span>
+                          </ListRow>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+    </section>
+  ) : null;
 
   return (
     <>
@@ -464,6 +522,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+{proView || operational ? flowSection : null}
       {/* ── 2 · KPIs DO DIA — UM card único horizontal, divisórias sutis ── */}
       {modules.bookings && today && (
         <>
@@ -513,6 +572,7 @@ export default function DashboardPage() {
         </>
       )}
 
+      {!(proView || operational) ? flowSection : null}
       {/* ── 3 · Setup real + Indicadores do período (5 + 7, como o mockup) ──
           §11 — para quem ATENDE esta linha não existe: o checklist é da
           clínica (não dele), a presença online é de quem cuida da página e
@@ -698,7 +758,7 @@ export default function DashboardPage() {
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">O que resolver agora</h3>
             {links.agenda === true && (
-              <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>
+              <Link href={agendaHrefFor(data.needsClosure?.[0]?.date)} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>
             )}
           </div>
           <div className="dsh-card__body pt-2 space-y-3">
@@ -716,7 +776,7 @@ export default function DashboardPage() {
               <ul className="space-y-1.5">
                 {(data.needsClosure || []).slice(0, 5).map((b) => (
                   <li key={b.id}>
-                    <ListRow allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
+                    <ListRow allowed={links.agenda === true} href={agendaHrefFor(b.date)}
                       className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[var(--border)] px-2.5 py-2 text-[12.5px]">
                       <span className="text-[11px] font-semibold text-[var(--text-muted)] w-[68px] shrink-0 tabular-nums">{humanDay(b.date)} {b.time}</span>
                       <span className="flex-1 min-w-0 truncate font-semibold text-[var(--text-primary)]">
@@ -747,7 +807,7 @@ export default function DashboardPage() {
         <section className="dsh-card min-w-0">
           <div className="dsh-card__head">
             <h3 className="dsh-card__title">Próximos atendimentos</h3>
-            {links.agenda === true && <Link href={`/agenda${q}`} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
+            {links.agenda === true && <Link href={agendaHrefFor(upcoming[0]?.date, upcoming[0]?.professionalId)} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">Ver agenda →</Link>}
           </div>
           <div className="dsh-card__body pt-2">
             {modules.bookings ? (
@@ -756,7 +816,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-1.5">
                   {upcoming.slice(0, 5).map((b) => (
-                    <ListRow key={b.id} allowed={links.agenda === true} href={`/agenda${q}&data=${b.date}`}
+                    <ListRow key={b.id} allowed={links.agenda === true} href={agendaHrefFor(b.date, b.professionalId)}
                       className="flex flex-col items-stretch gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
                       style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
                       <strong className="min-w-0 font-semibold leading-snug text-[var(--text)] break-words">{b.customerName}</strong>
