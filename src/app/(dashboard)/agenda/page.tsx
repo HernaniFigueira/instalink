@@ -552,13 +552,13 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                     <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
                   </div>
                   {b.pro && (
-                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="userCircle" size={15} /></span><span>{b.pro}</span></div>
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="userCircle" size={16} /></span><span>{b.pro}</span></div>
                   )}
                   {b.service && (
-                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="service" size={15} /></span><span>{b.service}</span></div>
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="service" size={16} /></span><span>{b.service}</span></div>
                   )}
                   {b.observation && (
-                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="chat" size={15} /></span><span className="ag-hover__obs">{b.observation}</span></div>
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="chat" size={16} /></span><span className="ag-hover__obs">{b.observation}</span></div>
                   )}
                 </div>
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
@@ -2150,7 +2150,7 @@ export default function AgendaPage() {
               onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
             />
             <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: proFilter })}>
-              <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
+              <Icon n="calendarPlus" size={16} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>
           </div>
         </div>

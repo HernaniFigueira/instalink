@@ -4393,9 +4393,6 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 .entity-main__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text, #1c2822); }
 .entity-main__actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .entity-main__history { padding: 0 0 8px; }
-.client360-overview-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
-.client360-overview-grid > * { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.client360-overview-grid > * > :is(a, button):last-child { margin-top: 10px; }
 
 @media (max-width: 1023px) {
   .entity-rail {

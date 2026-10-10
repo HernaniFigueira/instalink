@@ -241,14 +241,14 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
             <p className="gd-ovl__title">Novo agendamento</p>
             {/* Contexto já conhecido (slot) em chips compactos: lido, não perguntado de novo. */}
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-quick-context>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium tabular-nums text-[var(--gd-text)]">
-                <Icon n="calendar" size={12} className="text-[var(--gd-text-muted)]" />{formatDayLabel(date)}
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-1 text-[13px] font-medium tabular-nums text-[var(--gd-text)]">
+                <Icon n="calendar" size={16} className="text-[var(--gd-text-muted)]" />{formatDayLabel(date)}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium tabular-nums text-[var(--gd-text)]">
-                <Icon n="clock" size={12} className="text-[var(--gd-text-muted)]" />{time || 'horário'}
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-1 text-[13px] font-medium tabular-nums text-[var(--gd-text)]">
+                <Icon n="clock" size={16} className="text-[var(--gd-text-muted)]" />{time || 'horário'}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium text-[var(--gd-text)]">
-                <Icon n="userCircle" size={12} className="text-[var(--gd-text-muted)]" />{professionalId ? (pros.find((p) => p.id === professionalId)?.name ?? 'Profissional') : 'Automático'}
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-1 text-[13px] font-medium text-[var(--gd-text)]">
+                <Icon n="userCircle" size={16} className="text-[var(--gd-text-muted)]" />{professionalId ? (pros.find((p) => p.id === professionalId)?.name ?? 'Profissional') : 'Automático'}
               </span>
             </div>
           </div>
@@ -337,7 +337,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--gd-border-soft)] pt-2.5">
           {/* Tertiary com ícone: caminho para o painel completo, com a intenção preservada. */}
           <Button variant="ghost" disabled={saving} onClick={() => onMore(seedIntent())}>
-            Mais opções <Icon n="chevR" size={12} />
+            Mais opções <Icon n="chevR" size={16} />
           </Button>
           <div className="flex items-center gap-2">
             <Button variant="secondary" disabled={saving} onClick={onClose}>Cancelar</Button>

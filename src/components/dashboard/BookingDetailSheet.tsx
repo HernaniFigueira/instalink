@@ -305,24 +305,24 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   */}
                   {can('check_in') && (
                     <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
-                      <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
+                      <Icon n="check" size={16} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
                     </Button>
                   )}
                   {can('start_care') && (
                     <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
-                      <Icon n="fileText" size={13} /> Iniciar atendimento
+                      <Icon n="fileText" size={16} /> Iniciar atendimento
                     </Button>
                   )}
                   {can('open_care') && (
                     // F1A — o atendimento JÁ ESTÁ EM ANDAMENTO: o botão diz o que
                     // vai acontecer (retomar o mesmo registro, nunca criar outro).
                     <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
-                      <Icon n="fileText" size={13} /> Retomar atendimento
+                      <Icon n="fileText" size={16} /> Retomar atendimento
                     </Button>
                   )}
                   {can('view_care') && (
                     <Button size="sm" variant="secondary" onClick={openCare} disabled={!!acting}>
-                      <Icon n="fileText" size={13} /> Ver atendimento
+                      <Icon n="fileText" size={16} /> Ver atendimento
                     </Button>
                   )}
                   {can('confirm') && (
@@ -349,13 +349,13 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   )}
                   {can('reschedule') && (
                     <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
-                      <Icon n="calendar" size={13} /> Reagendar
+                      <Icon n="calendar" size={16} /> Reagendar
                     </Button>
                   )}
                   {can('check_in_undo') && (
                     <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
                       title="Desfazer o check-in deste atendimento">
-                      <Icon n="check" size={13} /> Chegou às {checkedInHM}
+                      <Icon n="check" size={16} /> Chegou às {checkedInHM}
                     </Button>
                   )}
                 </div>
@@ -469,7 +469,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
               </div>
             </section>
 
-            <section className="space-y-3">
+            <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
               <h4 className={GROUP_H}>Atendimento</h4>
               <DetailRow icon="userCircle" hint="Profissional">{pro?.name || 'Automático'}</DetailRow>
               {(booking.resourceIds || []).map(id => {
@@ -484,13 +484,13 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             </section>
 
             {booking.note && (
-              <section className="space-y-3">
+              <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
                 <h4 className={GROUP_H}>Observação</h4>
                 <DetailRow icon="chat">“{booking.note}”</DetailRow>
               </section>
             )}
 
-            <section className="space-y-3">
+            <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
               <h4 className={GROUP_H}>Financeiro</h4>
               <DetailRow icon="wallet" hint="Valor do atendimento" aside={service?.price !== undefined ? money(service.price) : '—'}>
                 {service?.name || 'Serviço'}
@@ -516,18 +516,18 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
               {booking.customerPhone && (
                 <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(booking.customerPhone)}`}
                   className={cn(buttonCls('ghost', 'sm'))}>
-                  <Icon n="user" size={13} /> Cliente
+                  <Icon n="user" size={16} /> Cliente
                 </Link>
               )}
               {booking.customerPhone && (
                 <a href={waLink(booking.customerPhone, waMsg)} target="_blank" rel="noreferrer"
                   className={cn(buttonCls('ghost', 'sm'))}>
-                  <Icon n="whatsapp" size={13} className="text-emerald-600" /> WhatsApp
+                  <Icon n="whatsapp" size={16} className="text-emerald-600" /> WhatsApp
                 </a>
               )}
               {hasHistory && (
                 <Button size="sm" variant="ghost" onClick={showHistory}>
-                  <Icon n="clock" size={13} /> Ver histórico
+                  <Icon n="clock" size={16} /> Ver histórico
                 </Button>
               )}
               {!booking.customerPhone && !hasHistory && (

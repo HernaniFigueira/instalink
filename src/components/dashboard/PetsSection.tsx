@@ -156,7 +156,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
           natural; hierarquia pet × tutor preservada). */}
       <div className="mt-3.5">
         <Button size="sm" variant="secondary" onClick={() => startPetForm(EMPTY_PET)}>
-          <Icon n="plus" size={14} /> Cadastrar pet
+          <Icon n="plus" size={16} /> Cadastrar pet
         </Button>
       </div>
 

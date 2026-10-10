@@ -529,7 +529,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             <div className="space-y-4" data-booking-created="true">
               <div className="rounded-xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-4">
                 <p className="text-base font-semibold text-[var(--success-fg)] flex items-center gap-2">
-                  <Icon n="check" size={18} strokeWidth={3} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
+                  <Icon n="check" size={18} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
                   {created.fitIn && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
                 </p>
                 {created.fitIn && (
@@ -572,7 +572,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               {!picked && (
                 <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
                   <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
-                    <Icon n="help" size={13} />
+                    <Icon n="help" size={16} />
                   </button>
                 </Tooltip>
               )}
@@ -622,7 +622,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                             </span>
                             <span className="block text-xs text-[var(--text-muted)]">{c.phone || 'sem telefone'}</span>
                           </span>
-                          <Icon n="chevR" size={14} className="text-[var(--text-faint)] shrink-0" />
+                          <Icon n="chevR" size={16} className="text-[var(--text-faint)] shrink-0" />
                         </button>
                       </li>
                     ))}
@@ -763,7 +763,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     <p className="text-xs text-[var(--text-muted)] mt-0.5">O encaixe aceita fora da grade — mostra o conflito e é registrado como encaixe.</p>
                   </div>
                   <Button type="button" variant="secondary" size="sm" onClick={() => { setFitInOpen(true); setFitInMessage(''); setFitInConflicts([]); setFitInTime(time || '09:00'); }}>
-                    <Icon n="clock" size={13} /> Encaixar
+                    <Icon n="clock" size={16} /> Encaixar
                   </Button>
                 </div>
               ) : (

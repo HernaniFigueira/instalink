@@ -120,7 +120,7 @@ export function PageBackAction({ href, onClick, label = 'Voltar', className }: {
   className?: string;
 }) {
   const classes = cn('il-page-back', className);
-  const content = <><Icon n="chevL" size={15} />{label}</>;
+  const content = <><Icon n="chevL" size={16} />{label}</>;
   return href
     ? <Link href={href} className={classes}>{content}</Link>
     : <button type="button" onClick={onClick} className={classes}>{content}</button>;
@@ -163,7 +163,7 @@ export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> 
       )}
       {...rest}
     >
-      <Icon n={icon} size={size === 'sm' ? 15 : size === 'xs' ? 13 : 16} />
+      <Icon n={icon} size={16} />
     </button>
   );
 }
@@ -925,7 +925,7 @@ export function Kpi({ label, value, hint, tone, icon }: {
   return (
     <div className="px-4 py-3">
       <div className="flex items-center gap-1.5">
-        {icon && <Icon n={icon} size={13} className="text-[var(--text-faint)]" />}
+        {icon && <Icon n={icon} size={16} className="text-[var(--text-faint)]" />}
         <p className="text-[11px] font-semibold tracking-wider uppercase text-[var(--text-muted)]">{label}</p>
       </div>
       <p className={cn('text-xl font-semibold mt-1 leading-none tabular-nums', toneCls2)}>{value}</p>
@@ -989,7 +989,7 @@ export function Notice({ tone = 'info', children, title, className, icon, onDism
       role={live ? 'status' : undefined}
       aria-live={live ? 'polite' : undefined}
     >
-      <Icon n={icone} size={15} className="mt-0.5 shrink-0" />
+      <Icon n={icone} size={16} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
         <div>{children}</div>
