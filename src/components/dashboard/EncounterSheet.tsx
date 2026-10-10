@@ -608,6 +608,8 @@ export function EncounterSheet({
   // ── Pós-atendimento: "como fica o acompanhamento?" ──
   // Na gaveta aparece logo após finalizar; no Registro (documento) vem DEPOIS
   // do conteúdo clínico — primeiro o que aconteceu, depois o próximo passo.
+  // Registro (documento): quem não reabre vê a regra dentro de Pós-finalização.
+  const showReopenInfo = !!row && !isDraft && !canReopen;
   const followUpPanel = row && (followUpOpen || documentMode) && row.status === 'finalized' ? (
               <div className={documentMode ? 'encounter-doc__section encounter-doc__followup space-y-3' : 'rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3'}
                 data-testid="encounter-followup-actions">
@@ -747,28 +749,37 @@ export function EncounterSheet({
                   <ReadOnlyField value={form.internalNote} multiline block empty="Sem nota interna neste atendimento."
                     hint="Fica só na unidade — não entra na via do cliente." />
                 </section>
-                {addenda.length > 0 && (
+                {/* Pós-finalização: notas complementares e a informação de
+                    reabertura ficam na MESMA seção do documento — quem não pode
+                    reabrir vê ali a regra, como parte do fluxo, não solta. A
+                    regra de quem reabre continua no servidor (canReopen). */}
+                {(addenda.length > 0 || showReopenInfo) && (
                   <section className="encounter-doc__section" aria-labelledby="doc-addenda" data-doc-section="addenda">
                     <header className="encounter-doc__head">
                       <p className="encounter-doc__group">Pós-finalização</p>
-                      <h3 id="doc-addenda" className="encounter-doc__title">Notas complementares</h3>
+                      <h3 id="doc-addenda" className="encounter-doc__title">
+                        {addenda.length > 0 && showReopenInfo ? 'Notas complementares e reabertura' : addenda.length > 0 ? 'Notas complementares' : 'Reabertura'}
+                      </h3>
                     </header>
-                    <ul className="encounter-doc__list">
-                      {addenda.map((note) => (
-                        <li key={note.id}>
-                          <p className="encounter-doc__note">{note.text}</p>
-                          <p className="encounter-doc__meta">{note.createdAt ? formatDateTimeBR(note.createdAt) : ''}</p>
-                        </li>
-                      ))}
-                    </ul>
+                    {addenda.length > 0 && (
+                      <ul className="encounter-doc__list">
+                        {addenda.map((note) => (
+                          <li key={note.id}>
+                            <p className="encounter-doc__note">{note.text}</p>
+                            <p className="encounter-doc__meta">{note.createdAt ? formatDateTimeBR(note.createdAt) : ''}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {showReopenInfo && (
+                      <div className="encounter-doc__reopen" data-testid="registro-reopen-info">
+                        <ReadOnlyField label="Reabertura" value="Somente quem administra a unidade reabre um registro finalizado."
+                          hint="A reabertura registra o motivo na auditoria da unidade." block />
+                      </div>
+                    )}
                   </section>
                 )}
                 {followUpPanel}
-                {!isDraft && !canReopen && (
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Somente quem administra a unidade reabre um registro finalizado.
-                  </p>
-                )}
               </>
             ) : (<>
             {editable ? (

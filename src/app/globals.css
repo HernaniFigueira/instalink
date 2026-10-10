@@ -4422,4 +4422,13 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   .entity-rail__data { gap: 8px; }
   .entity-rail__identity .entity-rail__data { margin-top: 12px; }
   .entity-rail__heading { margin-bottom: 8px; }
-}
+}/* Procedimentos · estado vazio e ação da lista: texto + CTA no mesmo bloco,
+   alinhados à esquerda (o botão não estica nem flutua no centro). Sem card. */
+.encounter-clinical__empty,
+.encounter-clinical__actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.encounter-clinical__empty > .encounter-section__hint { margin: 0; }
+/* Registro · Pós-finalização: a regra de reabertura é parte da seção. */
+.encounter-doc__list + .encounter-doc__reopen { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft, #eef2ef); }
+/* Sessão empilhada (<1024): conteúdo curto (ex.: Procedimentos vazio) não pode
+   esticar a linha do rail e abrir um vão entre o rail e a navegação. */
+.encounter-session { align-content: start; }

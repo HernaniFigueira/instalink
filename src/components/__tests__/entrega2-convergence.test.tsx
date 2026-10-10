@@ -23,6 +23,7 @@ import { EncounterWorkspace } from '../dashboard/EncounterWorkspace';
 import { EncounterWorkspaceBody } from '../dashboard/EncounterWorkspaceBody';
 import { EncounterSessionTimer, EncounterSurfaceSwitch } from '../dashboard/EncounterSessionRail';
 import { EncounterClinicalDocument } from '../dashboard/EncounterClinicalDocument';
+import { EncounterSheet, type EncounterRow } from '../dashboard/EncounterSheet';
 import { OverflowTabs, type TabItem } from '../ui';
 import type { EncounterAuthorityRow } from '../dashboard/useEncounterAuthority';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -216,6 +217,30 @@ describe('Registro completo finalizado = documento', () => {
     expect(doc.textContent).toContain('Limpeza otológica 2x por semana');
     expect(doc.textContent).toContain('Pele melhor');
     expect(doc.querySelectorAll('textarea, input, select, [contenteditable="true"]')).toHaveLength(0);
+  });
+
+  it('quem não reabre vê a regra de reabertura DENTRO de Pós-finalização (não solta)', () => {
+    const finalized = { id: 'e-reg', businessId: 'b1', status: 'finalized', version: 3,
+      customerName: 'Bernardo', date: '2026-10-09', time: '08:00', tags: [],
+      complaint: 'Retorno', evolution: 'Pele melhor', guidance: '', internalNote: '', followUp: '',
+      createdAt: '2026-10-09T11:00:00Z', updatedAt: '2026-10-09T11:10:00Z',
+      bookingId: '', queueId: '', serviceId: '', professionalId: '', customerId: '', contactId: '',
+      createdBy: 'u1', updatedBy: 'u1', finalizedAt: '2026-10-09T11:10:00Z', finalizedBy: 'u1', signedBy: 'Michelle',
+      professionalName: '', serviceName: '', bookingStatus: '', customerPhone: '',
+    } as unknown as EncounterRow;
+    get.mockResolvedValue({ ok: false, status: 404, error: 'x' } as never);
+    const html = (canReopen: boolean) => {
+      cleanup();
+      return render(createElement(EncounterSheet, { businessId: 'b1', existing: finalized, onClose: () => {}, layout: 'page', canReopen })).container;
+    };
+    const vet = html(false);
+    const info = vet.querySelector('[data-doc-section="addenda"] [data-testid="registro-reopen-info"]');
+    expect(info?.textContent).toContain('Somente quem administra a unidade reabre um registro finalizado.');
+    expect(vet.querySelector('[data-doc-section="addenda"]')?.textContent).toContain('Pós-finalização');
+    // Uma única ocorrência — nenhuma linha órfã fora da seção.
+    expect(vet.textContent!.split('Somente quem administra a unidade reabre').length - 1).toBe(1);
+    // Quem pode reabrir não vê o aviso (regra de permissão inalterada).
+    expect(html(true).querySelector('[data-testid="registro-reopen-info"]')).toBeNull();
   });
 
   it('o Registro não tem Salvar/Finalizar próprios: a escrita é no Atendimento', () => {
