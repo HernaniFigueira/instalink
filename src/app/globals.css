@@ -2277,14 +2277,17 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    data (o único CONTROLE DE CAMPO da linha) entra nessa régua — antes era a
    única caixa outlined da toolbar e fazia o resto parecer desalinhado. O foco
    continua no anel canônico do DS (`:focus-visible` + `shadow-focus`). */
-.ag-page .gd-toolbar .il-field-control {
+/* O gatilho do SelectMenu é ação SECUNDÁRIA (canônico): mantém contorno em
+   repouso mesmo na toolbar (`gd-select-trigger`). A régua sem contorno vale
+   só para o gatilho de data. */
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger) {
   background: transparent;
   border-color: transparent;
   transition: background-color var(--gd-motion-fast) var(--gd-ease),
               border-color var(--gd-motion-fast) var(--gd-ease);
 }
-.ag-page .gd-toolbar .il-field-control:hover { background: var(--surface-hover); }
-.ag-page .gd-toolbar .il-field-control:focus-visible {
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):hover { background: var(--surface-hover); }
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):focus-visible {
   background: var(--surface);
   border-color: var(--accent);
 }
@@ -2965,17 +2968,21 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 @media(max-width:767px) { .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:44px; } }
 
 /* Shared inline alert dialog used by guarded overlays (no second native modal/backdrop). */
+/* P1.4 — UMA camada modal só: o backdrop é o do diálogo que já está aberto.
+   A confirmação de descarte NÃO pinta outro véu nem centraliza um segundo
+   modal: é um cartão de decisão no canto inferior do próprio diálogo. A
+   camada transparente continua capturando o ponteiro para que os controles
+   de baixo não abram um segundo pedido de fechamento enquanto ela existe. */
 .overlay-confirm-layer {
+  /* Dialog CANÔNICO: backdrop global (escurece o que está atrás, inclusive o
+     formulário que o originou), cartão centralizado, foco preso no cartão. */
   position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  backdrop-filter: blur(1px);
-  /* Covers the existing dialog surface to keep controls underneath from
-     opening a second close request while this decision is pending. */
+  padding: 24px;
+  background: var(--overlay-scrim, rgba(15, 23, 42, 0.42));
   pointer-events: auto;
 }
 .overlay-confirm {
@@ -2989,7 +2996,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 12%));
   text-align: center;
   pointer-events: auto;
 }
@@ -3079,7 +3086,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .encounter-page__save-state--saving { color: var(--brand-fg, #276347); }
 .encounter-page__save-state--error { color: var(--danger, #b42318); }
 .encounter-page__save-state--dirty { color: var(--warning-fg, #8a5b00); }
-.encounter-page > .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+.encounter-page > .overlay-confirm-layer { z-index: 1200; }
 @media (max-width: 767px) {
   .encounter-page { min-height: calc(100dvh - 56px); margin-inline: -16px; }
   .encounter-page__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
@@ -3341,7 +3348,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   .encounter-workspace__header { scroll-behavior: auto; }
   .encounter-workspace__nav-item { transition: none; }
 }
-.client-profile-page .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+.client-profile-page .overlay-confirm-layer { z-index: 1200; }
 
 /* ═══════════════════════════════════════════════════════════════
    CONVERSAS — workspace operacional full-height
@@ -4381,6 +4388,7 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 .gd-overflow-tabs { position: relative; min-width: 0; width: 100%; }
 .gd-overflow-tabs__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .gd-overflow-tabs__list { flex: 0 1 auto; min-width: 0; }
+.gd-overflow-tabs--wrap .gd-overflow-tabs__list { flex-wrap: wrap; overflow: visible; row-gap: 4px; width: 100%; }
 .gd-overflow-tabs__more { border: 1px solid var(--border-soft); background: var(--surface-3); flex: none; }
 [aria-expanded='true'] .gd-overflow-tabs__more { background: var(--surface); color: var(--accent); }
 .gd-overflow-tabs__more-count {

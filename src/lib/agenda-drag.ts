@@ -15,8 +15,12 @@
 // coberto por testes em src/lib/__tests__/agenda-drag.test.ts.
 import { timeToMin, minToTime } from './utils';
 
-/** Threshold de movimento (px) exigido pela especificação: 5–8px. */
-export const DRAG_THRESHOLD_PX = 6;
+/**
+ * Threshold CANÔNICO de movimento (px): até 8px inclusive é CLIQUE (abre o
+ * detalhe); só acima de 8px o gesto vira drag. Pressionar e soltar antes da
+ * ativação do drag sempre abre o detalhe.
+ */
+export const DRAG_THRESHOLD_PX = 8;
 
 export interface Point {
   x: number;

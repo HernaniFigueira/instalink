@@ -36,16 +36,19 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
-  // Ação secundária não é link: o acento fica reservado para primary e links
-  // reais. Em repouso ela é neutra, sem borda visível; hover/active só acendem
-  // uma superfície neutra. A borda transparente preserva a mesma métrica do
-  // primary e o foco continua no anel canônico.
+  // SECUNDÁRIA (gramática de ações): tem CONTORNO e superfície suave VISÍVEIS
+  // em repouso — nunca parece texto. Não usa acento (o acento é do primary e
+  // dos links reais). Hover/active só trocam a superfície; o foco segue no anel
+  // canônico. O contorno usa a borda forte do DS (contraste de limite de
+  // controle), não uma borda decorativa.
   secondary:
-    'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]',
+    'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
+  // TERCIÁRIA: ação leve, com COR DE AÇÃO (texto do acento) e hover/focus
+  // claros — ícone quando ajuda. Sem contorno em repouso.
   ghost:
-    'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
+    'bg-transparent text-[var(--accent-fg)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--accent-fg)]',
   // SOLID vermelho = SÓ o passo de confirmação destrutiva final (regra do DS
   // catalogada em /dev/design-system). Em repouso, numa fila de ações, o
   // destrutivo é `destructive-soft` — senão o vermelho cheio compete com o CTA
@@ -729,8 +732,10 @@ function TabInner<T extends string>({ item, selected }: { item: TabItem<T>; sele
  *   • teclado: setas/Home/End entre as abas visíveis (Tabs), Tab chega ao
  *     "Mais", Enter/↓ abre o menu.
  */
-export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais' }: {
+export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais', wrap = false }: {
   items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; className?: string; moreLabel?: string;
+  /** Quando a seção precisa ficar sempre visível (ex.: Cliente 360): as abas quebram em linhas e nada vai para "Mais". */
+  wrap?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
@@ -741,6 +746,7 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
     const host = hostRef.current;
     const ruler = rulerRef.current;
     if (!host || !ruler) return undefined;
+    if (wrap) { setShown(null); return undefined; }
     const measure = () => {
       const tabs = Array.from(ruler.querySelectorAll<HTMLElement>('[data-ruler-tab]'));
       const more = ruler.querySelector<HTMLElement>('[data-ruler-more]');
@@ -771,17 +777,17 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, value]);
+  }, [signature, value, wrap]);
 
   const visible = shown ? items.filter((item) => shown.includes(item.id)) : items;
   const visibleIds = new Set(visible.map((item) => item.id));
   const overflow = items.filter((item) => !visibleIds.has(item.id));
 
   return (
-    <div ref={hostRef} className={cn('gd-overflow-tabs', className)} data-overflow-count={overflow.length || undefined}>
+    <div ref={hostRef} className={cn('gd-overflow-tabs', wrap && 'gd-overflow-tabs--wrap', className)} data-overflow-count={overflow.length || undefined}>
       <div className="gd-overflow-tabs__row">
         <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} className="gd-overflow-tabs__list" />
-        {overflow.length > 0 && (
+        {overflow.length > 0 && !wrap && (
           <DropdownMenu
             label={`${moreLabel}: outras seções`}
             align="end"
@@ -2784,7 +2790,7 @@ export function SelectMenu({ options, value, onChange, label = 'Selecionar', pla
           else if (e.key === 'Tab' && open) { setOpen(false); }
         }}
         className={cn(
-          FIELD_CLS, inShell && 'gd-field__control--inline',
+          FIELD_CLS, inShell && 'gd-field__control--inline', 'gd-select-trigger',
           'flex items-center justify-between gap-2 text-left cursor-pointer',
           'aria-[invalid=true]:border-[var(--gd-danger-fg)]',
           'disabled:opacity-60',

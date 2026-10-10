@@ -71,7 +71,7 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // link antes da interação.
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-transparent text-\[var\(--text\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--surface\)\] text-\[var\(--text\)\] border border-\[var\(--border-strong\)\]/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });

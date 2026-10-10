@@ -26,10 +26,15 @@ function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemp
   return Object.entries(response.answers || {}).map(([id, value]) => ({ id, label: id, type: '', value }));
 }
 
-export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPhone, onOpenEncounter }: {
+export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName, tutorPhone, onOpenEncounter }: {
   open: boolean;
   onClose: () => void;
   businessId: string;
+  /**
+   * Ponto de partida (id + tutor + nome). A FICHA sempre usa o cadastro
+   * canônico do pet, carregado por id via /api/pets: quem chama (ex.: o
+   * detalhe do agendamento) não duplica espécie, raça, sexo e nascimento.
+   */
   pet: Pet | null;
   tutorName: string;
   tutorPhone?: string;
@@ -44,6 +49,26 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   const [templates, setTemplates] = useState<AnamneseTemplate[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
+  const [canonicalPet, setCanonicalPet] = useState<Pet | null>(null);
+  // Cadastro canônico do pet (fonte única): o que vale é o registro do pet,
+  // nunca o stub do chamador.
+  const pet = canonicalPet && petProp && canonicalPet.id === petProp.id ? canonicalPet : petProp;
+
+  useEffect(() => {
+    if (!open || !petProp?.id) return;
+    let on = true;
+    setCanonicalPet(null);
+    const tutorQuery = petProp.tutorId ? `&tutorId=${encodeURIComponent(petProp.tutorId)}` : '';
+    apiGet<{ pets?: Pet[] }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}${tutorQuery}`,
+      { scope: 'area', area: 'Atendimento' },
+    ).then((r) => {
+      if (!on || !r.ok) return;
+      const found = (r.data?.pets || []).find((candidate) => candidate.id === petProp.id);
+      if (found) setCanonicalPet(found);
+    }).catch(() => { /* mantém o ponto de partida; a ficha mostra o que existe */ });
+    return () => { on = false; };
+  }, [open, petProp?.id, petProp?.tutorId, businessId]);
 
   useEffect(() => {
     if (!open || !pet?.id) return;

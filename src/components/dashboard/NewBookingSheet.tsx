@@ -14,6 +14,8 @@ import { fitInPastError } from '@/lib/fit-in';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
+
+type ErrorField = 'client' | 'pet' | 'service' | 'date' | 'time' | '';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { cn, minToTime, onlyDigits, timeToMin } from '@/lib/utils';
@@ -131,6 +133,17 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [slotsError, setSlotsError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Erro → PRIMEIRO campo com problema recebe o foco, com a mensagem junto da causa.
+  const [errorField, setErrorField] = useState<ErrorField>('');
+  const formRef = useRef<HTMLDivElement>(null);
+  const fail = (message: string, field: ErrorField = '') => { setError(message); setErrorField(field); };
+  useEffect(() => {
+    if (!error || !errorField) return;
+    const id = requestAnimationFrame(() => {
+      formRef.current?.querySelector<HTMLElement>(`[data-field="${errorField}"] input, [data-field="${errorField}"] button, [data-field="${errorField}"] [role="combobox"], [data-field="${errorField}"] textarea`)?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [error, errorField]);
   const [created, setCreated] = useState<{
     count?: number;
     occurrences?: Array<{ id: string; date: string; time: string; professionalName: string }>;
@@ -382,25 +395,25 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { return; }
     // Campos obrigatórios ANTES da conferência de intervalo: formulário vazio
     // deve dizer o que falta (cliente/serviço), não "aguarde o intervalo".
-    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
-    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
-    if (!serviceId || !date) { setError('Escolha serviço, data e horário.'); return; }
-    if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { setError(slotsError || 'Aguarde a conferência do intervalo.'); return; }
-    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
-    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
+    if (!picked || !name.trim()) { fail('Busque o cliente ou cadastre um novo para usar neste agendamento.', 'client'); return; }
+    if (!contactId) { fail('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).', 'client'); return; }
+    if (!serviceId || !date) { fail('Escolha serviço, data e horário.', !serviceId ? 'service' : !date ? 'date' : 'time'); return; }
+    if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { fail(slotsError || 'Aguarde a conferência do intervalo.', 'time'); return; }
+    if (!picked || !name.trim()) { fail('Busque o cliente ou cadastre um novo para usar neste agendamento.', 'client'); return; }
+    if (!contactId) { fail('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).', 'client'); return; }
     // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
     if (isVet && contactId && pets.length > 0 && !petId) {
-      setError('Em clínica veterinária, escolha o pet (paciente) deste agendamento.');
+      fail('Em clínica veterinária, escolha o pet (paciente) deste agendamento.', 'pet');
       return;
     }
-    if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    if (onlyDigits(phone).length < 10) { fail('Informe um WhatsApp válido.', 'client'); return; }
     const when = opts.timeOverride || time;
-    if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
+    if (!serviceId || !date || !when) { fail('Escolha serviço, data e horário.', !serviceId ? 'service' : !date ? 'date' : 'time'); return; }
     // Encaixe em horário que já passou: recusado AQUI, sem chamar o servidor
     // (que recusaria do mesmo jeito — a frase é a mesma).
     if (opts.fitIn) {
       const past = fitInPastError(date, when, today, nowHM(new Date(), timezone || undefined));
-      if (past) { setError(past); return; }
+      if (past) { fail(past, 'time'); return; }
     }
     if (opts.fitIn && repeat) { setError('Encaixe não cria série — desligue a repetição.'); return; }
     setSaving(true);
@@ -510,11 +523,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               </div>
             </div>
           ) : (
-          <div className="space-y-3">
+          <div className="space-y-3" ref={formRef}>
           {/* 1. Cliente — o rótulo usa o tipo canônico do DS (label 13/20 500);
               a nota de por que buscamos no CRM virou AJUDA CONTEXTUAL (tooltip),
               em vez de parágrafo permanente sob o campo (§13). */}
-          <div>
+          <div data-field="client">
             <span className="mb-1.5 flex items-center gap-1.5">
               <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
               {!picked && (
@@ -589,11 +602,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {/* FASE 2 · P6 — veterinária: o PET é o paciente (obrigatório quando
               o tutor já tem pet; sem pet, use o cadastro unificado). */}
           {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
-            <Field label="Pet (paciente)" required
+            <div data-field="pet"><Field label="Pet (paciente)" required
               hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
               <SelectMenu value={petId} disabled={saving || reviewing} onChange={(v) => setPetId(v)} placeholder="Selecione o pet…"
                 options={pets.map((p) => ({ value: p.id, label: p.name, hint: p.breed || undefined }))} />
-            </Field>
+            </Field></div>
           )}
           {picked && contactId && (isVet || vetMode) && pets.length === 0 && (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
@@ -602,7 +615,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <Field label="2. Serviço" required>
+          <div data-field="service"><Field label="2. Serviço" required>
             {/* CP3 · Combobox do DS (busca + teclado), no lugar do select nativo. */}
             <Combobox
               label="Serviço"
@@ -617,7 +630,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 hint: eligibleProfessionalIds(s as any, pros).length === 0 ? 'Sem profissional habilitado' : undefined,
               }))]}
             />
-          </Field>
+          </Field></div>
 
 
 
@@ -640,14 +653,14 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           )}
 
           {proIssue && <Notice tone="warning">{proIssue}</Notice>}
-          <Field label="3. Data" required>
+          <div data-field="date"><Field label="3. Data" required>
             {/* CP3 · DatePicker do DS: o input date nativo não é mais usado no produto. */}
             <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => setDate(iso)} />
-          </Field>
+          </Field></div>
 
           {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
           {date && serviceId && !proIssue && (!rangeIntent || editingTime) && (
-            <div>
+            <div data-field="time">
               <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
               {loadingSlots ? (
                 <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">

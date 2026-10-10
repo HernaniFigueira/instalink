@@ -904,7 +904,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
         {/* Abas principais visíveis; o excedente vai para "Mais" (menu
             canônico). Sem scroll horizontal escondido. */}
-        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
+        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" wrap />
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}

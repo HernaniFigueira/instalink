@@ -47,7 +47,6 @@ import {
 } from '@/lib/encounters';
 import { formatDateBR, formatDateTimeBR } from '@/lib/tz';
 import type { AnamneseResponse, AnamneseTemplate, Encounter, EncounterFile, EncounterFollowUpMode } from '@/lib/types';
-import { AnamneseFiller } from '@/components/dashboard/AnamneseFiller';
 import { RegisterPaymentSheet, type PaymentSeed } from '@/components/dashboard/RegisterPaymentSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
@@ -156,7 +155,6 @@ export function EncounterSheet({
   const [taskDone, setTaskDone] = useState('');
   // FASE 2 · P3/P4/P7 — anamnese, arquivos e pagamento opcional na conclusão.
   const [anamneseTemplates, setAnamneseTemplates] = useState<AnamneseTemplate[]>([]);
-  const [anamneseOpen, setAnamneseOpen] = useState(false);
   const [anamneseCount, setAnamneseCount] = useState(0);
   const [anamneseLast, setAnamneseLast] = useState<Pick<AnamneseResponse, 'id' | 'templateId' | 'createdAt' | 'answers'> | null>(null);
   const [anamneseHistoryOpen, setAnamneseHistoryOpen] = useState(false);
@@ -899,7 +897,12 @@ export function EncounterSheet({
                   ) : <p className="text-[11.5px] text-[var(--text-muted)]">Ainda não há ficha neste atendimento.</p>}
                 </div>
                 {anamneseTemplates.length > 0 && row.contactId ? (
-                  <Button size="sm" variant={anamneseCount > 0 || documentMode ? 'secondary' : 'primary'} onClick={() => setAnamneseOpen(true)}>
+                  /* P1.3 — a anamnese é preenchida na SEÇÃO Anamnese do workspace
+                     do atendimento (mesma autoridade de persistência). Não há
+                     sheet paralela: o Registro só leva até lá, com a guarda de saída. */
+                  <Button size="sm" variant={anamneseCount > 0 || documentMode ? 'secondary' : 'primary'}
+                    disabled={!workspaceHref || !onOpenWorkspace}
+                    onClick={() => { if (workspaceHref && onOpenWorkspace) void requestClose('navigation', () => onOpenWorkspace(`${workspaceHref}&secao=anamnese`)); }}>
                     {anamneseCount > 0 ? 'Preencher outra ficha' : 'Preencher anamnese'}
                   </Button>
                 ) : (
@@ -959,24 +962,6 @@ export function EncounterSheet({
         )}
       </div>
 
-      {/* FASE 2 · P4 — preencher ficha de anamnese deste atendimento. */}
-      {row && row.contactId && anamneseOpen && (
-        <AnamneseFiller
-          open={anamneseOpen}
-          onClose={() => { setAnamneseOpen(false); onChanged?.(); }}
-          businessId={businessId}
-          templateId={anamneseTemplates[0]?.id || ''}
-          contactId={row.contactId}
-          petId={row.petId || ''}
-          professionalId={row.professionalId}
-          encounterId={row.id}
-          onSaved={(savedResponse) => {
-            setAnamneseLast({ id: savedResponse.id, templateId: savedResponse.templateId, createdAt: savedResponse.createdAt, answers: savedResponse.answers });
-            setAnamneseCount((n) => n + 1);
-            setAnamneseHistoryOpen(true);
-          }}
-        />
-      )}
       {/* FASE 2 · P7 — recebimento opcional pré-preenchido ao concluir. */}
       <RegisterPaymentSheet
         seed={paymentSeed}

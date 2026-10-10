@@ -714,6 +714,9 @@ export default function AgendaPage() {
   const columnsRef = useRef<DropColumn[]>([]);
   const bookingsRef = useRef<Map<string, Booking>>(new Map());
   const durationRef = useRef(30);
+  // Distância (px) entre o ponteiro e o topo do evento no momento da pegada: o
+  // destino do drop é o TOPO do evento (ponto − pegada), não o ponteiro.
+  const grabOffsetRef = useRef(0);
   const geometryRef = useRef<{ g: GridGeometry; minY: number } | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -1179,7 +1182,7 @@ export default function AgendaPage() {
     return planDrop({
       // Fora do eixo horizontal da grade é destino inválido; não clample à
       // primeira coluna (um drop à esquerda não pode virar reagendamento).
-      point: { x: point.x, y: Math.max(point.y, geo.minY) },
+      point: { x: point.x, y: Math.max(point.y - grabOffsetRef.current, geo.minY) },
       geometry: geo.g,
       columns: columnsRef.current,
       drag: slots,
@@ -1295,7 +1298,7 @@ export default function AgendaPage() {
     if (!geo) return;
     geometryRef.current = geo;
     const b = bookingsRef.current.get(interactionRef.current.id);
-    const point: Point = { x: at.x, y: Math.max(at.y, geo.minY) };
+    const point: Point = { x: at.x, y: Math.max(at.y - grabOffsetRef.current, geo.minY) };
     const plan = planDrop({
       point,
       geometry: geo.g,
@@ -1418,6 +1421,7 @@ export default function AgendaPage() {
       return;
     }
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
+    grabOffsetRef.current = e.clientY - (e.currentTarget as HTMLElement).getBoundingClientRect().top;
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
@@ -2125,7 +2129,7 @@ export default function AgendaPage() {
               className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
               onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
             />
-            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: proFilter })}>
               <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>
           </div>
@@ -2356,7 +2360,7 @@ export default function AgendaPage() {
                       onBlockClick={onBlockClick}
                       onBlockEdit={onBlockEdit}
                       onBlockContextMenu={onBlockContextMenu}
-                      hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
+                      hoverSuppressed={!!dragId || ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}

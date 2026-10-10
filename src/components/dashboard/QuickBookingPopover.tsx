@@ -27,7 +27,11 @@ import {
 } from '@/lib/booking-quick-create';
 import type { Professional, Service } from '@/lib/types';
 
-const DURATIONS = [15, 30, 45, 60, 90, 120];
+// Passos oferecidos no Quick Create. NÃO é regra clínica: não existe teto no
+// servidor (só duração > 0) e o formulário completo vai até 720 min. O teto
+// antigo de 120 min era uma lista fixa de UI. Uma duração vinda de arraste
+// (ex.: 135 min) entra na lista para o campo nunca mostrar um valor órfão.
+const DURATIONS = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 240, 300, 360, 480, 720];
 
 export interface QuickBookingAnchor {
   /** Ponto do clique, em coordenadas de viewport (posição do popover). */
@@ -79,6 +83,9 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   const [durationMin, setDurationMin] = useState<number | undefined>(anchor.durationMin);
   // Data/duração recolhidos por padrão; abrem sozinhos quando o gesto já trouxe duração.
   const [moreTime, setMoreTime] = useState<boolean>(anchor.durationMin != null);
+  const durationOptions = durationMin != null && !DURATIONS.includes(durationMin)
+    ? [...DURATIONS, durationMin].sort((a, b) => a - b)
+    : DURATIONS;
   const [contactId, setContactId] = useState('');
   // O contato escolhido é guardado por INTEIRO (a lista de resultados é
   // limpa ao escolher) — o nome/telefone vão no payload, como no fluxo completo.
@@ -364,7 +371,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
               <Field label="Duração">
                 <Combobox label="Duração" value={durationMin != null ? String(durationMin) : ''} disabled={saving}
                   onChange={(v) => { const x = String(v); setDurationMin(x === '' ? undefined : Number(x)); }}
-                  options={[{ value: '', label: 'Padrão do serviço' }, ...DURATIONS.map((d) => ({ value: String(d), label: durationLabel(d) }))]} />
+                  options={[{ value: '', label: 'Padrão do serviço' }, ...durationOptions.map((d) => ({ value: String(d), label: durationLabel(d) }))]} />
               </Field>
             </div>
           )}
