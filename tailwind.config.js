@@ -14,7 +14,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        // A fonte canônica do produto é Barlow. `font-sans` precisa herdar o
+        // A fonte canônica do produto é Inter (camada visual PR #69). `font-sans` precisa herdar o
         // mesmo token do body; `--font-geist-sans` não existe neste app e fazia
         // as utilitárias Tailwind caírem em system-ui.
         sans: ["var(--gd-font-sans)"],

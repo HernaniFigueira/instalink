@@ -302,8 +302,8 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                 </span>
               )}
             </div>
-            <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {durationLabel(dur)}</p>
+            <p className="text-base font-semibold text-[var(--gd-text-strong)] mt-1.5 leading-snug truncate" data-entity-title>{service?.name || 'Serviço'}</p>
+            <p className="text-xs font-medium text-[var(--gd-text-muted)] mt-0.5">{humanDay(booking.date, today)} · {durationLabel(dur)}</p>
           </div>
 
         </header>
@@ -334,7 +334,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
                 </p>
               )}
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap items-center gap-2" data-action-zone="principal">
                 {/*
                   §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:
                   ela move o atendimento adiante. As demais (Confirmar/Concluir/
@@ -396,12 +396,14 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                     <Icon n="check" size={13} /> Chegou às {checkedInHM}
                   </Button>
                 )}
-                {can('cancel') && (
+              </div>
+              {can('cancel') && (
+                <div className="mt-3 border-t border-[var(--gd-border-soft)] pt-3 flex justify-start" data-action-zone="perigo">
                   <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
                     {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
               {wf.allowed.length === 0 && (
                 <p className="text-[11px] text-[var(--text-muted)]">Nenhuma ação disponível para o seu perfil nesta etapa.</p>
               )}

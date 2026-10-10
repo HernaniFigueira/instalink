@@ -151,7 +151,7 @@ describe('§3 · uma fonte, um token (Geist não pode voltar como fonte do corpo
     // `--font-geist-sans` deixou de existir com a Barlow: um `var()` pendurado
     // invalida a declaração e o navegador cai na fonte default da plataforma.
     expect(css).not.toMatch(/font-family: var\(--font-geist-sans\)/);
-    expect(ds).toMatch(/--gd-font-sans: var\(--font-barlow\)/);
+    expect(ds).toMatch(/--gd-font-sans: var\(--font-inter\)/);
     // `font-sans` também precisa resolver para o token Barlow: utilitárias
     // Tailwind não podem introduzir uma segunda família/fallback inválido.
     expect(tailwind).toMatch(/sans:\s*\["var\(--gd-font-sans\)"\]/);

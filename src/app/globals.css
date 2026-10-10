@@ -2616,37 +2616,52 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    lateral. Hover e detalhe nunca ocupam a tela ao mesmo tempo. */
 .gd-hovercard.ag-hover {
   /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
-     precisa viver nele (não apenas no filho), senão o max-width genérico de
-     320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
+     precisa viver nele (não apenas no filho). Geometria NOVA: card 12px com
+     hairline; sombra mínima (só separa a camada do evento). */
   width: 340px; max-width: min(340px, calc(100vw - 24px)); padding: 0;
-  border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
-  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
+  border: 1px solid var(--gd-border); border-radius: var(--gd-radius-lg);
+  background: var(--gd-bg-surface); box-shadow: 0 6px 18px rgba(20, 16, 13, .08);
 }
-/* Prévia rica, ainda contextual: cresce para leitura confortável sem cobrir o
-   evento que a abriu e sem ganhar a sombra forte de um modal. */
+/* Prévia de leitura em 2 segundos: identidade (ícone + título + status), data
+   forte, pessoas e serviço com ícone, footer de ações. Nenhum rótulo cinza
+   disputando com valor. */
 .ag-hover__card {
   width: 100%; max-width: 100%; padding: var(--gd-space-4);
   display: flex; flex-direction: column; gap: var(--gd-space-2);
 }
-/* Hierarquia da prévia: horário é a informação principal (semibold, ink);
-   paciente/serviço/profissional vêm em pares rótulo→valor; "Ver detalhes" é a
-   única ação primária, "Editar" fica secundário e nunca compete com ela. */
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
-.ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
-.ag-hover__date { margin: 0; color: var(--gd-text); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); }
-.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
-.ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
-.ag-hover__rows dt { flex: 0 0 76px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
-.ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
-.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
+.ag-hover__heading {
+  display: inline-flex; align-items: center; gap: var(--gd-space-2);
+  font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text-strong);
+}
+.ag-hover__heading-ico { color: var(--gd-accent-fg); flex: 0 0 auto; }
+.ag-hover__date {
+  margin: 0; color: var(--gd-text-strong); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold);
+  padding-bottom: var(--gd-space-2); border-bottom: 1px solid var(--gd-border-soft);
+}
+.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-2); }
+.ag-hover__rows > div { display: flex; align-items: flex-start; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
+.ag-hover__ico {
+  flex: 0 0 20px; height: 20px; margin: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--gd-text-soft);
+}
+.ag-hover__rows dd { min-width: 0; margin: 0; display: flex; flex-direction: column; color: var(--gd-text); }
+.ag-hover__value { font-weight: var(--gd-weight-medium); color: var(--gd-text-strong); overflow-wrap: anywhere; }
+.ag-hover__sub { font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); color: var(--gd-text-muted); }
+.ag-hover__observation {
+  display: flex; align-items: flex-start; gap: var(--gd-space-2); margin: 0;
+  overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere;
+}
+.ag-hover__obs-ico { flex: 0 0 auto; margin-top: 2px; color: var(--gd-text-soft); }
 .ag-hover__flag { margin: 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
 .ag-hover__flag--attention { color: var(--attention-fg); }
+/* Footer de ações: Ver detalhes é a primária (solid, ocupa o espaço restante);
+   Editar é secundário com borda visível em repouso. Nunca dois pesos iguais. */
 .ag-hover__actions {
-  display: flex; align-items: center; justify-content: flex-end; gap: var(--gd-space-2); padding-top: var(--gd-space-3); margin-top: var(--gd-space-1);
+  display: flex; align-items: center; gap: var(--gd-space-2); padding-top: var(--gd-space-3); margin-top: var(--gd-space-1);
   border-top: 1px solid var(--gd-border-soft);
 }
 .ag-hover__actions > button { flex: 0 0 auto; min-height: var(--gd-control-h); font-weight: var(--gd-weight-semibold); }
+.ag-hover__actions > button:last-child { flex: 1 1 0; }
 .ag-hover__actions > button:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 /* Resultado pós-PATCH (nunca otimista): sucesso e falha são avisos distintos. */
 .ag-ctx-success,

@@ -45,17 +45,18 @@ describe('P1 · botões e ícones sem contorno ocioso', () => {
 });
 
 describe('Pass 2 · régua canônica de controles e Quick Create', () => {
-  it('define 40px no desktop, 44px no toque, raio 8, seção 18/600 e rótulo 14/500 na fonte única', () => {
+  it('define 40px no desktop, 44px no toque, raio NOVA (6 compacto), seção 16/600 e rótulo 12/600 na fonte única (camada visual PR #69)', () => {
     expect(ds).toMatch(/--gd-control-h: 40px/);
     expect(ds).toMatch(/--gd-control-h-touch: 44px/);
-    expect(ds).toMatch(/--gd-radius-sm: 8px/);
+    expect(ds).toMatch(/--gd-radius-sm: 6px/);
+    expect(ds).toMatch(/--gd-radius-lg: 12px/);
     // B4: título de seção é 18/600 pela escala canônica; o alias histórico
     // aponta para ela, então títulos de detalhe/formulário não ficam em 16px.
-    expect(ds).toMatch(/--gd-type-section-size: 18px/);
+    expect(ds).toMatch(/--gd-type-section-size: 16px/);
     expect(ds).toMatch(/--gd-type-section-weight: var\(--gd-weight-semibold\)/);
     expect(ds).toMatch(/--gd-font-size-section: var\(--gd-type-section-size\)/);
     expect(ds).toMatch(/\.gd-detail__header h2 \{[\s\S]*?font-size: var\(--gd-type-section-size\); line-height: var\(--gd-type-section-line\);[\s\S]*?font-weight: var\(--gd-type-section-weight\)/);
-    expect(ds).toMatch(/--gd-type-label-size: 14px/);
+    expect(ds).toMatch(/--gd-type-label-size: 12px/);
     expect(ds).toMatch(/\.gd-field__label \{[^}]*font-size: var\(--gd-type-label-size\)[^}]*font-weight: var\(--gd-type-label-weight\)/);
     // Field também usa o token `gd-*` diretamente: popovers são portais fora
     // de `.il-platform` e não podem depender do alias de altura do shell.

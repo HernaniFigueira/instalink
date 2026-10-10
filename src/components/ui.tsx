@@ -69,8 +69,9 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const BTN_SIZE_CLS: Record<ButtonSize, string> = {
   xs: 'text-[11px] px-2 py-1 gap-1',
-  sm: 'text-xs px-2.5 py-1.5 gap-1.5',
-  md: 'text-sm px-3.5 py-2 gap-1.5',
+  // Geometria NOVA: sm ≈ 32px com texto 13px; md ≈ 36px com texto 14px.
+  sm: 'text-[13px] font-medium px-3 py-1.5 gap-1.5',
+  md: 'text-sm font-medium px-3.5 py-2 gap-1.5',
   lg: 'text-sm px-5 py-2.5 gap-2',
 };
 

@@ -530,17 +530,32 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                  com camadas exclusivas. Nada de tooltip nativo ou card fixo. */
               <div className="ag-hover__card">
                 <div className="ag-hover__head">
-                  <span className="ag-hover__heading">Agendamento</span>
+                  <span className="ag-hover__heading"><Icon n="calendar" size={16} className="ag-hover__heading-ico" />Agendamento</span>
                   <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
                 </div>
                 <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
+                {/* Leitura por ÍCONE + valor (não grade rótulo→valor): paciente
+                    e tutor, profissional, serviço e observação. O rótulo vira
+                    texto de apoio ou sr-only; o valor é a informação forte. */}
                 <dl className="ag-hover__rows">
-                  <div><dt>{b.petName ? 'Paciente' : 'Tutor'}</dt><dd>{b.petName || b.customerName}</dd></div>
-                  {b.petName && <div><dt>Tutor</dt><dd>{b.customerName}</dd></div>}
-                  {b.service && <div><dt>Serviço</dt><dd>{b.service}</dd></div>}
-                  {b.pro && <div><dt>Profissional</dt><dd>{b.pro}</dd></div>}
+                  <div>
+                    <dt className="ag-hover__ico"><Icon n={b.petName ? 'paw' : 'user'} size={15} /><span className="sr-only">{b.petName ? 'Paciente' : 'Tutor'}</span></dt>
+                    <dd><span className="ag-hover__value">{b.petName || b.customerName}</span>{b.petName && <span className="ag-hover__sub">Tutor · {b.customerName}</span>}</dd>
+                  </div>
+                  {b.pro && (
+                    <div>
+                      <dt className="ag-hover__ico"><Icon n="userCircle" size={15} /><span className="sr-only">Profissional</span></dt>
+                      <dd><span className="ag-hover__value">{b.pro}</span></dd>
+                    </div>
+                  )}
+                  {b.service && (
+                    <div>
+                      <dt className="ag-hover__ico"><Icon n="service" size={15} /><span className="sr-only">Serviço</span></dt>
+                      <dd><span className="ag-hover__value">{b.service}</span></dd>
+                    </div>
+                  )}
                 </dl>
-                {b.observation && <p className="ag-hover__observation"><strong>Observação</strong> · {b.observation}</p>}
+                {b.observation && <p className="ag-hover__observation"><Icon n="chat" size={14} className="ag-hover__obs-ico" /><span>{b.observation}</span></p>}
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">
