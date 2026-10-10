@@ -20,7 +20,7 @@
 //   • a persistência é a do domínio (PATCH /api/encounters) com a versão vinda
 //     da AUTORIDADE do workspace — uma versão só para o Encounter inteiro.
 import { useMemo } from 'react';
-import { ClinicalRecordSection, Field, ReadOnlyField, Select, Textarea } from '@/components/ui';
+import { ClinicalRecordSection, Field, ReadOnlyField, Textarea, SelectMenu } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -171,24 +171,21 @@ export function EncounterVisitAnamnesisSection({
 
           {STATUS_FIELDS.map((f) => (
             <Field key={f.key} label={f.label} hint={f.hint} htmlFor={`an-${f.key}`}>
-              <Select id={`an-${f.key}`} disabled={disabled}
-                value={form[f.key]} onChange={(e) => setField(f.key, e.target.value as VisitChangeStatus)}>
-                {CHANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </Select>
+              <SelectMenu id={`an-${f.key}`} disabled={disabled} aria-label={f.label}
+                value={form[f.key]} onChange={(v) => setField(f.key, v as VisitChangeStatus)}
+                options={CHANGE_OPTIONS} />
             </Field>
           ))}
 
           <Field label="Vômito" hint="Relatado nesta visita." htmlFor="an-vomiting">
-            <Select id="an-vomiting" disabled={disabled}
-              value={form.vomiting} onChange={(e) => setField('vomiting', e.target.value as VisitYesNoStatus)}>
-              {YES_NO_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
+            <SelectMenu id="an-vomiting" disabled={disabled} aria-label="Vômito"
+              value={form.vomiting} onChange={(v) => setField('vomiting', v as VisitYesNoStatus)}
+              options={YES_NO_OPTIONS} />
           </Field>
           <Field label="Diarreia" hint="Relatado nesta visita." htmlFor="an-diarrhea">
-            <Select id="an-diarrhea" disabled={disabled}
-              value={form.diarrhea} onChange={(e) => setField('diarrhea', e.target.value as VisitYesNoStatus)}>
-              {YES_NO_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </Select>
+            <SelectMenu id="an-diarrhea" disabled={disabled} aria-label="Diarreia"
+              value={form.diarrhea} onChange={(v) => setField('diarrhea', v as VisitYesNoStatus)}
+              options={YES_NO_OPTIONS} />
           </Field>
 
           <Field label="Medicações em uso (relatadas nesta visita)" hint={TEXT_FIELDS[2].hint} htmlFor="an-medications">

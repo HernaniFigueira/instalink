@@ -11,7 +11,7 @@
 //   5. conduta não duplica guidance/followUp (aparecem como contexto em leitura);
 //   6. procedimento aceita texto custom (catálogo é só sugestão);
 //   7. a navegação por vertical continua isolando o pacote B2.
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, useState } from 'react';
 import { EncounterClinicalProblemsSection } from '../dashboard/EncounterClinicalProblemsSection';
@@ -21,6 +21,19 @@ import { EncounterWorkspaceBody } from '../dashboard/EncounterWorkspaceBody';
 import { useEncounterAuthority, type EncounterAuthorityRow } from '../dashboard/useEncounterAuthority';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { ENCOUNTER_AUTOSAVE_MS } from '@/lib/encounters';
+
+/** SelectMenu canônico: lê as opções abrindo o menu (não é mais <select> nativo). */
+function menuOptionLabels(trigger: HTMLElement): string[] {
+  fireEvent.click(trigger);
+  const labels = within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent?.trim() || '');
+  fireEvent.keyDown(trigger, { key: 'Escape' });
+  return labels;
+}
+/** Escolhe uma opção do SelectMenu pelo nome visível (clique no menu aberto). */
+function chooseMenuOption(trigger: HTMLElement, name: string): void {
+  fireEvent.click(trigger);
+  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name }));
+}
 
 vi.mock('@/lib/api-client', () => ({ apiSend: vi.fn(), apiGet: vi.fn() }));
 const send = vi.mocked(apiSend);
@@ -128,9 +141,9 @@ describe('F1B2 · seção Problemas (lista compacta, identidade estável)', () =
         plan: { conduct: '' }, procedures: [],
       } as any,
     }) as any);
-    const tipo = screen.getByLabelText('Tipo do problema 1') as HTMLSelectElement;
-    expect([...tipo.options].map((option) => option.textContent)).toEqual(['Problema', 'Hipótese', 'Diagnóstico']);
-    expect(tipo.value).toBe('hypothesis');
+    const tipo = screen.getByLabelText('Tipo do problema 1');
+    expect(menuOptionLabels(tipo)).toEqual(['Problema', 'Hipótese', 'Diagnóstico']);
+    expect(tipo.getAttribute('data-value')).toBe('hypothesis');
     expect((screen.getByLabelText('Descrição do problema 1') as HTMLInputElement).value).toBe('Dermatite alérgica');
     expect((screen.getByLabelText('Observação do problema 2') as HTMLInputElement).value).toBe('Confirmado na otoscopia.');
     // Remover tem nome acessível que diz O QUE some (não depende de cor/ícone).
@@ -147,7 +160,7 @@ describe('F1B2 · seção Problemas (lista compacta, identidade estável)', () =
     expect(item.getAttribute('data-problem-id')).toMatch(/^prb-/);
 
     fireEvent.change(screen.getByLabelText('Descrição do problema 1'), { target: { value: 'Otite externa' } });
-    fireEvent.change(screen.getByLabelText('Tipo do problema 1'), { target: { value: 'diagnosis' } });
+    chooseMenuOption(screen.getByLabelText('Tipo do problema 1'), 'Diagnóstico');
     await flushAutosave();
 
     expect(send).toHaveBeenCalledTimes(1);

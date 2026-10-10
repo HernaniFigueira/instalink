@@ -1226,7 +1226,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       </div>
       </div>
       </>) : (
-        <ClientQuickPreview person={person} tags={tags} clinicalView={clinicalView} />
+        <ClientQuickPreview person={person} tags={tags} clinicalView={clinicalView} businessId={businessId} />
       )}
     </ProfileShell>
     </>
@@ -1297,10 +1297,14 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
  * conteúdo do outro": a ordem de leitura é a mesma em qualquer largura.
  * Sem abas e sem carregar atendimentos/financeiro: a ficha completa é página.
  */
-function ClientQuickPreview({ person, tags, clinicalView }: {
+/** Acima disto a prévia corta a mensagem e oferece a leitura completa (CTA). */
+const PREVIEW_TALK_CLAMP_AT = 140;
+
+function ClientQuickPreview({ person, tags, clinicalView, businessId }: {
   person: Person360;
   tags: { id: string; label: string; tone?: string; hint?: string }[];
   clinicalView: boolean;
+  businessId: string;
 }) {
   const profile = profileOf(person.profile);
   const age = person.age ?? ageFromBirthDate(profile.birthDate);
@@ -1364,7 +1368,17 @@ function ClientQuickPreview({ person, tags, clinicalView }: {
       {/* 4 · Última conversa (só quando existe) */}
       {lastTalk && (
         <PreviewBlock title="Última conversa">
-          <p className="text-[14px] text-[var(--text-muted)] line-clamp-3">{lastTalk.preview || 'Sem mensagens.'}</p>
+          {/* Corte DELIBERADO: 3 linhas + reticências, texto completo no title e,
+              quando a mensagem é longa, CTA para ler a conversa inteira. */}
+          <p className="text-[14px] text-[var(--text-muted)] line-clamp-3 break-words" title={lastTalk.preview || undefined}>
+            {lastTalk.preview || 'Sem mensagens.'}
+          </p>
+          {lastTalk.preview && lastTalk.preview.length > PREVIEW_TALK_CLAMP_AT && person.phone && (
+            <Link href={`/conversas?b=${businessId}&q=${encodeURIComponent(person.phone)}`}
+              className={cn(buttonCls('secondary', 'xs'), 'mt-2')}>
+              Ler conversa completa
+            </Link>
+          )}
         </PreviewBlock>
       )}
 
@@ -1393,7 +1407,7 @@ function Data({ label, value, action, mono }: { label: string; value: string; ac
     <div className="min-w-0">
       <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">{label}</dt>
       <dd className={cn('text-sm font-semibold text-[var(--text)] truncate mt-0.5 flex items-center gap-1.5', mono && 'font-mono text-xs')}>
-        <span className="truncate">{value}</span>
+        <span className="truncate" title={value}>{value}</span>
         {action}
       </dd>
     </div>

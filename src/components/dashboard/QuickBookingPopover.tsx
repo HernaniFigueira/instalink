@@ -15,6 +15,7 @@
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api-client';
+import { professionalServesService } from '@/lib/booking';
 import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
@@ -174,6 +175,19 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     };
   }
 
+  // VÍNCULO SERVIÇO ↔ PROFISSIONAL: autoridade é o próprio serviço
+  // (professionalMode/professionalIds), pela mesma regra do fluxo completo
+  // (professionalServesService). Filtra nos dois sentidos; nada é inventado.
+  const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
+  const serviceById = (id: string) => bookable.find((s) => s.id === id);
+  const proOptions = useMemo(() => {
+    const svc = serviceById(serviceId);
+    return svc ? activePros.filter((p) => professionalServesService(svc, p.id, pros)) : activePros;
+  }, [serviceId, activePros, bookable, pros]);
+  const serviceOptions = useMemo(() => (
+    professionalId ? bookable.filter((s) => professionalServesService(s, professionalId, pros)) : bookable
+  ), [professionalId, bookable, pros]);
+
   const noContactFound = !contactId && query.trim().length >= 2 && !searching
     && searchedTerm === query.trim() && results.length === 0;
 
@@ -289,15 +303,27 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
           <Field label="Serviço" required>
             {/* DS · Combobox canônico (lista do DS, não o select nativo do navegador). */}
             <Combobox label="Serviço" value={serviceId} disabled={saving} placeholder="Selecione…"
-              onChange={(v) => { setServiceId(String(v)); setTime(anchor.time); }}
-              options={[{ value: '', label: 'Selecione…' }, ...bookable.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
+              onChange={(v) => {
+                const next = String(v);
+                setServiceId(next); setTime(anchor.time);
+                // Profissional escolhido que não atende o novo serviço: limpa (não deixa inválido).
+                const svc = serviceById(next);
+                if (svc && professionalId && !professionalServesService(svc, professionalId, pros)) setProfessionalId('');
+              }}
+              options={[{ value: '', label: 'Selecione…' }, ...serviceOptions.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
           </Field>
 
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="Profissional">
               <Combobox label="Profissional" value={professionalId} disabled={saving} placeholder="Automático"
-                onChange={(v) => setProfessionalId(String(v))}
-                options={[{ value: '', label: 'Automático' }, ...pros.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name }))]} />
+                onChange={(v) => {
+                  const next = String(v);
+                  setProfessionalId(next);
+                  // Serviço escolhido que este profissional não atende: limpa o serviço.
+                  const svc = serviceById(serviceId);
+                  if (svc && next && !professionalServesService(svc, next, pros)) setServiceId('');
+                }}
+                options={[{ value: '', label: 'Automático' }, ...proOptions.map((p) => ({ value: p.id, label: p.name }))]} />
             </Field>
             {/* Os campos de hora explicam o estado; o horário do gesto continua
                 visível mesmo fora da lista (o servidor decide o encaixe). */}

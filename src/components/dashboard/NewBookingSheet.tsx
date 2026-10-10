@@ -21,7 +21,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip, SelectMenu } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
@@ -591,10 +591,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
             <Field label="Pet (paciente)" required
               hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
-              <Select value={petId} disabled={saving || reviewing} onChange={(e) => setPetId(e.target.value)}>
-                <option value="">Selecione o pet…</option>
-                {pets.map((p) => <option key={p.id} value={p.id}>{p.name}{p.breed ? ` · ${p.breed}` : ''}</option>)}
-              </Select>
+              <SelectMenu value={petId} disabled={saving || reviewing} onChange={(v) => setPetId(v)} placeholder="Selecione o pet…"
+                options={pets.map((p) => ({ value: p.id, label: p.name, hint: p.breed || undefined }))} />
             </Field>
           )}
           {picked && contactId && (isVet || vetMode) && pets.length === 0 && (

@@ -46,9 +46,9 @@ describe('pós-homologação manual — atendimento, anamnese e proteção de tr
       expect(source).toContain('Não informado');
       expect(source).toContain('type === \'boolean\'');
     }
-    expect(filler).toContain('<option value="true">Sim</option>');
-    expect(filler).toContain('<option value="false">Não</option>');
-    expect(filler).toContain('<option value="">Não informado</option>');
+    expect(filler).toContain("{ value: 'true', label: 'Sim' }");
+    expect(filler).toContain("{ value: 'false', label: 'Não' }");
+    expect(filler).toContain("{ value: '', label: 'Não informado' }");
   });
 
   it('Encounter universal não carrega exemplos odontológicos hardcoded', () => {

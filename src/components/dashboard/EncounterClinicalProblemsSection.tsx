@@ -17,7 +17,7 @@
 //   • persistência é a do domínio (PATCH /api/encounters) com a versão vinda da
 //     AUTORIDADE do workspace — uma versão só para o Encounter inteiro.
 import { useMemo, useState } from 'react';
-import { Button, ClinicalRecordSection, Input, ReadOnlyField, Select } from '@/components/ui';
+import { Button, ClinicalRecordSection, Input, ReadOnlyField, SelectMenu } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -151,16 +151,13 @@ export function EncounterClinicalProblemsSection({
             return (
               <li key={item.id} className="encounter-clinical__list-item" data-problem-id={item.id}>
                 <div className="encounter-clinical__row">
-                  <Select
+                  <SelectMenu
                     aria-label={`Tipo do problema ${index + 1}`}
                     value={item.kind}
                     disabled={disabled}
-                    onChange={(e) => setItem(item.id, { kind: e.target.value as ClinicalProblemKind })}
-                  >
-                    {KIND_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </Select>
+                    onChange={(v) => setItem(item.id, { kind: v as ClinicalProblemKind })}
+                    options={KIND_OPTIONS}
+                  />
                   <Input
                     aria-label={`Descrição do problema ${index + 1}`}
                     value={item.label}

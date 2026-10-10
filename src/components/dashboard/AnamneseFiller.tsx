@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
-import { Button, Input, Textarea, Select, Field, Notice, ListSkeleton } from '@/components/ui';
+import { Button, Input, Textarea, Field, Notice, ListSkeleton, SelectMenu } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import type { AnamneseField, AnamneseResponse, AnamneseTemplate, Pet } from '@/lib/types';
 import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
@@ -106,18 +106,13 @@ export function AnamneseFiller({
       <Field key={f.id} label={f.label} required={f.required} error={err} htmlFor={`an_${f.id}`}>
         {f.type === 'textarea' && <Textarea {...common} rows={3} value={String(answers[f.id] ?? '')} onChange={(e) => setAns(f, e.target.value)} />}
         {f.type === 'boolean' && (
-          <Select {...common} value={answers[f.id] === true ? 'true' : answers[f.id] === false ? 'false' : ''}
-            onChange={(e) => setAns(f, e.target.value === '' ? null : e.target.value === 'true')}>
-            <option value="">Não informado</option>
-            <option value="true">Sim</option>
-            <option value="false">Não</option>
-          </Select>
+          <SelectMenu {...common} value={answers[f.id] === true ? 'true' : answers[f.id] === false ? 'false' : ''}
+            onChange={(v) => setAns(f, v === '' ? null : v === 'true')}
+            options={[{ value: '', label: 'Não informado' }, { value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]} />
         )}
         {f.type === 'select' && (
-          <Select {...common} value={String(answers[f.id] ?? '')} onChange={(e) => setAns(f, e.target.value)}>
-            <option value="">Selecione…</option>
-            {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
-          </Select>
+          <SelectMenu {...common} value={String(answers[f.id] ?? '')} onChange={(v) => setAns(f, v)} placeholder="Selecione…"
+            options={[{ value: '', label: 'Selecione…' }, ...(f.options || []).map((o) => ({ value: o, label: o }))]} />
         )}
         {f.type === 'multiselect' && (
           <div className="flex flex-wrap gap-2">
