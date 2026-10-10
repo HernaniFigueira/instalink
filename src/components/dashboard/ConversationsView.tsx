@@ -3,13 +3,12 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, PageSkeleton } from '@/components/ui';
+import { Avatar, DetailSideModal, PageSkeleton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { formatDateTimeBR } from '@/lib/tz';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { QuickRegisterSheet, type SavedContact } from '@/components/dashboard/QuickRegisterSheet';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { loadMe } from '@/lib/session-me';
 import { INSTAGRAM_TEXT_MAX_BYTES, instagramTextBytes, instagramTextFits, instagramTextLimitError } from '@/lib/instagram';
 import type { WaChannelData } from '@/components/dashboard/WhatsappChannelPanel';
@@ -680,11 +679,14 @@ export function ConversationsView({ unitId, panel = false }: { unitId?: string; 
         </aside>
       </div>
 
-      <WorkspaceSheet open={contextSheetOpen && compactLayout && !!active && !panel} onClose={() => setContextSheetOpen(false)}
+      {/* P0 · RODADA 2 — no layout compacto o contexto é PRÉVIA lateral: mesmo
+          side modal do detalhe (preso à direita, altura cheia), nunca uma
+          gaveta flutuante. O conteúdo já recua (`p-4`). */}
+      <DetailSideModal open={contextSheetOpen && compactLayout && !!active && !panel} onClose={() => setContextSheetOpen(false)}
         title={vetClinic ? 'Tutor e paciente' : 'Contexto do cliente'} subtitle="Informações administrativas da conversa" icon="inbox"
-        width="max-w-sm">
+        width="384px" flush>
         <div id="conversation-context-sheet" className="p-4">{contextContent}</div>
-      </WorkspaceSheet>
+      </DetailSideModal>
 
       <QuickRegisterSheet open={quickOpen} onClose={() => setQuickOpen(false)} businessId={businessId} vet={vetClinic} source="conversa"
         initial={active ? { name: active.conversation.name || '', phone: active.conversation.phone || '', email: '' } : undefined}

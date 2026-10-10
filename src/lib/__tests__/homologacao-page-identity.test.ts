@@ -60,24 +60,32 @@ describe('P1 · Página — Modelo/Seções/Aparência/Prévia', () => {
 });
 
 describe('P1 · Identidade e marca estável', () => {
-  it('GODOUTOR 2.0 — cabeçalho da sidebar = CLÍNICA; GoDoutor discreto no rodapé', () => {
+  it('MISSÃO UX CLOSURE · GODOUTOR 2.0 — a identidade da CLÍNICA vive na TOPBAR (logo + nome completo)', () => {
+    const top = read('src/components/dashboard/WorkspaceTopbar.tsx');
+    // Item 2 da missão: logo + nome COMPLETO da clínica no bloco esquerdo da
+    // topbar full-width (ex.: `[logo] Andrioni Veterinaria`), nunca truncado no
+    // rail. A troca de unidade continua sendo troca REAL de contexto.
+    expect(top).toContain('ClinicIdentity');
+    expect(top).toContain('ClinicIdentity');
+    expect(top).toContain('unit.logo');
+    expect(top).toContain('ws-clinic__name');
+    expect(top).toContain('ws-clinic__mark');
+    expect(top).toMatch(/units\.length\s*>\s*1|units\.length > 1/);
+    // A marca do PRODUTO continua existindo (nada de white-label) — mas não
+    // como identidade de navegação.
     const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
-    // §C (clinic-first / co-branded): o nome e o logo da clínica dominam a
-    // interface do tenant. A marca do PRODUTO continua presente — nunca vira
-    // white-label — mas discreta, no rodapé da navegação.
-    expect(nav).toContain('workspace-clinic-head');
-    expect(nav).toContain('unit.logo');
-    expect(nav).toContain('powered by <strong>GoDoutor</strong>');
-    // E nenhum resquício do nome antigo da plataforma.
-    expect(nav).not.toMatch(/Insta<span>Link<\/span>/);
     expect(nav).not.toContain('InstaLink');
   });
 
-  it('a identidade da clínica NÃO é duplicada na topbar (uma vez só, na sidebar)', () => {
-    const top = read('src/components/dashboard/WorkspaceTopbar.tsx');
-    // Regra 2.0: a topbar carrega busca, ações e a conta — a unidade vive na
-    // sidebar (e a troca de unidade no menu da conta).
-    expect(top).not.toContain('unit.logo');
+  it('a identidade NÃO é duplicada: a sidebar não repete nome nem logo da clínica', () => {
+    const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
+    expect(nav).not.toContain('workspace-clinic-head');
+    expect(nav).not.toContain('unit.logo');
+    expect(nav).not.toContain('clinicType');
+    expect(nav).not.toContain('unit.name');
+    const css = read('src/app/globals.css');
+    expect(css).not.toContain('.workspace-clinic-head__logo');
+    expect(css).not.toContain('.workspace-clinic-head__name');
     const menu = read('src/components/dashboard/AccountMenu.tsx');
     expect(menu).toContain('Clínica atual');
     expect(menu).toMatch(/units\.map/);
@@ -91,8 +99,10 @@ describe('P1 · Identidade e marca estável', () => {
   });
 
   it('não há white label total (marca do produto permanece)', () => {
+    // O rodapé do RAIL não repete identidade; a assinatura do produto continua
+    // no rodapé do DRAWER móvel (uma vez, discreta, onde havia cabeçalho).
     const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
-    expect(nav).toContain('GoDoutor');
+    expect(nav).toContain('powered by <strong>GoDoutor</strong>');
   });
 });
 
@@ -100,22 +110,29 @@ describe('P1 · sidebar contínua + colapso', () => {
   const nav = read('src/components/dashboard/WorkspaceNavigation.tsx');
   const css = read('src/app/globals.css');
 
-  it('botão colapsar = item de rodapé icônico, sem texto «<<»', () => {
-    // 2.0: o controle de recolher vive no RODAPÉ da navegação, como os demais
-    // itens utilitários (Ajuda) — quadrado, rotulado e acessível por teclado.
+  it('P0 · rodada 2 — o controle de expandir/recolher voltou ao rodapé, sem « e sem estado no shell', () => {
+    // O rail continua sendo o PADRÃO; o que voltou foi a decisão de LARGURA do
+    // usuário, num controle único no rodapé (nunca flutuando sobre o conteúdo,
+    // nunca um « decorativo) com a preferência persistida.
     expect(nav).toContain('workspace-foot__item--collapse');
-    // (missão sidebar final: o rodapé recebe `mini` — no drawer móvel o modo
-    // é sempre o expandido — mas o rótulo dinâmico continua o mesmo contrato)
-    expect(nav).toMatch(/aria-label=\{(collapsed|mini) \? 'Expandir navegação' : 'Recolher navegação'\}/);
+    expect(nav).toMatch(/Expandir navegação/);
+    expect(nav).toMatch(/Recolher navegação/);
     expect(nav).not.toContain('«');
+    // A classe de estado é `is-expanded` (o rail é o padrão: nenhum
+    // `is-collapsed` — o estado padrão não precisa de classe).
+    expect(nav).not.toMatch(/is-collapsed/);
     expect(css).toContain('.workspace-foot__item--collapse');
+    expect(css).toContain('.workspace-sidebar.is-expanded');
+    expect(css).not.toMatch(/\.is-collapsed/);
+    const shell = read('src/components/DashboardShell.tsx');
+    expect(shell).not.toMatch(/localStorage\.\w+\(\s*'(godoutor|il)-side/);
   });
 
-  it('o cabeçalho da clínica é superfície contínua (sem régua horizontal)', () => {
-    // A régua do cabeçalho saiu: uma linha a mais entre a marca e o menu
-    // criava um degrau visual sem função. O que separa é o espaçamento.
-    const head = css.slice(css.indexOf('.workspace-clinic-head {'));
-    expect(head.slice(0, 400)).not.toMatch(/border-bottom:\s*1px/);
+  it('o rail não repete cabeçalho de clínica: o topo é a própria lista de destinos', () => {
+    // Sem `.workspace-clinic-head` não existe régua de cabeçalho para revisar:
+    // a identidade está na topbar e o rail começa direto no menu.
+    expect(css).not.toContain('.workspace-clinic-head {');
+    expect(nav).not.toContain('workspace-clinic-head');
   });
 });
 

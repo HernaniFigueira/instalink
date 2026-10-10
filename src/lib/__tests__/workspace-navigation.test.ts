@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { PANEL_ROUTES, panelNavigation } from '../panel';
-import { workspaceAreas, switchUnitHref, routeBreadcrumb, workspaceSections } from '../workspace-navigation';
+import {
+  workspaceAreas, switchUnitHref, routeBreadcrumb, workspaceSections,
+  workspaceRailItems, workspacePanelItems, OFF_MENU_ROUTES, CONTEXTUAL_ONLY_ROUTES,
+} from '../workspace-navigation';
 
 describe('360 navigation is an authorized projection', () => {
   it('keeps every destination exactly once, including contextual/legacy routes', () => {
@@ -33,13 +36,58 @@ describe('360 navigation is an authorized projection', () => {
       expect(projected.map(r => r.href).sort()).toEqual(nav.allowed.map(r => r.href).sort());
     });
   }
-  it('keeps /atendimento authorized and directly reachable, but out of navigation', () => {
+  it('A2 · /atendimento continua autorizado e contextual, mas não ocupa navegação persistente', () => {
+    // A rota clínica continua declarada e com área dona (breadcrumb/filhas),
+    // porém só deve abrir a partir da entidade que a contextualiza: Agenda,
+    // Fila ou Cliente 360. Não é uma porta fixa de menu.
     const nav = panelNavigation({ permissions: { atendimento: true }, modes: ['services', 'bookings'], features: {} });
     expect(nav.allowed.some((r) => r.href === '/atendimento')).toBe(true);
     expect(nav.sidebar.some((r) => r.href === '/atendimento')).toBe(false);
     expect(nav.more.some((r) => r.href === '/atendimento')).toBe(true);
-    expect(workspaceAreas(nav.allowed, { multiUnit: true }).flatMap((a) => a.items).some((r) => r.href === '/atendimento')).toBe(true);
-    expect(routeBreadcrumb('/atendimento', workspaceAreas(nav.allowed, { multiUnit: true })).group).toBeUndefined();
+    const areas = workspaceAreas(nav.allowed, { multiUnit: true });
+    const clinica = areas.find((a) => a.id === 'clinica')!;
+    expect(clinica.items.some((r) => r.href === '/atendimento')).toBe(true);
+    expect(workspaceRailItems(clinica).map((r) => r.href)).not.toContain('/atendimento');
+    expect(workspacePanelItems(clinica).map((r) => r.href)).not.toContain('/atendimento');
+    // A flag legada também não pode reintroduzir essa porta persistente.
+    expect(workspacePanelItems(clinica, { legacyPages: true }).map((r) => r.href)).not.toContain('/atendimento');
+    expect(CONTEXTUAL_ONLY_ROUTES).toContain('/atendimento');
+    expect(areas.some((a) => a.id === 'mais')).toBe(false);
+  });
+
+  it('PARTIÇÃO TOTAL também no painel: nenhuma área inventa destino, nenhuma rota some', () => {
+    const permissions = {
+      dashboard: true, agenda: true, clientes: true, leads: true, catalogo: true,
+      pagina: true, equipe: true, financeiro: true, config: true, agente: true,
+      campanhas: true, whatsapp: true, pedidos: true, atendimento: true,
+    };
+    const nav = panelNavigation({ permissions, modes: ['services', 'bookings'], features: {} });
+    const areas = workspaceAreas(nav.allowed, { multiUnit: true });
+    const panel = areas.flatMap((a) => workspacePanelItems(a).map((r) => r.href));
+    const rail = areas.flatMap((a) => workspaceRailItems(a).map((r) => r.href));
+    // Painel = catálogo autorizado inteiro MENOS a Página legada (flag), MENOS
+    // os alias de compatibilidade E MENOS os destinos que por decisão de produto
+    // não ocupam MENU com a experiência padrão (P0 · rodada 2: comércio
+    // legado/diagnóstico — a rota segue autorizada e viva por URL, e continua
+    // alcançável DENTRO da tela que a explica).
+    expect(panel.sort()).toEqual(
+      nav.allowed
+        .filter((r) => r.href !== '/pagina' && r.href !== '/profissionais' && !OFF_MENU_ROUTES.includes(r.href) && !CONTEXTUAL_ONLY_ROUTES.includes(r.href))
+        .map((r) => r.href)
+        .sort(),
+    );
+    // Contrato da supressão: os destinos suprimidos são EXATAMENTE os
+    // declarados — nada de supressão implícita decidida na tela.
+    for (const href of [...OFF_MENU_ROUTES, ...CONTEXTUAL_ONLY_ROUTES]) {
+      if (!nav.allowed.some((r) => r.href === href)) continue;
+      expect(panel, href).not.toContain(href);
+      expect(rail, href).not.toContain(href);
+    }
+    expect(new Set(panel).size).toBe(panel.length);
+    expect(new Set(rail).size).toBe(rail.length);
+    for (const href of rail) expect(panel, href).toContain(href);
+    expect(rail).not.toContain('/atendimento'); // contextual: não é porta persistente
+    expect(rail).not.toContain('/execucoes');
   });
 
   it('preserves presentation filters, strips entity IDs/searches on unit change', () => {
@@ -87,7 +135,7 @@ describe('360 navigation is an authorized projection', () => {
     // Member continuam separados) e sem perder nenhum destino.
     const clinica = areas.find((a) => a.id === 'clinica')!;
     expect(clinica.items.map((i) => i.href).sort()).toEqual(
-      ['/disponibilidade', '/equipe', '/estrutura', '/produtos', '/profissionais', '/servicos', '/pedidos'].sort(),
+      ['/atendimento', '/disponibilidade', '/equipe', '/estrutura', '/produtos', '/profissionais', '/servicos', '/pedidos'].sort(),
     );
   });
 

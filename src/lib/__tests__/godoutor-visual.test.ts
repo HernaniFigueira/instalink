@@ -83,12 +83,17 @@ describe('2 · DS 1.0 §13 — sidebar BRANCA com item ativo em acento suave', (
     expect(contrastHex(color('--il-nav-active-fg'), active)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('o ícone ativo não repete um chip preenchido (estado comunicado pelo item)', () => {
+  it('o ícone do item ATIVO fica centrado, sem um segundo poço de seleção', () => {
     const icon = ruleOf('.workspace-link__icon {');
     expect(icon).toContain('border-radius: var(--radius-xs)');
+    expect(icon).toContain('align-items: center');
+    expect(icon).toContain('justify-content: center');
+    // A linha já carrega a superfície ativa; o ícone preserva só a cor para
+    // não criar dois planos preenchidos no rail.
     const active = ruleOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
-    expect(active).toContain('background: transparent');
     expect(active).toContain('color: var(--il-nav-active-fg)');
+    expect(active).toContain('background: transparent');
+    expect(active).not.toContain('color-mix');
   });
 
   it('estado continua sendo aria-current (nunca só cor)', () => {
@@ -212,8 +217,12 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     // esconde a grade.
     expect(agenda).toContain('onClick={() => setFocus(today)}');
     expect(agenda).toContain("'Você já está em hoje'");
-    // Só existe UM "Hoje" e ele vive na toolbar (não em card/métrica):
-    expect(agenda.match(/>\s*Hoje\s*</g)?.length).toBe(1);
+    // O rótulo "Hoje" existe na TOOLBAR (ação) e, desde a missão UX Closure,
+    // também como ETIQUETA da coluna do dia atual (`ag-col-today`) — a data de
+    // hoje não depende só de cor para ser reconhecida. Nenhum deles é
+    // card/métrica, e não há uma segunda AÇÃO "Hoje".
+    expect(agenda.match(/>\s*Hoje\s*</g)?.length).toBe(2);
+    expect(agenda).toContain('ag-col-today');
     // A dependência do seletor nativo de data acabou: nenhum `<input
     // type="date">` no código (comentários que o citam não contam).
     const agendaCode = agenda.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');

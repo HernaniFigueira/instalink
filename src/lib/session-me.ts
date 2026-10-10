@@ -40,6 +40,9 @@ export interface SessionBusiness {
   slug?: string;
   logo?: string;
   role?: string;
+  /** Vínculo clínico da pessoa nesta unidade (projeção, não autorização). */
+  professionalId?: string;
+  professionalName?: string;
   clinicType?: string;
   permissions?: Record<string, boolean>;
 }

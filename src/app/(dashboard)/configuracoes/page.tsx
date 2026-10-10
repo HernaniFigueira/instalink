@@ -93,7 +93,8 @@ function BookingRules({ businessId, initial, onSaved }: {
     onSaved();
   }
 
-  const num = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm mt-1';
+  // DS 1.0 · §6 — métrica do controle vem do canônico, não de um `py-2` de página.
+  const num = 'il-field-control mt-1';
   return (
     <section className="bg-white border border-zinc-200 p-5 space-y-3">
       <div>
@@ -139,7 +140,7 @@ function BookingRules({ businessId, initial, onSaved }: {
             <span className="flex gap-2"><button type="button" className={buttonCls('secondary', 'sm')} onClick={() => { setEditingResource(r); setResourceName(r.name); setResourceKind(r.kind); }}>Editar</button>
               <button type="button" className={buttonCls('secondary', 'sm')} disabled={resourceBusy} onClick={() => void saveResource({ action: 'resource.save', id: r.id, name: r.name, kind: r.kind, active: !r.active })}>{r.active ? 'Desativar' : 'Ativar'}</button></span>
           </div>)}
-          <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala cirúrgica 1 ou Ultrassom 01" className="border rounded-md px-2 py-2 text-sm flex-1 min-w-36" />
+          <div className="flex flex-wrap gap-2"><input aria-label="Nome do recurso" value={resourceName} onChange={e => setResourceName(e.target.value)} placeholder="Sala cirúrgica 1 ou Ultrassom 01" className="il-field-control flex-1 min-w-36" />
             {/* DS 1.0 · §6 — controle canônico (o `<select>` cru era exceção). */}
             <Select aria-label="Tipo do recurso" value={resourceKind} onChange={e => setResourceKind(e.target.value as 'room' | 'equipment')} className="w-auto">
               <option value="room">Sala</option>
@@ -252,14 +253,13 @@ export default function ConfigPage() {
   if (!biz) return <PageSkeleton />;
   const set = (k: keyof Business, v: any) => setBiz({ ...biz, [k]: v } as Business);
   const setAny = (k: string, v: any) => setBiz({ ...biz, [k]: v } as any);
-  const input = 'w-full rounded-md border border-[var(--border-strong)] px-3 py-2 text-sm shadow-xs focus:outline-none focus:shadow-focus focus:border-[var(--brand)]';
+  const input = 'il-field-control';
 
   return (
     <>
       <PageHeader
         icon="settings"
         title="Configurações"
-        hint="Cadastro institucional e operacional da clínica."
       />
       {msg && <p role="status" className="mb-3 text-sm font-semibold bg-[var(--success-bg)] border border-[var(--success-border)] text-[var(--success-fg)] rounded-md px-3 py-2">{msg}</p>}
       {/* Diagnóstico 'Como está a inteligência' movido para Canais — ver /canais */}

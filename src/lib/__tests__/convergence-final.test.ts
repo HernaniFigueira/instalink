@@ -308,9 +308,14 @@ describe('D · identificadores: namespace godoutor com migração dual-read', ()
     };
     walk(path.join(root, 'src'));
     expect(offenders).toEqual([]);
-    // preferência da sidebar e carrinho: chave canônica declarada no mesmo arquivo
-    expect(read('src/components/DashboardShell.tsx')).toContain("'godoutor-side-v2'");
+    // O carrinho segue com chave canônica declarada no mesmo arquivo.
     expect(read('src/components/public/widgets.tsx')).toContain('`godoutor-cart-');
+    // MISSÃO UX CLOSURE · item 1: a largura da navegação deixou de ser
+    // preferência — o rail é fixo e o shell NÃO persiste chave de sidebar
+    // (nem a nova, nem a antiga). A única largura vem do token `--gd-rail-w`.
+    const shellSrc = read('src/components/DashboardShell.tsx');
+    expect(shellSrc).not.toMatch(/localStorage\.\w+Item\(\s*[`'"](godoutor|il)-side/);
+    expect(shellSrc).not.toContain("'--sidebar-w'");
   });
 
   it('compat congelada permanece declarada (cookies/protocolo não renomeados à toa)', () => {

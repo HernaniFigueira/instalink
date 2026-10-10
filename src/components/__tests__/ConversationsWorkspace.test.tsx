@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { loadMe } from '@/lib/session-me';
@@ -18,9 +18,14 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...props }: any) => <a
 vi.mock('@/lib/api-client', () => ({ apiGet: vi.fn(), apiSend: vi.fn() }));
 vi.mock('@/lib/session-me', () => ({ loadMe: vi.fn() }));
 vi.mock('@/components/dashboard/QuickRegisterSheet', () => ({ QuickRegisterSheet: () => null }));
-vi.mock('@/components/dashboard/WorkspaceSheet', () => ({
-  WorkspaceSheet: ({ open, title, children }: any) => open ? <div role="dialog" aria-label={title}>{children}</div> : null,
-}));
+// P0 · rodada 2 — o contexto lateral compacto deixou de ser `WorkspaceSheet` e
+// passou a ser o `DetailSideModal` (side modal preso à direita). O jsdom não
+// implementa o <dialog> nativo, então o mock abaixo é o do ambiente — o mesmo
+// usado nos outros testes de overlay do projeto.
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+});
 
 const rows = [
   { id: 'alpha', name: 'Beatriz Lima', phone: '5521999001000', status: 'open', mode: 'automation', agentState: 'ai_active', unread: 2, lastMessageAt: '2026-09-28T15:00:00.000Z', lastMessagePreview: 'Oi, preciso de ajuda', registered: true, channel: 'whatsapp', failedMessages: 0 },

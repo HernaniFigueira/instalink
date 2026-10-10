@@ -5,13 +5,13 @@
 // Rota do USUÁRIO (login), não da unidade. "Também atende" cria/vincula
 // Professional a este User sem unir as entidades.
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Badge, Button, buttonCls, Field, FormSection, Input, Notice, PageHeader, PageSkeleton, Textarea } from '@/components/ui';
 import { ImageUpload } from '@/components/dashboard/ImageUpload';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { Icon } from '@/components/icons';
 import { roleLabel as accessRoleLabel } from '@/lib/role-labels';
+import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 
 interface MeProfile {
   id: string; name: string; email: string; role: string;
@@ -20,15 +20,28 @@ interface MeProfile {
 }
 
 export default function MeuPerfilPage() {
-  const params = useSearchParams();
-  const businessId = params.get('b') || '';
-  const [me, setMe] = useState<MeProfile | null>(null);
+  // A unidade/papel abaixo vêm da mesma projeção que o shell recebe do
+  // servidor. O parâmetro da URL sozinho nunca decide o que este perfil diz.
+  const {
+    businessId,
+    role: unitRole,
+    professionalId,
+    professionalName,
+    ready: accessReady,
+  } = usePanelPermissions();
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [linking, setLinking] = useState(false);
+  // Apenas o resultado recém-criado localmente. O vínculo já existente vem
+  // do contexto autorizado da unidade ativa, não de estado persistido nesta
+  // tela nem do papel global da conta.
   const [linkedPro, setLinkedPro] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    setLinkedPro(null);
+  }, [businessId]);
 
   // Form local (edita e salva em um passo)
   const [form, setForm] = useState({ name: '', email: '', phone: '', photo: '', title: '', conselho: '', professionalBio: '' });
@@ -39,7 +52,6 @@ export default function MeuPerfilPage() {
       .then((res) => {
         const u = res.data?.user;
         if (u) {
-          setMe(u);
           setForm({
             name: u.name, email: u.email, phone: u.phone || '', photo: u.photo || '',
             title: u.title || '', conselho: u.conselho || '', professionalBio: u.professionalBio || '',
@@ -58,7 +70,6 @@ export default function MeuPerfilPage() {
         '/api/account', 'PATCH', form, { scope: 'area', area: 'Perfil' },
       );
       if (res.ok && res.data?.user) {
-        setMe(res.data.user);
         setMsg('Perfil salvo.');
       } else {
         setErr(res.data?.error || res.message || 'Não foi possível salvar.');
@@ -71,7 +82,10 @@ export default function MeuPerfilPage() {
   }
 
   async function linkAsProfessional() {
-    if (!businessId) { setErr('Abra esta tela a partir de uma unidade (parâmetro ?b=).'); return; }
+    if (!businessId) {
+      setErr('Escolha uma unidade ativa para criar um vínculo clínico.');
+      return;
+    }
     setLinking(true); setErr(''); setMsg('');
     try {
       const res = await apiSend('/api/account', 'POST', {
@@ -80,6 +94,9 @@ export default function MeuPerfilPage() {
       }, { scope: 'action', area: 'Profissionais' });
       if (res.data?.professional) {
         setLinkedPro(res.data.professional);
+        // Atualiza a projeção visual do shell; não muda papel, permissões ou
+        // escopo no cliente — o servidor continua sendo a autoridade.
+        window.dispatchEvent(new Event('godoutor:business-refresh'));
         setMsg(res.data.alreadyLinked
           ? `Você já é ${res.data.professional.name} nesta unidade.`
           : `Criado e vinculado: ${res.data.professional.name}. Edite o nome/cargo em Profissionais.`);
@@ -93,7 +110,15 @@ export default function MeuPerfilPage() {
 
   if (!loaded) return <PageSkeleton />;
 
-  const officialRole = accessRoleLabel(me?.role);
+  const officialRole = accessRoleLabel(unitRole);
+  const activeLinkedProfessional = linkedPro || (professionalId
+    ? { id: professionalId, name: professionalName || 'Profissional vinculado' }
+    : null);
+  const unitContextLabel = !accessReady
+    ? 'Carregando unidade…'
+    : businessId
+      ? officialRole || 'Equipe'
+      : 'Escolha uma unidade';
 
   return (
     <div className="space-y-4 pb-10">
@@ -124,12 +149,16 @@ export default function MeuPerfilPage() {
             <Field label="Telefone / WhatsApp" htmlFor="pf-phone">
               <Input id="pf-phone" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(21) 99999-0000" />
             </Field>
-            <div className="space-y-1.5">
-              <span className="block text-xs font-semibold text-[var(--text-muted)]">Papel de acesso</span>
-              <Badge tone="blue" title="Papel de acesso à unidade — não é o cargo profissional">
-                {officialRole || 'Equipe'}
+            <div className="space-y-1.5" data-profile-unit-access>
+              <span className="block text-xs font-semibold text-[var(--text-muted)]">Papel de acesso nesta unidade</span>
+              <Badge tone="blue" title="Papel de acesso da unidade ativa — não é o cargo profissional">
+                {unitContextLabel}
               </Badge>
-              <p className="text-xs text-[var(--text-muted)]">Define o que esta conta pode acessar; não é um cargo clínico.</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {businessId
+                  ? 'Define o que esta conta pode acessar nesta unidade; não é um cargo clínico.'
+                  : 'Selecione uma unidade no painel para ver o papel de acesso aplicável.'}
+              </p>
             </div>
           </div>
         </FormSection>
@@ -147,22 +176,46 @@ export default function MeuPerfilPage() {
             <Textarea id="pf-bio" rows={3} value={form.professionalBio} onChange={(e) => set('professionalBio', e.target.value)} />
           </Field>
 
-          <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <h3 className="text-sm font-semibold">Também realiza atendimentos</h3>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Vincule seu perfil à equipe clínica para aparecer na agenda. Você poderá ter serviços vinculados e horário de atendimento configurado em Disponibilidade.
-            </p>
-            {linkedPro && (
-              <p className="text-xs mt-2 text-[var(--success-fg)]">
-                Vinculado: <strong>{linkedPro.name}</strong> ·{' '}
-                <Link href={`/equipe?b=${businessId}`} className="underline">gerenciar na Equipe</Link>
-              </p>
+          <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4" data-profile-clinical-link>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">Também realiza atendimentos</h3>
+              <span className="text-xs text-[var(--text-muted)]">· vínculo clínico nesta unidade</span>
+            </div>
+            {activeLinkedProfessional ? (
+              <>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge tone="green">Vinculado à equipe clínica</Badge>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Profissional: <strong className="text-[var(--text)]">{activeLinkedProfessional.name}</strong>
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-2 leading-relaxed">
+                  Você aparece na agenda desta unidade. Esse vínculo não altera seu papel de acesso nem suas permissões.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="mt-2"><Badge tone="zinc">Sem vínculo clínico nesta unidade</Badge></div>
+                <p className="text-xs text-[var(--text-muted)] mt-2 leading-relaxed">
+                  Vincule seu perfil à equipe clínica para aparecer na agenda. O papel de acesso{officialRole ? ` de ${officialRole}` : ''} não cria esse vínculo automaticamente.
+                </p>
+              </>
             )}
             <div className="mt-3">
-              <Button type="button" variant="secondary" disabled={linking || !businessId} onClick={linkAsProfessional}>
-                {linking ? 'Vinculando…' : linkedPro ? 'Gerenciar na Equipe' : 'Vincular à equipe clínica'}
-              </Button>
-              {!businessId && <p className="text-[11px] text-[var(--text-muted)] mt-1.5">Abra o perfil a partir de uma unidade para vincular.</p>}
+              {activeLinkedProfessional && businessId ? (
+                <Link href={`/equipe?b=${encodeURIComponent(businessId)}`} className={buttonCls('secondary')}>
+                  Gerenciar na Equipe
+                </Link>
+              ) : (
+                <Button type="button" variant="secondary" disabled={linking || !businessId || !accessReady} onClick={linkAsProfessional}>
+                  {linking ? 'Vinculando…' : 'Vincular à equipe clínica'}
+                </Button>
+              )}
+              {!businessId && (
+                <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
+                  {accessReady ? 'Escolha uma unidade no painel para vincular.' : 'Carregando a unidade ativa…'}
+                </p>
+              )}
             </div>
           </div>
         </FormSection>

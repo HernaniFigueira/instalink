@@ -1,35 +1,39 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// SIDEBAR DO APP SHELL — GoDoutor final (disciplina visual Meta-like)
+// SIDEBAR DO APP SHELL — missão UX Closure · item 1
 // ═══════════════════════════════════════════════════════════════
-// Objetivo: POUCAS PORTAS. A arquitetura vem de
-// lib/workspace-navigation.ts (apresentação) sobre o catálogo lib/panel.ts
-// (rotas + permissões + módulos). Nenhuma rota é apagada aqui: item com
-// `sidebar: false` continua existindo por URL e por atalho contextual.
+// COMPORTAMENTO (o que o usuário vê e sente):
 //
-//   Visão geral · Agenda · Conversas · Pendências · Clientes     (links)
-//   Clínica ▾ (grupo) · Página                                    (porta)
-//   Automação ▾ · Gestão ▾ · Configurações ▾                      (grupos)
+//   ┌──────────────────────── TOPBAR full-width ────────────────────────┐
+//   │ [logo] Andrioni Veterinaria        busca        +  sino  ajuda  eu │
+//   ├────┬──────────────────────────────────────────────────────────────┤
+//   │ ▪  │                        CONTEÚDO                              │
+//   │ ▪◄─┼─┐ painel do grupo COLADO no rail (sai de trás dele)          │
+//   │ ▪  │ │  Serviços · Disponibilidade · Equipe…                      │
+//   └────┴─┴──────────────────────────────────────────────────────────────┘
 //
-// MISSÃO SIDEBAR FINAL (Meta-like):
-//   • SEM títulos de seção (nada de OPERAÇÃO/CLÍNICA/ADMINISTRAÇÃO) — a
-//     hierarquia vem do alinhamento, do recuo e do espaçamento entre blocos;
-//   • SEM acordeão (DS 1.0 §18): grupo NÃO empurra os filhos dentro da
-//     coluna. Hover/focus/clique de grupo abre o PANEL LATERAL (§15) — um só
-//     mecanismo para rail recolhido E sidebar expandida;
-//   • item ativo/grupo aberto = fundo azul MUITO claro + texto azul (nunca
-//     botão azul sólido, nunca texto branco);
-//   • recolhida (~68px): SÓ ícones centralizados com tooltip (renderizado no
-//     nível do <aside>, fora do container rolável — é isso que elimina a
-//     scrollbar horizontal que os ::after do .il-tip causavam), sem nome de
-//     clínica, sem submenu inline; clicar num grupo EXPANDE e abre o grupo;
-//   • submenu abre PARA BAIXO na própria coluna, com recuo limpo (a linha-guia
-//     saiu — hierarquia percebida pelo recuo).
+//  • a topbar continua full-width e ACIMA de tudo; ela carrega a identidade
+//    (logo + nome completo). A sidebar NÃO repete nome nem logo;
+//  • a sidebar é um RAIL BRANCO ESTREITO (~60px) — sem botão flutuante de
+//    expandir/recolher, sem estado persistido de largura: não existe "modo
+//    expandido" no desktop, então nada empurra o conteúdo;
+//  • links diretos continuam diretos (Visão geral, Agenda, Conversas,
+//    Pendências, Clientes… conforme autorização real);
+//  • grupos (Clínica, Automação, Gestão, Configurações) abrem uma EXTENSÃO
+//    fisicamente ligada ao rail: mesma superfície branca, UMA divisória
+//    vertical fina, sem gap morto, sem sombra pesada, sem cara de modal;
+//  • abrir/recolher em ~180ms; mover o cursor do ícone para a área branca
+//    MANTÉM aberto; fecha só quando o ponteiro sai de rail + painel, com
+//    pequeno atraso (mata o flicker); passar direto de Clínica → Automação →
+//    Gestão troca o conteúdo sem fechar/reabrir;
+//  • teclado equivalente ao hover: foco abre, ↑/↓ andam nos destinos, ← ou
+//    Escape volta para o grupo e fecha.
 //
-// IDENTIDADE (co-branding): dentro da operação a identidade principal é a da
-// CLÍNICA — logo, nome e tipo. GoDoutor é a plataforma e aparece discretamente
-// ("Powered by") e na central de ajuda. Nada de duas marcas disputando o mesmo
-// espaço: uma identidade principal por região.
+// A arquitetura de informação vem de lib/workspace-navigation.ts
+// (apresentação) sobre o catálogo lib/panel.ts (rotas + permissões + módulos).
+// Nenhuma rota é criada nem apagada aqui: item com `sidebar: false` continua
+// existindo por URL; registros declarados como contextuais abrem apenas pela
+// entidade que lhes dá sentido, não por um painel persistente.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
@@ -39,26 +43,26 @@ import { Drawer } from '@/components/ui';
 import { useRevalidateOnFocus } from './use-revalidate';
 import { loadOverview, navAllowsOverview } from '@/lib/overview';
 import { apiGet } from '@/lib/api-client';
-import { clinicTypeLabel } from '@/lib/clinic-presets';
 import { isLegacyPagesEnabled } from '@/lib/product';
 import type { panelNavigation } from '@/lib/panel';
 import {
-  areaOfRoute, workspaceAreas, workspaceSections, type WorkspaceArea,
+  areaOfRoute, workspaceAreas, workspacePanelItems, workspaceRailItems, workspaceSections,
+  type WorkspaceArea,
 } from '@/lib/workspace-navigation';
 
 type Unit = {
   id: string; name: string; logo?: string; slug: string; role?: string;
-  organizationId?: string; clinicType?: import('@/lib/types').ClinicType;
+  organizationId?: string;
 };
 type Nav = ReturnType<typeof panelNavigation>;
 type NavItem = Nav['allowed'][number];
 
-function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '·';
-}
+/** Preferência de largura da navegação no desktop (`'full'` | `'mini'`). */
+const NAV_WIDTH_KEY = 'godoutor-side-v2';
+const NAV_WIDTH_KEY_LEGACY = 'il-side-v2';
 
-export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUnit, collapsed, onCollapse, mobileOpen, onMobileOpen, onHelp, onUnit }: {
-  nav: Nav; activePath: string; unit: Unit; collapsed: boolean; onCollapse: () => void;
+export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUnit, mobileOpen, onMobileOpen, onHelp, onUnit }: {
+  nav: Nav; activePath: string; unit: Unit;
   /** Estado do drawer móvel pertence ao shell: é a topbar que abre o menu. */
   mobileOpen?: boolean; onMobileOpen?: (open: boolean) => void;
   /** Unidades disponíveis (troca real de contexto). Uma só = sem seletor. */
@@ -67,27 +71,45 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   multiUnit?: boolean;
   /** Abre a central de ajuda (sheet do shell). */
   onHelp?: () => void;
-  /** Troca de unidade a partir do cabeçalho. */
+  /** Troca de unidade a partir da topbar (mantido no contrato do shell). */
   onUnit?: (id: string) => void;
 }) {
   const setMobile = (open: boolean) => onMobileOpen?.(open);
   const mobile = !!mobileOpen;
   const legacyPagesEnabled = isLegacyPagesEnabled();
+  // ── P0 · RODADA 2 — RECOLHER/EXPANDIR (o controle de largura VOLTOU) ──
+  // O rail estreito continua sendo o PADRÃO (é o que o dia a dia usa), mas a
+  // decisão de largura volta a ser do usuário: no rodapé existe UM controle que
+  // alterna rail (ícones) ↔ navegação aberta (ícone + rótulo + filhos do grupo
+  // no fluxo). A preferência é persistida (`godoutor-side-v2`, os mesmos
+  // valores 'full' | 'mini' do contrato histórico; `il-side-v2` só é lida como
+  // fallback de quem já tinha a preferência gravada).
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(NAV_WIDTH_KEY) ?? localStorage.getItem(NAV_WIDTH_KEY_LEGACY);
+      setExpanded(stored === 'full');
+    } catch { /* sem preferência legível ⇒ rail (o padrão) */ }
+  }, []);
+  const toggleWidth = () => setExpanded((open) => {
+    const next = !open;
+    try {
+      localStorage.setItem(NAV_WIDTH_KEY, next ? 'full' : 'mini');
+      localStorage.removeItem(NAV_WIDTH_KEY_LEGACY);
+    } catch { /* preferência é conveniência, nunca bloqueia o controle */ }
+    return next;
+  });
   const areas = useMemo(() => workspaceAreas(nav.allowed, { multiUnit }), [nav.allowed, multiUnit]);
   const sections = useMemo(() => workspaceSections(areas), [areas]);
+  // REGRA ÚNICA de exibição (lib): rail = frequência; painel = tudo que é
+  // autorizado. Nenhuma tela recria essa decisão.
+  const railItems = useCallback((area: WorkspaceArea) => workspaceRailItems(area, { legacyPages: legacyPagesEnabled }), [legacyPagesEnabled]);
+  const panelItems = useCallback((area: WorkspaceArea) => workspacePanelItems(area, { legacyPages: legacyPagesEnabled }), [legacyPagesEnabled]);
 
   // Mini-card de setup: MESMO checklist real do /api/overview. É ONBOARDING,
   // não decoração permanente: enquanto houver passo pendente ele aparece; ao
-  // completar 100% sai de cena (o rodapé fixo fica para Ajuda e suporte).
-  //
-  // §P1.4 — UMA fonte de verdade, SEM número velho: o card revalida quando
-  // qualquer escrita do painel conclui (`godoutor:overview-refresh`, disparado pelo
-  // apiSend), quando módulos/permissões mudam (`godoutor:business-refresh`) e quando
-  // a aba volta ao foco. Completou 100% ⇒ o card SOME na hora (nada de
-  // "88% pronta" com a página mostrando 8/8).
+  // completar 100% sai de cena (o rodapé fica para Ajuda e suporte).
   const [setup, setSetup] = useState<{ pct: number; href: string } | null>(null);
-  // Sem `/dashboard` na navegação já calculada, o checklist não existe para
-  // este perfil: nenhuma chamada ao Overview (e o card nunca aparece).
   const overviewAllowed = navAllowsOverview(nav);
   const loadSetup = useCallback((businessId: string) => {
     if (!businessId) return;
@@ -121,24 +143,13 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
   }, [unit.id, loadSetup]);
   useRevalidateOnFocus(() => loadSetup(unit.id), 30_000);
 
-  // Destinos com `sidebar: false` não ocupam linha no menu (régua: frequência),
-  // mas continuam acessíveis por URL/atalho contextual.
-  // Clinical OS §20 — /produtos e /pedidos saem da navegação quando GDP Legado OFF, mas seguem acessíveis por deep link.
-  const visible = (items: NavItem[]) => items.filter((i) => {
-    if (i.sidebar === false) return false;
-    if (!legacyPagesEnabled && (i.href === '/produtos' || i.href === '/pedidos')) return false;
-    return true;
-  });
-
   const activeArea = areaOfRoute(activePath, areas);
   // Grupo DONO da rota ativa (marca `is-active`): só grupos que desenham linha
-  // própria. Destinos com `sidebar: false` (Meu perfil, Execuções, Recursos)
-  // vivem de atalho contextual e não criam grupo vazio.
+  // própria. Destinos com `sidebar: false` vivem de atalho contextual e não
+  // criam grupo vazio.
   const activeGroup = activeArea && sections.some(
     (s) => s.groups.some((g) => !g.flat && g.area.id === activeArea.id),
   ) ? activeArea.id : null;
-
-  const [unitOpen, setUnitOpen] = useState(false);
 
   useEffect(() => {
     // Trocar de rota/unidade fecha o painel de grupo (nada de painel órfão
@@ -154,23 +165,21 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     return () => media?.removeEventListener?.('change', close);
   }, []);
 
-  // ── TOOLTIP do modo recolhido ────────────────────────────────
-  // O tooltip é renderizado em PORTAL no <body> (position: fixed, coordenadas
-  // de viewport). Antes era filho do <aside> — o sticky do aside cria um
-  // stacking context e, em telas com elementos em z-index (ex.: toolbar da
-  // Agenda em z-40), o tooltip ficava ABAIXO do conteúdo, parecendo cortado/
-  // sobreposto. Em portal ele escapa de qualquer contexto e nada o corta —
-  // sem esticar largura de scroll de container nenhum.
+  // ── TOOLTIP do rail ──────────────────────────────────────────
+  // Renderizado em PORTAL no <body> (position: fixed, coordenadas de viewport):
+  // escapa de qualquer stacking context da página (a toolbar da Agenda vive em
+  // z-40) e nada o corta, sem esticar a largura de rolagem de container nenhum.
+  // Estado da extensão de grupo (abre/retrai com o atraso de trânsito do
+  // ponteiro — a máquina de estados vive em lib/sidebar-peek.ts).
+  const peekCtl = useSidebarPeek();
   const asideRef = useRef<HTMLElement | null>(null);
   const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
-  // DS 1.0 · §15/§18 — painel lateral de grupo. Vale no rail E na sidebar
-  // expandida (o acordeão que empurrava os filhos foi removido); NUNCA mexe no
-  // estado `collapsed` persistido — o único controle persistente é o pin.
-  const peekCtl = useSidebarPeek();
   useEffect(() => {
-    if (!collapsed) { setTip(null); return; }
     const root = asideRef.current;
     if (!root) return;
+    // Navegação ABERTA: rótulo e dica são a mesma informação — tooltip do rail
+    // não existe nesse modo (seria repetição flutuante do que já está escrito).
+    if (expanded) { setTip(null); return; }
     const tipOf = (el: Element) => el.closest('[data-tip]');
     const show = (e: Event) => {
       const el = tipOf(e.target as Element);
@@ -200,16 +209,17 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
       root.removeEventListener('focusin', show);
       root.removeEventListener('focusout', hide);
     };
-  }, [collapsed]);
+  }, [expanded]);
 
   function hrefFor(item: NavItem) {
     if (item.href === '/organizacao') return `/organizacao?organization=${unit.organizationId || ''}`;
     return item.requiresBusiness === false ? item.href : `${item.href}?b=${unit.id}`;
   }
 
-  // `mini` = este destino está sendo desenhado para o RAIL recolhido (só
-  // ícone + tooltip). O drawer móvel sempre usa o modo expandido.
-  const link = (item: NavItem, sub = false, mini = collapsed) => (
+  // ── RAIL ─────────────────────────────────────────────────────
+  // `mini` = desenhado para a coluna estreita (só ícone + tooltip). O drawer
+  // móvel sempre usa o modo expandido (toque não tem hover).
+  const link = (item: NavItem, sub = false, mini = !expanded) => (
     <Link
       key={item.href}
       href={hrefFor(item)}
@@ -230,16 +240,17 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
 
   /** Id do painel de grupo (um por tela: só existe um aberto por vez). */
   const NAV_PANEL_ID = 'ws-nav-panel';
+  const groupRefs = useRef(new Map<string, HTMLButtonElement>());
 
-  const groupButton = (area: WorkspaceArea, mini = collapsed) => {
-    const items = visible(area.items);
+  const groupButton = (area: WorkspaceArea) => {
+    // Um grupo existe enquanto houver DESTINO autorizado nele (a régua do
+    // painel, não a do rail): grupo cujo conteúdo é contextual continua sendo
+    // uma porta real.
+    const items = panelItems(area);
     if (!items.length) return null;
     const open = peekCtl.peekId === area.id;
     return (
-      <div
-        key={area.id}
-        className={`workspace-group${open ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}
-      >
+      <div key={area.id} className={`workspace-group${open ? ' is-open' : ''}${activeGroup === area.id ? ' is-active' : ''}`}>
         <button
           type="button"
           className="workspace-link workspace-link--group"
@@ -248,143 +259,59 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           aria-expanded={open}
           aria-controls={open ? NAV_PANEL_ID : undefined}
           data-peek-group={area.id}
+          ref={(node) => { if (node) groupRefs.current.set(area.id, node); else groupRefs.current.delete(area.id); }}
           onMouseEnter={() => peekCtl.onGroupEnter(area.id)}
           onMouseLeave={() => peekCtl.onGroupLeave()}
           onFocus={() => peekCtl.onGroupEnter(area.id)}
           onBlur={() => peekCtl.onGroupLeave()}
           onClick={() => {
             // Clique = abre/trava (ou fecha se já travado). NUNCA expande a
-            // sidebar: o único controle persistente é o pin do rodapé.
+            // navegação: o rail é sempre o rail.
             peekCtl.togglePeek(area.id);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowDown' && e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            peekCtl.pinPeek(area.id);
+            // O foco entra no painel (equivalência teclado ↔ hover); o portal
+            // vive no fim do <body>, então o foco é movido explicitamente.
+            window.requestAnimationFrame(() => {
+              document.querySelector<HTMLElement>(`#${NAV_PANEL_ID} [role="menuitem"]`)?.focus();
+            });
           }}
         >
           <span className="workspace-link__icon"><Icon n={area.icon} size={18} /></span>
           <span className="workspace-label">{area.label}</span>
-          <Icon n="chevronRight" size={15} className="workspace-link__chevron" aria-hidden="true" />
+          {/* DS 1.1 — SEM CHEVRON no rail. A seta prometia um accordion que
+              não existe: o grupo abre um PAINEL lateral conectado, e o próprio
+              painel (título + itens) é o feedback de abertura. O estado aberto
+              continua acessível por `aria-expanded`; nada de ícone decorativo
+              sugerindo hierarquia/pilha. */}
         </button>
       </div>
     );
   };
 
-  /**
-   * CABEÇALHO — a clínica é a identidade principal desta região.
-   * Com mais de uma unidade o nome vira botão (troca real de contexto);
-   * com uma unidade só, é texto — sem controle que não faz nada.
-   * RECOLHIDO: SÓ a logo (ou monograma), centralizada — nome e tipo não são
-   * renderizados (nada de "A…"/"Cl…" truncado); o tooltip carrega
-   * "Nome · Tipo" para quem precisar do contexto.
-   */
-  const header = (mini = collapsed, interactive = true) => {
-    const label = unit.name || 'Clínica';
-    const kind = clinicTypeLabel(unit.clinicType);
-    const canSwitch = interactive && !!onUnit && units.length > 1;
-    if (mini) {
-      const mark = unit.logo
-        ? <img src={unit.logo} alt="" className="workspace-clinic-head__logo workspace-clinic-head__logo--mini" />
-        : <span className="workspace-clinic-head__mark workspace-clinic-head__mark--mini" aria-hidden="true">{initials(label)}</span>;
-      const tipText = `${label} · ${kind || 'Clínica'}`;
-      return (
-        <div className="workspace-clinic-head-wrap">
-          {canSwitch ? (
-            <button
-              type="button"
-              className="workspace-clinic-head workspace-clinic-head--collapsed"
-              aria-haspopup="menu"
-              aria-expanded={unitOpen}
-              aria-label={`Unidade atual: ${label}. Trocar de unidade`}
-              data-tip={tipText}
-              onClick={() => setUnitOpen((v) => !v)}
-            >
-              {mark}
-            </button>
-          ) : (
-            <div className="workspace-clinic-head workspace-clinic-head--collapsed" data-tip={tipText}>
-              {mark}
-            </div>
-          )}
-          {canSwitch && unitOpen && (
-            <div className="ws-pop ws-pop--left" role="menu" aria-label="Trocar de unidade">
-              <p className="ws-pop__label">Unidades</p>
-              {units.map((u) => (
-                <button key={u.id} type="button" role="menuitem" className="ws-pop__item"
-                  onClick={() => { setUnitOpen(false); if (u.id !== unit.id) onUnit?.(u.id); }}>
-                  {u.logo
-                    ? <img src={u.logo} alt="" aria-hidden="true" className="ws-unitpill__logo" />
-                    : <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>}
-                  <span className="flex-1 truncate">{u.name || 'Clínica'}</span>
-                  {u.id === unit.id && <Icon n="check" size={14} className="text-[var(--success-fg)]" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-    const inner = (
-      <>
-        {unit.logo
-          ? <img src={unit.logo} alt="" className="workspace-clinic-head__logo" />
-          : <span className="workspace-clinic-head__mark" aria-hidden="true">{initials(label)}</span>}
-        <span className="workspace-clinic-head__text">
-          <span className="workspace-clinic-head__name">{label}</span>
-          <span className="workspace-clinic-head__meta">{kind || 'Clínica'}</span>
-          {canSwitch && (
-            <span className="workspace-clinic-head__unit">
-              Trocar unidade <Icon n="chevD" size={12} aria-hidden="true" />
-            </span>
-          )}
-        </span>
-      </>
-    );
-    return (
-      <div className="workspace-clinic-head-wrap">
-        {canSwitch ? (
-          <button
-            type="button"
-            className="workspace-clinic-head"
-            aria-haspopup="menu"
-            aria-expanded={unitOpen}
-            aria-label={`Unidade atual: ${label}. Trocar de unidade`}
-            onClick={() => setUnitOpen((v) => !v)}
-          >
-            {inner}
-          </button>
-        ) : (
-          <div className="workspace-clinic-head">{inner}</div>
-        )}
-        {canSwitch && unitOpen && (
-          <div className="ws-pop ws-pop--left" role="menu" aria-label="Trocar de unidade">
-            <p className="ws-pop__label">Unidades</p>
-            {units.map((u) => (
-              <button key={u.id} type="button" role="menuitem" className="ws-pop__item"
-                onClick={() => { setUnitOpen(false); if (u.id !== unit.id) onUnit?.(u.id); }}>
-                {u.logo
-                  ? <img src={u.logo} alt="" aria-hidden="true" className="ws-unitpill__logo" />
-                  : <span className="ws-unitpill__dot" aria-hidden="true">{initials(u.name || 'Clínica')}</span>}
-                <span className="flex-1 truncate">{u.name || 'Clínica'}</span>
-                {u.id === unit.id && <Icon n="check" size={14} className="text-[var(--success-fg)]" />}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // SEM TÍTULOS DE SEÇÃO (missão §2): a sidebar é uma sequência contínua de
-  // destinos e grupos. As seções continuam existindo como AGRUPAMENTO/ORDEM
-  // (e fonte do breadcrumb), mas não desenham rótulo nenhum — a separação é
-  // só espaçamento vertical; no rail recolhido, um fio discreto entre blocos.
-  const menu = (mini = collapsed) => (
+  // SEM TÍTULOS DE SEÇÃO: a sidebar é uma sequência contínua de destinos e
+  // grupos. As seções existem como agrupamento/ordem (fonte do painel), mas
+  // não desenham rótulo — a separação é o respiro entre blocos.
+  const menu = () => (
     <>
       {sections.map((section) => {
-        const rows = section.groups.flatMap(({ area, flat }) =>
-          flat ? visible(area.items).map((item) => link(item, false, mini)) : [groupButton(area, mini)],
-        ).filter(Boolean);
+        const rows = section.groups.flatMap(({ area, flat }) => {
+          // NAVEGAÇÃO ABERTA (P0 · rodada 2): os destinos do grupo entram no
+          // FLUXO sob o título do grupo — a coluna larga não precisa de painel
+          // flutuante, e o rail continua sem accordion/seta em nenhum modo.
+          if (expanded) {
+            const items = panelItems(area).map((item) => link(item, !flat));
+            return flat || !items.length ? items : [groupTitle(area), ...items];
+          }
+          return flat ? railItems(area).map((item) => link(item)) : [groupButton(area)];
+        }).filter(Boolean);
         if (!rows.length) return null;
         return (
           <div className="workspace-section" key={section.id}>
-            {mini && <span className="workspace-section__rule" aria-hidden="true" />}
+            <span className="workspace-section__rule" aria-hidden="true" />
             {rows}
           </div>
         );
@@ -392,36 +319,62 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </>
   );
 
+  /** Título do grupo quando a navegação está ABERTA (mesmo tratamento do
+   *  drawer móvel: o grupo é um rótulo, não um botão com seta). */
+  const groupTitle = (area: WorkspaceArea) => (
+    <p key={`t-${area.id}`} className="workspace-nav-drawer__title">{area.label}</p>
+  );
+
+  /** Linhas "abertas" de uma seção — usadas pelo drawer móvel e pela navegação
+   *  expandida no desktop (UMA implementação, nenhuma lista paralela). */
+  const inlineRows = (section: (typeof sections)[number]) =>
+    section.groups.flatMap(({ area, flat }) => {
+      const items = panelItems(area);
+      if (!items.length) return [];
+      if (flat) return items.map((item) => link(item, false, false));
+      return [groupTitle(area), ...items.map((item) => link(item, true, false))];
+    });
+
   /**
-   * DRAWER MÓVEL — o painel lateral (hover) não existe em toque: no celular o
-   * grupo mostra os filhos DIRETO, sob um rótulo discreto do grupo. Sem
-   * disclosure, sem acordeão, sem "toque para abrir".
+   * DRAWER MÓVEL — o painel (hover) não existe em toque: no celular o grupo
+   * mostra os filhos DIRETO, sob um rótulo discreto do grupo, incluindo os
+   * destinos contextuais que o rail não desenha.
    */
   const mobileMenu = () => (
     <>
       {sections.map((section) => {
-        const rows = section.groups.flatMap(({ area, flat }) => {
-          const items = visible(area.items);
-          if (!items.length) return [];
-          if (flat) return items.map((item) => link(item, false, false));
-          return [
-            <p key={`t-${area.id}`} className="workspace-nav-drawer__title">{area.label}</p>,
-            ...items.map((item) => link(item, true, false)),
-          ];
-        });
+        const rows = inlineRows(section);
         if (!rows.length) return null;
-        return (
-          <div className="workspace-section" key={section.id}>
-            {rows}
-          </div>
-        );
+        return <div className="workspace-section" key={section.id}>{rows}</div>;
       })}
     </>
   );
 
-  const footer = (withCollapse: boolean, mini = collapsed) => (
+  /** Passo pendente do checklist → href real, com a unidade preservada. */
+  const setupHref = setup ? `${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}` : '';
+  const footer = (withBrand: boolean) => (
     <div className="workspace-foot">
-      {setup && !mini && (
+      {/* RAIL (60px): o cartão de setup não cabe em texto, mas a pendência não
+          pode sumir do desktop — ela vira um ANEL de progresso com tooltip,
+          levando ao MESMO próximo passo do checklist real. */}
+      {setup && !withBrand && (
+        <Link
+          href={setupHref}
+          className="workspace-foot__item ws-setup-ring"
+          aria-label={`Configuração da clínica: ${setup.pct}% concluída`}
+          data-tip={`Configuração: ${setup.pct}%`}
+        >
+          <span
+            aria-hidden="true"
+            className="ws-setup-ring__dial"
+            style={{ background: `conic-gradient(var(--accent) ${setup.pct}%, var(--surface-3) 0)` }}
+          >
+            <span className="ws-setup-ring__hole" />
+          </span>
+          <span className="workspace-label">Configuração</span>
+        </Link>
+      )}
+      {setup && withBrand && (
         <div className="ws-setup-mini">
           <p className="text-[12px] font-semibold text-[var(--text)] leading-tight">
             Sua clínica está {setup.pct}% pronta
@@ -432,7 +385,7 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
           <div className="h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden mt-2" aria-hidden="true">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${setup.pct}%` }} />
           </div>
-          <Link href={`${setup.href}${setup.href.includes('?') ? '&' : '?'}b=${unit.id}`}
+          <Link href={setupHref}
             className="mt-2 inline-flex w-full items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[11.5px] font-semibold text-[var(--brand-strong)] hover:bg-[var(--surface-hover)]">
             Continuar configuração
           </Link>
@@ -443,24 +396,28 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         className="workspace-foot__item"
         onClick={() => { setMobile(false); onHelp?.(); }}
         aria-label="Ajuda e suporte"
-        {...(mini ? { 'data-tip': 'Ajuda e suporte' } : {})}
+        {...(expanded ? {} : { 'data-tip': 'Ajuda e suporte' })}
       >
         <Icon n="help" size={18} />
         <span className="workspace-label">Ajuda e suporte</span>
       </button>
-      {withCollapse && (
+      {/* CONTROLE DE LARGURA (P0 · rodada 2). O rail continua o PADRÃO; este
+          botão é o único lugar que decide a largura, e a escolha sobrevive ao
+          reload. Fica no rodapé da coluna, nunca flutuando sobre o conteúdo. */}
+      {!withBrand && (
         <button
           type="button"
           className="workspace-foot__item workspace-foot__item--collapse"
-          aria-label={mini ? 'Expandir navegação' : 'Recolher navegação'}
-          {...(mini ? { 'data-tip': 'Expandir navegação' } : {})}
-          onClick={onCollapse}
+          onClick={toggleWidth}
+          aria-label={expanded ? 'Recolher navegação' : 'Expandir navegação'}
+          aria-pressed={expanded}
+          {...(expanded ? {} : { 'data-tip': 'Expandir navegação' })}
         >
           <Icon n="panel" size={18} />
-          <span className="workspace-label">{mini ? 'Expandir navegação' : 'Recolher menu'}</span>
+          <span className="workspace-label">{expanded ? 'Recolher navegação' : 'Expandir navegação'}</span>
         </button>
       )}
-      {!mini && (
+      {withBrand && (
         <p className="workspace-foot__brand">
           powered by <strong>GoDoutor</strong>
         </p>
@@ -468,67 +425,99 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
     </div>
   );
 
+  useEffect(() => {
+    // Trocar para a navegação aberta fecha a extensão (não fica painel órfão
+    // apontando para um grupo que agora desenha os filhos na própria coluna).
+    if (expanded) peekCtl.closePeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  // Teclado dentro do painel: ↑/↓/Home/End andam, ← e Escape voltam ao grupo.
+  const peekKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, areaId: string) => {
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const go = (target?: HTMLElement) => { if (target) { e.preventDefault(); target.focus(); } };
+    if (e.key === 'ArrowDown') go(items[(index + 1 + items.length) % items.length]);
+    if (e.key === 'ArrowUp') go(items[(index - 1 + items.length) % items.length]);
+    if (e.key === 'Home') go(items[0]);
+    if (e.key === 'End') go(items[items.length - 1]);
+    if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+      e.preventDefault();
+      peekCtl.closePeek();
+      groupRefs.current.get(areaId)?.focus();
+    }
+  };
+
+  /**
+   * Painel do grupo — a EXTENSÃO do rail: nasce na borda direita da coluna
+   * (sem gap), com a mesma superfície branca, uma divisória vertical fina e
+   * sem sombra. Quem calcula a geometria é o CSS por token (`--gd-rail-w`); o
+   * painel é portal no <body> para escapar de qualquer stacking context.
+   */
+  const peekPanel = () => {
+    // Navegação ABERTA não tem extensão: os destinos do grupo já estão no
+    // fluxo da coluna. Um peek que tenha ficado pinado antes da troca de
+    // largura simplesmente não é renderizado.
+    if (expanded) return null;
+    if (!peekCtl.peekId || typeof document === 'undefined') return null;
+    const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
+    const items = area ? panelItems(area) : [];
+    if (!area || !items.length) return null;
+    return createPortal(
+      <div
+        id={NAV_PANEL_ID}
+        className="ws-peek"
+        role="menu"
+        aria-label={area.label}
+        onMouseEnter={peekCtl.onPeekEnter}
+        onMouseLeave={peekCtl.onPeekLeave}
+        onFocus={peekCtl.onPeekEnter}
+        onKeyDown={(e) => peekKeyDown(e, area.id)}
+      >
+        <p className="ws-peek__title">{area.label}</p>
+        <div className="ws-peek__items">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={hrefFor(item)}
+              role="menuitem"
+              aria-current={activePath === item.href ? 'page' : undefined}
+              className="ws-peek__item"
+              onClick={() => { peekCtl.closePeek(); setMobile(false); }}
+            >
+              <Icon n={item.icon} size={15} />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </div>
+      </div>,
+      document.body,
+    );
+  };
+
   return (
     <>
-      <aside ref={asideRef} className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegação da clínica">
-        {header(collapsed)}
+      <aside
+        ref={asideRef}
+        className={`workspace-sidebar${expanded ? ' is-expanded' : ''}`}
+        data-nav-width={expanded ? 'full' : 'mini'}
+        aria-label="Navegação da clínica"
+      >
         <nav aria-label="Menu principal" className="workspace-primary ws-scroll">
-          {menu(collapsed)}
+          {menu()}
         </nav>
-        {footer(true, collapsed)}
-        {/* Tooltip do rail recolhido: portal no <body> (fora de qualquer
-            container rolável/stacking context) — não gera scrollbar horizontal
-            e renderiza ACIMA do conteúdo da página (Agenda incluída). */}
-        {collapsed && tip && typeof document !== 'undefined' && createPortal(
+        {footer(false)}
+        {/* Tooltip do rail: portal no <body> — não gera scrollbar horizontal e
+            renderiza ACIMA do conteúdo da página (Agenda incluída). */}
+        {tip && typeof document !== 'undefined' && createPortal(
           <div className="ws-nav-tip" role="tooltip" style={{ top: `${tip.top}px`, left: `${tip.left}px` }}>{tip.text}</div>,
           document.body,
         )}
-        {/* DS 1.0 · §15/§18 — PAINEL DE GRUPO: abre à direita da navegação
-            (rail OU sidebar expandida), SEMPRE abaixo da top bar, com altura
-            útil e sem empurrar o conteúdo. Abre em ~180ms (ease-out) e recolhe
-            250–300ms após o mouseleave; fecha no Escape e na troca de rota.
-            O estado `collapsed` NUNCA muda por causa dele. */}
-        {peekCtl.peekId && typeof document !== 'undefined' && (() => {
-          const area = sections.flatMap((s) => s.groups).find((g) => g.area.id === peekCtl.peekId)?.area;
-          const items = area ? visible(area.items) : [];
-          if (!area || !items.length) return null;
-          return createPortal(
-            <div
-              id={NAV_PANEL_ID}
-              className={`ws-peek${collapsed ? '' : ' ws-peek--wide'}`}
-              role="menu"
-              aria-label={area.label}
-              /* DS 1.0 · §15 — o painel do grupo começa SEMPRE abaixo da top
-                 bar (posição no CSS por token), com altura útil, e NÃO empurra
-                 o conteúdo: nenhum `top` medido no DOM entra aqui. */
-              onMouseEnter={peekCtl.onPeekEnter}
-              onMouseLeave={peekCtl.onPeekLeave}
-            >
-              <p className="ws-peek__title">{area.label}</p>
-              <div className="ws-peek__items">
-                {items.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={hrefFor(item)}
-                    role="menuitem"
-                    aria-current={activePath === item.href ? 'page' : undefined}
-                    className="ws-peek__item"
-                    onClick={() => { peekCtl.closePeek(); setMobile(false); }}
-                  >
-                    <Icon n={item.icon} size={15} />
-                    <span>{item.label}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          );
-        })()}
+        {peekPanel()}
       </aside>
 
-      {/* Mobile: UM diálogo, o MESMO acordeão (nunca duas colunas na tela).
-          O drawer sempre usa o modo EXPANDIDO — mesmo que a sidebar desktop
-          esteja recolhida. */}
+      {/* Mobile: UM diálogo, os mesmos destinos (nunca duas colunas na tela). */}
       <Drawer
         open={mobile}
         onClose={() => setMobile(false)}
@@ -536,9 +525,8 @@ export function WorkspaceNavigation({ nav, activePath, unit, units = [], multiUn
         width="max-w-[420px]"
         dialogClassName="workspace-nav-drawer"
       >
-        {header(false)}
         <nav aria-label="Menu móvel" className="p-3">{mobileMenu()}</nav>
-        {footer(false, false)}
+        {footer(true)}
       </Drawer>
     </>
   );

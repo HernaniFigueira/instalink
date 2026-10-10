@@ -85,8 +85,11 @@ describe('Clinical Convergence — GODOUTOR_LEGACY_PAGES OFF: limpeza da experi�
 
   it('Disponibilidade usa clínica, não casa/empresa', () => {
     const disponibilidade = read('src/app/(dashboard)/disponibilidade/page.tsx');
-    expect(disponibilidade).toContain('Quando a clínica e cada profissional');
-    expect(disponibilidade).not.toContain('Quando a casa e cada profissional');
+    // DS 1.1 · §13 — a mesma regra (clínica + profissional, nunca casa/empresa),
+    // agora na frase curta que sobrou depois da limpeza de copy.
+    expect(disponibilidade).toContain('Cada profissional pode seguir o horário da clínica ou ter agenda própria');
+    expect(disponibilidade).not.toMatch(/\bcasa\b/i);
+    expect(disponibilidade).not.toMatch(/\bempresa\b/i);
     const bh = read('src/components/dashboard/BusinessHours.tsx');
     expect(bh).toContain('Horário da clínica');
     expect(bh).not.toMatch(/Horário da empresa/);

@@ -77,7 +77,6 @@ export default function EstruturaPage() {
     <PageHeader
       icon="grid"
       title="Estrutura da clínica"
-      hint="O que a clínica oferece, quem realiza, quando atende e quem pode entrar."
     />
   );
 

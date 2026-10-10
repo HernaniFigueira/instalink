@@ -567,7 +567,13 @@ describe('A3.4 · B7 (2ª volta) — o fluxo na tela', () => {
     expect(page).toMatch(/export\?businessId/);
     expect(page).toMatch(/export-full\?businessId/);
     expect(page).toMatch(/Exportar tudo \(JSON\)/);
-    expect(page).toMatch(/const canExportFull = \['OWNER', 'ADMIN', 'MASTER'\]/);
+    // P2 · rodada 2 — além da permissão própria, a ferramenta de base exige o
+    // PAPEL de administração (OWNER/ADMIN; MASTER em suporte): recepção e
+    // profissional não veem Importar/Exportar/Exportar tudo.
+    expect(page).toMatch(/const broadAccess = BROAD_ACCESS_ROLES\.includes/);
+    expect(page).toMatch(/const canExportFull = broadAccess;/);
+    expect(page).toMatch(/const canExportBase = broadAccess && permsReady && unitScope && permissions\.clientes_exportar === true;/);
+    expect(page).toMatch(/const canImportBase = broadAccess && permsReady && unitScope && permissions\.clientes_importar === true;/);
   });
 });
 

@@ -18,7 +18,13 @@ describe('Last pre-F1 gates — navigation, geometry and clinical copy',()=>{
  });
  it('does not shadow shell measured left inset, and reserves visible space for the selected column',()=>{
   const css=read('src/app/globals.css');expect(css).toContain('--sheet-left: inherit;');
-  expect(css).toContain('.ag-mode-panel[data-range-focus]');expect(css).toContain('margin-right: calc(min(46vw, 560px) + 14px)');
+  expect(css).toContain('.ag-mode-panel[data-range-focus]');
+  // MISSÃO UX CLOSURE · item 3C — o editor de agendamento é MODAL CENTRAL: a
+  // reserva passa a ser METADE da faixa do modal (token do DS) — o mesmo
+  // invariante (coluna selecionada visível ao lado do editor), sem o valor
+  // antigo de um painel colado à direita.
+  expect(css).toContain('margin-right: calc(min(var(--gd-booking-modal-w), 92vw) / 2 + 14px)');
+  expect(read('src/styles/godoutor-design-system.css')).toContain('--gd-booking-modal-w: 672px');
   expect(read('src/app/(dashboard)/agenda/page.tsx')).toContain('columns.filter(c => c.key === selectedRange?.columnKey)');
  });
  it('active empty-state/campaign copy and image actions follow the clinical contract',()=>{

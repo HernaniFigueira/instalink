@@ -1,0 +1,66 @@
+{
+  "zoom200": {
+    "overflowX": 0,
+    "eventos": 6,
+    "controlesDaBarra": 12,
+    "menorAlvoDeToque": 36,
+    "detalhe": {
+      "x": 260,
+      "largura": 460,
+      "distanciaDireita": 0,
+      "alturaCheia": true
+    }
+  },
+  "contraste": {
+    "nav": {
+      "cor": "rgb(31, 35, 40)",
+      "fundo": "rgb(255, 255, 255)",
+      "razao": 15.8,
+      "tamanho": "14px",
+      "ok": true
+    },
+    "tituloDaPagina": {
+      "cor": "rgb(28, 24, 21)",
+      "fundo": "rgb(244, 246, 248)",
+      "razao": 16.28,
+      "tamanho": "20px",
+      "ok": true
+    },
+    "nomeDoEvento": {
+      "cor": "rgb(146, 64, 14)",
+      "fundo": "rgb(255, 244, 224)",
+      "razao": 6.51,
+      "tamanho": "10.5px",
+      "ok": true
+    },
+    "horaNaGrade": null,
+    "rotuloDeStatus": {
+      "cor": "rgb(146, 64, 14)",
+      "fundo": "rgb(255, 244, 224)",
+      "razao": 6.51,
+      "tamanho": "14px",
+      "ok": true
+    }
+  },
+  "destrutiva": {
+    "itemNoMenu": false
+  },
+  "naoAdmin": {
+    "csv": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "full": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    },
+    "imp": {
+      "status": 403,
+      "erro": "Seu perfil não tem permissão para esta ação."
+    }
+  },
+  "menu": {
+    "proibidosPresentes": [],
+    "itens": 5
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "fila": {
+    "controleEncontrado": true,
+    "rotulo": "Fila 3",
+    "abriu": false,
+    "estrutura": null,
+    "fechouComEscape": true
+  },
+  "seletorDeData": {
+    "gatilho": "Quinta, 08/10/2026",
+    "abriu": {
+      "classe": "gd-layer gd-popover",
+      "largura": 306,
+      "altura": 264,
+      "dias": 33,
+      "temDMY": true
+    }
+  },
+  "vistas": {
+    "selecionadaAposClique": "true",
+    "voltaParaDia": "true",
+    "troca": {
+      "Semana": {
+        "selecionada": "true",
+        "colunasDeGrade": 7,
+        "linhasDeLista": 0,
+        "eventos": 6,
+        "overflowX": 0
+      },
+      "Lista": {
+        "selecionada": "true",
+        "colunasDeGrade": 0,
+        "linhasDeLista": 6,
+        "eventos": 0,
+        "overflowX": 0
+      },
+      "Dia": {
+        "selecionada": "true",
+        "colunasDeGrade": 3,
+        "linhasDeLista": 0,
+        "eventos": 6,
+        "overflowX": 0
+      }
+    }
+  },
+  "lista": {
+    "linhas": 6,
+    "primeiraLinha": "08:30Marina SouzaConsulta veterinária · Dra. Helena AndrioniPendente",
+    "temHorario": true,
+    "temPaciente": true,
+    "temStatus": true,
+    "rolagem": 0,
+    "overflowX": 0
+  },
+  "detalhe": {
+    "titulo": "Detalhe do agendamento",
+    "secoes": [
+      "Cliente",
+      "Profissional",
+      "Valor"
+    ],
+    "acoes": [
+      "Registrar chegada",
+      "Confirmar",
+      "Reagendar",
+      "Cancelar",
+      "Ver histórico",
+      "Alterar duração",
+      "Histórico (1) ▲"
+    ],
+    "rolagemInterna": 0,
+    "largura": 460,
+    "altura": 900,
+    "escapavel": true,
+    "focoDeVoltaNoEvento": true
+  }
+}

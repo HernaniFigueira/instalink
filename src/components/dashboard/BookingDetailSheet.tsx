@@ -31,7 +31,7 @@ import { waLink, cn, money } from '@/lib/utils';
 import { adminBookingMaxDate, bookingDurationOf, needsClosure, rescheduleDecision } from '@/lib/booking-ops';
 import { SLOT_STATE_MESSAGE } from '@/lib/slot-states';
 import type { Booking, ScheduleResource } from '@/lib/types';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { DetailSideModal } from '@/components/ui';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { workflowView, type WorkflowActionId } from '@/lib/appointment-workflow';
 import { useOverlayDismissGuard } from './OverlayDismissGuard';
@@ -52,8 +52,17 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus }: {
   booking: Booking;
+  /**
+   * MISSÃO UX CLOSURE · item 3A — o resumo do evento pode abrir o detalhe
+   * DIRETO no fluxo de reagendamento. O detalhe continua sendo o mesmo; a
+   * decisão entre mover e recriar continua sendo da REGRA (`rescheduleDecision`).
+   */
+  startRescheduling?: boolean;
+  /** Evento que abriu o detalhe: recebe o foco de volta quando o gatilho do
+   *  clique foi um CTA do HoverCard (que desmonta). Repassado ao DetailSideModal. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
   service: ServiceRef | undefined;
   pro: ProRef | undefined;
   resources?: ScheduleResource[];
@@ -75,7 +84,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
   const [pet360Open, setPet360Open] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduling, setRescheduling] = useState(startRescheduling);
   const [resizeOpen, setResizeOpen] = useState(false);
   const [resizeEnd, setResizeEnd] = useState('');
   const rescheduleDismiss = useOverlayDismissGuard();
@@ -110,6 +119,26 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
       { agenda: true, atendimento: !!permissions.atendimento },
     );
   const can = (id: WorkflowActionId) => wf.allowed.includes(id);
+  /**
+   * §12 — a AÇÃO PRIMÁRIA desta etapa: a primeira do FLUXO que o servidor
+   * autorizou. Um passo adiante por vez; as demais ações são transições de
+   * estado e ficam NEUTRAS (só o destrutivo mantém tintura).
+   */
+  const primaria: 'check_in' | 'start_care' | 'open_care' | 'confirm' | 'close_retro' =
+    can('check_in') ? 'check_in'
+      : can('start_care') ? 'start_care'
+        : can('open_care') ? 'open_care'
+          : can('confirm') ? 'confirm'
+            : 'close_retro';
+  // Rótulo puramente visual da próxima ação que o SERVIDOR já declarou
+  // elegível. Em especial, "Chegou" não vira BookingStatus: permanece uma
+  // etapa operacional cuja continuidade é "Iniciar atendimento".
+  const nextActionLabel = can('check_in') ? 'Registrar chegada'
+    : can('start_care') ? 'Iniciar atendimento'
+      : can('open_care') ? 'Retomar atendimento'
+        : can('confirm') ? 'Confirmar agendamento'
+          : can('close_retro') ? 'Concluir atendimento'
+            : '';
   const rescheduleDirty = rescheduling && (date !== booking.date || time !== '' || cancelSeries);
   const dismissReschedule = () => rescheduleDismiss.requestClose('close-button', { dirty: rescheduleDirty, saving: !!acting, context: 'edit' }, () => {
     setRescheduling(false); setConfirming(false); setCancelSeries(false); setDate(booking.date); setTime(''); setError('');
@@ -229,7 +258,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   const waMsg = `Olá, ${(booking.customerName || '').split(' ')[0]}! Sobre seu agendamento de ${service?.name || 'atendimento'} (${formatDateBR(booking.date)} às ${booking.time}):`;
 
-  // WorkspaceSheet recebe o foco e fecha em ESC (como qualquer painel).
+  // O DetailSideModal recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
 
   function showHistory() {
     setHistoryOpen(true);
@@ -243,23 +272,34 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
     : '';
 
   return (
-    <WorkspaceSheet
+    <DetailSideModal
       open
       onClose={onClose}
+      returnFocus={returnFocus}
       dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}
       title="Detalhe do agendamento"
-      icon="calendar"
-      width="max-w-[620px]"
+      flush
       >
-        {/* ── Cabeçalho denso ── */}
-        <header className="shrink-0 px-4 py-3 flex items-start justify-between gap-3 border-b border-zinc-200">
+        {/* ── Sumário do atendimento (1ª seção do detalhe) ──
+            Sem divisória própria: quem separa do cabeçalho do painel é a borda
+            dele — duas linhas empilhadas viravam degrau sem função. */}
+        <header className="px-4 pt-3 pb-2.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
-              <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              {/* Status persistido do agendamento e etapa operacional são
+                  informações diferentes. "Chegou" é workflow/check-in, nunca
+                  um novo BookingStatus. */}
+              <span className="inline-flex items-center gap-1" data-booking-status>
+                <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Agendamento</span>
+                <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
+              </span>
               {booking.bookingKind === 'fit_in' && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
               {(wf.state === 'arrived' || wf.state === 'in_care') && (
-                <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
+                <span className="inline-flex items-center gap-1" data-workflow-stage>
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Etapa operacional</span>
+                  <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
+                </span>
               )}
             </div>
             <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
@@ -283,10 +323,24 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           />
         )}
 
-          {/* ── Ações do atendimento: etapa × papel (servidor decide) ── */}
+          {/* ── Ações do atendimento: etapa × papel (servidor decide) ──
+              §12/§14 — UMA ação primária por etapa (a próxima do fluxo) e as
+              demais NEUTRAS: antes a linha misturava azul + verde + âmbar +
+              vermelho e disputava a leitura. Só o destrutivo mantém tintura. */}
           {!rescheduling && (
-            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state}>
+            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
+              {nextActionLabel && (
+                <p className="mb-2 text-xs text-[var(--text-muted)]" data-workflow-next-action>
+                  Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
+                </p>
+              )}
               <div className="flex flex-wrap gap-1.5">
+                {/*
+                  §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:
+                  ela move o atendimento adiante. As demais (Confirmar/Concluir/
+                  Não compareceu/Reabrir/Reagendar) são transições e ficam
+                  NEUTRAS; só o Cancelar mantém tintura, porque é destrutivo.
+                */}
                 {can('check_in') && (
                   <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
                     <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
@@ -310,18 +364,18 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   </Button>
                 )}
                 {can('confirm') && (
-                  <Button size="sm" variant="success" onClick={() => act('confirmed')} disabled={!!acting}>
+                  <Button size="sm" variant={primaria === 'confirm' ? 'primary' : 'secondary'} onClick={() => act('confirmed')} disabled={!!acting}>
                     {acting === 'confirmed' ? 'Salvando…' : 'Confirmar'}
                   </Button>
                 )}
                 {can('close_retro') && (
-                  <Button size="sm" variant="success" onClick={() => act('completed')} disabled={!!acting}
+                  <Button size="sm" variant={primaria === 'close_retro' ? 'primary' : 'secondary'} onClick={() => act('completed')} disabled={!!acting}
                     title="Fechar o atendimento que já passou, sem registro clínico">
                     {acting === 'completed' ? 'Salvando…' : 'Concluir'}
                   </Button>
                 )}
                 {can('no_show') && (
-                  <Button size="sm" variant="warning" onClick={() => act('no_show')} disabled={!!acting}>
+                  <Button size="sm" variant="secondary" onClick={() => act('no_show')} disabled={!!acting}>
                     {acting === 'no_show' ? 'Salvando…' : 'Não compareceu'}
                   </Button>
                 )}
@@ -343,7 +397,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   </Button>
                 )}
                 {can('cancel') && (
-                  <Button size="sm" variant="danger" onClick={() => act('cancelled')} disabled={!!acting}>
+                  <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
                     {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
                   </Button>
                 )}
@@ -570,6 +624,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             </div>
           )}
         {rescheduleDismiss.dialog}
-        </WorkspaceSheet>
+    </DetailSideModal>
   );
 }

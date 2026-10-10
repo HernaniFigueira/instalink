@@ -11,6 +11,7 @@ import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { nowHM, todayISO } from '@/lib/tz';
 import { fitInPastError } from '@/lib/fit-in';
+import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
@@ -20,7 +21,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
@@ -50,45 +51,65 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     contactId?: string; name: string; phone: string; email?: string;
     /** A3.4: agenda pré-preenchida ao clicar num horário vago da grade. */
     date?: string; time?: string; professionalId?: string; serviceId?: string; selectedDurationMin?: number;
+    /** Termo vindo do Quick Create sem contato selecionado; continua sendo busca, não contato. */
+    searchQuery?: string;
+    /** CTA explícito do Quick Create: abre o cadastro real dentro do fluxo completo. */
+    openRegistration?: boolean;
+    /** Tipo da unidade já resolvido pela Agenda; é apenas terminologia do cadastro. */
+    vetMode?: boolean;
+    /** Só o chamador que veio DIRETAMENTE da célula pode pedir conveniência de serviço único. */
+    allowSingleEligibleServicePrefill?: boolean;
+    /** Prefill permitido ao duplicar agendamento (não inclui respostas/histórico). */
+    petId?: string; note?: string;
   };
   onClose: () => void;
   onCreated: () => void;
 }) {
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
   /**
-   * Clique na grade (modo DIA): a coluna identifica o profissional. Quando o
-   * catálogo só oferece UM serviço elegível para ele, esse serviço entra
-   * pré-selecionado como conveniência — sem isso o bloco de horários (que só
-   * existe com `date && serviceId`) nem aparecia e a intenção do clique ficava
-   * invisível. Com 0 ou 2+ elegíveis nada é escolhido. Sem profissional
-   * (colunas de DIA na Semana) nunca se inventa vínculo.
-   * Decisão pelos vínculos reais (`professionalIds`) — nunca por nome/cargo.
+   * Serviço só chega pré-escolhido por duas intenções explícitas:
+   *   1. `serviceId` que a pessoa de fato escolheu (Quick Create, duplicação,
+   *      fila ou CRM); ou
+   *   2. clique DIRETO de célula que declarou a conveniência de serviço único.
+   *
+   * Um handoff do Quick Create com serviço vazio NÃO pode cair no fallback de
+   * um serviço elegível único: isso era o "serviço fantasma" observado ao abrir
+   * "Mais opções". O vínculo continua decidido pelos ids reais do catálogo.
    */
-  const presetServiceId = initial?.serviceId || uniqueEligibleServiceId(bookable, initial?.professionalId || '');
-  const [query, setQuery] = useState('');
+  const presetServiceId = initial?.serviceId || (initial?.allowSingleEligibleServicePrefill
+    ? uniqueEligibleServiceId(bookable, initial?.professionalId || '') : '');
+  const initialSearchQuery = initial?.searchQuery || '';
+  const initialSearchDigits = onlyDigits(initialSearchQuery);
+  const initialRegistrationName = initial?.openRegistration && initialSearchDigits.length < 10 ? initialSearchQuery.trim() : '';
+  const initialRegistrationPhone = initial?.openRegistration && initialSearchDigits.length >= 10 ? initialSearchQuery.trim() : '';
+  const [query, setQuery] = useState(initialSearchQuery);
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
   const [contactId, setContactId] = useState(initial?.contactId || '');
-  const [name, setName] = useState(initial?.name || '');
-  const [phone, setPhone] = useState(initial?.phone || '');
+  const [name, setName] = useState(initial?.name || initialRegistrationName);
+  const [phone, setPhone] = useState(initial?.phone || initialRegistrationPhone);
   const [email, setEmail] = useState(initial?.email || '');
+  // A duplicação pode vir de um agendamento sem vínculo CRM. Preservamos e
+  // mostramos os dados copiados como dados informados (não fingimos um contato
+  // selecionado); a gravação segue o fluxo normal de criação.
+  const [unlinkedPrefill, setUnlinkedPrefill] = useState(!initial?.contactId && !initial?.searchQuery && !!(initial?.name || initial?.phone));
   // HOMOLOGAÇÃO · fechamento — SEM cadastro temporário: "+ Cadastrar" abre o
   // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
   // agendamento depois NÃO apaga o paciente.
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(!!initial?.openRegistration);
   const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
-  const [vetMode, setVetMode] = useState(false);
+  const [vetMode, setVetMode] = useState(!!initial?.vetMode);
   const [serviceId, setServiceId] = useState(presetServiceId);
   const [proId, setProId] = useState(initial?.professionalId || '');
   const [date, setDate] = useState(initial?.date || '');
   const [time, setTime] = useState(initial?.time || '');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initial?.note || '');
   const [staffDuration, setStaffDuration] = useState<number | ''>(initial?.selectedDurationMin || '');
   const [advanced, setAdvanced] = useState(false);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
-  const [isVet, setIsVet] = useState(false);
-  const [petId, setPetId] = useState('');
+  const [isVet, setIsVet] = useState(!!initial?.vetMode);
+  const [petId, setPetId] = useState(initial?.petId || '');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
   const [fitInOpen, setFitInOpen] = useState(false);
   const [fitInTime, setFitInTime] = useState(initial?.time || '');
@@ -124,9 +145,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const seq = useRef(0);
   const slotSeq = useRef(0);
   const initialBookingSnapshot = useRef(JSON.stringify({
-    query: '', contactId: initial?.contactId || '', name: initial?.name || '', phone: initial?.phone || '', email: initial?.email || '',
+    query: initialSearchQuery, contactId: initial?.contactId || '', name: initial?.name || initialRegistrationName, phone: initial?.phone || initialRegistrationPhone, email: initial?.email || '',
     serviceId: presetServiceId, proId: initial?.professionalId || '', date: initial?.date || '', time: initial?.time || '',
-    note: '', staffDuration: initial?.selectedDurationMin || '', petId: '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
+    note: initial?.note || '', staffDuration: initial?.selectedDurationMin || '', petId: initial?.petId || '', fitInOpen: false, fitInTime: initial?.time || '', repeat: false, occurrences: [],
   }));
   const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, staffDuration, petId, fitInOpen, fitInTime, repeat, occurrences });
   const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
@@ -153,8 +174,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const orderedServices = [...bookable].sort((a, b) => Number(!!proId && professionalServesService(b as any, proId, pros)) - Number(!!proId && professionalServesService(a as any, proId, pros)));
   const slotKey = `${serviceId}|${date}|${proId}|${staffDuration}`;
   const [checkedSlotKey, setCheckedSlotKey] = useState('');
-  const pastIssue = date && time && (date < today || (date === today && time < nowHM(new Date(), timezone || undefined)))
-    ? 'Esse intervalo já passou. Escolha um horário futuro.' : '';
+  // Quick Create e formulário completo chamam esta mesma regra visual. O
+  // POST em `booking-create.ts` continua revalidando a data no fuso da unidade.
+  const pastIssue = bookingPastTimeError(date, time, today, nowHM(new Date(), timezone || undefined));
   const slotIssue = !proIssue && (pastIssue || (!incompatiblePro && time && checkedSlotKey === slotKey && !loadingSlots && !slotsError && !slots.includes(time)
     ? dayState?.reason === 'no_windows' ? 'O horário não está dentro da disponibilidade deste profissional.'
       : 'Este profissional não está disponível neste intervalo. Confira a disponibilidade, os atendimentos e os bloqueios.' : ''));
@@ -218,9 +240,33 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       `/api/pets?businessId=${encodeURIComponent(businessId)}`,
       { scope: 'area', area: 'Agenda' },
     ).then((r) => { if (on) { setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); } })
-      .catch(() => { if (on) { setVetMode(false); setIsVet(false); } });
+      .catch(() => { if (on) {
+        // Se a leitura auxiliar falhar, preserva a informação já resolvida
+        // pela Agenda; nunca infere veterinária a partir do contato.
+        setVetMode(!!initial?.vetMode); setIsVet(!!initial?.vetMode);
+      } });
     return () => { on = false; };
   }, [businessId]);
+
+  /**
+   * MISSÃO HOMOLOGAÇÃO · duplicação: o booking pode trazer petId SEM customerId
+   * (agenda interna cria reserva pelo fluxo do profissional). Quando o contato
+   * não veio, recupera o vínculo REAL do tutor pelo pet (`pet.tutorId`) — sem
+   * simular seleção quando não há vínculo (contrato "sem vínculo CRM").
+   */
+  const initialPetRef = useRef(initial?.petId || '');
+  useEffect(() => {
+    if (contactId || !initialPetRef.current) return;
+    let on = true;
+    apiGet<{ pets: Pet[] }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
+      .then((r) => {
+        if (!on) return;
+        const pet = (r.data?.pets || []).find((p) => p.id === initialPetRef.current && p.active !== false);
+        if (pet?.tutorId) setContactId(pet.tutorId);
+      })
+      .catch(() => {});
+    return () => { on = false; };
+  }, [businessId, contactId]);
 
   useEffect(() => {
     setPetId('');
@@ -232,12 +278,17 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     ).then((r) => {
       if (!on) return;
       setIsVet(!!r.data?.vet);
-      setPets(r.data?.pets?.filter((p) => p.active !== false) || []);
+      const list = r.data?.pets?.filter((p) => p.active !== false) || [];
+      setPets(list);
+      // Prefill de duplicação: restaura o pet semeado quando ele pertence ao tutor.
+      const seeded = initialPetRef.current;
+      if (seeded && list.some((p) => p.id === seeded)) setPetId(seeded);
     }).catch(() => { if (on) setPets([]); });
     return () => { on = false; };
   }, [contactId, businessId]);
 
   function pick(c: Contact) {
+    setUnlinkedPrefill(false);
     setContactId(c.id);
     setName(c.name);
     setPhone(c.phone);
@@ -249,6 +300,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   /** Abre o CADASTRO REAL (CRM). Prefill do que já foi digitado na busca. */
   function startNew() {
+    setUnlinkedPrefill(false);
     const digits = onlyDigits(query);
     setContactId('');
     setName(digits.length >= 10 ? '' : query.trim());
@@ -263,6 +315,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
    * em veterinária, o pet recém-criado selecionado.
    */
   function onClientRegistered(contactId: string, extra?: { petId?: string }) {
+    setUnlinkedPrefill(false);
     setRegisterOpen(false);
     setContactId(contactId);
     setQuery(''); setResults([]); setError('');
@@ -290,6 +343,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }
 
   function resetClient() {
+    setUnlinkedPrefill(false);
     setContactId(''); setName(''); setPhone(''); setEmail('');
     setQuery(''); setResults([]); setError('');
     setPetId(''); setPets([]); setIsVet(false);
@@ -388,12 +442,19 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   return (
     <Drawer
       open
+      /* MISSÃO UX CLOSURE · item 3C — NOVO/EDITAR AGENDAMENTO = MODAL CENTRAL.
+         Antes: faixa lateral de até 95% da viewport (um formulário curto
+         esticado contra a borda direita). Agora: modal central do DS, largura
+         confortável (672px; criação rápida vinda do slot fica mais compacta) e
+         o par 50/50 preservado quando o cadastro de paciente abre no MESMO
+         overlay. Regras de agenda, guardas de descarte e presets: intactos. */
+      variant="dialog"
+      dialogWidth={quick && !advanced ? '560px' : '672px'}
       dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
-      subtitle="Paciente → serviço → data e horário → confirmação"
       width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
@@ -445,9 +506,20 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           ) : (
           <div className="space-y-3">
-          {/* 1. Cliente */}
+          {/* 1. Cliente — o rótulo usa o tipo canônico do DS (label 13/20 500);
+              a nota de por que buscamos no CRM virou AJUDA CONTEXTUAL (tooltip),
+              em vez de parágrafo permanente sob o campo (§13). */}
           <div>
-            <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+            <span className="mb-1.5 flex items-center gap-1.5">
+              <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+              {!picked && (
+                <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
+                  <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
+                    <Icon n="help" size={13} />
+                  </button>
+                </Tooltip>
+              )}
+            </span>
             {picked ? (
               <div className="flex flex-wrap items-center gap-3 bg-[var(--success-bg)] border border-[var(--success-border)] rounded-lg px-3.5 py-3">
                 <Avatar name={name || '?'} size={36} />
@@ -460,13 +532,20 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 <Badge tone="green" icon="check">Cadastro vinculado</Badge>
                 <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
               </div>
+            ) : unlinkedPrefill ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-unlinked-client-prefill="true">
+                <Avatar name={name || '?'} size={36} />
+                <span className="min-w-0 flex-1 basis-40">
+                  <span className="block break-words text-sm font-semibold text-[var(--text)]">{name || 'Cliente sem nome'}</span>
+                  <span className="block break-words text-xs text-[var(--text-muted)]">{phone || 'Sem WhatsApp informado'}{email ? ` · ${email}` : ''}</span>
+                </span>
+                <span className="text-xs font-medium text-[var(--text-muted)]">Dados copiados · sem vínculo CRM</span>
+                <Button type="button" variant="ghost" size="xs" onClick={resetClient}>Trocar</Button>
+              </div>
             ) : (
               <>
                 <Input type="search" name="godoutor-client-search" autoComplete="off" spellCheck={false} autoCorrect="off" autoCapitalize="none" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
-                <p className="text-xs text-[var(--text-muted)] mt-1.5">
-                  Buscamos no CRM para não duplicar cadastro — {isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}
-                </p>
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
                   <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
@@ -520,7 +599,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <Field label="2. Serviço" required hint="O que será feito neste agendamento">
+          <Field label="2. Serviço" required>
             <Select value={serviceId} disabled={saving || reviewing} onChange={(e) => setServiceId(e.target.value)}>
               <option value="">Selecione…</option>
               {orderedServices.map((s) => <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}{eligibleProfessionalIds(s as any, pros).length === 0 ? ' — Sem profissional habilitado' : ''}</option>)}
@@ -587,9 +666,12 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             {rangeIntent && loadingSlots && <p role="status" className="text-sm text-[var(--text-muted)]">Verificando disponibilidade…</p>}
             {rangeIntent && !editingTime && slotsError && <Notice tone="error">{slotsError}</Notice>}
           </section>}
-          <details open={advanced} onToggle={e => setAdvanced(e.currentTarget.open)} className="group rounded-md border border-[var(--border)] bg-[var(--surface)]">
-            <summary className="flex list-none cursor-pointer items-center justify-between p-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">Opções avançadas<Icon n="chevD" size={16} className="ml-auto transition-transform group-open:rotate-180" /></summary>
-            <div className="space-y-3 border-t border-[var(--border)] p-3">
+          {/* §9/§14 — as opções avançadas são DIVULGAÇÃO canônica (nasce
+              fechada). O `<details>`+`<summary>` com chevron próprio desenhava
+              um segundo padrão de abrir/fechar; agora é o `Disclosure` do DS,
+              controlado pelo mesmo estado que decide o conteúdo. */}
+          <Disclosure label="Opções avançadas" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
+            <div className="space-y-3 p-3">
           <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin ? durationLabel(service.durationMin) : '—'}; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
               value={staffDuration} disabled={saving || reviewing || repeat}
@@ -668,7 +750,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           </Field>}
 
             </div>
-          </details>
+          </Disclosure>
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
             <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
           </section>}

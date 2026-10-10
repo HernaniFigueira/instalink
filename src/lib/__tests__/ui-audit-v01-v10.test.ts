@@ -55,7 +55,10 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
   });
 
   it('V06 usa foreground temático nos chevrons fechados, com contraste para Branco, Azul, Sálvia e Ônix', () => {
-    expect(css).toMatch(/\.workspace-link__chevron\s*\{[^}]*color:\s*var\(--il-nav-fg\)/);
+    // CONTRATO SUPERSEDED (DS 1.1): o rail não tem chevron. A regra antiga
+    // cobrava a cor da seta; hoje o elemento é escondido por contrato e a
+    // navegação comunica abertura pelo painel + `aria-expanded`.
+    expect(css).toContain('.workspace-link__chevron { display: none; }');
     // DS 1.0 §13: a ESTRUTURA (chevron incluso) é neutra e fixa; o contraste
     // se mede no par real da navegação e no par ATIVO de cada preset.
     expect(contrastRatio(color('--il-nav-fg'), color('--il-nav')), 'estrutura').toBeGreaterThanOrEqual(4.5);
@@ -63,7 +66,7 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
       const theme = NAV_ACCENTS.find((entry) => entry.id === id)!;
       expect(contrastRatio(theme.vars['--il-nav-active-fg'], theme.vars['--il-nav-active']), id).toBeGreaterThanOrEqual(4.5);
     }
-    expect(css).toContain(".workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }");
+    // (idem acima: a seta de grupo do rail deixou de existir como affordance)
   });
 
   it('V07 aplica padding 16px ao body do sheet financeiro sem mexer no domínio', () => {
@@ -80,7 +83,7 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
   });
 
   it('V09 não duplica “Salvo agora” na página, compacta ações secundárias e destaca Finalizar', () => {
-    expect(encounter).toContain("layout !== 'page' && isDraft && autoState === 'saved'");
+    expect(encounter).toMatch(/layout !== 'page' && isDraft && editable && autoState === 'saved'/);
     expect(encounter).toContain('flex flex-wrap items-center gap-2');
     expect(encounter).toContain('Finalizar atendimento');
     expect(css).toContain('env(safe-area-inset-bottom)');

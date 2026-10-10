@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { PetsSection } from '../dashboard/PetsSection';
@@ -92,8 +94,17 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     const onClose = vi.fn();
     render(<NewBookingSheet businessId="biz-1" services={[]} pros={[]} horizonDays={30} onClose={onClose} onCreated={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
-    // Largura operacional compartilhada (nem esticado, nem estreito).
-    expect(document.querySelector('.il-drawer__strip')?.className).toContain('max-w-2xl');
+    // MISSÃO UX CLOSURE · item 3C — a criação de agendamento é MODAL CENTRAL
+    // (mesmo overlay system do Drawer, geometria no centro da tela). A largura
+    // passa a ser o token do dialog (`--gd-booking-modal-w` / --il-dialog-w),
+    // não mais o preset de faixa lateral; a faixa continua existindo para
+    // superfícies de trabalho longas.
+    expect(dialog.className).toContain('il-drawer--dialog');
+    expect(dialog.getAttribute('style') || '').toContain('--il-dialog-w: 672px');
+    expect(document.querySelector('.il-drawer__strip')?.className).toContain('w-full');
+    // A reserva de largura do modal está declarada como token no DS (uma fonte).
+    const dsTokens = readFileSync(path.join(process.cwd(), 'src/styles/godoutor-design-system.css'), 'utf8');
+    expect(dsTokens).toContain('--gd-booking-modal-w: 672px');
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar cliente' }), { target: { value: 'Alex' } });
     fireEvent.click(dialog.querySelector('[aria-hidden="true"]')!);
     const confirmation = await screen.findByRole('alertdialog');

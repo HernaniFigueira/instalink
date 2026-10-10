@@ -72,17 +72,20 @@ export const WORKSPACE_AREAS: WorkspaceAreaDef[] = [
     // recepção resolve pendências o dia todo). `/perfil` continua fora da
     // linha (menu da conta), mas ter dono evita a rede de segurança "Mais"
     // que fazia o breadcrumb mentir ("Visão geral > Mais > Pendências").
-    // Atendimento clínico é uma porta contextual da operação, mas sidebar:false
-    // mantém a página fora da linha de navegação.
-    routes: ['/dashboard', '/agenda', '/atendimento', '/conversas', '/clientes', '/tarefas', '/perfil'],
+    routes: ['/dashboard', '/agenda', '/conversas', '/clientes', '/tarefas', '/perfil'],
   },
   {
     // Quem a clínica é por dentro: o que oferece, quem atende, quando atende e
     // quem entra no sistema. Perguntas que se respondem UMA vez (e se ajustam
     // de vez em quando) — por isso vivem atrás de uma porta, não soltas no
     // menu. `/produtos` e `/pedidos` só existem quando o módulo está ativo.
+    //
+    // A2 · `/atendimento` continua tendo esta área dona para breadcrumb e
+    // rota filha, mas não ocupa navegação persistente: é aberto no contexto da
+    // Agenda, Fila e Cliente 360. A supressão visual não altera a permissão,
+    // deep-link nem o construtor `encounterWorkspaceHref`.
     id: 'clinica', label: 'Clínica', icon: 'grid', color: 'var(--brand)',
-    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/equipe', '/produtos', '/pedidos'],
+    routes: ['/estrutura', '/servicos', '/profissionais', '/disponibilidade', '/atendimento', '/equipe', '/produtos', '/pedidos'],
   },
   {
     id: 'presenca', label: 'Página', icon: 'link', color: 'var(--brand)',
@@ -180,6 +183,82 @@ export const WORKSPACE_SECTIONS: WorkspaceSectionDef[] = [
     entries: [{ area: 'automacao' }, { area: 'gestao' }, { area: 'ajustes' }],
   },
 ];
+
+// ── O QUE APARECE ONDE (regra única, nunca repetida na tela) ────
+//   • COLUNA (rail): só destinos com `sidebar !== false` — a régua é
+//     FREQUÊNCIA de uso, não importância;
+//   • PAINEL DO GRUPO: os destinos autorizados do grupo, inclusive os de
+//     `sidebar: false`, exceto os que declaram ser puramente contextuais. O
+//     painel é um atalho persistente; um registro clínico individual não deve
+//     parecer porta de navegação.
+//   • `CONTEXTUAL_ONLY_ROUTES` segue autorizado, vivo por URL/deep-link e é
+//     aberto apenas pela superfície que conhece a entidade (Agenda, Fila ou
+//     Cliente 360). Não altera permissões nem os contratos de Encounter.
+//   • comércio/diagnóstico em `OFF_MENU_ROUTES` também não ocupa menu nenhum
+//     com a experiência padrão (continuam autorizados, vivos por URL e
+//     alcançáveis DENTRO da tela que os explica);
+//   • ALIAS DE COMPATIBILIDADE (`compatOnly`) nunca aparece — duas portas
+//     para a mesma tela é ruído, e a rota segue viva por URL;
+//   • a Página legada segue fora das duas superfícies quando
+//     `GODOUTOR_LEGACY_PAGES` está desligada (decisão de PRODUTO, não de
+//     menu) — a rota continua acessível por URL e por deep link.
+export interface MenuProjectionOptions {
+  legacyPages?: boolean;
+  /** Hrefs que a tela precisa esconder por decisão de produto (GDP legado). */
+  hidden?: (route: PanelRouteDef) => boolean;
+}
+
+/**
+ * P0 · RODADA 2 — DESTINOS QUE NÃO OCUPAM O MENU PADRÃO.
+ *
+ * O Clinical OS é operado pela clínica: os módulos de COMÉRCIO (`/produtos`,
+ * `/pedidos`) e as telas de DIAGNÓSTICO/AJUSTE do próprio sistema (`/recursos`,
+ * `/execucoes`) não são portas do dia a dia. O produto já diz onde cada uma
+ * vive — este arquivo é a APRESENTAÇÃO, então é aqui que a decisão é aplicada:
+ *
+ *   /execucoes → dentro de Automações (a tela lista as execuções);
+ *   /recursos  → dentro de Assistente ("Capacidades do sistema") e por URL;
+ *   /produtos · /pedidos → experiência de comércio legada.
+ *
+ * Com a experiência LEGADA ligada (`GODOUTOR_LEGACY_PAGES=1`) o menu volta ao
+ * comportamento anterior, sem migração. Em nenhum caso a rota é apagada: o
+ * catálogo (`lib/panel.ts`), as permissões e o acesso por URL seguem intactos —
+ * a supressão é de MENU. Módulo (`modes`) e permissão continuam sendo decididos
+ * ANTES, em `panelNavigation`.
+ */
+export const OFF_MENU_ROUTES: readonly string[] = ['/produtos', '/pedidos', '/recursos', '/execucoes'];
+
+/**
+ * Registros que só fazem sentido a partir de uma entidade operacional já
+ * conhecida. Não aparecem nem no rail nem nos painéis persistentes — mesmo
+ * com a experiência legada ligada — mas a rota, o deep-link e as permissões
+ * continuam declarados no catálogo.
+ */
+export const CONTEXTUAL_ONLY_ROUTES: readonly string[] = ['/atendimento'];
+
+/** Itens que ocupam linha na coluna de navegação. */
+export function workspaceRailItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
+  return area.items.filter((item) => item.sidebar !== false && !item.compatOnly && !isHidden(item, opts));
+}
+
+/** Itens que o PAINEL do grupo apresenta (inclui destino contextual). */
+export function workspacePanelItems(area: WorkspaceArea, opts: MenuProjectionOptions = {}): PanelRouteDef[] {
+  return area.items.filter((item) => !item.compatOnly && !isHidden(item, opts));
+}
+
+function isHidden(route: PanelRouteDef, opts: MenuProjectionOptions): boolean {
+  if (opts.hidden?.(route)) return true;
+  // A2: registro clínico não volta ao menu quando a flag da experiência legada
+  // é ligada. Ele nasce com entidade/contexto, não como destino persistente.
+  if (CONTEXTUAL_ONLY_ROUTES.includes(route.href)) return true;
+  // Só a Página legada e os destinos de comércio/diagnóstico são decisão de
+  // PRODUTO (a rota segue viva por URL). Módulos (`modes`) e permissões já
+  // foram filtrados ANTES, em `panelNavigation` — a apresentação nunca esconde
+  // destino por conta própria.
+  const legacyPages = opts.legacyPages ?? isLegacyPagesEnabled();
+  if (legacyPages) return false;
+  return route.href === '/pagina' || OFF_MENU_ROUTES.includes(route.href);
+}
 
 export interface WorkspaceSection extends WorkspaceSectionDef {
   /** Entradas já resolvidas contra os destinos autorizados. */

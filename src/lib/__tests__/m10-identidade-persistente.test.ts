@@ -126,8 +126,23 @@ describe('contraste ESTRUTURAL (temas claros/escuros) — fg sempre pelo bg real
     }
   });
 
-  it('monograma da clínica usa o par accent/contrast (nunca fg fixo)', () => {
-    expect(css).toMatch(/workspace-clinic-head__mark[\s\S]{0,300}background: var\(--accent\); color: var\(--accent-contrast\)/);
+  it('identidade da clínica: logo SOLTA e monograma como TEXTO (DS 1.1 · §5)', () => {
+    // CONTRATO SUPERSEDED (DS 1.1): o DS 1.0 desenhava um TILE com o par
+    // accent/contrast atrás da marca. A missão §5 determina o contrário — a
+    // logo é a marca da clínica, não um avatar de app: sem tile, sem borda,
+    // sem fundo decorativo, proporção do arquivo preservada. O que continua
+    // valendo (e é o que este teste guarda agora):
+    //   • a arte não é distorcida: altura por token + `width: auto`;
+    //   • quando NÃO existe arquivo, o fallback é TEXTO no token de contraste
+    //     do sistema (`--text-strong`), não um bloco colorido com fg fixo;
+    //   • nada de fundo de acento atrás da marca.
+    const marca = css.slice(css.indexOf('.ws-clinic__logo'), css.indexOf('.ws-clinic__name'));
+    expect(marca).toMatch(/height: var\(--gd-topbar-logo\);[\s\S]{0,80}width: auto/);
+    expect(marca).toMatch(/border: 0; border-radius: 0; background: none;/);
+    expect(marca).toMatch(/color: var\(--text-strong\)/);
+    expect(marca).not.toMatch(/background: var\(--accent\)/);
+    // e o antigo cabeçalho da sidebar não existe mais (nem no componente, nem no CSS)
+    expect(css).not.toContain('.workspace-clinic-head__mark');
   });
 });
 

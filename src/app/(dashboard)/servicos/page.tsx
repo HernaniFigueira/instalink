@@ -170,7 +170,7 @@ export default function ServicosPage() {
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <Button variant="secondary" size="xs" onClick={() => { setEditingCat(c); setCatName(c.name); }}>Renomear</Button>
-                              <IconButton icon="x" label={`Excluir ${c.name}`} tip={count > 0 ? `${count} serviços usam esta categoria` : `Excluir ${c.name}`} variant="destructive" size="sm" onClick={() => {
+                              <IconButton icon="x" label={`Excluir ${c.name}`} tip={count > 0 ? `${count} serviços usam esta categoria` : `Excluir ${c.name}`} variant="destructive-soft" size="sm" onClick={() => {
                                 if (count > 0) { setMsg(`${count} serviços usam esta categoria. Mova-os antes de excluir.`); setTimeout(() => setMsg(''), 4000); return; }
                                 call('category.delete', { id: c.id }).catch((err) => setMsg(err.message));
                               }} />
@@ -237,7 +237,7 @@ export default function ServicosPage() {
                       </span>
                       <span className="flex justify-end items-center gap-1.5 text-xs shrink-0">
                         <Button variant="secondary" size="xs" onClick={() => { setEditing(sv); setShowForm(true); }}>Editar</Button>
-                        <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="destructive" size="sm" onClick={() => ask('service', sv)} />
+                        <IconButton icon="x" label={`Excluir ${sv.name}`} tip={`Excluir ${sv.name}`} variant="destructive-soft" size="sm" onClick={() => ask('service', sv)} />
                       </span>
                     </div>
                   );

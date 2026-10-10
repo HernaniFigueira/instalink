@@ -14,9 +14,10 @@
 // `DatePicker`, `Button`, `Notice`, `StatusBadge`). Nenhum controle desenhado
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, DatePicker, Field, Input, Notice, Popover, Select } from '@/components/ui';
+import { Button, DatePicker, Field, IconButton, Input, Notice, Popover, Select } from '@/components/ui';
 import { durationLabel } from '@/lib/duration-label';
-import { todayISO } from '@/lib/tz';
+import { nowHM, todayISO } from '@/lib/tz';
+import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { timeToMin } from '@/lib/utils';
 import {
   fetchSlotTimes, searchContacts, submitBookingIntent, type Contact,
@@ -36,18 +37,36 @@ export interface QuickBookingAnchor {
   durationMin?: number;
 }
 
-export function QuickBookingPopover({ anchor, businessId, services, pros, timezone, onClose, onCreated, onMore }: {
+export interface QuickBookingSeed {
+  /** Contato real escolhido no CRM; vazio quando o termo seguirá para cadastro. */
+  contactId: string;
+  customerName: string;
+  customerPhone: string;
+  /** Só existe quando a pessoa realmente escolheu um serviço no Quick Create. */
+  serviceId: string;
+  professionalId: string;
+  date: string;
+  time: string;
+  durationMin?: number;
+  /** Termo digitado sem contato selecionado — não vira contato sintético. */
+  searchQuery?: string;
+  /** CTA de ausência de resultado: abre o formulário completo já no cadastro. */
+  openRegistration?: boolean;
+}
+
+export function QuickBookingPopover({ anchor, businessId, services, pros, timezone, vetMode = false, onClose, onCreated, onMore }: {
   anchor: QuickBookingAnchor;
   businessId: string;
   services: Service[];
   pros: Professional[];
   /** Fuso do negócio: "hoje" e limites vêm daí, nunca do navegador. */
   timezone?: string;
+  /** Terminologia do cadastro: veterinária registra tutor e pet juntos. */
+  vetMode?: boolean;
   onClose: () => void;
   onCreated: () => void;
-  /** "Mais opções" → fluxo completo, com o MESMO preenchimento (inclui o
-   *  contato escolhido: nome/telefone seguem preenchidos lá). */
-  onMore: (seed: { contactId: string; customerName: string; customerPhone: string; serviceId: string; professionalId: string; date: string; time: string; durationMin?: number }) => void;
+  /** "Mais opções" → fluxo completo, preservando só a intenção explícita. */
+  onMore: (seed: QuickBookingSeed) => void;
 }) {
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
   const [serviceId, setServiceId] = useState('');
@@ -62,6 +81,8 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
+  /** Termo da última busca que de fato terminou; evita CTA sobre resultado antigo. */
+  const [searchedTerm, setSearchedTerm] = useState('');
   const [slots, setSlots] = useState<{ times: string[]; empty: boolean; loading: boolean; error: string }>(
     { times: [], empty: false, loading: false, error: '' },
   );
@@ -69,16 +90,26 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   const [error, setError] = useState('');
   const seq = useRef(0);
   const today = todayISO(new Date(), timezone);
+  const now = nowHM(new Date(), timezone);
+  const pastIssue = bookingPastTimeError(date, time, today, now);
 
   // Busca no CRM (nome ou WhatsApp) — mesma rota da busca do fluxo completo.
+  // O CTA de cadastro só aparece DEPOIS de uma busca concluída para este termo;
+  // não transforma falha/resultado velho em "paciente inexistente".
   useEffect(() => {
     const term = query.trim();
-    if (term.length < 2 || contactId) { setResults([]); setSearching(false); return; }
     const mySeq = ++seq.current;
-    setSearching(true);
+    if (term.length < 2 || contactId) {
+      setResults([]); setSearching(false); setSearchedTerm('');
+      return;
+    }
+    setResults([]); setSearchedTerm(''); setSearching(true);
     const timer = window.setTimeout(() => {
       searchContacts(businessId, term)
-        .then((rows) => { if (mySeq === seq.current) setResults(rows); })
+        .then((rows) => {
+          if (mySeq !== seq.current) return;
+          setResults(rows); setSearchedTerm(term);
+        })
         .finally(() => { if (mySeq === seq.current) setSearching(false); });
     }, 250);
     return () => window.clearTimeout(timer);
@@ -103,15 +134,26 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     setError('');
   }
 
-  function seedIntent() {
+  /**
+   * Handoff estrito: contato REAL ou termo de busca (nunca os dois fingindo ser
+   * a mesma coisa), serviço somente se foi selecionado, e o contexto temporal
+   * do gesto. Assim o formulário completo não inventa serviço/contato ao abrir.
+   */
+  function seedIntent(extra: Pick<QuickBookingSeed, 'openRegistration'> = {}): QuickBookingSeed {
+    const term = query.trim();
     return {
       contactId,
       customerName: picked?.name || '',
       customerPhone: picked?.phone || '',
       serviceId, professionalId, date, time,
       ...(durationMin ? { durationMin } : {}),
+      ...(!picked && term ? { searchQuery: term } : {}),
+      ...extra,
     };
   }
+
+  const noContactFound = !contactId && query.trim().length >= 2 && !searching
+    && searchedTerm === query.trim() && results.length === 0;
 
   async function create() {
     if (saving) return;
@@ -119,6 +161,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     if (!contactId || !picked) { setError('Escolha um paciente já cadastrado — ou use "Mais opções" para cadastrar.'); return; }
     if (!serviceId) { setError('Escolha o serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
+    if (pastIssue) { setError(pastIssue); return; }
     setSaving(true);
     const res = await submitBookingIntent(businessId, {
       contactId,
@@ -150,14 +193,17 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
       trigger={<span aria-hidden="true" />}
     >
       <div className="w-[312px] space-y-2.5 p-1">
-        <div>
-          <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">Novo agendamento</p>
-          <p className="text-[12px] text-[var(--gd-text-muted)] tabular-nums">
-            {date} · {time || 'escolha o horário'}
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">Novo agendamento</p>
+            <p className="text-[12px] text-[var(--gd-text-muted)] tabular-nums">
+              {date} · {time || 'escolha o horário'}
+            </p>
+          </div>
+          <IconButton type="button" icon="x" label="Fechar criação rápida" onClick={onClose} />
         </div>
 
-        <Field label="Paciente" required hint="Nome ou WhatsApp — cadastro novo em “Mais opções”">
+        <Field label="Paciente" required hint="Nome ou WhatsApp — o cadastro abre no fluxo completo">
           <Input
             value={query}
             autoFocus
@@ -185,6 +231,18 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
               </li>
             ))}
           </ul>
+        )}
+
+        {noContactFound && (
+          <div className="rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface-2)] p-2" data-quick-create-empty-search="true">
+            <p className="text-[12px] text-[var(--gd-text-muted)]">
+              Nenhum {vetMode ? 'tutor ou paciente' : 'paciente'} encontrado para “{query.trim()}”.
+            </p>
+            <Button type="button" variant="secondary" className="mt-2 w-full justify-start"
+              onClick={() => onMore(seedIntent({ openRegistration: true }))}>
+              {vetMode ? '+ Cadastrar tutor e pet' : '+ Cadastrar paciente'}
+            </Button>
+          </div>
         )}
 
         <Field label="Serviço" required>
@@ -241,12 +299,13 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
         </div>
 
         {slots.error && <Notice tone="warning" title="Horários">{slots.error}</Notice>}
-        {error && <Notice tone="error" title="Não foi possível criar">{error}</Notice>}
+        {pastIssue && <Notice tone="warning" title="Horário indisponível">{pastIssue}</Notice>}
+        {error && error !== pastIssue && <Notice tone="error" title="Não foi possível criar">{error}</Notice>}
 
         {/* Texto à esquerda, ações à direita — o mesmo contrato do PageActionBar. */}
         <div className="flex items-center justify-end gap-2 border-t border-[var(--gd-border-soft)] pt-2.5">
-          <Button variant="ghost" size="sm" disabled={saving} onClick={() => onMore(seedIntent())}>Mais opções</Button>
-          <Button size="sm" disabled={saving} onClick={() => void create()}>
+          <Button variant="ghost" disabled={saving} onClick={() => onMore(seedIntent())}>Mais opções</Button>
+          <Button disabled={saving || !!pastIssue} onClick={() => void create()}>
             {saving ? 'Criando…' : 'Criar agendamento'}
           </Button>
         </div>

@@ -32,7 +32,10 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(whatsapp).toContain("className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}");
     expect(whatsapp).not.toContain('hover:text-[var(--brand-fg)]');
     const ui = read('src/components/ui.tsx');
-    expect(ui).toContain("secondary:\n    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-[var(--brand-soft)]'");
+    // Pass 2 — secundário sem contorno OU acento em repouso; só o estado ganha
+    // superfície neutra. Links reais continuam sendo a variante `link`.
+    expect(ui).toContain("'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]'");
+    expect(ui).not.toContain("secondary:\n    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)]");
   });
 
   it('conversation workspace fills the column and outgoing bubbles stay muted', () => {

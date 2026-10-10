@@ -35,7 +35,7 @@
 // nunca é sobrescrito pela resposta de um save anterior.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Button, Field, Input, Textarea } from '@/components/ui';
+import { Button, ClinicalRecordSection, Disclosure, Field, Input, ReadOnlyField, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, applySaveResult,
@@ -81,6 +81,8 @@ interface Props {
    * SERVIDOR e devolvida na leitura). Ausente = a régua antiga (status).
    */
   canEdit?: boolean;
+  /** §11 — motivo da LEITURA (o documento mostra uma vez, sem virar aviso). */
+  readOnlyHint?: string;
 }
 
 /**
@@ -151,7 +153,7 @@ interface SaveOutcome {
 const SAVED: SaveOutcome = { ok: true, conflict: false, message: '' };
 
 export function EncounterCoreSection({
-  businessId, encounter, onSaved, registerLeave, authority, canEdit,
+  businessId, encounter, onSaved, registerLeave, authority, canEdit, readOnlyHint,
 }: Props) {
   const [row, setRow] = useState<EncounterCoreRow>(encounter);
   const [form, setForm] = useState<CoreForm>(() => formOf(encounter));
@@ -438,6 +440,42 @@ export function EncounterCoreSection({
   });
 
   const fields = CORE_FIELDS.filter((f) => supportsEncounterCapability(f.capability));
+
+  // §11 — em LEITURA o registro é DOCUMENTO: os mesmos campos, agora como texto
+  // (nunca um formulário desabilitado), o secundário (nota interna) sob
+  // divulgação e o motivo da leitura dito uma única vez. Nenhuma regra clínica
+  // muda: os mesmos valores, a mesma autoria, a mesma privacidade.
+  if (!editable) {
+    const notaInterna = fields.find((f) => f.capability === 'internalNote');
+    const principal = fields.filter((f) => f.capability !== 'internalNote');
+    const valor = (capability: string) => (form as unknown as Record<string, string>)[capability];
+    return (
+      <section className="encounter-workspace__section" aria-label="Registro do atendimento" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Registro do atendimento">
+            {principal.map((f) => (
+              <ReadOnlyField
+                key={f.capability}
+                label={f.label}
+                value={valor(f.capability)}
+                multiline={f.kind === 'textarea'}
+                block={f.kind === 'textarea'}
+                className={f.kind === 'textarea' ? undefined : 'sm:col-span-1'}
+              />
+            ))}
+          </ClinicalRecordSection>
+          {notaInterna && (
+            <Disclosure label={notaInterna.label} hint="Só na unidade — não sai na via do tutor">
+              <ReadOnlyField value={valor(notaInterna.capability)} multiline empty="Sem nota interna neste atendimento." />
+            </Disclosure>
+          )}
+          <p className="encounter-core__readonly">
+            <Icon n="lock" size={13} /> {readOnlyHint || 'Leitura: editar o conteúdo clínico depende do profissional responsável.'}
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section

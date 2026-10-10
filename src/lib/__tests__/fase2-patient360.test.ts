@@ -8,8 +8,12 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(
 const SHEET = stripComments(read('src/components/dashboard/ClientProfileDrawer.tsx'));
 
 describe('FASE 2 · P2 — Paciente 360 (Workspace Sheet)', () => {
-  it('abre no WorkspaceSheet (não no Drawer antigo)', () => {
-    expect(SHEET).toContain('<WorkspaceSheet');
+  it('abre no side modal canônico (não no Drawer antigo)', () => {
+    // P0 · rodada 2 — a PRÉVIA/FICHA lateral usa o `DetailSideModal` (preso à
+    // direita, altura cheia). A régua antiga ("WorkspaceSheet") virou o defeito
+    // de leitura: gaveta flutuante com raio e gap — cara de card solto.
+    expect(SHEET).toContain('<DetailSideModal');
+    expect(SHEET).not.toContain('<WorkspaceSheet');
     expect(SHEET).not.toContain('<Drawer');
     expect(SHEET).toContain('Paciente 360');
   });

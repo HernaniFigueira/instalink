@@ -82,7 +82,7 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   it('uses neutral panels, compact radius tokens, and flat workspace surfaces', () => {
     // Escala compacta na FONTE ÚNICA; globals só aliasa.
     expect(rawToken('--gd-radius-xs')).toBe('4px');
-    expect(rawToken('--gd-radius-sm')).toBe('6px');
+    expect(rawToken('--gd-radius-sm')).toBe('8px');
     expect(rawToken('--gd-radius-md')).toBe('8px');
     for (const tok of ['lg', 'xl', '2xl']) expect(rawToken(`--gd-radius-${tok}`), tok).toBe('8px');
     expect(rawToken('--radius-xs')).toBe('var(--gd-radius-xs)');
@@ -99,7 +99,9 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   });
 
   it('offers canonical button anatomy with explicit semantic success and warning', () => {
-    expect(ui).toContain("'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning'");
+    // MISSÃO UX CLOSURE · item 6: a família destrutiva tem DOIS níveis canônicos —
+    // repouso (soft) e confirmação final (solid). O contrato protege os dois.
+    expect(ui).toContain("'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'link' | 'success' | 'warning'");
     expect(ui).toMatch(/  success:\n[\s\S]*?var\(--success\)/);
     expect(ui).toMatch(/  warning:\n[\s\S]*?var\(--warning-bg\)/);
     for (const alias of ["danger: 'destructive'", "soft: 'secondary'", "quiet: 'ghost'", "cta: 'primary'"]) {

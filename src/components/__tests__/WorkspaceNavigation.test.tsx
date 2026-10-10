@@ -17,7 +17,7 @@
 //   5. permissões e rotas: a navegação nunca revela nem cria destino que o
 //      usuário não alcança (fonte: `nav.allowed`), e nenhuma rota desaparece.
 import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, within, fireEvent } from '@testing-library/react';
+import { act, cleanup, render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,21 +36,31 @@ beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => {
+  cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs();
+  // A preferência de largura é persistida pelo controle do rodapé (P0 · rodada
+  // 2): cada caso começa do estado de fábrica (rail).
+  window.localStorage.clear();
+});
 
 const unit = { id: 'one', name: 'Clínica sintética', logo: '/demo/clinic.svg', slug: 'demo-one' };
 const FULL_PERMISSIONS = {
   dashboard: true, agenda: true, clientes: true, leads: true, catalogo: true,
   pagina: true, equipe: true, financeiro: true, config: true, agente: true,
-  campanhas: true, whatsapp: true, pedidos: true,
+  campanhas: true, whatsapp: true, pedidos: true, atendimento: true,
 };
 const nav = panelNavigation({
   permissions: FULL_PERMISSIONS as any, modes: ['services', 'bookings'], features: {},
 });
 
+/**
+ * MISSÃO UX CLOSURE — o rail não tem mais estado de largura nem pin: os props
+ * de colapso deixaram de existir por decisão de produto (a coluna é SEMPRE o
+ * rail estreito). Este helper continua devolvendo os callbacks que restam.
+ */
 function setup(overrides: any = {}) {
-  const callbacks = { onCollapse: vi.fn(), onMobileOpen: vi.fn() };
-  const props = { nav, activePath: '/agenda', unit, collapsed: false, ...callbacks, ...overrides };
+  const callbacks = { onMobileOpen: vi.fn(), onHelp: vi.fn(), onUnit: vi.fn() };
+  const props = { nav, activePath: '/agenda', unit, ...callbacks, ...overrides };
   const view = render(<WorkspaceNavigation {...props} />);
   return { ...view, ...callbacks, props };
 }
@@ -165,7 +175,7 @@ describe('Etapa A — sidebar por seções', () => {
 
   it('painel META: UM grupo aberto por vez; clicar no grupo ABERTO fecha', async () => {
     const u = userEvent.setup();
-    const { onCollapse } = setup();
+    setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     // O estado VISUAL mora em aria-expanded + .is-open; o painel tem UM id.
     await u.click(within(main).getByRole('button', { name: 'Gestão' }));
@@ -181,7 +191,6 @@ describe('Etapa A — sidebar por seções', () => {
     await u.click(within(main).getByRole('button', { name: 'Configurações' }));
     expect(within(main).getByRole('button', { name: 'Configurações' }).getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
-    expect(onCollapse).not.toHaveBeenCalled();
   });
 
   it('deep-link marca o grupo dono e a troca de rota move a marca (sem abrir painel sozinho)', () => {
@@ -195,22 +204,63 @@ describe('Etapa A — sidebar por seções', () => {
     expect(within(main).getByRole('link', { name: 'Agenda' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('marca 2.0: a CLÍNICA identifica a navegação, GoDoutor assina no rodapé', () => {
-    // §C — clinic-first: o topo da sidebar é a clínica (nome + logo). A marca
-    // do produto NÃO some (nada de white-label): ela assina discretamente.
-    setup();
+  it('MISSÃO UX CLOSURE · item 2 — o rail NÃO repete a identidade da clínica (ela vive na topbar)', () => {
+    // Antes: nome + logo da clínica no topo da sidebar. Agora: identidade ÚNICA
+    // na topbar (logo + nome completo). A sidebar não desenha nome, logo nem
+    // marca do produto — é uma coluna de navegação, não um cabeçalho.
+    const { container } = setup();
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
-    expect(side.querySelector('.workspace-clinic-head__logo')).toBeTruthy();
-    expect(side.textContent).toContain(unit.name);
-    expect(side.textContent).toContain('GoDoutor');
+    expect(side.querySelector('.workspace-clinic-head')).toBeNull();
+    expect(side.querySelector('.workspace-clinic-head__logo')).toBeNull();
+    expect(side.querySelector('.ws-clinic')).toBeNull();
+    expect(side.textContent).not.toContain(unit.name);
+    expect(side.textContent).not.toContain('GoDoutor');
     expect(side.textContent).not.toContain('InstaLink');
+    // E nenhum texto/logo é renderizado no rail: a coluna é só ícones.
+    expect(side.querySelectorAll('img')).toHaveLength(0);
+    expect(container.querySelector('.ws-clinic')).toBeNull();
   });
 
-  it('só recolhe no botão explícito', async () => {
+  it('P0 · rodada 2 — o rodapé TEM o controle de expandir/recolher, e o rail continua o PADRÃO', async () => {
     const u = userEvent.setup();
-    const { onCollapse } = setup();
+    const { container } = setup();
+    const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
+    // Em repouso: rail (mini), rótulos ocultos, nenhum modo expandido.
+    expect(side.getAttribute('data-nav-width')).toBe('mini');
+    expect(side.className).not.toContain('is-expanded');
+    // O controle existe, é UM e vive no rodapé (nunca flutuando sobre o conteúdo).
+    const toggle = screen.getByRole('button', { name: 'Expandir navegação' });
+    expect(container.querySelector('.workspace-foot__item--collapse')).toBe(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    // Clicar abre a MESMA navegação com rótulos e PERSISTE a escolha.
+    await u.click(toggle);
+    expect(side.getAttribute('data-nav-width')).toBe('full');
+    expect(side.className).toContain('is-expanded');
+    expect(window.localStorage.getItem('godoutor-side-v2')).toBe('full');
+    // E o botão passa a oferecer a volta (recolher), também persistida.
     await u.click(screen.getByRole('button', { name: 'Recolher navegação' }));
-    expect(onCollapse).toHaveBeenCalledOnce();
+    expect(side.getAttribute('data-nav-width')).toBe('mini');
+    expect(window.localStorage.getItem('godoutor-side-v2')).toBe('mini');
+    // O SHELL continua sem estado de largura: quem guarda a preferência é a
+    // própria navegação (uma fonte só), e o layout reflui sozinho no flex.
+    const shell = fs.readFileSync(path.join(process.cwd(), 'src/components/DashboardShell.tsx'), 'utf8');
+    expect(shell).not.toMatch(/localStorage\.(get|set|remove)Item\(\s*'(godoutor|il)-side/);
+    expect(shell).not.toMatch(/localStorage\.(get|set)Item\(\s*`(godoutor|il)-side/);
+    expect(shell).not.toContain("'--sidebar-w'");
+  });
+
+  it('P0 · rodada 2 — a navegação ABERTA desenha os filhos do grupo no fluxo (sem painel flutuante, sem seta)', async () => {
+    const u = userEvent.setup();
+    const { container } = setup();
+    await u.click(screen.getByRole('button', { name: 'Expandir navegação' }));
+    const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
+    // O grupo deixa de ser BOTÃO (nada de accordion) e vira título + destinos.
+    expect(within(side).queryByRole('button', { name: 'Clínica' })).toBeNull();
+    expect(side.querySelectorAll('.workspace-nav-drawer__title').length).toBeGreaterThan(0);
+    expect(side.querySelectorAll('.workspace-link--sub').length).toBeGreaterThan(0);
+    // E nenhuma extensão flutuante é renderizada nesse modo.
+    expect(document.getElementById('ws-nav-panel')).toBeNull();
+    expect(container.querySelector('.ws-peek')).toBeNull();
   });
 
   it('destino fora do menu NUNCA deixa painel vazio (invariante da área dona)', async () => {
@@ -401,45 +451,54 @@ describe('DS 1.0 §15/§18 — grupo abre PAINEL LATERAL (sem acordeão)', () =>
   });
 });
 
-describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu inline)', () => {
+describe('MISSÃO UX CLOSURE · o rail (só ícones, tooltip, sem submenu inline)', () => {
   it('não renderiza nome/tipo da clínica, nem submenu inline, nem powered by', () => {
-    setup({ collapsed: true, unit: { ...unit, name: 'Andrioni Veterinária', clinicType: 'veterinaria' } });
+    setup({ unit: { ...unit, name: 'Andrioni Veterinária', clinicType: 'veterinaria' } });
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
     expect(side.textContent).not.toContain('Andrioni Veterinária');
     expect(side.textContent).not.toContain('Clínica veterinária');
-    expect(side.querySelector('.workspace-submenu')).toBeNull();
-    // §18 — nenhum grupo abre filhos dentro da coluna, em nenhum modo.
-    expect(side.querySelector('.workspace-nav-drawer__title')).toBeNull();
-    expect(side.querySelector('.workspace-clinic-head__text')).toBeNull();
     expect(side.textContent).not.toContain('powered by');
-    // A logo/monograma recolhida existe, centralizada no rail.
-    expect(side.querySelector('.workspace-clinic-head__logo--mini, .workspace-clinic-head__mark--mini')).toBeTruthy();
+    expect(side.querySelector('.workspace-submenu')).toBeNull();
+    expect(side.querySelector('.workspace-clinic-head__text')).toBeNull();
+    // §18 — nenhum grupo abre filhos DENTRO da coluna: o painel é a extensão.
+    expect(side.querySelector('.workspace-nav-drawer__title')).toBeNull();
+    expect(side.querySelectorAll('.workspace-link--sub')).toHaveLength(0);
   });
 
-  it('labels do menu ficam OCULTOS por CSS (contrato de fonte do globals.css)', () => {
-    const css = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'app', 'globals.css'), 'utf8');
-    expect(css).toMatch(/\.is-collapsed \.workspace-label\s*\{\s*display:\s*none/);
-    expect(css).toMatch(/\.is-collapsed \.workspace-clinic-head__text\s*\{\s*display:\s*none/);
-    // §15 — painel ancorado na borda da navegação (rail OU expandida).
-    expect(css).toMatch(/\.ws-peek \{[\s\S]*?left: calc\(var\(--gd-rail-w\) \+ var\(--gd-space-1\)\)/);
-    expect(css).toMatch(/\.ws-peek--wide \{ left: calc\(var\(--gd-sidebar-w\) \+ var\(--gd-space-1\)\); \}/);
+  it('labels do menu ficam OCULTOS por CSS e o painel é COLADO no rail', () => {
+    const css = fs.readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8');
+    // O rail não tem modo expandido: o rótulo é sempre oculto na coluna.
+    expect(css).toMatch(/\.workspace-sidebar \.workspace-label\s*\{\s*display:\s*none/);
+    expect(css).not.toMatch(/\.is-collapsed/);
+    // A extensão do grupo nasce na BORDA do rail: sem gap, sem card flutuante.
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?left: var\(--gd-rail-w\)/);
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?bottom: 0/);
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?border-left: 0/);
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?box-shadow: none/);
+    expect(css).toMatch(/\.ws-peek \{[\s\S]*?top: var\(--gd-topbar-h\)/);
+    // A largura da coluna vem de UMA fonte (token), nunca de valor solto.
+    expect(css).toMatch(/\.il-platform \.workspace-sidebar \{[\s\S]*?width: var\(--gd-rail-w\)/);
+    // ... e o token está na janela 56–60px pedida pela missão.
+    const ds = fs.readFileSync(path.join(process.cwd(), 'src/styles/godoutor-design-system.css'), 'utf8');
+    const rail = Number(ds.match(/--gd-rail-w:\s*(\d+)px/)?.[1]);
+    expect(rail).toBeGreaterThanOrEqual(56);
+    expect(rail).toBeLessThanOrEqual(60);
   });
 
   it('NENHUM elemento da sidebar usa .il-tip (causa raiz da scrollbar horizontal, §9)', () => {
-    setup({ collapsed: true });
+    setup();
     expect(document.querySelectorAll('.il-tip')).toHaveLength(0);
-    // Proteção extra: o container rolável não deixa nada vazar na horizontal.
-    const css = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'app', 'globals.css'), 'utf8');
+    const css = fs.readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8');
     expect(css).toMatch(/\.workspace-primary\s*\{[^}]*overflow-x:\s*hidden/);
   });
 
   it('itens do rail carregam tooltip (data-tip) e o tooltip aparece ao hover', () => {
-    setup({ collapsed: true });
+    setup();
     const side = screen.getByRole('complementary', { name: 'Navegação da clínica' });
     const agenda = screen.getByRole('link', { name: 'Agenda' });
     expect(agenda.getAttribute('data-tip')).toBe('Agenda');
-    // GRUPOS no rail: SEM data-tip — o hover-peek (§7) assume este papel
-    // (cobre o nome + itens); o tooltip é só para rotas diretas.
+    // GRUPOS no rail: SEM data-tip — a própria extensão mostra o nome do grupo
+    // (um tooltip por cima do painel seria ruído); diretas usam tooltip.
     expect(screen.getByRole('button', { name: 'Automação' }).getAttribute('data-tip')).toBeNull();
     expect(screen.getByRole('button', { name: 'Ajuda e suporte' }).getAttribute('data-tip')).toBe('Ajuda e suporte');
     expect(side.querySelector('.ws-nav-tip')).toBeNull();
@@ -453,7 +512,7 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
   });
 
   it('tooltip também aparece no foco (teclado)', () => {
-    setup({ collapsed: true });
+    setup();
     const agenda = screen.getByRole('link', { name: 'Agenda' });
     fireEvent(agenda, new Event('focusin', { bubbles: true }));
     expect(screen.getByRole('tooltip').textContent).toBe('Agenda');
@@ -461,21 +520,99 @@ describe('Missão §7/§8 — rail recolhido (só ícones, tooltip, sem submenu 
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
-  it('clicar num grupo no modo recolhido NÃO expande a sidebar — só abre o flyout', async () => {
+  it('clicar num grupo NUNCA expande a coluna — só abre/fecha a extensão', async () => {
     const u = userEvent.setup();
-    const view = setup({ collapsed: true });
+    const view = setup();
     const main = screen.getByRole('navigation', { name: 'Menu principal' });
     const btn = within(main).getByRole('button', { name: 'Automação' });
     await u.click(btn);
-    // CONTRATO do refino final: o clique de grupo NUNCA expande a sidebar.
-    expect(view.onCollapse).not.toHaveBeenCalled();
-    // O flyout do grupo abre (aria-expanded acompanha o peek).
+    // O rail não tem largura variável: não existe callback de colapso.
+    expect(Object.keys(view)).not.toContain('onCollapse');
     expect(btn.getAttribute('aria-expanded')).toBe('true');
-    // Clique de novo fecha o flyout — sidebar continua recolhida.
     await u.click(btn);
-    expect(view.onCollapse).not.toHaveBeenCalled();
     expect(btn.getAttribute('aria-expanded')).toBe('false');
-    // Nenhum submenu inline aparece no rail.
     expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(0);
+  });
+
+  it('a extensão do grupo contém os destinos persistentes da área, sem promover Atendimento', async () => {
+    const u = userEvent.setup();
+    setup({ activePath: '/configuracoes' });
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    for (const [group, expected] of [
+      ['Clínica', ['Serviços', 'Disponibilidade', 'Equipe']],
+      ['Automação', ['Automações', 'Follow-up', 'Campanhas']],
+      ['Gestão', ['Resultados', 'Financeiro', 'Oportunidades']],
+      ['Configurações', ['Canais & Integrações']],
+    ] as const) {
+      await u.click(within(main).getByRole('button', { name: group }));
+      const panel = document.getElementById('ws-nav-panel')!;
+      const labels = within(panel).getAllByRole('menuitem').map((m) => m.textContent || '');
+      for (const label of expected) {
+        expect(labels.some((l) => l.startsWith(label)), `${group} → ${label}`).toBe(true);
+      }
+      // P0 · RODADA 2 — nenhuma linha de MENU traz comércio/diagnóstico nem o
+      // rótulo interno "contextual" que existia para explicar o item.
+      for (const banned of ['Produtos', 'Recursos', 'Execuções', 'Atendimento', 'contextual', 'CONTEXTUAL']) {
+        expect(panel.textContent, `${group} → ${banned}`).not.toContain(banned);
+      }
+      // Nenhum alias de compatibilidade duplica porta.
+      expect(labels.some((l) => l.startsWith('Profissionais'))).toBe(false);
+    }
+  });
+
+  it('a extensão abre no hover, sobrevive ao trânsito até ela e fecha só ao sair', async () => {
+    vi.useFakeTimers();
+    try {
+      const { PEEK_CLOSE_MS } = await import('@/lib/sidebar-peek');
+      setup();
+      const main = screen.getByRole('navigation', { name: 'Menu principal' });
+      const clinica = within(main).getByRole('button', { name: 'Clínica' });
+      // hover abre na hora
+      fireEvent.mouseEnter(clinica);
+      const panel = document.getElementById('ws-nav-panel')!;
+      expect(panel.getAttribute('aria-label')).toBe('Clínica');
+      // sair do ícone e ENTRAR no painel mantém aberto…
+      fireEvent.mouseLeave(clinica);
+      fireEvent.mouseEnter(panel);
+      act(() => { vi.advanceTimersByTime(PEEK_CLOSE_MS + 50); });
+      expect(document.getElementById('ws-nav-panel')).toBeTruthy();
+      // …e sair do painel fecha depois do pequeno atraso.
+      fireEvent.mouseLeave(panel);
+      act(() => { vi.advanceTimersByTime(PEEK_CLOSE_MS + 50); });
+      expect(document.getElementById('ws-nav-panel')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('trocar de grupo com o painel aberto NÃO fecha entre um e outro', async () => {
+    const u = userEvent.setup();
+    setup();
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    await u.click(within(main).getByRole('button', { name: 'Clínica' }));
+    expect(document.getElementById('ws-nav-panel')?.getAttribute('aria-label')).toBe('Clínica');
+    await u.click(within(main).getByRole('button', { name: 'Gestão' }));
+    // Sem fechar/reabrir: o MESMO painel troca de conteúdo (um grupo por vez).
+    const panel = document.getElementById('ws-nav-panel')!;
+    expect(panel.getAttribute('aria-label')).toBe('Gestão');
+    expect(document.querySelectorAll('.ws-peek')).toHaveLength(1);
+    expect(document.querySelectorAll('.workspace-group.is-open')).toHaveLength(1);
+  });
+
+  it('teclado: foco abre, setas andam nos destinos, ← e Escape fecham', async () => {
+    const u = userEvent.setup();
+    setup();
+    const main = screen.getByRole('navigation', { name: 'Menu principal' });
+    const clinica = within(main).getByRole('button', { name: 'Clínica' });
+    clinica.focus();
+    fireEvent.keyDown(clinica, { key: 'ArrowRight' });
+    const panel = document.getElementById('ws-nav-panel')!;
+    const items = within(panel).getAllByRole('menuitem');
+    await vi.waitFor(() => expect(document.activeElement).toBe(items[0]));
+    fireEvent.keyDown(items[0], { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1], { key: 'Escape' });
+    expect(document.getElementById('ws-nav-panel')).toBeNull();
+    await u.tab(); // teclado segue navegável depois de fechar
   });
 });

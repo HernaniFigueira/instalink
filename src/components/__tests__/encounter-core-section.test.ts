@@ -111,7 +111,9 @@ describe('F1A · o núcleo renderiza só o que é do F1A', () => {
     expect(html).toContain('aria-label="Registro do atendimento"');
   });
 
-  it('finalizado é leitura: sem edição e sem ação de reabertura aqui', () => {
+  // DS 1.1 · §11 — o contrato mudou DE PROPÓSITO: escrita bloqueada = DOCUMENTO
+  // (valor em leitura, motivo dito uma vez), não um formulário desabilitado.
+  it('finalizado é leitura: documento, sem nenhum controle de formulário', () => {
     const finalized = renderToStaticMarkup(
       createElement(EncounterCoreSection, {
         businessId: 'b1', encounter: coreRow({ status: 'finalized' }),
@@ -119,10 +121,11 @@ describe('F1A · o núcleo renderiza só o que é do F1A', () => {
     );
     expect(finalized).toContain('Conduta realizada');           // o conteúdo continua legível
     expect(finalized).not.toContain('Reabrir para editar');
-    // Nenhum campo editável: TODO controle do núcleo nasce desabilitado.
-    const controls = finalized.match(/<(?:textarea|input)\b[^>]*>/g) || [];
-    expect(controls.length).toBeGreaterThan(0);
-    for (const tag of controls) expect(tag).toContain('disabled');
+    // Nenhum campo — nem habilitado, nem desabilitado: leitura é texto.
+    const controls = finalized.match(/<(?:textarea|input|select)\b[^>]*>/g) || [];
+    expect(controls.length).toBe(0);
+    expect(finalized).toContain('gd-ro-section');
+    expect(finalized).toMatch(/Leitura: editar o conteúdo clínico|Registro finalizado/);
   });
 });
 

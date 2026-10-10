@@ -207,9 +207,22 @@ export interface PanelRouteDef {
   /**
    * false = destino declarado que não ocupa linha no menu (uso esporádico ou
    * legado). Continua acessível por URL e por atalho contextual.
+   *
+   * MISSÃO UX CLOSURE — o painel do GRUPO não é "linha do menu": ele é a
+   * superfície de atalho contextual do grupo. Por isso `sidebar: false`
+   * continua fora da COLUNA (régua: frequência) e passa a aparecer DENTRO do
+   * painel do grupo dono — nenhuma rota autorizada fica invisível. A exceção
+   * é `compatOnly` (abaixo).
    * Default: true.
    */
   sidebar?: boolean;
+  /**
+   * true = alias de compatibilidade: a rota existe e redireciona para a porta
+   * viva (`/profissionais` → `/equipe`), mas não é um destino próprio. Alias
+   * não ocupa linha, não abre painel de grupo e não entra em busca — senão o
+   * menu mostra duas portas para a mesma tela.
+   */
+  compatOnly?: boolean;
   /** Arquétipo obrigatório: determina largura máxima, gutters e padding do PageFrame. */
   pageType: PageType;
   /**
@@ -279,6 +292,7 @@ export const PANEL_ROUTES: PanelRouteDef[] = [
     href: '/profissionais', label: 'Profissionais', icon: 'idcard', section: 'operacao',
     pageType: 'hub',
     modes: ['services', 'bookings'], permission: 'catalogo', area: 'profissionais', sidebar: false,
+    compatOnly: true,
     description: 'Redireciona para Equipe — gestão unificada de pessoas (compatibilidade com links antigos).',
   },
   {

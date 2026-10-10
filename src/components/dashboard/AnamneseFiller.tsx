@@ -158,7 +158,7 @@ export function AnamneseFiller({
   return (
     <WorkspaceSheet open={open} onClose={onClose}
       dismissGuard={dismissState}
-      title={template?.name || 'Anamnese'} subtitle="Ficha clínica — episódio atual do paciente." icon="fileText" width="820px"
+      title={template?.name || 'Anamnese'} icon="fileText" width="820px"
       footer={<div className="flex w-full justify-end gap-2"><Button variant="secondary" onClick={requestFormClose} disabled={busy}>Cancelar</Button><Button variant="primary" onClick={save} disabled={busy || !template}>{busy ? 'Salvando…' : 'Salvar ficha'}</Button></div>}
     >
       {formDismiss.dialog}

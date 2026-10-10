@@ -14,10 +14,10 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        // §4 — a tipografia interna é Geist Sans, e só ela. "Inter" não é
-        // carregada em lugar nenhum: mantê-la aqui fazia `font-sans` cair no
-        // system-ui e a tela trocar de letra sem ninguém perceber.
-        sans: ["var(--font-geist-sans)", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        // A fonte canônica do produto é Barlow. `font-sans` precisa herdar o
+        // mesmo token do body; `--font-geist-sans` não existe neste app e fazia
+        // as utilitárias Tailwind caírem em system-ui.
+        sans: ["var(--gd-font-sans)"],
       },
       colors: {
         // Neutros do produto (frio, suave, com contraste de estado).

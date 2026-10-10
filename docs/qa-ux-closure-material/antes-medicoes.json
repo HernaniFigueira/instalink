@@ -1,0 +1,97 @@
+{
+  "base": "http://127.0.0.1:3001",
+  "tag": "antes",
+  "hoverMsAteAparecer": 243,
+  "hover": {
+    "largura": 278,
+    "altura": 180,
+    "fundo": "rgb(255, 255, 255)",
+    "sombra": "rgba(15, 23, 42, 0.12) 0px 4px 12px -4px, rgba(15, 23, 42, 0.14) 0px 12px 24px -",
+    "temCta": true,
+    "temStatus": true,
+    "texto": "12:30–12:45PendenteAna PradoServiçoVacinação anualProfissionalDr. Pedro AndrioniVer detalhesReagendar"
+  },
+  "ctxmenu": {
+    "existe": false,
+    "itens": [],
+    "hoverAceso": true
+  },
+  "ctxmenuTeclado": false,
+  "toolbar": {
+    "todos": [
+      {
+        "rotulo": "Filtros",
+        "altura": 40,
+        "borda": "1px",
+        "fundo": "rgba(0, 0, 0, 0)"
+      },
+      {
+        "rotulo": "Fila3",
+        "altura": 40,
+        "borda": "1px",
+        "fundo": "rgba(0, 0, 0, 0)"
+      },
+      {
+        "rotulo": "Legenda e como usar a gr",
+        "altura": 40,
+        "borda": "1px",
+        "fundo": "rgba(0, 0, 0, 0)"
+      }
+    ],
+    "qtd": 3,
+    "min": 40,
+    "max": 40,
+    "variacao": 0,
+    "comBorda": [
+      "Filtros",
+      "Fila3",
+      "Legenda e como usar a gr"
+    ],
+    "equivalentesVariacao": 0
+  },
+  "semana": {
+    "vistaSelecionada": "Semana",
+    "colunas": 7,
+    "eventos": 6,
+    "alcas": 6
+  },
+  "detalhe1440": {
+    "classe": "gd-detail__panel",
+    "x": 980,
+    "largura": 460,
+    "altura": 900,
+    "distanciaDireita": 0,
+    "alturaCheia": true,
+    "viewport": "1440x900",
+    "raio": "0px",
+    "sombra": "none"
+  },
+  "detalhe390": {
+    "x": 8,
+    "largura": 374,
+    "topo": 8,
+    "altura": 828,
+    "distanciaDireita": 8,
+    "flutua": true
+  },
+  "menu": {
+    "rotulo": "Visão geral",
+    "fonteDoDestino": "13.5px",
+    "linha": "17.55px",
+    "larguraDoRail": 60,
+    "chevrons": 0
+  },
+  "perfil": {
+    "temGrade": false,
+    "colunas": null,
+    "xResumo": 933,
+    "xConteudo": 883,
+    "resumoAEsquerda": false
+  },
+  "dashboard": {
+    "itens": 5,
+    "borda": "1px",
+    "fundo": "rgb(255, 255, 255)",
+    "temAcoesRapidas": true
+  }
+}

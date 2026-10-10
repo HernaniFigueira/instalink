@@ -88,7 +88,7 @@ export default function FollowUpPage() {
     <PageHeader
       icon="send"
       title="Follow-up"
-      hint="Receitas de retorno: confirmação, falta, pós-atendimento, retorno e reativação. Prévia com dado real — nada é enviado ainda."
+      hint="Prévia com dado real — nada é enviado ainda."
     />
   );
 

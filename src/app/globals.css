@@ -231,14 +231,19 @@
 }
 
 html { scroll-behavior: smooth; }
+/* DS 1.1 · §3 — a fonte do produto é UMA: o token canônico. O `body` apontava
+   para `--font-geist-sans`, variável que deixou de existir quando a Barlow
+   entrou: um `var()` inexistente invalida a declaração inteira e o navegador
+   caía no default da plataforma (Times New Roman) em tudo que não estivesse
+   dentro do `.gd-app`. Agora o corpo herda o mesmo token do app. */
 body {
   @apply subpixel-antialiased;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--gd-font-sans);
   font-feature-settings: 'cv11', 'ss01';
 }
-.font-display { font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif; letter-spacing: -.015em; }
+.font-display { font-family: var(--gd-font-sans); letter-spacing: -.015em; }
 ::selection { background: var(--brand); color: #fff; }
 
 /* Foco visível em QUALQUER elemento interativo do painel — coerente e
@@ -332,16 +337,26 @@ body {
 .il-segmented {
   /* Seletor de MODO (Agenda): container claro, opções compactas. O estado
      ativo é azul CLARO (fundo suave + texto/ícone azul) — o azul sólido com
-     texto branco competia com a página inteira. */
+     texto branco competia com a página inteira.
+     CONTRATO DE MÉTRICA: o seletor de modo tem a MESMA altura do Button do
+     seu nível (`--control-h` / `--control-h-sm`) — antes ele media 36px e
+     ficava 4px mais baixo que "Hoje"/setas/data na mesma linha da toolbar. */
   position: relative; display: inline-flex; align-items: center; gap: 2px;
-  padding: 3px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  min-height: var(--control-h);
+  /* P1 · RODADA 2 — MENOS CONTORNO: o grupo é um POÇO neutro (`--surface-3`),
+     não um controle desenhado. Quem marca a opção ativa é o polegar suave; a
+     borda do container não existe mais. Assim o seletor de modo (Dia/Semana/
+     Lista) para de competir com o CTA da própria toolbar. */
+  padding: 3px; background: var(--surface-3);
+  border: 1px solid transparent; border-radius: var(--radius-sm);
 }
+.il-segmented--sm { min-height: var(--control-h-sm); }
 .il-segmented__thumb {
   position: absolute; top: 3px; left: 0; height: calc(100% - 6px); z-index: 0;
   border-radius: calc(var(--radius-sm) - 3px);
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface));
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(15, 23, 42, .08));
   transition: transform var(--motion-base) var(--ease-standard),
               width var(--motion-base) var(--ease-standard);
   pointer-events: none;
@@ -349,12 +364,14 @@ body {
 .il-segmented__item {
   position: relative; z-index: 1;
   display: inline-flex; align-items: center; gap: 6px;
-  height: 30px; padding: 0 11px; border-radius: calc(var(--radius-sm) - 3px);
+  /* 8px = padding 3px×2 + borda 1px×2 do container: a opção preenche a altura
+     útil do controle, então o seletor mede exatamente --control-h. */
+  height: calc(var(--control-h) - 8px); padding: 0 11px; border-radius: calc(var(--radius-sm) - 3px);
   font-size: 13px; font-weight: 500; line-height: 1.1; white-space: nowrap;
   color: var(--text-soft);
   transition: color var(--motion-fast) var(--ease-standard);
 }
-.il-segmented__item:hover { color: var(--text); }
+.il-segmented__item:hover { color: var(--text); background: color-mix(in srgb, var(--surface-hover) 70%, transparent); }
 .il-segmented__item[aria-selected='true'] { color: var(--brand-fg); font-weight: 600; }
 .il-segmented__item:disabled { opacity: .45; pointer-events: none; }
 .il-segmented__count {
@@ -364,7 +381,7 @@ body {
   background: var(--surface-hover); color: var(--text-muted);
 }
 .il-segmented__item[aria-selected='true'] .il-segmented__count { background: rgba(255,255,255,.22); color: #fff; }
-.il-segmented--sm .il-segmented__item { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.il-segmented--sm .il-segmented__item { height: calc(var(--control-h-sm) - 8px); padding: 0 10px; font-size: 12.5px; }
 /* Em telas estreitas o ícone sai e só o rótulo fica: o controle continua
    legível e as quatro opções cabem sem rolar a faixa (§19). */
 @media (max-width: 640px) {
@@ -965,7 +982,10 @@ input[type='color'] { @apply cursor-pointer; }
 /* Option chips / escolhas múltiplas — selecionado por contorno e foreground,
    não preenchimento principal. Tabs, badges e CTAs têm contratos separados. */
 .il-platform .il-option-choice {
-  display:inline-flex; min-height:36px; align-items:center; justify-content:center; gap:6px;
+  /* DS 1.0 · §6 — 36px não é nível do DS. O chip de opção usa o nível DENSO da
+     escala (`--control-h-sm`, 34px), o mesmo das ações densas; o `--compact`
+     continua em 28. Nada de altura inventada por componente. */
+  display:inline-flex; min-height:var(--control-h-sm); align-items:center; justify-content:center; gap:6px;
   padding:0 12px; border:1px solid var(--border-strong); border-radius:var(--radius-pill);
   background:var(--surface); color:var(--text-muted); font:inherit; font-size:12.5px; font-weight:600;
   line-height:1.25; cursor:pointer; transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease;
@@ -981,7 +1001,9 @@ input[type='color'] { @apply cursor-pointer; }
   border-color:var(--accent); background:var(--surface); color:var(--accent-fg);
 }
 .il-platform .il-option-choice:disabled { opacity:1; cursor:not-allowed; }
-.il-platform .il-option-choice--compact { min-height:30px; padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
+/* Variante COMPACTA (chips de período em card): o nível vem do DS
+   (`--gd-control-h-xs`), não de um 30px solto — mesma escala de todo controle. */
+.il-platform .il-option-choice--compact { min-height:var(--gd-control-h-xs); padding:0 9px; border-radius:var(--radius-sm); font-size:12px; }
 .il-platform .il-selectable-card {
   border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface);
   color:var(--text); transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease;
@@ -992,21 +1014,50 @@ input[type='color'] { @apply cursor-pointer; }
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent);
 }
 
-/* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ── */
+/* ── Alturas de controle: UMA escala (tokens), não 44px solto por regra ──
+   Contrato do DS 1.0: controle do mesmo nível tem a mesma altura. Ícone é
+   QUADRADO (largura = altura do nível) — o `.gd-icon-control*` decide isso; a
+   regra abaixo só garante o mínimo de alvo em ponteiro fino. */
 .il-platform .il-control { min-height: var(--control-h); }
 .il-platform .il-control--sm { min-height: var(--control-h-sm); }
 .il-platform .il-control--xs { min-height: var(--control-h-xs); }
-.il-platform .il-icon-button { min-width: var(--control-h); }
+/* O nível LG existia sem régua: a altura saía do `py-2.5` + texto e media 42px
+   — um 5º nível acidental, 2px fora da escala (a auditoria global pegou o CTA
+   "Salvar agente"). LG é o nível de AÇÃO GRANDE do DS: 44 (`--control-h-touch`). */
+.il-platform .il-control--lg { min-height: var(--control-h-touch); }
+/* O campo canônico tem a métrica MD em QUALQUER página — não só dentro de
+   `.il-platform`. Antes disso, páginas fora do escopo do platform herdavam o
+   `py-2` do `FIELD_CLS` e mediam 38px, a 2px da régua (o defeito que a auditoria
+   global pegou em /configuracoes e /clientes). A régua é do controle, então a
+   regra é do controle — não de um `h-[38px]` de página. */
+.il-field-control { min-height: var(--control-h); }
 .il-platform .il-field-control { min-height: var(--control-h); }
 .il-platform textarea.il-field-control { min-height: 76px; }
-.il-platform .il-tab { min-height: var(--control-h-sm); }
+/* Tabs: o nível vem do tamanho pedido (md = régua de ação, sm = régua densa).
+   O `scale-95` que existia no `il-tabbar--sm` saiu: escalar controle é
+   métrica falsa (34px × 0.95 = 32,3px) e borra tipografia. */
+.il-platform .il-tab { min-height: var(--control-h); }
+.il-platform .il-tabbar--sm .il-tab { min-height: var(--control-h-sm); }
 
 /* Alvo de toque: em ponteiro grosso/tela pequena tudo volta a 44px (AAA). */
 @media (pointer: coarse), (max-width: 767px) {
   .il-platform .il-control,
   .il-platform .il-tab { min-height: var(--control-h-touch); }
-  .il-platform .il-icon-button { min-width: var(--control-h-touch); }
+  .il-platform .il-icon-button { min-width: var(--control-h-touch); min-height: var(--control-h-touch); }
+  /* MISSÃO UX CLOSURE · itens 5 e 6 — no toque a régua é UMA só, e ela vale
+     para TODO controle da mesma linha. O `il-field-control` (inclusive quando é
+     o gatilho do DatePicker) e o `il-segmented` ficavam em 40 ao lado de
+     botões de 44 na MESMA linha da toolbar (medido a 390px). O campo é o
+     canônico: a régua sobe no canônico, não num `min-h-[44px]` de página. */
+  /* Especificidade: dentro de `.il-platform` quem manda é a regra de dois
+     seletores — a régua de toque precisa da MESMA especificidade para vencer. */
+  .il-field-control,
+  .il-platform .il-field-control { min-height: var(--control-h-touch); }
   .il-platform .il-field-control { font-size: 16px; }
+  .il-segmented { min-height: var(--control-h-touch); }
+  /* Cada opção é um alvo independente (Dia, Semana, Lista): não basta o
+     contêiner do grupo medir 44px se os botões internos ficam em 36px. */
+  .il-segmented__item { height: var(--control-h-touch); }
 }
 @media (prefers-reduced-motion: reduce) {
   .il-platform, .il-platform *, .il-platform *::before, .il-platform *::after {
@@ -1138,6 +1189,41 @@ dialog.il-drawer .il-actionbar {
   }
   .il-drawer__panel--recessed { transform: none; }
 }
+/* ── VARIANTE MODAL CENTRAL (`variant="dialog"`) ─────────────────
+   MISSÃO UX CLOSURE · item 3C — criação/edição de agendamento é FORMULÁRIO
+   CURTO e vive no CENTRO da tela, com largura confortável (nunca 95% da
+   viewport colada na borda direita). Mesmo overlay system do Drawer: um
+   dialog, um backdrop, guards e foco iguais — muda só a geometria. A faixa
+   lateral continua existindo para superfícies de TRABALHO longas. */
+dialog.il-drawer--dialog {
+  top: 50%; left: 50%; right: auto; bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(var(--il-dialog-w, 672px), calc(100vw - 2 * var(--gd-space-4)));
+  height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
+  max-height: calc(100dvh - 2 * var(--gd-space-4));
+}
+/* Com o cadastro aninhado aberto o par 50/50 precisa de faixa: a MESMA regra
+   do sistema expande o modal (até 1280px), sem virar dois overlays. */
+dialog.il-drawer--dialog[data-expanded='true'] {
+  width: min(1280px, calc(100vw - 2 * var(--gd-space-4)));
+}
+dialog.il-drawer--dialog .il-drawer__strip {
+  width: 100%; max-width: none;
+  border-radius: var(--gd-radius-lg);
+}
+/* Bolinha do topo: no modal central a faixa tem raio do DS (8px, não 20px). */
+dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) var(--gd-radius-lg); }
+@media (max-width: 767px) {
+  /* Celular: o modal central usa a largura/altura úteis com respiro mínimo —
+     nunca uma coluna estreita perdida no meio. */
+  dialog.il-drawer--dialog {
+    top: 50%; left: 50%; right: auto; bottom: auto;
+    width: calc(100vw - 2 * var(--gd-space-3));
+    height: calc(100dvh - 2 * var(--gd-space-3));
+    max-height: calc(100dvh - 2 * var(--gd-space-3));
+  }
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    APP SHELL — topbar, navegação por seções e conteúdo contextual
@@ -1192,7 +1278,10 @@ dialog.il-drawer .il-actionbar {
   position: sticky; top: 0; z-index: 45;
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 12px;
-  padding: 0 16px;
+  /* Pass 2 — identidade no eixo do rail: logo de 34px + gutter 13px tem
+     centro x=30, o mesmo dos ícones no rail de 60px. O lado direito preserva
+     o gutter de conteúdo de 16px. */
+  padding: 0 16px 0 var(--gd-topbar-gutter-x);
   background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -1276,7 +1365,48 @@ dialog.il-drawer .il-actionbar {
 .ws-crumbs--content a { color: var(--text-faint); transition: color .15s ease; }
 .ws-crumbs--content a:hover { color: var(--brand-fg); }
 .ws-crumbs--content [aria-current="page"] { color: var(--text-soft); font-weight: 600; }
-.ws-topbar__left { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.ws-topbar__left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+/* IDENTIDADE NA TOPBAR (missão item 2): logo + NOME COMPLETO da clínica no
+   bloco esquerdo. A sidebar não repete isso. Com mais de uma unidade o bloco
+   é botão (troca real de contexto); com uma só, é texto. */
+/* DS 1.1 — IDENTIDADE: LOGO SOLTA + NOME COMPLETO, uma vez só.
+   A logo é a marca da clínica, não um avatar de app: nada de tile (sem borda,
+   sem fundo, sem raio) — só a arte, na proporção do arquivo. O texto ao lado é
+   o NOME COMPLETO, no papel de título de página. */
+.ws-clinic {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-width: 0; max-width: min(40ch, 42vw);
+  min-height: var(--control-h);
+  /* P1 · RODADA 2 — SEM RECUO ESQUERDO: o bloco de identidade ENCOSTA no
+     gutter da topbar (que é o eixo dos ícones do rail). Com 6px de recuo, a
+     logo nascia 6px à direita do primeiro ícone da coluna e a página tinha
+     DUAS linhas verticais de início. */
+  padding: 0 6px 0 0; border-radius: var(--radius-md);
+  color: var(--text-strong);
+  font-size: var(--gd-type-page-title-size); font-weight: var(--gd-type-page-title-weight);
+  line-height: var(--gd-type-page-title-line); letter-spacing: -.02em;
+}
+.ws-clinic--action { border: 1px solid transparent; transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
+.ws-clinic--action:hover { background: var(--surface-hover); border-color: var(--border); }
+.ws-clinic__logo {
+  /* `height` fixa a presença; `width: auto` + `max-width` PRESERVAM a proporção
+     do arquivo (nada de quadrado forçado distorcendo logo horizontal). */
+  height: var(--gd-topbar-logo); width: auto; max-width: var(--gd-topbar-logo-max);
+  object-fit: contain; flex-shrink: 0;
+  border: 0; border-radius: 0; background: none;
+}
+.ws-clinic__mark {
+  /* Fallback de QUEM NÃO TEM ARQUIVO: a sigla ocupa o lugar da logo com o peso
+     do texto — sem bloco colorido decorativo (a cor de marca fica no acento). */
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--gd-topbar-logo); min-width: calc(var(--gd-topbar-logo) * .72);
+  padding: 0 2px; flex-shrink: 0;
+  color: var(--text-strong);
+  font-size: calc(var(--gd-topbar-logo) * .46); font-weight: var(--gd-weight-bold);
+  letter-spacing: -.02em; background: none; border-radius: 0;
+}
+.ws-clinic__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-clinic__chev { color: var(--text-muted); flex-shrink: 0; }
 .ws-topbar__center { display: flex; justify-content: center; flex: 1 1 auto; min-width: 0; }
 .ws-topbar__right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
@@ -1565,44 +1695,37 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 /* ── Sidebar principal ──────────────────────────────────────── */
 .il-platform .workspace-sidebar {
   display: none; flex-direction: column; flex-shrink: 0;
-  /* DS 1.0 · §12/§13 — sidebar BRANCA (estrutura fixa), presa abaixo da
-     top bar full-width; nunca projeta sombra sobre o conteúdo. */
+  /* MISSÃO UX CLOSURE · item 1 — a sidebar é um RAIL BRANCO ESTREITO de
+     navegação (56–60px): não existe modo expandido no desktop, não existe
+     botão de expandir/recolher e nada empurra o conteúdo. Presa abaixo da
+     topbar full-width; a divisa com o workspace é UMA linha de 1px (nunca
+     sombra projetada). */
   position: sticky; top: var(--gd-topbar-h);
-  width: var(--sidebar-w); height: calc(100dvh - var(--gd-topbar-h));
+  width: var(--gd-rail-w); height: calc(100dvh - var(--gd-topbar-h));
   background: var(--il-nav);
-  /* Separação sidebar × workspace SEM sombra projetada: só borda 1px sutil
-     + a diferença natural de fundo (refino final — nenhuma shadow na divisa). */
   border-right: 1px solid var(--il-nav-border);
 }
-.il-platform .workspace-sidebar.is-collapsed { width: var(--sidebar-w-mini); }
-.is-collapsed .workspace-label { display: none; }
+.workspace-sidebar .workspace-label { display: none; }
+/* ── P0 · RODADA 2 — NAVEGAÇÃO ABERTA (`is-expanded`) ────────────────────
+   O rail estreito continua sendo o PADRÃO desta coluna; o controle do rodapé
+   (`.workspace-foot__item--collapse`) é quem abre a MESMA navegação com os
+   rótulos visíveis e os destinos de grupo no fluxo. Nenhuma rota, cor ou
+   permissão muda com a largura — muda só o espaço que a coluna ocupa, e a
+   preferência é do usuário (persistida). A largura vem de UM token
+   (`--gd-nav-w`), nunca de um número solto. */
+.il-platform .workspace-sidebar.is-expanded { width: var(--gd-nav-w); }
+.workspace-sidebar.is-expanded .workspace-label { display: inline; }
+.workspace-sidebar.is-expanded .workspace-link { justify-content: flex-start; }
+/* Título de grupo na coluna aberta: mesmo tratamento do drawer móvel — o grupo
+   é um RÓTULO, não um botão com seta (o rail não é accordion em modo nenhum). */
+.workspace-sidebar.is-expanded .workspace-nav-drawer__title { padding-left: 10px; }
+/* Identidade NÃO mora mais aqui (ver bloco dedicado adiante). */
 
-/* HOMOLOGAÇÃO · sidebar = UMA superfície contínua (sem linha sob a marca). */
-.workspace-identity { padding: 14px 14px 12px; border-bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.workspace-collapse-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: var(--radius-md); border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.10); color: var(--il-nav-fg);
-  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
-}
-.workspace-collapse-btn:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); border-color: var(--il-nav-border); }
-.workspace-collapse-btn.is-mini { width: 28px; height: 28px; border-color: transparent; background: transparent; }
-.workspace-collapse-btn.is-mini:hover { background: var(--il-nav-hover); border-color: var(--il-nav-border); }
-.workspace-wordmark--product { color: var(--il-nav-fg); }
-.is-collapsed .workspace-wordmark--product { font-size: 12px; letter-spacing: -.04em; }
-.ws-unitpill__logo { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.workspace-identity__collapse { color: var(--il-nav-icon); border-radius: var(--radius-md); flex-shrink: 0; }
-.workspace-identity__collapse:hover { color: var(--il-nav-fg); background: var(--il-nav-hover); }
-.is-collapsed .workspace-identity { padding: 12px 8px; justify-content: center; }
-.workspace-logo { display: block; width: 100%; max-height: 52px; object-fit: contain; object-position: left center; }
-.workspace-wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--il-nav-fg); }
-.workspace-wordmark span { color: var(--il-nav-cta); }
-.is-collapsed .workspace-wordmark { font-size: 13px; text-align: center; }
-.workspace-clinic {
-  margin: 7px 0 0; font-size: 11.5px; font-weight: 600; color: var(--il-nav-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+/* MISSÃO UX CLOSURE · o rail não tem cabeçalho nem controle de largura.
+   Os blocos antigos de identidade na sidebar (`.workspace-identity`,
+   `.workspace-collapse-btn`, `.workspace-wordmark`, `.workspace-logo`,
+   `.workspace-clinic`) foram REMOVIDOS junto com o markup: identidade vive na
+   topbar (`.ws-clinic*`) e a largura da coluna é token (`--gd-rail-w`). */
 
 .workspace-primary {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -1636,15 +1759,19 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
               background-color var(--motion-fast) var(--ease-standard);
 }
 .workspace-link[aria-current="page"] .workspace-link__icon {
-  /* O fundo do item já comunica seleção; o glifo fica claro sem um segundo
-     bloco concorrente. */
-  background: transparent; color: var(--il-nav-active-fg);
+  /* O item já é a superfície ativa. Deixar o ícone sem um segundo poço evita
+     dupla ênfase no rail estreito e preserva um único estado de seleção. */
+  background: transparent;
+  color: var(--il-nav-active-fg);
   box-shadow: none;
 }
 .workspace-link {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   min-height: var(--control-h); padding: 0 10px;
-  font-size: 13.5px; font-weight: 500; line-height: 1.3; text-align: left;
+  /* AUDITORIA · rodada 2 — rótulo de NAVEGAÇÃO na régua de leitura: 14px com
+     20px de linha (era 13.5px/1.3). Vale para o painel conectado do rail, para
+     a coluna aberta e para o drawer móvel. */
+  font-size: 14px; font-weight: 500; line-height: 20px; text-align: left;
   border-radius: var(--radius-md); color: var(--il-nav-fg);
   transition: background-color var(--motion-fast) var(--ease-standard),
               color var(--motion-fast) var(--ease-standard);
@@ -1672,23 +1799,18 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 .workspace-link--group[aria-expanded='true'] .workspace-link__icon {
   background: transparent; color: var(--il-nav-active-fg);
 }
-.workspace-link[aria-current='page'] .workspace-link__chevron,
-.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { color: inherit; }
-.workspace-link__chevron {
-  margin-left: auto; color: var(--il-nav-fg); flex-shrink: 0;
-  transition: transform var(--motion-base) var(--ease-standard),
-              color var(--motion-fast) var(--ease-standard);
-}
-.workspace-link--group[aria-expanded='true'] .workspace-link__chevron { transform: rotate(90deg); }
+/* DS 1.1 — o gatilho de grupo NÃO tem chevron: o rail não é accordion.
+   Contrato antigo (seta de 15px girando 90°, depois sinalizador de 9px) foi
+   removido junto com o elemento: o feedback de abertura é o PAINEL conectado, e
+   o estado acessível é `aria-expanded`. Nenhuma seta decorativa sobrevive na
+   navegação — em nenhuma largura. */
+.workspace-link__chevron { display: none; }
 /* O rail/traço vertical do item ativo foi REMOVIDO (GoDoutor 2.0): o estado
    ativo é fundo suave + texto/cor de marca + `aria-current`. O elemento segue
    no DOM como marcador (data-nav-rail) para acessibilidade e testes, sem
    desenhar traço nenhum. */
 .workspace-link__rail { display: none; }
 .workspace-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.is-collapsed .workspace-link { justify-content: center; padding: 0; }
-.is-collapsed .workspace-link__chevron,
-.is-collapsed .workspace-link__rail { display: none; }
 
 .ws-setup-mini {
   margin: 0 10px 10px; padding: 12px;
@@ -1696,50 +1818,14 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   background: var(--surface-3); border: 1px solid var(--border);
 }
 
-/* ── Cabeçalho da sidebar: a CLÍNICA é a identidade principal ──────
-   GoDoutor continua sendo a plataforma (login, Master, suporte, rodapé
-   discreto), mas dentro da operação quem identifica é a clínica. */
-.workspace-clinic-head-wrap { position: relative; }
-.workspace-clinic-head {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 12px 12px 10px; border-radius: var(--radius-md);
-}
-button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
-.workspace-foot__item--collapse { color: var(--il-nav-muted); }
-.workspace-clinic-head__logo {
-  width: 34px; height: 34px; border-radius: var(--radius-md);
-  object-fit: cover; flex-shrink: 0; background: var(--surface-3);
-  border: 1px solid var(--border);
-}
-.workspace-clinic-head__mark {
-  width: 34px; height: 34px; border-radius: var(--radius-md); flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  /* Preenchido accent: fg = token de CONTRASTE do próprio accent (regra
-     estrutural — nunca cor fixa; em qualquer tema o par é AA). */
-  background: var(--accent); color: var(--accent-contrast);
-  font-size: 13px; font-weight: 700; letter-spacing: -.01em;
-}
-.workspace-clinic-head__text { min-width: 0; flex: 1; text-align: left; }
-.workspace-clinic-head__name {
-  display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em;
-  color: var(--il-nav-active-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.workspace-clinic-head__meta {
-  display: block; font-size: 11px; font-weight: 500; color: var(--il-nav-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.workspace-clinic-head__unit {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
-  font-size: 11px; font-weight: 600; color: var(--il-nav-cta);
-}
-/* Missão §7 — RAIL RECOLHIDO: só a logo, centralizada. Nome e tipo NÃO são
-   renderizados (o componente já não os desenha; o display:none abaixo é a
-   trava de segurança) — era isso que produzia "A…"/"Cl…" truncado. */
-.workspace-clinic-head--collapsed { padding: 12px 0 10px; justify-content: center; }
-.is-collapsed .workspace-clinic-head { padding: 12px 0 10px; justify-content: center; }
-.is-collapsed .workspace-clinic-head__text { display: none; }
-.workspace-clinic-head__logo--mini,
-.workspace-clinic-head__mark--mini { width: 36px; height: 36px; }
+/* ── IDENTIDADE NÃO MORA NA SIDEBAR (missão item 2) ──────────────
+   A clínica (logo + NOME COMPLETO) identifica na TOPBAR full-width. O antigo
+   cabeçalho `.workspace-clinic-head` foi REMOVIDO — sem duplicação, sem nome
+   truncado no rail ("A…"), sem segunda fonte de identidade. O rail começa
+   direto nos destinos; trava abaixo garante que nenhum shell antigo reintroduza
+   identidade dentro da coluna. */
+.workspace-sidebar .workspace-clinic-head,
+.workspace-sidebar .workspace-clinic-head-wrap { display: none !important; }
 
 /* ── Tooltip do rail recolhido (missão §7/§9) ────────────────────
    Filho do <aside> (position:sticky ⇒ posicionado), FORA do container
@@ -1751,6 +1837,16 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
    QUALQUER stacking context da página (na Agenda, elementos com z-index do
    conteúdo pintavam por cima do tooltip dentro do <aside>) e nada corta.
    Continua sem estreitar largura de scroll de container nenhum. */
+/* Anel de progresso do setup no RAIL: o cartão de texto vive no drawer móvel;
+   no desktop a pendência é um anel de 18px (conic-gradient) + tooltip — o
+   mesmo próximo passo do checklist, sem espremer texto em 60px. */
+.ws-setup-ring { justify-content: center; padding: 0; }
+.ws-setup-ring__dial {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ws-setup-ring__hole { width: 12px; height: 12px; border-radius: 50%; background: var(--il-nav); }
+
 .ws-nav-tip {
   position: fixed; transform: translateY(-50%);
   padding: 5px 9px; border-radius: var(--radius-sm);
@@ -1765,24 +1861,32 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
 .workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
 .workspace-foot__item {
+  /* MISSÃO UX CLOSURE · item 6 — o rodapé do rail é feito de CONTROLES
+     (ícone + rótulo). Antes tinham 36px, um nível que não existe na escala do
+     DS: no rail de 60px isso ainda transbordava o eixo. Agora usam o mesmo
+     nível MD dos outros controles (`--gd-control-h`, 40px) — a métrica vem do
+     token, não de um número inventado aqui. */
   display: flex; align-items: center; gap: 10px; width: 100%;
-  min-height: 36px; padding: 0 10px; border-radius: var(--radius-md);
+  min-height: var(--gd-control-h); padding: 0 10px; border-radius: var(--radius-md);
   font-size: 13px; font-weight: 500; color: var(--il-nav-muted); text-align: left;
 }
 .workspace-foot__item:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
+@media (pointer: coarse), (max-width: 767px) {
+  .workspace-nav-drawer .workspace-foot__item { min-height: var(--gd-control-h-touch); }
+  [data-help-center] #help-center-search { height: var(--gd-control-h-touch); min-height: var(--gd-control-h-touch); }
+  [data-help-center] [data-support-whatsapp] { height: auto; min-height: var(--gd-control-h-touch); }
+}
 .workspace-foot__brand {
   display: block; padding: 6px 10px 2px; font-size: 10.5px; font-weight: 500;
   color: var(--text-faint); letter-spacing: .01em;
 }
 .workspace-foot__brand strong { font-weight: 700; color: var(--il-nav-fg); }
-.is-collapsed .workspace-foot__item { justify-content: center; padding: 0; }
 .workspace-icon-button {
   display: flex; align-items: center; gap: 9px;
-  min-height: 36px; min-width: 36px; padding: 0 10px;
+  min-height: var(--gd-control-h); min-width: var(--gd-control-h); padding: 0 10px;
   font-size: 12.5px; font-weight: 600; color: var(--il-nav-muted); border-radius: var(--radius-md);
 }
 .workspace-icon-button:hover { background: var(--il-nav-hover); color: var(--il-nav-fg); }
-.is-collapsed .workspace-icon-button { justify-content: center; padding: 0; }
 
 /* ── Acordeão do submenu (FASE D: UMA coluna, expande para BAIXO) ──
    Sem segunda coluna: o grupo abre ABAIXO do próprio botão, com altura
@@ -1801,7 +1905,9 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
    filhos direto, sob um rótulo discreto). */
 .workspace-nav-drawer__title {
   margin: var(--gd-space-3) 0 var(--gd-space-1); padding: 0 var(--gd-space-2);
-  font-size: var(--gd-font-size-metadata); font-weight: var(--gd-weight-semibold);
+  /* 14px/20px: o rótulo do GRUPO é navegação. A hierarquia continua vindo da
+     cor (muted) e do peso — não de um corpo de 11px que ninguém lê. */
+  font-size: 14px; line-height: 20px; font-weight: var(--gd-weight-semibold);
   color: var(--gd-text-muted);
 }
 .workspace-nav-drawer__title:first-child { margin-top: var(--gd-space-1); }
@@ -1829,44 +1935,57 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
    180–220ms), recolhe 250–300ms após o mouseleave (o delay vive no JS —
    lib/sidebar-peek.ts). Nunca altera o estado recolhido/expandido. */
 .ws-peek {
+  /* MISSÃO UX CLOSURE · item 1 — a extensão do grupo é FISICAMENTE ligada ao
+     rail: nasce exatamente na borda direita da coluna (mesmo `left` da largura
+     do rail, sem `+ gap`), encosta o topo na topbar e vai até o rodapé da
+     viewport. Superfície BRANCA (a mesma do rail), SEM borda esquerda e SEM
+     sombra: a divisória entre rail e painel é a única linha de 1px do rail.
+     Nada de card flutuante, nada de gap morto, nada de cara de modal. */
   position: fixed; z-index: var(--gd-z-nav-panel);
-  left: calc(var(--gd-rail-w) + var(--gd-space-1));
+  left: var(--gd-rail-w);
   top: var(--gd-topbar-h);
-  min-width: var(--gd-nav-panel-w); max-width: 260px;
-  padding: var(--gd-space-2);
+  bottom: 0;
+  width: var(--gd-nav-panel-w); max-width: min(280px, calc(100vw - var(--gd-rail-w)));
+  padding: var(--gd-space-3) var(--gd-space-2) var(--gd-space-4);
   background: var(--gd-nav-panel-bg);
-  border: 1px solid var(--gd-nav-border);
-  border-radius: var(--radius-md);
-  /* Sem sombra projetada: a separação é borda 1px + contraste de superfície
-     (contrato do refino final mantido — §15 não pede elevação). Nada de
-     "caixa flutuante" com sombra. */
+  border-left: 0;
+  border-top: 0;
+  border-bottom: 0;
+  border-right: 1px solid var(--gd-nav-border);
+  border-radius: 0;
   box-shadow: none;
-  /* ALTURA ÚTIL: o painel começa abaixo da top bar e nunca passa da tela. */
-  max-height: calc(100dvh - var(--gd-topbar-h) - var(--gd-space-3));
   overflow-y: auto;
+  overscroll-behavior: contain;
   animation: ws-peek-in var(--gd-motion-slow) var(--gd-ease);
+  transform-origin: left center;
 }
-/* Sidebar EXPANDIDA (pin): o painel nasce na borda dela — mesma altura, mesmo
-   contrato; nenhuma largura é medida no DOM. */
-.ws-peek--wide { left: calc(var(--gd-sidebar-w) + var(--gd-space-1)); }
 .ws-peek__title {
   margin: 0 0 var(--gd-space-2); padding: var(--gd-space-1) var(--gd-space-2);
   font-size: var(--gd-font-size-metadata); font-weight: var(--gd-weight-semibold);
   letter-spacing: 0; text-transform: none;
   color: var(--gd-text-muted);
 }
+/* Destino contextual (sidebar:false): aparece no painel do grupo dono — o
+   rótulo "contextual" explica por que ele não ocupa linha no rail. */
+.ws-peek__flag {
+  margin-left: auto; font-size: 9.5px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--gd-text-faint);
+}
 .ws-peek__items { display: flex; flex-direction: column; gap: 2px; }
 .ws-peek__item {
   display: flex; align-items: center; gap: var(--gd-space-2);
   padding: 7px var(--gd-space-2); border-radius: var(--radius-sm);
-  font-size: var(--gd-font-size-secondary); font-weight: var(--gd-weight-medium); color: var(--gd-text);
+  /* 14px/20px — o item do flyout do rail lê como destino, não como legenda. */
+  font-size: 14px; line-height: 20px; font-weight: var(--gd-weight-medium); color: var(--gd-text);
   text-decoration: none;
   transition: background-color var(--gd-motion-fast) var(--gd-ease);
 }
 .ws-peek__item:hover { background: var(--gd-nav-hover); }
 .ws-peek__item[aria-current='page'] { background: var(--gd-nav-active-bg); color: var(--gd-nav-active-fg); font-weight: var(--gd-weight-semibold); }
+/* A entrada nasce do rail: a superfície desliza de trás dele (8px) com fade
+   curto em 180ms — dentro da janela 140–180ms pedida pela missão. */
 @keyframes ws-peek-in {
-  from { opacity: 0; transform: translateX(-6px); }
+  from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1874,22 +1993,23 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 }
 
 /* ── Breakpoints ────────────────────────────────────────────── */
-@media (min-width: 1200px) {
+/* MISSÃO UX CLOSURE — o rail entra a partir de 1024px: em 1024 (largura da
+   homologação) a navegação continua sendo um rail de 60px + conteúdo útil, em
+   vez de sumir e obrigar a abrir drawer em um desktop. Abaixo disso (tablet
+   retrato e celular) o menu é o drawer, aberto pela topbar. */
+@media (min-width: 1024px) {
   .workspace-shell { display: flex; }
   .il-platform .workspace-sidebar { display: flex; }
   .ws-topbar__nav-toggle { display: none; }
 }
-@media (max-width: 1199px) {
-  .workspace-link { min-height: var(--control-h-touch); }
-  .ws-crumbs__group { display: none; }
-  /* DS 1.0 · §12 — sem a sidebar (abaixo de 1200px) a coluna principal precisa
-     de base 100% para NÃO dividir a linha com a topbar full-width: com
-     `flex-basis: 0` o flexbox a acomodava na mesma linha (sobra zero) e a
-     página nascia com largura 0. Aqui ela passa a ocupar a própria linha. */
-  .workspace-shell > .workspace-main-col { flex: 1 1 100%; }
-}
 @media (max-width: 1023px) {
   .ws-account__trigger { padding: 4px; }
+  .workspace-link { min-height: var(--control-h-touch); }
+  .ws-crumbs__group { display: none; }
+  /* DS 1.0 · §12 — sem a sidebar a coluna principal precisa de base 100% para
+     NÃO dividir a linha com a topbar full-width: com `flex-basis: 0` o flexbox
+     a acomodava na mesma linha (sobra zero) e a página nascia com largura 0. */
+  .workspace-shell > .workspace-main-col { flex: 1 1 100%; }
 }
 @media (max-width: 767px) {
   /* Topbar mobile sem sobreposição: pill vira só o dot, ajuda some e o
@@ -1904,6 +2024,37 @@ button.workspace-clinic-head:hover { background: var(--il-nav-hover); }
 }
 @media (max-width: 479px) {
   .ws-quickcreate-btn { width: 34px; height: 34px; }
+  /* MISSÃO UX CLOSURE · item 2 — em 390 a IDENTIDADE ganha a largura: o nome
+     completo da clínica não pode virar "Andri…". Os atalhos secundários da
+     topbar (Conversas e Ajuda) saem primeiro porque existem em outro lugar
+     (navegação e rodapé do menu) — nada de função perdida, só de repetição. */
+  .ws-topbar { gap: 6px; padding: 0 8px; }
+  .ws-topbar__right { gap: 4px; }
+  .il-platform .ws-topbar [data-topbar-secondary] { display: none; }
+  /* Identidade RÍGIDA (o nome completo da clínica manda) e busca ELÁSTICA:
+     em telas estreitas a busca recolhe para o ícone e volta à largura total
+     quando tem foco. */
+  .il-platform .ws-topbar__left { flex: 0 1 auto; min-width: 50%; }
+  /* DS 1.1 — no estreito a logo encolhe um degrau (32px) mas continua SOLTA e
+     proporcional; o NOME não é cortado: a busca é quem cede. */
+  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
+  /* §5 — em tela estreita a IDENTIDADE não encolhe: logo no tamanho do token e
+     nome COMPLETO (pode quebrar em duas linhas, nunca virar "Andri…"). Quem
+     cede espaço é a busca, que recolhe para o ícone. */
+  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .il-platform .global-search { width: var(--control-h); max-width: none; flex: 0 0 auto; }
+  .il-platform .global-search__field { padding: 0; gap: 0; justify-content: center; cursor: pointer; }
+  .il-platform .global-search__input { width: 0; flex: 0 0 auto; padding: 0; }
+  .il-platform .global-search__clear,
+  .il-platform .global-search__kbd { display: none; }
+  /* Com foco, a busca ocupa a linha inteira da topbar (por cima dos vizinhos,
+     sem mexer no layout do rail nem no conteúdo). */
+  .il-platform .global-search:focus-within {
+    position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; width: auto;
+    display: flex; align-items: center; z-index: 60;
+  }
+  .il-platform .global-search:focus-within .global-search__field { padding: 0 6px 0 11px; gap: 8px; justify-content: flex-start; }
+  .il-platform .global-search:focus-within .global-search__input { width: auto; flex: 1 1 auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
@@ -2079,6 +2230,12 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .il-platform .agenda-page-gutter { padding:8px; }
 .il-platform [data-agenda-main] > div { border-radius:var(--radius-md); box-shadow:none; }
 .il-platform [data-queue-rail] { width:280px; flex-shrink:0; align-self:flex-start; max-height:var(--queue-rail-maxh); overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
+/* A fila tem cabeçalho próprio na rail desktop. No modal compacto, o Drawer já
+   fornece título e fechamento acessíveis; evita repetir ambos no conteúdo. */
+@media (max-width: 1279px) {
+  .il-drawer.queue-dock-modal [data-queue-panel-title],
+  .il-drawer.queue-dock-modal [data-queue-panel-close] { display: none; }
+}
 @media(min-width:1200px) { .il-platform .agenda-page-gutter { padding:16px; } }
 @media(max-width:767px) { .il-platform .il-tab { min-height:44px; } }
 
@@ -2112,6 +2269,25 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .ag-free-range:hover {
   background: var(--surface-hover);
   box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+/* ── P1 · RODADA 2 — TOOLBAR DA AGENDA: UMA FAMÍLIA, UM SÓ CONTORNO ───────
+   Hoje · ‹ › · data · Dia/Semana/Lista · Filtros · Fila · Bloquear · Novo
+   agendamento vivem na mesma linha e agora compartilham a MESMA régua de
+   estado: repouso sem contorno, hover com preenchimento suave. O gatilho de
+   data (o único CONTROLE DE CAMPO da linha) entra nessa régua — antes era a
+   única caixa outlined da toolbar e fazia o resto parecer desalinhado. O foco
+   continua no anel canônico do DS (`:focus-visible` + `shadow-focus`). */
+.ag-page .gd-toolbar .il-field-control {
+  background: transparent;
+  border-color: transparent;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease),
+              border-color var(--gd-motion-fast) var(--gd-ease);
+}
+.ag-page .gd-toolbar .il-field-control:hover { background: var(--surface-hover); }
+.ag-page .gd-toolbar .il-field-control:focus-visible {
+  background: var(--surface);
+  border-color: var(--accent);
 }
 /* Painéis de modo (Dia/Semana/Mês/Lista): superfície única rolável do modo.
    O panel ocupa TODO o resto do viewport (flex:1) e o scroller é o único
@@ -2194,15 +2370,25 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .dsh-check__mark { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
 .dsh-check__mark--done { background: var(--success); color: #fff; }
 .dsh-check__mark--todo { border: 1.5px solid var(--border-strong); background: var(--surface); }
+/* ── P1 · RODADA 2 — AÇÕES RÁPIDAS SEM CARD-DENTRO-DE-CARD ───────────────
+   O que era um cartão (borda + fundo próprio) DENTRO do cartão da seção vira
+   uma AÇÃO: ícone em poço suave + rótulo, centrados, sem contorno. A área
+   clicável continua a mesma (o alvo não encolhe); só a composição some com o
+   degrau visual. O hover é preenchimento neutro do sistema. */
 .dsh-quick {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 14px 8px; border-radius: var(--radius-lg);
-  border: 1px solid var(--border-soft); background: var(--surface);
-  font-size: 11.5px; font-weight: 700; color: var(--text-soft); text-align: center;
-  transition: border-color .15s ease, background-color .15s ease;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px;
+  padding: 10px 6px; border-radius: var(--radius-md);
+  border: 0; background: transparent;
+  font-size: 12px; font-weight: 600; color: var(--text); text-align: center;
+  transition: background-color .15s ease;
 }
-.dsh-quick:hover { border-color: var(--border-strong); background: var(--surface-hover); }
-.dsh-quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--accent-fg); }
+.dsh-quick:hover { background: var(--surface-hover); }
+.dsh-quick__icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--brand-soft); color: var(--brand-fg);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    CAMADA DE CONSISTÊNCIA — Etapa E
@@ -2355,7 +2541,9 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
 .pe-device--desktop { width: 100%; border-width: 8px; border-radius: 18px; }
 .pe-device--desktop::before { display: none; }
 .pe-nav { position: sticky; top: calc(var(--topbar-h) + 14px); display: flex; flex-direction: column; gap: 2px; padding: 8px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); }
-.pe-nav__item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-align: left; transition: background-color .15s ease, color .15s ease; }
+/* DS 1.0 · §6 — item de navegação do editor de página: a altura vem do nível
+   DENSO da escala (`--control-h-sm`), não de `8px + texto` = 34,75px. */
+.pe-nav__item { display: flex; align-items: center; gap: 9px; min-height: var(--control-h-sm); padding: 0 10px; border-radius: var(--radius-md); font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-align: left; transition: background-color .15s ease, color .15s ease; }
 .pe-nav__item:hover { background: var(--surface-hover); color: var(--text); }
 .pe-nav__item[aria-current="page"] { background: var(--brand-soft); color: var(--brand-fg); box-shadow: inset 2px 0 0 var(--brand); }
 .pe-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); overflow: hidden; }
@@ -2377,6 +2565,153 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   .pe-nav { position: static; flex-direction: row; overflow-x: auto; }
   .pe-nav__item { white-space: nowrap; }
 }
+
+/* Etiqueta textual da coluna de HOJE (a cor sozinha não é sinal). */
+.ag-col-today {
+  flex-shrink: 0; padding: 0 5px; border-radius: var(--radius-pill);
+  background: var(--gd-accent-soft, var(--brand-soft)); color: var(--brand-fg);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+}
+
+/* ── INDICADOR de bloqueios (não uma faixa de aviso) — missão · item 4 ──
+   Uma linha discreta: ícone + contagem + dica + pílulas compactas. Leitura de
+   apoio para o que já está hachurado na grade — nunca um bloco laranja que
+   domina o topo da Agenda. */
+.ag-blocks-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: var(--gd-space-2);
+  padding: 6px 10px;
+  border: 1px solid var(--gd-border-soft);
+  border-radius: var(--gd-radius-md);
+  background: var(--gd-bg-subtle);
+}
+.ag-blocks-bar__label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--gd-text);
+  font-variant-numeric: tabular-nums;
+}
+.ag-blocks-bar__hint { font-size: 11.5px; color: var(--gd-text-muted); }
+.ag-blocks-bar__items { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.ag-blocks-bar__chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--gd-control-h-xs);
+  padding: 2px 9px; border-radius: var(--radius-pill);
+  border: 1px solid var(--warning-border);
+  background: var(--gd-bg-surface); color: var(--warning-fg);
+  font-size: 11.5px; font-weight: 600;
+  transition: background-color var(--gd-motion-fast) var(--gd-ease);
+}
+.ag-blocks-bar__chip:hover { background: var(--warning-bg-hover); }
+.ag-blocks-bar__chip .ag-blocks-bar__scope { color: var(--gd-text-muted); font-weight: 500; }
+@media (max-width: 767px) {
+  .ag-blocks-bar__hint { display: none; }
+  .ag-blocks-bar__items { margin-left: 0; }
+}
+
+/* ── RESUMO DO EVENTO (hover/foco) — prévia contextual, não modal ────
+   Identifica paciente/tutor, data/horário, serviço, profissional, status e
+   observação curta; Editar abre modal central e Ver detalhes abre leitura
+   lateral. Hover e detalhe nunca ocupam a tela ao mesmo tempo. */
+.gd-hovercard.ag-hover {
+  /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
+     precisa viver nele (não apenas no filho), senão o max-width genérico de
+     320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
+  width: 360px; max-width: min(360px, calc(100vw - 24px)); padding: 0;
+  border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
+  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
+}
+/* Prévia rica, ainda contextual: cresce para leitura confortável sem cobrir o
+   evento que a abriu e sem ganhar a sombra forte de um modal. */
+.ag-hover__card {
+  width: 100%; max-width: 100%; padding: var(--gd-space-4);
+  display: flex; flex-direction: column; gap: var(--gd-space-2);
+}
+.ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
+.ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
+.ag-hover__date { margin: 0; color: var(--gd-text-secondary); font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line); font-weight: var(--gd-type-label-weight); }
+.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
+.ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
+.ag-hover__rows dt { flex: 0 0 80px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
+.ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
+.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
+.ag-hover__flag { margin: 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
+.ag-hover__flag--attention { color: var(--attention-fg); }
+.ag-hover__actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--gd-space-2); padding-top: var(--gd-space-3); margin-top: var(--gd-space-1);
+  border-top: 1px solid var(--gd-border-soft);
+}
+.ag-hover__actions > button { flex: 0 0 auto; min-height: var(--gd-control-h); font-weight: var(--gd-weight-semibold); }
+.ag-hover__actions > button:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
+/* Resultado pós-PATCH (nunca otimista): sucesso e falha são avisos distintos. */
+.ag-ctx-success,
+.ag-ctx-error {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 var(--gd-space-2); padding: 8px 10px;
+  border-radius: var(--gd-radius-sm);
+  font-size: 12px; font-weight: 600;
+}
+.ag-ctx-success { border: 1px solid var(--success-border); background: var(--success-bg); color: var(--success-fg); }
+.ag-ctx-error { background: var(--gd-danger-soft, var(--danger-bg)); color: var(--gd-danger-fg, var(--danger-fg)); }
+.ag-ctx-success button,
+.ag-ctx-error button { display: inline-flex; margin-left: auto; color: inherit; opacity: .8; }
+.ag-ctx-success button:hover,
+.ag-ctx-error button:hover { opacity: 1; }
+
+/* ── ORDEM DE CAMADAS DA GRADE — um só lugar (DS 1.0 · missão UX CLOSURE) ──
+   O sombreamento de indisponibilidade (exceção de disponibilidade do dia) é
+   FUNDO SEMÂNTICO: nunca pode cobrir o conteúdo real. Achado da auditoria
+   visual: o sombreamento declarava `z-[5]` e os atendimentos nenhum z-index,
+   então um agendamento dentro da exceção sumia — sobrava só uma faixa fina
+   na borda do cartão. Ordem canônica:
+     0 = sombreamento de indisponibilidade (fundo)
+     1 = atendimento (SEMPRE visível e por cima do sombreamento)
+    10 = bloqueio operacional (etiqueta com ação própria, classe `ag-block`)
+   Qualquer novo elemento da grade entra nesta lista — sem z-index solto. */
+.il-platform [data-agenda-main] .ag-event { z-index: 1; }
+
+/* ── BLOQUEIO OPERACIONAL na grade — missão · item 4 ──────────────────
+   O período bloqueado é dito por HACHURA no lugar (mesmo vocabulário do
+   indisponível), com etiqueta compacta. Sem caixa laranja de texto e sem
+   tooltip nativo: o clique abre o formulário do bloqueio, que é quem mostra
+   escopo e motivo por extenso. */
+.ag-block {
+  border: 1px dashed var(--warning-border);
+  border-radius: var(--gd-radius-sm);
+  background: color-mix(in srgb, var(--warning-bg) 70%, var(--gd-bg-surface));
+  color: var(--warning-fg);
+  transition: background-color var(--gd-motion-fast) var(--gd-ease);
+}
+.ag-block:hover { background: var(--warning-bg-hover); }
+.ag-block__hatch {
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(45deg,
+    color-mix(in srgb, var(--warning-border) 55%, transparent) 0 5px, transparent 5px 11px);
+}
+.ag-block__tag {
+  position: relative; display: inline-flex; align-items: center; gap: 4px;
+  margin: 3px 4px; padding: 1px 5px; border-radius: var(--radius-pill);
+  background: var(--gd-bg-surface); border: 1px solid var(--warning-border);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+.ag-block__label {
+  position: relative; display: block; margin: 0 6px 4px;
+  font-size: 10.5px; font-weight: 600; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  opacity: .9;
+}
+/* Etiqueta de duração exibida SÓ durante o redimensionamento (substitui o
+   `title` nativo que existia no handle). */
+.ag-event__resize-hint {
+  position: absolute; right: 4px; bottom: 2px; z-index: 12;
+  padding: 0 4px; border-radius: var(--radius-xs);
+  background: var(--gd-bg-surface); border: 1px solid var(--gd-border);
+  font-size: 9.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--gd-text-strong); pointer-events: none; white-space: nowrap;
+}
+.ag-event__resize-hint:empty { display: none; }
 
 /* ── Linha do horário atual (Agenda) — coral gráfico, só quando visível ── */
 .ag-hatch {
@@ -2544,9 +2879,7 @@ dialog.workspace-nav-drawer .ws-sheet__close:focus-visible {
 .workspace-nav-drawer .workspace-link__chevron {
   color: var(--il-nav-fg);
 }
-.workspace-nav-drawer .workspace-clinic-head__name,
-.workspace-nav-drawer .workspace-clinic-head__meta,
-.workspace-nav-drawer .workspace-clinic-head__unit,
+.workspace-nav-drawer .ws-clinic__name,
 .workspace-nav-drawer .workspace-foot__item,
 .workspace-nav-drawer .workspace-foot__brand,
 .workspace-nav-drawer .workspace-foot__brand strong,
@@ -2654,9 +2987,11 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .overlay-confirm__copy h2 { margin: 1px 0 0; color: var(--text); font-size: 18px; font-weight: 600; line-height: 1.35; }
 .overlay-confirm__copy p { margin: 5px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 .overlay-confirm__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 6px; }
-.overlay-confirm__action { min-height: 42px; padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
-.overlay-confirm .il-control--secondary { border: 1px solid var(--brand); background: transparent; color: var(--brand-fg); }
-.overlay-confirm .il-control--secondary:hover { background: var(--brand-soft); }
+.overlay-confirm__action { min-height: var(--control-h); padding: 0 15px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+/* Mesma régua neutra do botão secundário do DS: sem contorno ou acento em
+   repouso; hover usa só a superfície suave do workspace. */
+.overlay-confirm .il-control--secondary { border: 1px solid transparent; background: transparent; color: var(--text); }
+.overlay-confirm .il-control--secondary:hover { background: var(--surface-3); }
 .overlay-confirm .il-control--destructive { border: 1px solid var(--danger); background: var(--danger); color: #fff; }
 .overlay-confirm .il-control--destructive:hover { border-color: var(--danger-strong); background: var(--danger-strong); }
 @media (max-width: 480px) {
@@ -3124,9 +3459,9 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .conversation-ai-takeover-note { margin:0 0 7px; color:var(--text-muted); font-size:10px; line-height:1.35; }
 .conversation-ai-takeover-note::before { display:inline-block; width:6px; height:6px; margin:0 6px 1px 1px; border-radius:50%; background:var(--accent); content:""; }
 .conversation-composer__form { display:flex; align-items:center; gap:8px; }
-.conversation-composer__form input { flex:1; min-width:0; min-height:42px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 12px; background:var(--surface); color:var(--text); font-size:12px; }
+.conversation-composer__form input { flex:1; min-width:0; min-height:var(--control-h); border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 12px; background:var(--surface); color:var(--text); font-size:12px; }
 .conversation-composer__form input:focus { outline:0; border-color:var(--accent); box-shadow:var(--shadow-focus); }
-.conversation-composer__form button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:80px; min-height:42px; padding:0 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:11px; font-weight:700; cursor:pointer; }
+.conversation-composer__form button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:80px; min-height:var(--control-h); padding:0 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent); color:var(--accent-contrast); font-size:11px; font-weight:700; cursor:pointer; }
 .conversation-composer__form button:hover { background:var(--accent-hover); }
 .conversation-composer__form button:disabled { opacity:.58; cursor:not-allowed; }
 .conversation-byte-count { margin:0 0 6px; color:var(--text-muted); font-size:10px; text-align:right; }
@@ -3304,9 +3639,15 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 /* Agenda range context: the selected real column remains beside the editor.
    No changes to temporal coordinates, persisted windows or public booking. */
 @media (min-width: 768px) {
-  .ag-mode-panel[data-range-focus] { margin-right: calc(min(46vw, 560px) + 14px); }
+  /* MISSÃO UX CLOSURE · item 3C — o editor de agendamento deixou de ser faixa
+     lateral e virou MODAL CENTRAL. A coluna selecionada continua ao lado do
+     editor: a reserva passa a ser METADE da faixa do modal (+ o respiro do
+     sistema), não a largura inteira de um painel colado à direita. */
+  .ag-mode-panel[data-range-focus] { margin-right: calc(min(var(--gd-booking-modal-w), 92vw) / 2 + 14px); }
   .ag-mode-panel[data-range-focus] [data-agenda-column] { min-width: 0 !important; }
-  dialog.gd-booking-range-drawer:not([data-expanded]) .il-drawer__strip {
+  /* Legado preservado: se algum fluxo ainda usar a FAIXA lateral para o
+     agendamento, a largura dela continua a mesma de antes. */
+  dialog.gd-booking-range-drawer:not(.il-drawer--dialog):not([data-expanded]) .il-drawer__strip {
     width: min(46vw, 560px); max-width: min(46vw, 560px);
   }
 }
@@ -3315,15 +3656,30 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 dialog.gd-team-editor { z-index: 50; }
 dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }
 
-/* Curated workspace type scale. Geist remains the sole identity font.
+/* Curated workspace type scale — DS 1.1: os papéis APONTAM para a escala
+ * canônica (`--gd-type-*`), então trocar a escala (ou a família) muda o produto
+ * inteiro de uma vez. Barlow é a identidade; a escala é a mesma em toda tela.
  * Scoped primitives, not blanket overrides of conversations/public renderers. */
-.il-platform { --type-page: 22px; --type-section: 16px; --type-card: 14px; --type-body: 14px; --type-label: 13px; --type-help: 13px; }
-.il-platform .il-type-page { font-size: var(--type-page); font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
-.il-platform .il-type-section { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
-.il-platform .il-type-label { font-size: var(--type-label); font-weight: 500; line-height: 1.45; }
-.il-platform .il-type-help { font-size: var(--type-help); line-height: 1.55; color: var(--text-muted); }
-.il-platform .dsh-card__title { font-size: var(--type-card); line-height: 1.4; }
-.il-platform .ws-sheet__titles h2 { font-size: var(--type-section); font-weight: 600; line-height: 1.4; }
+.il-platform {
+  --type-page: var(--gd-type-page-title-size);
+  --type-page-line: var(--gd-type-page-title-line);
+  --type-section: var(--gd-type-section-size);
+  --type-card: var(--gd-type-section-size);
+  --type-body: var(--gd-type-body-size);
+  --type-label: var(--gd-type-label-size);
+  --type-help: var(--gd-type-helper-size);
+  --type-meta: var(--gd-type-metadata-size);
+}
+.il-platform .il-type-page { font-size: var(--type-page); font-weight: var(--gd-type-page-title-weight); line-height: var(--type-page-line); letter-spacing: -.02em; }
+.il-platform .il-type-section { font-size: var(--type-section); font-weight: var(--gd-type-section-weight); line-height: var(--gd-type-section-line); }
+.il-platform .il-type-label { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); line-height: var(--gd-type-label-line); }
+.il-platform .il-type-help { font-size: var(--type-help); font-weight: var(--gd-type-helper-weight); line-height: var(--gd-type-helper-line); color: var(--text-muted); }
+.il-platform .il-type-body, .il-platform table { font-size: var(--type-body); line-height: var(--gd-type-body-line); }
+.il-platform .il-type-meta { font-size: var(--type-meta); font-weight: var(--gd-type-metadata-weight); line-height: var(--gd-type-metadata-line); color: var(--text-muted); }
+.il-platform .dsh-card__title { font-size: var(--type-card); line-height: var(--gd-type-section-line); }
+.il-platform .ws-sheet__titles h2 { font-size: var(--type-section); font-weight: var(--gd-type-section-weight); line-height: var(--gd-type-section-line); }
 .il-platform .tabular-nums { font-variant-numeric: tabular-nums; }
-.il-platform .il-type-body, .il-platform table { font-size: var(--type-body); line-height: 1.5; }
-.il-platform table th { font-size: var(--type-label); font-weight: 500; text-transform: none; letter-spacing: normal; }
+/* Agenda e números temporais: Barlow com numerais tabulares mantém a coluna de
+   horários alinhada igual à fonte anterior. */
+.il-platform .ag-event, .il-platform .ag-time, .il-platform .ag-list__time { font-variant-numeric: tabular-nums; }
+.il-platform table th { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); text-transform: none; letter-spacing: normal; }

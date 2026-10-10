@@ -154,7 +154,12 @@ export function GlobalSearch({ items, activePath, businessId = '', compact = fal
 
   return (
     <div ref={boxRef} className="global-search">
-      <div ref={fieldRef} className="global-search__field">
+      {/* MISSÃO UX CLOSURE · item 2 — em telas estreitas (≤479px) a busca
+          recolhe para o ÍCONE (40px) e a identidade da clínica fica com a
+          largura. O clique no campo focado expande a busca para a linha da
+          topbar (CSS `:focus-within`), então nada de função se perde: o
+          `onClick` só garante que o toque no ícone foque o input. */}
+      <div ref={fieldRef} className="global-search__field" onClick={() => inputRef.current?.focus()}>
         <Icon n="search" size={16} className="global-search__icon" />
         <input
           ref={inputRef}

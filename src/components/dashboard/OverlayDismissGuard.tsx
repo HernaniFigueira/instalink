@@ -13,6 +13,14 @@ export interface DismissGuardState {
   context?: DismissContext;
   title?: string;
   description?: string;
+  /**
+   * Rótulos das AÇÕES. O padrão é o do guard de descarte ("Continuar
+   * editando" / "Descartar"); confirmações destrutivas fora de um formulário
+   * (ex.: cancelar atendimento pelo menu de contexto da Agenda) passam os seus
+   * — o diálogo é o mesmo, o verbo muda.
+   */
+  confirmLabel?: string;
+  discardLabel?: string;
 }
 
 export interface PendingRequest {
@@ -77,9 +85,9 @@ export function ConfirmDialog({ pending, onContinue, onDiscard }: {
         </div>
         <div className="overlay-confirm__actions">
           <button type="button" data-safe-action className="il-control il-control--secondary overlay-confirm__action" onClick={onContinue}>
-            {saving ? 'Continuar salvando' : 'Continuar editando'}
+            {saving ? 'Continuar salvando' : pending.state.confirmLabel || 'Continuar editando'}
           </button>
-          {!saving && <button type="button" className="il-control il-control--destructive overlay-confirm__action" onClick={onDiscard}>Descartar</button>}
+          {!saving && <button type="button" className="il-control il-control--destructive overlay-confirm__action" onClick={onDiscard}>{pending.state.discardLabel || 'Descartar'}</button>}
         </div>
       </div>
     </div>

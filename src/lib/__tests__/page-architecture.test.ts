@@ -71,7 +71,8 @@ describe('Perfil, role e cargo profissional', () => {
     const profile = read('src/app/(dashboard)/perfil/page.tsx');
     expect((profile.match(/<ImageUpload\b/g) || []).length).toBe(1);
     expect(profile).not.toContain('<Avatar');
-    expect(profile).toContain('accessRoleLabel(me?.role)');
+    // Papel de acesso é projetado da unidade ativa, nunca do perfil global.
+    expect(profile).toContain('accessRoleLabel(unitRole)');
     expect(profile).toContain('<Badge tone="blue"');
     for (const title of ['Dados pessoais', 'Identidade profissional', 'Segurança']) expect(profile).toContain(title);
     expect(profile).toContain('Cargo / função');
@@ -91,7 +92,8 @@ describe('Perfil, role e cargo profissional', () => {
     expect(roleLabel('PROFISSIONAL')).toBe('Profissional');
     const profile = read('src/app/(dashboard)/perfil/page.tsx');
     expect(profile).toContain('form.title');
-    expect(profile).toContain('accessRoleLabel(me?.role)');
+    // Papel de acesso é projetado da unidade ativa, nunca do perfil global.
+    expect(profile).toContain('accessRoleLabel(unitRole)');
     expect(profile).not.toMatch(/me\?\.role\s*===.*\?.*Proprietário/);
   });
 });

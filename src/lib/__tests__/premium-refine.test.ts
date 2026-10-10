@@ -66,11 +66,12 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     expect(css).toMatch(/--accent:\s*var\(--gd-accent\)/);
   });
 
-  it('botões seguem token-driven: primary segue o TEMA (accent), secondary contornado', () => {
-    // DECRETO FINAL: o CTA principal acompanha o tema da clínica (--accent)
+  it('botões seguem token-driven: primary segue o TEMA e secondary fica neutro', () => {
+    // O CTA principal acompanha o tema da clínica; ação secundária não parece
+    // link antes da interação.
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-transparent text-\[var\(--brand-fg\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-transparent text-\[var\(--text\)\] border/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });

@@ -650,7 +650,7 @@ describe('uma porta por conceito', () => {
     expect(clientes).toMatch(/permissions\.leads === true/);
     // O hook resolve a unidade pela MESMA fonte do shell — ?b= estranho não concede nada.
     const hook = read('src/components/dashboard/usePanelPermissions.ts');
-    expect(hook).toMatch(/resolveActiveBusinessId\(requested, list\)/);
+    expect(hook).toMatch(/resolveActiveBusinessId\(requested, list, readLastBusinessId\(d\?\.user\?\.id\)\)/);
     expect(hook).toMatch(/\/api\/auth\/me/);
   });
 

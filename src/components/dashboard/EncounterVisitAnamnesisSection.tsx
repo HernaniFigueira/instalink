@@ -20,7 +20,7 @@
 //   • a persistência é a do domínio (PATCH /api/encounters) com a versão vinda
 //     da AUTORIDADE do workspace — uma versão só para o Encounter inteiro.
 import { useMemo } from 'react';
-import { Field, Select, Textarea } from '@/components/ui';
+import { ClinicalRecordSection, Field, ReadOnlyField, Select, Textarea } from '@/components/ui';
 import type { EncounterAuthority, EncounterAuthorityRow } from './useEncounterAuthority';
 import { useClinicalSection } from './useClinicalSection';
 import {
@@ -118,6 +118,30 @@ export function EncounterVisitAnamnesisSection({
     update({ ...form, [key]: value });
   };
   const disabled = !editable;
+  const rotulo = <T extends string>(opcoes: Array<{ value: T; label: string }>, v: T) =>
+    opcoes.find((o) => o.value === v)?.label || 'Não informado';
+
+  // §11 — LEITURA = documento: o que foi relatado vira texto, com os mesmos
+  // rótulos e a mesma fonte de dado. Nenhum campo desabilitado.
+  if (!editable) {
+    return (
+      <section className="encounter-workspace__section" aria-label="Anamnese da visita" data-section="anamnese" data-readonly="true">
+        <div className="encounter-workspace__content">
+          <ClinicalRecordSection title="Anamnese da visita">
+            {TEXT_FIELDS.map((f) => (
+              <ReadOnlyField key={f.key} label={f.label} value={form[f.key]} multiline block />
+            ))}
+            {STATUS_FIELDS.map((f) => (
+              <ReadOnlyField key={f.key} label={f.label} value={rotulo(CHANGE_OPTIONS, form[f.key])} />
+            ))}
+            <ReadOnlyField label="Vômito" value={rotulo(YES_NO_OPTIONS, form.vomiting)} />
+            <ReadOnlyField label="Diarreia" value={rotulo(YES_NO_OPTIONS, form.diarrhea)} />
+          </ClinicalRecordSection>
+          <p className="encounter-core__readonly" role="status">{readOnlyHint}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="encounter-workspace__section" aria-label="Anamnese da visita" data-section="anamnese">

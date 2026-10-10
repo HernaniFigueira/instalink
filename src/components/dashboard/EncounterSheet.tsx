@@ -32,7 +32,7 @@ import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type 
 //      leitura POR ID (nunca POST, que criaria outro registro).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Badge, Button, Field, Input, Notice, PageBackAction, Textarea } from '@/components/ui';
+import { Badge, Button, Disclosure, Field, Input, Notice, PageBackAction, ReadOnlyField, Textarea } from '@/components/ui';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -547,7 +547,7 @@ export function EncounterSheet({
               {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
               {/* Indicador do autosave: discreto, no lugar onde a pessoa olha. */}
               {isDraft && autoState === 'saving' && <span>{ENCOUNTER_AUTOSAVE_LABELS.saving}</span>}
-              {layout !== 'page' && isDraft && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
+              {layout !== 'page' && isDraft && editable && autoState === 'saved' && !dirty && <span>{ENCOUNTER_AUTOSAVE_LABELS.saved}</span>}
               {isDraft && autoState === 'error'
                 && <span className="text-[var(--danger-fg)]">{ENCOUNTER_AUTOSAVE_LABELS.error}</span>}
             </span>
@@ -660,11 +660,13 @@ export function EncounterSheet({
                 Enquanto é rascunho, o texto é salvo sozinho um segundo depois de você parar de digitar.
               </p>
             )}
-            {!isDraft && (
+            {/* §13 — o aviso de leitura JÁ está no Notice "Registro finalizado"
+                acima; repetir aqui em parágrafo era o padrão "título + descrição
+                explicando a própria tela". Fica só o que o Notice NÃO diz: quem
+                NÃO pode reabrir precisa saber que a porta existe em outro lugar. */}
+            {!isDraft && !canReopen && (
               <p className="text-xs text-[var(--text-muted)]">
-                {canReopen
-                  ? 'Registro finalizado é somente leitura. Para editar, use “Reabrir para editar” — e a reabertura fica na auditoria.'
-                  : 'Você está vendo um registro finalizado. Só quem administra a unidade reabre para edição.'}
+                Somente quem administra a unidade reabre um registro finalizado.
               </p>
             )}
 
@@ -680,26 +682,53 @@ export function EncounterSheet({
             </div>
 
             {/* ── Conteúdo do registro ── */}
-            <Field label={ENCOUNTER_LABELS.complaint}>
-              <Textarea value={form.complaint} disabled={!editable} maxLength={600}
-                onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
-                placeholder="Descreva o motivo do atendimento" />
-            </Field>
-            <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
-              <Textarea value={form.evolution} disabled={!editable} maxLength={4000}
-                onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
-                placeholder="Registre o que foi realizado neste atendimento" />
-            </Field>
-            <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
-              <Textarea value={form.guidance} disabled={!editable} maxLength={2000}
-                onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
-                placeholder="Registre as orientações fornecidas" />
-            </Field>
+            {editable ? (
+              <Field label={ENCOUNTER_LABELS.complaint}>
+                <Textarea value={form.complaint} maxLength={600}
+                  onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
+                  placeholder="Descreva o motivo do atendimento" />
+              </Field>
+            ) : (
+              <ReadOnlyField label={ENCOUNTER_LABELS.complaint} value={form.complaint} multiline block />
+            )}
+            {editable ? (
+              <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
+                <Textarea value={form.evolution} maxLength={4000}
+                  onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
+                  placeholder="Registre o que foi realizado neste atendimento" />
+              </Field>
+            ) : (
+              /* Registro finalizado é LEITURA: o texto aparece como documento
+                 (parágrafos preservados), não como textarea cinza desabilitado. */
+              <ReadOnlyField label={ENCOUNTER_LABELS.evolution} value={form.evolution} multiline block />
+            )}
+            {editable ? (
+              <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
+                <Textarea value={form.guidance} maxLength={2000}
+                  onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
+                  placeholder="Registre as orientações fornecidas" />
+              </Field>
+            ) : (
+              <ReadOnlyField label={ENCOUNTER_LABELS.guidance} value={form.guidance} multiline block
+                hint="Sai na via impressa que o cliente leva." />
+            )}
             {/* ── FASE 2 · P3 — retorno: sem retorno · data · intervalo ── */}
+            {!editable ? (
+              <>
+                <ReadOnlyField label="Retorno" block
+                  value={row.followUpMode && row.followUpMode !== 'none'
+                    ? `${FOLLOW_UP_MODE_LABELS[row.followUpMode]}${followUpDueDate(row) ? ` — ${formatDateBR(followUpDueDate(row))}` : ''}`
+                    : 'Sem retorno definido'} />
+                {/* O texto livre do retorno ganha rótulo PRÓPRIO: repetir
+                    "Retorno" duas vezes fazia a leitura parecer dado duplicado. */}
+                <ReadOnlyField label="Orientação de retorno" value={form.followUp} block />
+                <ReadOnlyField label="Etiquetas" value={form.tags} block />
+              </>
+            ) : (
             <Field label="Retorno" hint="Defina quando este paciente precisa voltar (alimenta o follow-up).">
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Como fica o retorno">
                 {FOLLOW_UP_MODES.map((m) => (
-                  <button key={m} type="button" disabled={!editable} onClick={() => setFollowUpMode(m)}
+                  <button key={m} type="button" onClick={() => setFollowUpMode(m)}
                     className="il-option-choice"
                     aria-pressed={form.followUpMode === m}>
                     {FOLLOW_UP_MODE_LABELS[m]}
@@ -708,14 +737,13 @@ export function EncounterSheet({
               </div>
               {form.followUpMode === 'date' && (
                 <div className="mt-2">
-                  <Input type="date" aria-label="Data do retorno" value={form.followUpDate} disabled={!editable}
+                  <Input type="date" aria-label="Data do retorno" value={form.followUpDate}
                     onChange={(e) => updateForm({ ...form, followUpDate: e.target.value })} className="max-w-[200px]" />
                 </div>
               )}
               {form.followUpMode === 'interval' && (
                 <div className="mt-2 flex items-center gap-2">
                   <Input type="number" aria-label="Intervalo em dias" min={1} max={730} value={form.followUpDays || ''}
-                    disabled={!editable}
                     onChange={(e) => updateForm({ ...form, followUpDays: Number(e.target.value) || 0 })}
                     className="max-w-[110px]" />
                   <span className="text-xs text-[var(--text-muted)]">dias após o atendimento</span>
@@ -723,20 +751,32 @@ export function EncounterSheet({
               )}
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={ENCOUNTER_LABELS.followUp} hint="Texto livre que sai na via do cliente.">
-                  <Input value={form.followUp} disabled={!editable} maxLength={200}
+                  <Input value={form.followUp} maxLength={200}
                     onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
                 </Field>
                 <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
-                  <Input value={form.tags} disabled={!editable}
+                  <Input value={form.tags}
                     onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
                 </Field>
               </div>
             </Field>
-            <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
-              <Textarea value={form.internalNote} disabled={!editable} maxLength={2000}
-                onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
-                placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
-            </Field>
+            )}
+            {editable ? (
+              <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
+                <Textarea value={form.internalNote} maxLength={2000}
+                  onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
+                  placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
+              </Field>
+            ) : (
+              /* Nota interna é informação SECUNDÁRIA na leitura (§11): nasce
+                 recolhida, com o rótulo já dizendo o que há dentro. */
+              <Disclosure
+                label={ENCOUNTER_LABELS.internalNote}
+                hint={form.internalNote ? 'Fica só na unidade — não entra na via do cliente.' : undefined}
+              >
+                <ReadOnlyField value={form.internalNote} multiline empty="Sem nota interna neste atendimento." />
+              </Disclosure>
+            )}
 
             {/* ── FASE 2 · P4 — anamnese vinculada a este atendimento ── */}
             <div className="rounded-md border border-[var(--border)] p-3">
@@ -904,9 +944,15 @@ export function EncounterSheet({
       </header>
       <section className="encounter-page__content">{encounterContent}</section>
       <footer className="encounter-page__footer">
-        <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
-          {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
-        </span>
+        {/* §11 — estado de GRAVAÇÃO é informação de rascunho. Num documento
+            finalizado (leitura) "Salvo agora" seria falso: nada está sendo
+            gravado. O estado do registro é dito pelo chip "Finalizado" e pelo
+            bloco de finalização, que continuam ali. */}
+        {isDraft && (
+          <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
+            {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
+          </span>
+        )}
         {encounterFooter}
       </footer>
       {routeDismiss.dialog}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { wrapDialogFocus } from '@/lib/dialog-focus';
+import { isTopOverlay, popOverlay, pushOverlay } from '@/lib/overlay-stack';
 import { avatarColorFor, avatarInitials } from '@/lib/avatar-palette';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from '@/components/dashboard/OverlayDismissGuard';
@@ -20,12 +21,13 @@ export type { HoursChipDay };
 // ═══════════════════════════════════════════════════════════════
 // Componentes existentes são a única fonte de apresentação operacional.
 // A cor primária vem do tema ativo; semânticas ficam reservadas a estados.
-export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'link' | 'success' | 'warning' | 'whatsapp';
+export type CanonicalButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'link' | 'success' | 'warning' | 'whatsapp';
 /** Aliases temporários mantidos para compatibilidade de chamadas existentes. */
-export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'soft' | 'quiet' | 'cta';
+export type ButtonVariant = CanonicalButtonVariant | 'success' | 'warning' | 'danger' | 'danger-soft' | 'soft' | 'quiet' | 'cta';
 
 const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant>> = {
   danger: 'destructive',
+  'danger-soft': 'destructive-soft',
   soft: 'secondary',
   quiet: 'ghost',
   cta: 'primary',
@@ -34,14 +36,24 @@ const BUTTON_VARIANT_ALIAS: Partial<Record<ButtonVariant, CanonicalButtonVariant
 const BTN_VARIANT_CLS: Record<CanonicalButtonVariant, string> = {
   primary:
     'bg-[var(--accent)] text-[var(--accent-contrast)] border border-[var(--accent)] hover:bg-[var(--accent-hover)] hover:border-[var(--accent-hover)]',
+  // Ação secundária não é link: o acento fica reservado para primary e links
+  // reais. Em repouso ela é neutra, sem borda visível; hover/active só acendem
+  // uma superfície neutra. A borda transparente preserva a mesma métrica do
+  // primary e o foco continua no anel canônico.
   secondary:
-    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)] hover:bg-[var(--brand-soft)]',
+    'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]',
   whatsapp:
     'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-transparent',
   ghost:
     'bg-transparent text-[var(--text-muted)] border border-transparent hover:bg-[var(--surface-3)] hover:text-[var(--text)]',
+  // SOLID vermelho = SÓ o passo de confirmação destrutiva final (regra do DS
+  // catalogada em /dev/design-system). Em repouso, numa fila de ações, o
+  // destrutivo é `destructive-soft` — senão o vermelho cheio compete com o CTA
+  // primário da própria superfície.
   destructive:
     'bg-[var(--danger)] text-white border border-[var(--danger)] hover:bg-[var(--danger-strong)] hover:border-[var(--danger-strong)]',
+  'destructive-soft':
+    'bg-[var(--danger-bg)] text-[var(--danger-fg)] border border-[var(--danger-border)] hover:bg-[var(--danger)] hover:border-[var(--danger)] hover:text-white',
   link:
     'bg-transparent text-[var(--accent)] border border-transparent underline-offset-4 hover:underline',
   success:
@@ -63,7 +75,8 @@ const BTN_SIZE_CLS: Record<ButtonSize, string> = {
  *  elementos de navegação (Link/a) sem duplicar estilo fora do ui.tsx. */
 export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
   return cn(
-    'il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
+    'gd-control il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
+    `gd-control--${size}`,
     `il-control--${size}`,
     'transition-[background-color,border-color,color] duration-150',
     'focus-visible:outline-none focus-visible:shadow-focus',
@@ -97,24 +110,44 @@ export function PageBackAction({ href, onClick, label = 'Voltar', className }: {
     : <button type="button" onClick={onClick} className={classes}>{content}</button>;
 }
 
-/** Botão só de ícone (com rótulo acessível obrigatório via aria-label). */
+/** Botão só de ícone (com rótulo acessível obrigatório via aria-label).
+ *
+ *  Métrica canônica: o botão é QUADRADO no nível escolhido, medindo da MESMA
+ *  régua do Button/Select do mesmo nível (`--gd-control-h` / `-sm` / `-xs`).
+ *  A altura/quadratura vive no contrato `.gd-icon-control*` do design system —
+ *  a página nunca define `h-[34px]` nem corrige "por fora". */
+/**
+ * IconButton — a AÇÃO DE ÍCONE do produto (DS 1.1 · §7).
+ *
+ * Contrato:
+ *   • em REPOUSO é quase neutra: **sem borda permanente**, sem fundo, ícone no
+ *     token de texto secundário. Um lápis de edição não é uma caixinha
+ *     outlined — é uma ação discreta que aparece quando o olho procura;
+ *   • hover/foco acendem um fundo suave (`--gd-surface-3`) e o ícone sobe para
+ *     o texto principal: o estado é o que dá o contorno, não o repouso;
+ *   • a ÁREA CLICÁVEL não encolhe junto com o visual: o quadrado é token
+ *     (`--gd-control-h` / `-sm` / `-xs`, 44px em ponteiro grosso);
+ *   • `variant="secondary"` (outline) é EXCEÇÃO HIERÁRQUICA, usada onde o ícone
+ *     é controle de navegação da própria tela (setas de data da Agenda, mês do
+ *     calendário, fechar de overlay) — nunca como padrão.
+ */
 export function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon: string; label: string; variant?: ButtonVariant; size?: 'sm' | 'md'; tip?: string;
+  icon: string; label: string; variant?: ButtonVariant; size?: 'sm' | 'md' | 'xs'; tip?: string;
 }) {
-  const { icon, label, variant = 'secondary', size = 'md', tip, className, ...rest } = props;
+  const { icon, label, variant = 'ghost', size = 'md', tip, className, ...rest } = props;
   return (
     <button
       aria-label={label}
       title={tip || label}
       className={cn(
         buttonCls(variant, size),
-        'il-icon-button',
-        size === 'sm' ? 'w-8 h-8 p-0' : 'w-9 h-9 p-0',
+        'il-icon-button p-0',
+        size === 'sm' ? 'gd-icon-control--sm' : size === 'xs' ? 'gd-icon-control--xs' : 'gd-icon-control',
         className,
       )}
       {...rest}
     >
-      <Icon n={icon} size={size === 'sm' ? 14 : 16} />
+      <Icon n={icon} size={size === 'sm' ? 15 : size === 'xs' ? 13 : 16} />
     </button>
   );
 }
@@ -220,6 +253,8 @@ interface FieldContextValue {
   descriptionIds: string[];
   required?: boolean;
   invalid?: boolean;
+  /** O controle está DENTRO de um `.gd-field__box`: não desenha borda própria. */
+  inShell?: boolean;
 }
 const FieldContext = createContext<FieldContextValue | null>(null);
 
@@ -274,34 +309,162 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function Field({ label, hint, children, required, htmlFor, error }: {
+/**
+ * Field — campo canônico do DS: rótulo visível sempre FORA e acima da caixa.
+ * Input, Textarea, Select, Combobox, DatePicker e wrappers como PhoneBRInput
+ * compartilham a mesma associação ARIA e o mesmo contorno contínuo.
+ */
+export function Field({ label, hint, children, required, htmlFor, error, className }: {
   label: string; hint?: string; children: React.ReactNode; required?: boolean;
-  htmlFor?: string; error?: string;
+  htmlFor?: string; error?: string; className?: string;
 }) {
   const id = useId();
-  const child = isValidElement<{ id?: string }>(children) ? children : null;
-  const nativeControl = child && typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type);
+  const child = isValidElement<{ id?: string; type?: string; disabled?: boolean; readOnly?: boolean }>(children) ? children : null;
+  const nativeTag = child && typeof child.type === 'string' ? child.type : '';
+  const kind: 'input' | 'textarea' | 'select' | 'other' = (() => {
+    if (nativeTag === 'input' || child?.type === Input) return 'input';
+    if (nativeTag === 'textarea' || child?.type === Textarea) return 'textarea';
+    if (nativeTag === 'select' || child?.type === Select) return 'select';
+    return 'other';
+  })();
+  const nativeControl = nativeTag === 'input' || nativeTag === 'textarea' || nativeTag === 'select';
   const field: FieldContextValue = {
     controlId: child?.props.id || htmlFor || `${id}-control`,
     labelId: `${id}-label`,
     descriptionIds: [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean),
-    required, invalid: !!error,
+    required, invalid: !!error, inShell: true,
   };
+  const control = nativeControl
+    ? cloneElement(child!, fieldControlProps(child!.props as React.AriaAttributes & { id?: string; required?: boolean }, field))
+    : children;
+  const multiline = kind === 'textarea';
+  const childProps = child?.props as { disabled?: boolean; readOnly?: boolean } | undefined;
   return (
     <FieldContext.Provider value={field}>
-      <label className="il-type-body block" htmlFor={htmlFor || child?.props.id || (nativeControl || child?.type === Input || child?.type === Select || child?.type === Textarea ? field.controlId : undefined)}>
-        <span id={field.labelId} className="il-type-label block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
-          {label} {required && <span aria-hidden="true" className="text-[var(--danger)]">*</span>}
+      <label
+        className={cn('gd-field', multiline && 'gd-field--multiline', className)}
+        data-invalid={error ? 'true' : undefined}
+        data-disabled={childProps?.disabled ? 'true' : undefined}
+        data-readonly={childProps?.readOnly ? 'true' : undefined}
+        htmlFor={htmlFor || child?.props.id || (nativeControl || kind !== 'other' ? field.controlId : undefined)}
+      >
+        <span id={field.labelId} className="gd-field__label">
+          {label}{required && <span aria-hidden="true" className="text-[var(--danger)]"> *</span>}
         </span>
-        {nativeControl ? cloneElement(child, fieldControlProps(child.props, field)) : children}
-        {hint && <span id={`${id}-hint`} className="il-type-help block text-xs text-[var(--text-muted)] mt-1">{hint}</span>}
-        {error && <span id={`${id}-error`} role="alert" className="block text-xs text-[var(--danger-fg)] mt-1">{error}</span>}
+        <span className="gd-field__box">{control}</span>
+        {/* Erro substitui visualmente a ajuda, mas ambos continuam associados
+            ao controle: leitores de tela recebem o contexto completo. */}
+        {hint && (
+          error
+            ? <span id={`${id}-hint`} className="gd-field__hint gd-field__hint--off">{hint}</span>
+            : <span id={`${id}-hint`} className="gd-field__hint">{hint}</span>
+        )}
+        {error && <span id={`${id}-error`} role="alert" className="gd-field__error">{error}</span>}
       </label>
     </FieldContext.Provider>
   );
 }
 
+/**
+ * ReadOnlyField — dado que NÃO se edita nesta tela (DS 1.1 · §11).
+ *
+ * Contrato (prontuário finalizado, resumo de registro, ficha somente leitura):
+ *   • leitura é CONTEÚDO, não formulário desabilitado: rótulo canônico + texto
+ *     na escala de corpo, sem caixa de input e sem cinza de "desabilitado";
+ *   • vazio vira `Não informado` em peso fraco — nunca um branco que pareça
+ *     campo não carregado;
+ *   • `multiline` preserva os parágrafos que o profissional escreveu;
+ *   • a ajuda contextual (`hint`) fica separada do valor;
+ *   • `block` desenha o respiro entre blocos de leitura de uma seção.
+ * Nenhuma regra clínica, autoria ou permissão mora aqui: é apresentação.
+ */
+export function ReadOnlyField({ label, value, hint, empty = 'Não informado', multiline = false, block = false, className, action }: {
+  /** Opcional dentro de um Disclosure: o gatilho já nomeia o bloco. */
+  label?: string;
+  value?: React.ReactNode;
+  /** Texto vazio/nulo/só-espaços cai no estado `Não informado`. */
+  hint?: string;
+  empty?: string;
+  multiline?: boolean;
+  block?: boolean;
+  className?: string;
+  /** Ação da seção (ex.: "Ver histórico") — fica no rodapé do bloco. */
+  action?: React.ReactNode;
+}) {
+  const vazio = value === null || value === undefined
+    || (typeof value === 'string' && value.trim().length === 0);
+  return (
+    <div className={cn('gd-ro', block && 'gd-ro--block', className)}>
+      {label ? <span className="gd-ro__label">{label}</span> : null}
+      {vazio
+        ? <span className="gd-ro__empty">{empty}</span>
+        : <span className="gd-ro__value">{value}</span>}
+      {hint && <span className="gd-ro__hint">{hint}</span>}
+      {action && <span className="mt-1.5 inline-flex items-center gap-2">{action}</span>}
+    </div>
+  );
+}
+
 /** Checkbox com cara de checkbox (não de texto clicável). */
+/**
+ * Disclosure — bloco secundário que ABRE (DS 1.1 · §14).
+ *
+ * Contrato:
+ *   • é uma divulgação REAL: `<button aria-expanded aria-controls>` + região
+ *     rotulada — não é um "accordion" falso, nem um chevron decorativo (a
+ *     lição do rail: chevron só existe se houver algo para abrir);
+ *   • fechado por padrão: conteúdo secundário (nota interna, histórico) não
+ *     ocupa a primeira leitura da tela;
+ *   • movimento curto (o painel entra em ~150ms) e discretamente reduzido para
+ *     quem pediu menos movimento;
+ *   • controlável (`open`/`onOpenChange`) ou livre (`defaultOpen`);
+ *   • o conteúdo continua no DOM quando fechado apenas se `keepMounted` — o
+ *     padrão é desmontar, para não vazar dado oculto em leitura de tela/print.
+ */
+/**
+ * ClinicalRecordSection — o BLOCO de um prontuário em LEITURA (§11).
+ *
+ * Read-only no GoDoutor é DOCUMENTO, não formulário desabilitado: cada seção tem
+ * título próprio, os valores entram como texto (com `ReadOnlyField`) e o que é
+ * secundário vai para `Disclosure`/metadado discreto. Sem caixa por campo, sem
+ * contorno de input, sem "Salvo agora" de página.
+ */
+export function ClinicalRecordSection({ title, hint, children, className }: {
+  title: string; hint?: string; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <section className={cn('gd-ro-section', className)} aria-label={title}>
+      <h3 className="gd-ro-section__title">{title}</h3>
+      {hint ? <p className="gd-ro-section__hint">{hint}</p> : null}
+      <div className="gd-ro-grid">{children}</div>
+    </section>
+  );
+}
+
+export function Disclosure({ label, hint, children, defaultOpen = false, open, onOpenChange, keepMounted = false, className }: {
+  label: string; hint?: string; children: React.ReactNode; defaultOpen?: boolean;
+  open?: boolean; onOpenChange?: (open: boolean) => void; keepMounted?: boolean; className?: string;
+}) {
+  const id = useId();
+  const [interno, setInterno] = useState(defaultOpen);
+  const aberto = open ?? interno;
+  const alternar = () => { const proximo = !aberto; if (open === undefined) setInterno(proximo); onOpenChange?.(proximo); };
+  return (
+    <div className={cn('gd-disclosure', className)} data-open={aberto ? 'true' : undefined}>
+      <button type="button" className="gd-disclosure__trigger" aria-expanded={aberto} aria-controls={`${id}-panel`} onClick={alternar}>
+        <Icon n={aberto ? 'chevD' : 'chevR'} size={14} className="gd-disclosure__caret" />
+        <span className="gd-disclosure__label">{label}</span>
+        {hint && <span className="gd-disclosure__hint">{hint}</span>}
+      </button>
+      {aberto || keepMounted ? (
+        <div id={`${id}-panel`} role="region" aria-label={label} hidden={!aberto} className="gd-disclosure__panel">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Checkbox({ label, hint, checked, onChange, disabled }: {
   label: React.ReactNode; hint?: string; checked: boolean;
   onChange: (v: boolean) => void; disabled?: boolean;
@@ -495,7 +658,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
   }
   return (
     <div role="tablist" aria-label={ariaLabel}
-      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm scale-95 origin-left', className)}>
+      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm', className)}>
       {items.map((item) => (
         <button key={item.id} type="button" role="tab"
           ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
@@ -672,21 +835,37 @@ export function Stat({ label, value, hint, tone = 'brand', icon }: {
   );
 }
 
-export function Notice({ tone = 'info', children, title, className }: { tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string; className?: string }) {
+export function Notice({ tone = 'info', children, title, className, icon, onDismiss, dismissLabel = 'Fechar aviso', live = false }: {
+  tone?: 'info' | 'success' | 'error' | 'warning'; children: React.ReactNode; title?: string; className?: string;
+  /** Ícone da função (ex.: `lock` no aviso de permissão). */
+  icon?: string;
+  /** Aviso de contexto local: fecha sem virar modal nem toast. */
+  onDismiss?: () => void;
+  dismissLabel?: string;
+  /** Confirmações de ação transitórias anunciam; avisos estáveis não. */
+  live?: boolean;
+}) {
   const map = {
     info: 'bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]',
     success: 'bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]',
     warning: 'bg-[var(--warning-bg)] text-[var(--warning-fg)] border-[var(--warning-border)]',
     error: 'bg-[var(--danger-bg)] text-[var(--danger-fg)] border-[var(--danger-border)]',
   }[tone];
-  const icon = { info: 'spark', success: 'checkCircle', warning: 'alert', error: 'alert' }[tone];
+  const icone = icon || { info: 'spark', success: 'checkCircle', warning: 'alert', error: 'alert' }[tone];
   return (
-    <div className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map, className)}>
-      <Icon n={icon} size={15} className="mt-0.5 shrink-0" />
-      <div className="min-w-0">
+    <div
+      className={cn('rounded-md px-3 py-2.5 text-sm font-medium border flex items-start gap-2', map, className)}
+      role={live ? 'status' : undefined}
+      aria-live={live ? 'polite' : undefined}
+    >
+      <Icon n={icone} size={15} className="mt-0.5 shrink-0" />
+      <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
         <div>{children}</div>
       </div>
+      {onDismiss && (
+        <CloseButton onClick={onDismiss} label={dismissLabel} className="shrink-0 -mr-1 -mt-0.5" />
+      )}
     </div>
   );
 }
@@ -695,8 +874,22 @@ export function Notice({ tone = 'info', children, title, className }: { tone?: '
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true, variant = 'side', dialogWidth = '672px' }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /**
+   * `side` (padrão) = faixa lateral; `dialog` = MODAL CENTRAL.
+   *
+   * MISSÃO UX CLOSURE · item 3C — criação/edição de agendamento é FORMULÁRIO
+   * CURTO: fluxo por etapas, largura confortável e leitura no centro da tela.
+   * A faixa lateral (95% da viewport em telas largas) ficou reservada para
+   * SUPERFÍCIES DE TRABALHO longas (prontuário, ficha do paciente, conversas).
+   * É o MESMO componente e o MESMO overlay system — muda só a geometria, então
+   * guards, foco, Escape, empilhamento com o cadastro aninhado e presets de
+   * largura continuam valendo sem uma segunda implementação.
+   */
+  variant?: 'side' | 'dialog';
+  /** Faixa do modal central (valor CSS). Ignorado no `variant="side"`. */
+  dialogWidth?: string;
   /** Nonmodal workspace editors leave navigation reachable; caller must guard exits. */
   modal?: boolean;
   /** Optional root class for a single, explicitly scoped Drawer surface. */
@@ -751,7 +944,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
   if (!open) return null;
   return (
-    <dialog ref={dialogRef} className={cn("il-drawer fixed inset-0 z-50", dialogClassName)} aria-modal={modal || undefined}
+    <dialog ref={dialogRef}
+      className={cn("il-drawer fixed inset-0 z-50", variant === 'dialog' && 'il-drawer--dialog', dialogClassName)}
+      style={variant === 'dialog' ? ({ '--il-dialog-w': dialogWidth } as React.CSSProperties) : undefined}
+      aria-modal={modal || undefined}
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
@@ -767,13 +963,17 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           if (!event.defaultPrevented) { event.preventDefault(); requestClose('escape'); }
         }
       }}>
-      <div className="flex h-full justify-end">
+      <div className={cn('flex h-full', variant === 'dialog' ? 'items-center justify-center' : 'justify-end')}>
         <div aria-hidden="true" onClick={() => requestClose('backdrop')} className="absolute inset-0 bg-transparent" />
         {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
           'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
-          expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`,
+          // No modal central a largura vem do token do dialog (CSS); nos
+          // demais casos continua sendo o preset pedido pela tela.
+          variant === 'dialog'
+            ? (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : 'w-full')
+            : (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`),
         )} data-expanded={expanded ? 'true' : undefined}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre.
@@ -1030,39 +1230,118 @@ export function CloseButton({ onClick, label = 'Fechar', className }: {
 }
 
 // ── camadas flutuantes: uma única engenharia de ancoragem ───────────────
-type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start';
+type LayerSide = 'bottom-start' | 'bottom-end' | 'top-start' | 'right-start' | 'left-start';
+
+/**
+ * Retângulo do ANCORADOR. O gatilho real é o CONTEÚDO do wrapper, não o
+ * wrapper: há casos (evento da Agenda) em que o filho é `position: absolute`
+ * dentro da coluna e o wrapper fica 0×0 — medir o wrapper colocaria o card no
+ * canto da coluna em vez de colado ao evento. Regra: se o wrapper tem tamanho,
+ * usa o wrapper (o conteúdo pode ser composto); se não tem, mede o filho.
+ */
+function anchorRectOf(ref: React.RefObject<HTMLElement | null>): DOMRect | null {
+  const el = ref.current;
+  if (!el) return null;
+  // §10 — o gatilho pode viver DENTRO de um campo canônico (Combobox, DatePicker):
+  // a âncora visual, então, é a CAIXA do campo (o contorno), não o host interno
+  // que carrega o padding do rótulo. Medir o host interno deixava a lista 13px
+  // mais estreita de cada lado e desalinhada do contorno — medido na QA do §10.
+  const box = fieldBoxOf(el);
+  if (box) {
+    const r = box.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return r;
+  }
+  const own = el.getBoundingClientRect();
+  if (own.width > 0 && own.height > 0) return own;
+  const child = el.firstElementChild as HTMLElement | null;
+  return child ? child.getBoundingClientRect() : own;
+}
+
+/**
+ * A CAIXA de um campo canônico (`.gd-field__box`) que contém este elemento —
+ * o alvo de alinhamento de qualquer camada ancorada a um campo do DS.
+ */
+function fieldBoxOf(el: HTMLElement | null): HTMLElement | null {
+  return el?.closest<HTMLElement>('.gd-field__box') || null;
+}
 
 /**
  * Posiciona uma camada em PORTAL a partir do retângulo do gatilho, com
- * clamp na viewport e flip vertical quando não há espaço abaixo. Sem medição
- * por `offsetHeight` no render: lê o rect real a cada abertura/scroll.
+ * clamp na viewport, flip vertical (cima/baixo) e flip horizontal
+ * (direita/esquerda) quando o lado pedido não tem espaço. Sem medição por
+ * `offsetHeight` no render: lê o rect real a cada abertura/scroll.
  */
 function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement | null>, side: LayerSide, offset = 6, layerRef?: React.RefObject<HTMLElement | null>) {
   const [style, setStyle] = useState<React.CSSProperties | null>(null);
   useEffect(() => {
     if (!open) { setStyle(null); return; }
     const place = () => {
-      const a = anchorRef.current?.getBoundingClientRect();
+      const a = anchorRectOf(anchorRef);
       if (!a) return;
       const w = layerRef?.current?.offsetWidth || 0;
       const h = layerRef?.current?.offsetHeight || 0;
+      const margin = 8;
       let top = a.bottom + offset;
       let left = a.left;
       if (side === 'bottom-end') left = a.right - w;
       if (side === 'top-start') top = a.top - h - offset;
-      if (side === 'right-start') { top = a.top; left = a.right + offset; }
+      if (side === 'right-start' || side === 'left-start') {
+        // LATERAIS — preferência declarada primeiro e FLIP quando ela não cabe.
+        // Antes a expressão estava invertida no caso "preferir direita": com o
+        // evento encostado na borda, o card era posicionado à direita de
+        // qualquer forma e o clamp o empurrava POR CIMA do próprio evento (e
+        // fora da viewport). Agora:
+        //   1. cabe no lado preferido?  → vai para ele, a `offset` de distância;
+        //   2. não cabe?               → FLIPA para o outro lado, mesmo `offset`;
+        //   3. não cabe em NENHUM lado (tela estreita) → sai de cima do evento:
+        //      abre abaixo (ou acima, se não houver espaço) alinhado à esquerda
+        //      dele, sempre dentro da viewport.
+        const gap = offset;
+        const toLeft = a.left - gap - w;
+        const toRight = a.right + gap;
+        const fitsLeft = toLeft >= margin;
+        const fitsRight = toRight + w <= window.innerWidth - margin;
+        const preferLeft = side === 'left-start';
+        top = a.top;
+        if (preferLeft ? fitsLeft : fitsRight) left = preferLeft ? toLeft : toRight;
+        else if (preferLeft ? fitsRight : fitsLeft) left = preferLeft ? toRight : toLeft;
+        else {
+          // Nenhum lado comporta a largura: empilha verticalmente (fora do
+          // evento) em vez de cobri-lo. `left` alinha com o evento e o clamp
+          // final mantém tudo dentro da tela.
+          left = preferLeft ? a.right : a.left;
+          const below = a.bottom + gap;
+          const above = a.top - h - gap;
+          top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;
+        }
+      }
       if (side === 'bottom-start' || side === 'bottom-end') {
         // Sem espaço abaixo (e com espaço acima) → abre para cima.
-        if (h && top + h > window.innerHeight - 8 && a.top - h - offset > 8) top = a.top - h - offset;
+        if (h && top + h > window.innerHeight - margin && a.top - h - offset > margin) top = a.top - h - offset;
       }
-      left = Math.max(8, Math.min(left, window.innerWidth - Math.max(w, 0) - 8));
-      top = Math.max(8, Math.min(top, Math.max(8, window.innerHeight - h - 8)));
+      left = Math.max(margin, Math.min(left, window.innerWidth - Math.max(w, 0) - margin));
+      top = Math.max(margin, Math.min(top, Math.max(margin, window.innerHeight - h - margin)));
+      // GANCHO DE HOMOLOGAÇÃO (leitura apenas): registra a última medição no
+      // próprio elemento posicionado. Sem isso, a única forma de conferir a
+      // geometria num teste é re-medir por fora — que foi justamente como o
+      // defeito do flip/stale passou. Não muda layout: é atributo de dado.
+      const posNode = layerRef?.current;
+      if (posNode) posNode.dataset.place = `l${Math.round(left)},t${Math.round(top)},w${Math.round(w)},h${Math.round(h)}`;
       setStyle({ top, left });
     };
     place();
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
+    // RE-MEDE quando a PRÓPRIA camada muda de tamanho. Sem isto, a primeira
+    // medição acontecia com o conteúdo ainda sem a largura/altura finais
+    // (tipografia, quebra de linha): o flip e o clamp eram calculados com um
+    // retângulo menor e o card acabava 16px POR CIMA do evento e podia vazar a
+    // viewport. Posição não altera tamanho, então não há laço de observação.
+    const layer = layerRef?.current;
+    const ro = typeof ResizeObserver !== 'undefined' && layer ? new ResizeObserver(place) : null;
+    if (ro && layer) ro.observe(layer);
     return () => {
+      ro?.disconnect();
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
     };
@@ -1076,9 +1355,16 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
 // não tratar o clique num descendente como "fora" (B1).
 let LAYER_SEQ = 0;
 
-function LayerPortal({ children, style, className, role, label, id }: {
+function LayerPortal({ children, style, className, role, label, id, positionRef }: {
   children: React.ReactNode; style: React.CSSProperties | null; className?: string;
   role?: string; label?: string; id?: string;
+  /**
+   * Ref do elemento POSICIONADO (o próprio wrapper do portal). É ele que o
+   * posicionamento precisa MEDIR: medir um filho interno dava largura/altura
+   * menores que a caixa real (padding do card) e o flip/clamp era calculado com
+   * um retângulo errado — o resumo encostava 16px POR CIMA do evento.
+   */
+  positionRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   if (typeof document === 'undefined') return null;
   return createPortal(
@@ -1089,7 +1375,11 @@ function LayerPortal({ children, style, className, role, label, id }: {
       className={className}
       style={style || undefined}
       data-layer=""
-      ref={(el) => { if (el && !el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ); }}
+      ref={(el) => {
+        if (!el) return;
+        if (positionRef) positionRef.current = el;
+        if (!el.dataset.layerOrder) el.dataset.layerOrder = String(++LAYER_SEQ);
+      }}
     >
       {children}
     </div>,
@@ -1138,7 +1428,9 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const style = useAnchoredLayer(open && !disabled, anchorRef, side, 8, layerRef);
+  // Mede o elemento POSICIONADO (wrapper do portal), não o conteúdo interno.
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open && !disabled, anchorRef, side, 8, posRef);
   const show = () => { if (!disabled) setOpen(true); };
   const hide = () => setOpen(false);
   return (
@@ -1154,7 +1446,7 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
         {children}
       </span>
       {open && !disabled && (
-        <LayerPortal style={style} className="gd-tooltip">
+        <LayerPortal style={style} className="gd-tooltip" positionRef={posRef}>
           <div ref={layerRef} role="tooltip">{label}</div>
         </LayerPortal>
       )}
@@ -1162,30 +1454,66 @@ export function Tooltip({ label, side = 'bottom-start', children, disabled }: {
   );
 }
 
-/** HoverCard: painel rico em hover/foco com a janela do §15 (150–250ms). */
+/** HoverCard: painel rico em hover/foco com a janela do §15 (150–250ms).
+ *
+ *  Contrato (missão UX Closure, resumo contextual da Agenda):
+ *   • abre ~180ms depois de o ponteiro pousar no alvo;
+ *   • fica ANCORADO ao alvo (8px de distância), com flip automático quando
+ *     falta espaço — nunca no canto da página nem fora da viewport;
+ *   • permanece aberto com o ponteiro no alvo OU na própria camada (o atraso
+ *     de fechamento de `closeDelayMs` evita o flicker do caminho entre os dois);
+ *   • teclado: foco abre igual ao hover; Escape fecha;
+ *   • `closeOnClick`: qualquer clique DENTRO da camada fecha antes de navegar
+ *     (a ação pedida acontece, a prévia não fica pendurada na tela);
+ *   • onde não existe hover real (toque), a prévia não abre por foco de toque. */
 export const HOVER_CARD_OPEN_MS = 180;
-export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS }: {
-  content: React.ReactNode; side?: LayerSide; children: React.ReactNode; openDelayMs?: number;
+export const HOVER_CARD_CLOSE_MS = 140;
+export function HoverCard({ content, side = 'right-start', children, openDelayMs = HOVER_CARD_OPEN_MS, closeDelayMs = HOVER_CARD_CLOSE_MS, offset = 10, closeOnClick = true, suppress = false, className }: {
+  content: React.ReactNode; side?: LayerSide; children: React.ReactNode;
+  openDelayMs?: number; closeDelayMs?: number; offset?: number; closeOnClick?: boolean; className?: string;
+  /**
+   * Silencia o resumo enquanto um menu de contexto (ou qualquer camada irmã
+   * mais forte) está aberto. Sem isto, o cartão do hover fica ACESO junto com o
+   * menu aberto no mesmo evento — dois painéis para o mesmo alvo, originando de
+   * novo a confusão "o menu é o próprio resumo" relatada na inspeção do produto.
+   * O silêncio é temporário: sair e voltar com o ponteiro reabre normalmente.
+   */
+  suppress?: boolean;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const timer = useRef<number | null>(null);
-  const style = useAnchoredLayer(open, anchorRef, side, 8, layerRef);
-  const clear = () => { if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; } };
-  // §5 — MOBILE SEM HOVER: onde não existe hover real (hover: none) a prévia
-  // não abre — nem por hover nem pelo foco de um toque. O caminho do toque é o
-  // clique, que abre o detalhe; nenhuma informação fica dependendo de hover.
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, offset, posRef);
+  const clear = () => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+  };
   const canHover = () => {
     try { return window.matchMedia('(hover: hover)').matches; } catch { return true; }
   };
+  /** Ponteiro/foco entrou no alvo OU na camada: cancela o fechamento pendente. */
   const enter = () => {
-    if (!canHover()) return;
-    clear();
-    timer.current = window.setTimeout(() => setOpen(true), openDelayMs);
+    if (suppress || !canHover()) return;
+    if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+    if (openTimer.current !== null) return;
+    openTimer.current = window.setTimeout(() => { setOpen(true); openTimer.current = null; }, openDelayMs);
   };
-  const leave = () => { clear(); setOpen(false); };
+  const leave = () => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) return;
+    closeTimer.current = window.setTimeout(() => { setOpen(false); closeTimer.current = null; }, closeDelayMs);
+  };
   useEffect(() => clear, []);
+  // Silêncio forçado: fecha o resumo na hora e cancela timers pendentes.
+  useEffect(() => {
+    if (!suppress) return;
+    clear();
+    setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suppress]);
   useDismissOnEscape(open, () => setOpen(false));
   return (
     <>
@@ -1195,13 +1523,28 @@ export function HoverCard({ content, side = 'right-start', children, openDelayMs
         onMouseEnter={enter}
         onMouseLeave={leave}
         onFocus={enter}
-        onBlur={leave}
+        onBlur={(e) => {
+          // EQUIVALÊNCIA TECLADO ↔ HOVER: sair do alvo para dentro da PRÓPRIA
+          // camada (Tab até "Ver detalhes"/"Reagendar") não fecha o resumo.
+          const next = e.relatedTarget as Node | null;
+          if (next && layerRef.current?.contains(next)) return;
+          setOpen(false);
+        }}
       >
         {children}
       </span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-hovercard">
-          <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}>{content}</div>
+        <LayerPortal style={style} className={cn('gd-layer gd-hovercard', className)} positionRef={posRef}>
+          <div ref={layerRef} onMouseEnter={enter} onMouseLeave={leave}
+            onFocus={enter}
+            onBlur={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && (layerRef.current?.contains(next) || anchorRef.current?.contains(next))) return;
+              setOpen(false);
+            }}
+            onClick={closeOnClick ? () => setOpen(false) : undefined}>
+            {content}
+          </div>
         </LayerPortal>
       )}
     </>
@@ -1221,7 +1564,8 @@ export function Popover({ open, onClose, trigger, children, side = 'bottom-start
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredLayer(open, anchorRef, side, 6, layerRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, side, 6, posRef);
   useDismissOnEscape(open, onClose);
   useEffect(() => {
     if (!open) return;
@@ -1240,7 +1584,7 @@ export function Popover({ open, onClose, trigger, children, side = 'bottom-start
     <>
       <span ref={anchorRef} style={anchorStyle} className={cn('lds-popover-anchor inline-flex', className)}>{trigger}</span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-popover" role="dialog" label={label}>
+        <LayerPortal style={style} className="gd-layer gd-popover" role="dialog" label={label} positionRef={posRef}>
           <div ref={layerRef}>{children}</div>
         </LayerPortal>
       )}
@@ -1263,7 +1607,8 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
   const [active, setActive] = useState(0);
   const itemRefs = useRef<Array<HTMLElement | null>>([]);
   const restoreRef = useRef<HTMLElement | null>(null);
-  const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, listRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, align === 'end' ? 'bottom-end' : side, 6, posRef);
   useDismissOnEscape(open, () => setOpen(false));
   const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
   useEffect(() => {
@@ -1311,7 +1656,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
         <span onClick={() => setOpen((v) => !v)}>{trigger}</span>
       </span>
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-menu" role="menu" label={label}>
+        <LayerPortal style={style} className="gd-layer gd-menu" role="menu" label={label} positionRef={posRef}>
           <div
             ref={listRef}
             onKeyDown={(e) => {
@@ -1322,40 +1667,7 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
               else if (e.key === 'Tab') setOpen(false);
             }}
           >
-            {items.map((item, idx) => (
-              <div key={item.id}>
-                {item.separatorBefore && <div className="gd-menu__separator" role="separator" />}
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    ref={(el) => { itemRefs.current[idx] = el; }}
-                    role="menuitem"
-                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
-                    data-active={idx === active}
-                    onMouseEnter={() => setActive(idx)}
-                    tabIndex={-1}
-                  >
-                    {item.icon && <Icon n={item.icon} size={15} />}
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    ref={(el) => { itemRefs.current[idx] = el; }}
-                    role="menuitem"
-                    disabled={item.disabled}
-                    className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
-                    data-active={idx === active}
-                    onMouseEnter={() => setActive(idx)}
-                    onClick={() => run(item)}
-                    tabIndex={-1}
-                  >
-                    {item.icon && <Icon n={item.icon} size={15} />}
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                )}
-              </div>
-            ))}
+            <MenuItemList items={items} active={active} setActive={setActive} run={run} listRef={listRef} itemRefs={itemRefs} />
           </div>
         </LayerPortal>
       )}
@@ -1363,10 +1675,173 @@ export function DropdownMenu({ items, trigger, label = 'Ações', side = 'bottom
   );
 }
 
+/** Item de menu renderizado — usado pelo DropdownMenu e pelo ContextMenu (uma
+ *  só marcação, um só CSS, um só comportamento de teclado). */
+function MenuItemList({ items, active, setActive, run, listRef, itemRefs }: {
+  items: MenuItem[]; active: number; setActive: (i: number) => void;
+  run: (item: MenuItem) => void; listRef: React.RefObject<HTMLDivElement>;
+  itemRefs: React.MutableRefObject<Array<HTMLElement | null>>;
+}) {
+  return (
+    <div ref={listRef}>
+      {items.map((item, idx) => (
+        <div key={item.id}>
+          {item.separatorBefore && <div className="gd-menu__separator" role="separator" />}
+          {item.href ? (
+            <Link
+              href={item.href}
+              ref={(el) => { itemRefs.current[idx] = el; }}
+              role="menuitem"
+              className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+              data-active={idx === active}
+              onMouseEnter={() => setActive(idx)}
+              tabIndex={-1}
+            >
+              {item.icon && <Icon n={item.icon} size={15} />}
+              <span className="truncate">{item.label}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              ref={(el) => { itemRefs.current[idx] = el; }}
+              role="menuitem"
+              disabled={item.disabled}
+              className={cn('gd-menu__item', item.danger && 'gd-menu__item--danger')}
+              data-active={idx === active}
+              onMouseEnter={() => setActive(idx)}
+              onClick={() => run(item)}
+              tabIndex={-1}
+            >
+              {item.icon && <Icon n={item.icon} size={15} />}
+              <span className="truncate">{item.label}</span>
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * ContextMenu canônico (botão direito / Shift+F10 / tecla Menu).
+ *
+ * Contratos:
+ *  • abre ANCORADO NO PONTEIRO (ou no canto do alvo, no caso do teclado) e
+ *    nunca sai da viewport — o flip vive no `useAnchoredLayer`;
+ *  • teclado: foco entra no primeiro item ao abrir, ↑/↓ navegam com wrap,
+ *    Home/End vão às pontas, Enter/Espaço executam, Escape e Tab fecham;
+ *  • ponteiro: `mousedown` fora, rolagem e perda de foco fecham — um menu de
+ *    contexto aberto não fica pendurado sobre a grade;
+ *  • ao fechar, o foco VOLTA para quem abriu (o evento da Agenda);
+ *  • hierarquia de camadas: usa `setLayerOrder` do LayerPortal, então um
+ *    Popover/Dialog aberto por um item do menu fica POR CIMA dele.
+ */
+export function ContextMenu({ open, onClose, point, items, label = 'Ações', header, returnFocus }: {
+  open: boolean; onClose: () => void;
+  /** Ponto do ponteiro (clientX/clientY) que originou o menu. */
+  point: { x: number; y: number } | null;
+  items: MenuItem[]; label?: string; header?: React.ReactNode;
+  /** Elemento que recebe o foco de volta ao fechar. */
+  returnFocus?: HTMLElement | null;
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  const [active, setActive] = useState(0);
+  const style = useAnchoredLayer(open && !!point, anchorRef, 'bottom-start', 4, posRef);
+  useDismissOnEscape(open, onClose);
+  const enabled = items.map((i, idx) => (i.disabled ? -1 : idx)).filter((i) => i >= 0);
+  useEffect(() => {
+    if (!open) return;
+    setActive(enabled[0] ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // Foco REAL no item ativo (roving focus) e devolução ao gatilho no fim.
+  useEffect(() => { if (open) itemRefs.current[active]?.focus(); }, [open, active]);
+  /**
+   * DEVOLUÇÃO DE FOCO. O menu é montado/desmontado pelo pai (`{open && ...}`),
+   * então o caminho de volta é a LIMPEZA do efeito — não uma passagem por
+   * `open === false`. Só devolvemos o foco quando ele ainda está no menu (ou
+   * solto no body): se uma ação abriu um Dialog/Sheet, quem manda no foco é a
+   * camada de cima, e ela assume em seguida.
+   */
+  useEffect(() => () => {
+    const ativo = document.activeElement;
+    const dentro = !!ativo && !!listRef.current?.contains(ativo);
+    if ((!ativo || ativo === document.body || dentro) && returnFocus?.isConnected) {
+      returnFocus.focus?.({ preventScroll: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnFocus]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (listRef.current?.contains(t)) return;
+      onClose();
+    };
+    const onScroll = () => onClose();
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('resize', onScroll);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open, onClose]);
+  const move = (dir: 1 | -1) => {
+    if (!enabled.length) return;
+    const pos = enabled.indexOf(active);
+    setActive(enabled[(pos + dir + enabled.length) % enabled.length]);
+  };
+  const run = (item: MenuItem) => {
+    if (!item || item.disabled) return;
+    onClose();
+    item.onSelect?.();
+  };
+  if (!open || !point) return null;
+  return (
+    <>
+      {/* Âncora virtual: o menu nasce no PONTO clicado, não num elemento. */}
+      <span ref={anchorRef} aria-hidden="true" style={{ position: 'fixed', left: point.x, top: point.y, width: 0, height: 0 }} />
+      <LayerPortal style={style} className="gd-layer gd-menu gd-menu--context" role="menu" label={label} positionRef={posRef}>
+        {header && <div className="gd-menu__header">{header}</div>}
+        <div
+          className="gd-menu__list"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+            else if (e.key === 'Home') { e.preventDefault(); if (enabled.length) setActive(enabled[0]); }
+            else if (e.key === 'End') { e.preventDefault(); if (enabled.length) setActive(enabled[enabled.length - 1]); }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(items[active]); }
+            else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+            else if (e.key === 'Tab') onClose();
+          }}
+        >
+          <MenuItemList items={items} active={active} setActive={setActive} run={run} listRef={listRef} itemRefs={itemRefs} />
+        </div>
+      </LayerPortal>
+    </>
+  );
+}
+
+/**
+ * Pilha de Dialogs ABERTOS: com um Dialog sobre outro (ex.: "Novo agendamento"
+ * + "Cadastrar novo paciente"), o Escape fecha SÓ o do topo. Sem isso os dois
+ * handlers de janela disparariam juntos e o overlay de baixo fecharia junto.
+ */
+// A hierarquia de overlays vive em lib/overlay-stack.ts (fonte única): o
+// Dialog responde a Escape/Tab só quando é o do TOPO — um sheet do DS aberto
+// por cima (ex.: cadastro de paciente) fecha sozinho, sem derrubar o de baixo.
+
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
-export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px' }: {
+export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
+  /** Event that opened a central modal when its hover action unmounts. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
   /**
    * Faixa do diálogo em unidade de CSS (ex.: '672px'). Confirmações simples
    * ficam curtas; revisões pedem mais. Vai como `--gd-dialog-w` (token local)
@@ -1386,17 +1861,22 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
     const prev = document.activeElement as HTMLElement | null;
     lockBodyScroll(token.current);
     const node = ref.current;
+    const entry = token.current;
+    pushOverlay(entry);
     const first = node?.querySelector<HTMLElement>('[data-autofocus], button, input, select, textarea, a[href]');
     (first || headingRef.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); requestClose('escape'); }
-      if (e.key === 'Tab' && node) wrapDialogFocus(e, node, headingRef.current);
+      // Só o overlay do TOPO responde ao Escape (o de baixo continua aberto).
+      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestClose('escape'); }
+      if (e.key === 'Tab' && node && isTopOverlay(entry)) wrapDialogFocus(e, node, headingRef.current);
     };
     window.addEventListener('keydown', onKey, true);
     return () => {
+      popOverlay(entry);
       window.removeEventListener('keydown', onKey, true);
       unlockBodyScroll(token.current);
-      prev?.focus?.();
+      if (prev?.isConnected) prev.focus?.({ preventScroll: true });
+      else if (returnFocus?.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -1429,6 +1909,149 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
     document.body,
   );
 }
+
+/**
+ * DETAIL PANEL — overlay canônico de DETALHE (missão UX Closure · item 3B).
+ *
+ * Existe porque o produto tinha UMA superfície lateral para dois trabalhos
+ * diferentes: ver um registro e preencher um formulário. Detalhe não é
+ * formulário e não é sheet gigante:
+ *   • backdrop + painel FLUTUANTE que entra pela direita (28px de deslocamento,
+ *     ~200ms — janela 180–220ms declarada em `--gd-motion-overlay`);
+ *   • margem de viewport (`--gd-detail-gap`), cantos arredondados, largura
+ *     CONTROLADA (`--gd-detail-w`, 460px; janela 420–480px) — nada de coluna
+ *     arbitrária de 60% da tela;
+ *   • header curto, corpo por seções, rodapé opcional de ações;
+ *   • Escape fecha, foco entra no título e VOLTA para quem abriu, Tab contido.
+ *
+ * NÃO reutiliza a aparência do WorkspaceSheet (superfície/geometria próprias);
+ * o WorkspaceSheet continua sendo o overlay de FORMULÁRIO lateral.
+ */
+/**
+ * DetailSideModal — a superfície canônica de DETALHE (DS 1.1).
+ *
+ * Distinto do `WorkspaceSheet` (formulário/fluxo longo): este é o overlay de
+ * LEITURA de um registro — preso à borda direita, altura cheia, sem gap no
+ * desktop, backdrop forte, slide de fora da borda em ~190ms, foco contido e
+ * devolvido ao gatilho. Base comportamental: Material 3 modal side sheet +
+ * `dialog` nativo (focus trap e ::backdrop do próprio browser).
+ */
+export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string;
+  children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
+  /**
+   * Largura PRÓPRIA (raro). Sem valor, vale o token do DS (`--gd-detail-w`,
+   * 460px) — a largura do painel nunca é a do conteúdo. Não passe
+   * `var(--gd-detail-w)` aqui: era exatamente isso que injetava um `var()`
+   * autorreferente (`--gd-detail-w: var(--gd-detail-w)`) e o painel caía para
+   * largura de conteúdo (448–456px, variando com o texto).
+   */
+  width?: string; label?: string;
+  /** Gatilho ALTERNATIVO quando o do clique desmonta (ex.: "Ver detalhes" do
+   *  HoverCard, que sai da tela junto com o card): o foco volta para o evento. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
+  /**
+   * Ícone do ASSUNTO no cabeçalho (opcional). Existe para as PRÉVIAS/FICHAS
+   * laterais (perfil do cliente, Pet 360, contexto da conversa) entrarem no
+   * MESMO side modal do detalhe sem inventar um segundo cabeçalho: título,
+   * subtítulo, ícone e fechar continuam sendo uma linha só. O detalhe do
+   * agendamento não passa ícone — o contrato medido dele (DS 1.1 §8) fica
+   * idêntico.
+   */
+  icon?: string;
+  /**
+   * Saída para a superfície COMPLETA do mesmo registro (ficha em página). Vive
+   * no cabeçalho, à esquerda do fechar — nunca no rodapé, onde competiria com
+   * as ações do próprio registro.
+   */
+  fullPage?: { href: string; label: string };
+  /**
+   * `flush` = corpo SEM recuo próprio: quem recua é cada SEÇÃO (borda cheia de
+   * ponta a ponta, divisórias contínuas). Use só em conteúdo seccionado — é a
+   * mesma família visual, não um segundo padrão (a régua interna segue 16px).
+   */
+  flush?: boolean;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const titleId = useId();
+  const [closing, setClosing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const dismiss = useOverlayDismissGuard();
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
+  const motion = () => {
+    try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 170; } catch { return 170; }
+  };
+  function closeNow() {
+    if (closing) return;
+    setClosing(true);
+    timer.current = setTimeout(() => { setClosing(false); onClose(); }, motion());
+  }
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    lockBodyScroll(dialog);
+    dialog.showModal();
+    pushOverlay(dialog);
+    headingRef.current?.focus({ preventScroll: true });
+    return () => {
+      clearTimeout(timer.current);
+      popOverlay(dialog);
+      dialog.close();
+      unlockBodyScroll(dialog);
+      // Foco de VOLTA: o gatilho do clique quando ele ainda existe; se ele
+      // desmontou (card de hover), o evento dono do detalhe.
+      const fallback = returnFocus?.current ?? null;
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      else if (fallback?.isConnected) fallback.focus({ preventScroll: true });
+    };
+  }, [open]);
+  if (!open) return null;
+  return (
+    <dialog
+      ref={dialogRef}
+      className="gd-detail"
+      data-closing={closing || undefined}
+      aria-labelledby={titleId}
+      aria-label={label}
+      onCancel={(e) => { e.preventDefault(); requestClose('escape'); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
+      onKeyDown={(e) => {
+        wrapDialogFocus(e, e.currentTarget, headingRef.current);
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose('escape'); }
+      }}
+    >
+      <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}>
+        <header className="gd-detail__header">
+          {icon && (
+            <span className="gd-detail__icon" aria-hidden="true"><Icon n={icon} size={17} /></span>
+          )}
+          <div className="min-w-0 flex-1">
+            <h2 ref={headingRef} tabIndex={-1} id={titleId}>{title}</h2>
+            {subtitle && <p className="gd-detail__sub">{subtitle}</p>}
+          </div>
+          {fullPage && (
+            <Link href={fullPage.href} className="gd-detail__fullpage">
+              <Icon n="external" size={14} /> {fullPage.label}
+            </Link>
+          )}
+          <CloseButton label={`Fechar ${title}`} onClick={() => requestClose('close-button')} />
+        </header>
+        <div className={cn('gd-detail__body ws-scroll', flush && 'gd-detail__body--flush')}>{children}</div>
+        {footer && <div className="gd-detail__footer">{footer}</div>}
+      </aside>
+      {dismiss.dialog}
+    </dialog>
+  );
+}
+
+/**
+ * `DetailPanel` — ALIAS de compatibilidade do `DetailSideModal`.
+ * @deprecated use `DetailSideModal` (o nome antigo descrevia um painel
+ * flutuante insetado; o comportamento agora é o side modal preso à direita).
+ */
+export const DetailPanel = DetailSideModal;
 
 /** Sheet: apelido semântico do Drawer (mesma implementação, mesmo contrato). */
 export function Sheet(props: Parameters<typeof Drawer>[0]) {
@@ -1668,21 +2291,28 @@ export function DatePicker({ value, onChange, label = 'Data', placeholder = 'Sel
   formatValue?: (iso: string) => string;
 }) {
   const [open, setOpen] = useState(false);
+  const field = useContext(FieldContext);
+  const describedBy = field?.descriptionIds.join(' ') || undefined;
   return (
     <Popover
       open={open}
       onClose={() => setOpen(false)}
       label={label}
-      className={className}
+      className={cn(className, field?.inShell && 'gd-field__control-host')}
       trigger={
         <button
+          id={field?.controlId}
           type="button"
           disabled={disabled}
-          aria-label={label}
+          aria-label={field?.inShell ? undefined : label}
+          aria-labelledby={field?.labelId}
+          aria-describedby={describedBy}
+          aria-invalid={field?.invalid || undefined}
+          aria-required={field?.required || undefined}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className={cn(FIELD_CLS, 'inline-flex items-center justify-between gap-2 text-left disabled:opacity-60')}
+          className={cn(FIELD_CLS, field?.inShell && 'gd-field__control--inline', 'inline-flex items-center justify-between gap-2 text-left disabled:opacity-60')}
         >
           <span className={cn('truncate', !value && 'text-[var(--gd-text-muted)]')}>
             {value ? (formatValue ? formatValue(value) : formatDateBR(value)) : placeholder}
@@ -1719,14 +2349,22 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
   label?: string; placeholder?: string; emptyLabel?: string; disabled?: boolean; className?: string;
 }) {
   const listId = useId();
+  const field = useContext(FieldContext);
+  /** Dentro de um `Field`, o contorno é o da caixa do shell — nunca dois. */
+  const inShell = !!field?.inShell;
   const multi = mode === 'multiple';
   const selected = multi ? (Array.isArray(value) ? value : []) : [String(value || '')];
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  /** Largura do âncora quando o campo é a própria caixa do shell (§10):
+   *  a lista ancorada acompanha a largura do CAMPO, como no Material —
+   *  menu de 190px flutuando embaixo de um campo largo parece solto. */
+  const [anchorW, setAnchorW] = useState<number | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, layerRef);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, posRef);
   const known = options.filter((o) => selected.includes(o.value));
   const displayLabel = multi ? query : (query || known[0]?.label || String(value || ''));
   const filtered = options.filter((o) => {
@@ -1735,6 +2373,11 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
     return !q || o.label.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q);
   });
   useEffect(() => { setActive(0); }, [query, open]);
+  useEffect(() => {
+    if (!open || !inShell) { setAnchorW(null); return; }
+    const box = fieldBoxOf(anchorRef.current);
+    setAnchorW(box ? Math.round(box.getBoundingClientRect().width) : (anchorRef.current?.offsetWidth ?? null));
+  }, [open, inShell]);
   useDismissOnEscape(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -1754,8 +2397,12 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
     if (!multi) setOpen(false);
   };
 
+  const repoProps = inShell && field
+    ? fieldControlProps<{ id?: string; required?: boolean } & React.AriaAttributes>({ id: undefined, required: undefined }, field)
+    : {};
+
   return (
-    <div className={cn('relative', className)} ref={anchorRef}>
+    <div className={cn('relative', inShell && 'gd-field__control-host', className)} ref={anchorRef}>
       {multi && known.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {known.map((o) => (
@@ -1772,9 +2419,10 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         </div>
       )}
       <input
+        {...repoProps}
         type="text"
         role="combobox"
-        aria-label={label}
+        aria-label={inShell ? undefined : label}
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
@@ -1791,10 +2439,10 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
             onChange(selected.slice(0, -1));
           }
         }}
-        className={cn(FIELD_CLS, 'disabled:opacity-60')}
+        className={cn(FIELD_CLS, inShell && 'gd-field__control--inline', 'disabled:opacity-60')}
       />
       {open && (
-        <LayerPortal style={style} className="gd-layer gd-menu" role="listbox" label={label}>
+        <LayerPortal style={anchorW ? { ...style, minWidth: anchorW } : style} className="gd-layer gd-menu" role="listbox" label={label} positionRef={posRef}>
           <div id={listId} ref={layerRef} className="max-h-[260px] overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="il-type-help px-2 py-3 text-center text-[var(--gd-text-muted)]">{emptyLabel}</p>

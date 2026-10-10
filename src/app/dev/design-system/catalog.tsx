@@ -106,12 +106,13 @@ export function DesignSystemCatalog() {
           </Row>
         </Section>
 
-        <Section id="botoes" title="Button · IconButton · CloseButton" rule="PRIMARY: uma por superfície. DANGER solid só na confirmação destrutiva final.">
+        <Section id="botoes" title="Button · IconButton · CloseButton" rule="PRIMARY: uma por superfície. DANGER: em repouso é SOFT (destructive-soft); SOLID só na confirmação destrutiva final.">
           <Row label="Variantes">
             <Button>Primary</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="ghost">Ghost</Button>
             <Button variant="warning">Warning soft · Não compareceu</Button>
+            <Button variant="destructive-soft">Danger soft · em repouso</Button>
             <Button variant="destructive">Danger solid (confirmar)</Button>
             <Button variant="success">Success</Button>
             <Button variant="link">Link</Button>

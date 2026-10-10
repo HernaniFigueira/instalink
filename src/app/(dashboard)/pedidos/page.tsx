@@ -67,7 +67,7 @@ export default function PedidosPage() {
 
   return (
     <>
-      <PageHeader icon="bag" title="Pedidos" hint="Acompanhe e atualize o status de cada pedido." />
+      <PageHeader icon="bag" title="Pedidos" />
       {error && <Notice tone="error" className="mb-4">{error}</Notice>}
 
       <div className="flex flex-wrap gap-1.5 mb-4">

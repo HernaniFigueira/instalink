@@ -8,8 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, ListSkeleton, Notice, Tabs } from '@/components/ui';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
+import { Avatar, Badge, Button, DetailSideModal, ListSkeleton, Notice, Tabs } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge, petLabel } from '@/lib/pets';
@@ -110,14 +109,18 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
     { id: 'notes' as const, label: 'Observações', icon: 'fileText' },
   ];
 
+  // P0 · RODADA 2 — Pet 360 é DETALHE: entra no side modal canônico (preso à
+  // direita, altura cheia) em vez da gaveta flutuante. O conteúdo já recua
+  // sozinho (`p-4`), então o corpo do painel não soma recuo.
   return (
-    <WorkspaceSheet
+    <DetailSideModal
       open={open}
       onClose={onClose}
       title={pet.name}
       subtitle={`Pet 360 — ${petLabel(pet)}`}
       icon="paw"
-      width="max-w-[640px]"
+      width="640px"
+      flush
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
       }
@@ -300,6 +303,6 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
           </div>
         )}
       </div>
-    </WorkspaceSheet>
+    </DetailSideModal>
   );
 }

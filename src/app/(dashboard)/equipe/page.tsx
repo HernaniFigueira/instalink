@@ -458,7 +458,7 @@ export default function EquipePage() {
       <PageHeader
         icon="users"
         title="Equipe"
-        hint="Gestão unificada de pessoas — quem acessa o sistema e quem realiza os atendimentos da clínica."
+        hint="Quem acessa o sistema e quem realiza os atendimentos."
         action={<Button variant="primary" size="sm" onClick={() => { resetAddForm(); setShowAdd(true); }}><Icon n="plus" size={14} /> Adicionar pessoa</Button>}
       />
 

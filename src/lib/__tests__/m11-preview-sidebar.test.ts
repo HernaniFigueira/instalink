@@ -35,7 +35,11 @@ describe('bug 1 — Agenda NÃO tem background próprio (pixel = --workspace-bg)
 
 describe('bug 2 — sidebar sem sombra projetada na divisa', () => {
   it('workspace-sidebar: sem box-shadow (só border-right 1px)', () => {
-    const s = css.slice(css.indexOf('.il-platform .workspace-sidebar {'), css.indexOf('.il-platform .workspace-sidebar.is-collapsed'));
+    // MISSÃO UX CLOSURE: não existe mais modo recolhido/expandido, então o
+    // recorte usa o fim da PRÓPRIA regra (chave de fechamento), não a regra
+    // seguinte — o contrato verificado é o mesmo.
+    const start = css.indexOf('.il-platform .workspace-sidebar {');
+    const s = css.slice(start, css.indexOf('}', start) + 1);
     expect(s).not.toContain('box-shadow');
     expect(s).toContain('border-right: 1px solid var(--il-nav-border)');
   });
@@ -70,16 +74,20 @@ describe('sidebar · ícones inativos legíveis (força ~70%, nunca lavados)', (
 });
 
 describe('sidebar · grupo ABERTO aceso, distinto da rota ativa', () => {
-  it('open = container sutil + ícone aceso (par nav-active) — current = accent cheio', () => {
+  it('open = container sutil + ícone aceso; current mantém uma única superfície ativa', () => {
     const open = css.slice(css.indexOf(".workspace-link--group[aria-expanded='true'] {"), css.indexOf(".workspace-link--group[aria-expanded='true'] {") + 700);
     // container sutil (não o par forte do current)
     expect(open).toContain('background: var(--il-nav-hover)');
     expect(open).toContain('color: var(--il-nav-fg)');
     // ícone ACESO no par ativo (contraste AA entre si)
     expect(open).toContain('background: transparent; color: var(--il-nav-active-fg)');
-    // current continua o mais forte (accent preenchido)
-    const cur = css.slice(css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {'), css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {') + 300);
-    expect(cur).toContain('background: transparent; color: var(--il-nav-active-fg)');
+    // Current continua mais forte pela superfície da LINHA. O glifo conserva
+    // apenas a tinta ativa — sem criar um segundo poço preenchido.
+    const curAt = css.indexOf('.workspace-link[aria-current="page"] .workspace-link__icon {');
+    const cur = css.slice(css.indexOf('{', curAt) + 1, css.indexOf('}', curAt));
+    expect(cur).toContain('color: var(--il-nav-active-fg)');
+    expect(cur).toContain('background: transparent');
+    expect(cur).not.toContain('color-mix');
   });
 
   it('par do ícone aceso é AA em todos os presets', () => {

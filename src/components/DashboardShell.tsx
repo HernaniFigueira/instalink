@@ -86,19 +86,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // a unidade da conta nova.
   const [userId, setUserId] = useState('');
   const [remembered, setRemembered] = useState<{ userId: string; id: string }>({ userId: '', id: '' });
-  const [collapsed, setCollapsed] = useState(() => {
-    // Renome com migração (bloco 5 da correção): chave canônica
-    // 'godoutor-side-v2'; a antiga 'il-side-v2' só é lida como fallback.
-    // DS 1.0 · §13 — o RAIL RECOLHIDO é o padrão do shell (56–64px): a
-    // preferência persistida continua mandando; sem preferência, começa
-    // recolhida. O pin "Expandir navegação" empurra o conteúdo e é lembrado.
-    try {
-      const v = localStorage.getItem('godoutor-side-v2');
-      if (v !== null) return v === 'mini';
-      const legacy = localStorage.getItem('il-side-v2');
-      return legacy !== null ? legacy === 'mini' : true;
-    } catch { return true; }
-  });
+  // MISSÃO UX CLOSURE · item 1 — o shell NÃO tem mais estado de largura da
+  // navegação: no desktop a sidebar é sempre o rail branco estreito (~60px,
+  // token `--gd-rail-w`). Sem pin, sem botão flutuante, sem preferência
+  // persistida de "modo" (a chave antiga `godoutor-side-v2` deixa de existir
+  // como estado de layout; o rail é o único modo). Nada empurra o conteúdo.
   /* Missão 6 — cor da navegação (Configurações → Aparência). */
   const [navAccent, setNavAccent] = useState<NavAccentId>(DEFAULT_ACCENT_ID);
   useEffect(() => {
@@ -282,12 +274,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const target = routeRequiresBusiness(pathname) ? pathname : '/dashboard';
     router.push(switchUnitHref(target, new URLSearchParams(params.toString()), id));
   }
-  function toggle() {
-    setCollapsed((c) => {
-      try { localStorage.setItem('godoutor-side-v2', c ? 'full' : 'mini'); localStorage.removeItem('il-side-v2'); } catch {}
-      return !c;
-    });
-  }
   async function logout() {
     if (!mayLeaveEditor()) return;
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
@@ -427,10 +413,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <PanelHomeProvider home={homeHref}>
     <WorkspaceContext.Provider value={{ role: business.role, agendaScope: business.agendaScope }}>
     <div
-      style={{
-        '--sidebar-w': collapsed ? 'var(--sidebar-w-mini)' : undefined,
-        ...accentVars,
-      } as React.CSSProperties}
+      style={{ ...accentVars } as React.CSSProperties}
       data-nav-accent={navAccent}
       className={cn('il-platform workspace-shell min-h-screen', isAgenda && 'workspace-shell--fill', isConversations && 'workspace-shell--conversations', conversationFocus && 'workspace-shell--conversation-focus', standaloneConversation && 'workspace-shell--standalone')}
     >
@@ -469,7 +452,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {!conversationFocus && <WorkspaceNavigation nav={nav}
         activePath={activePath} unit={business}
         units={businesses} multiUnit={multiUnit} onUnit={switchBiz}
-        collapsed={collapsed} onCollapse={toggle}
         mobileOpen={mobileNav} onMobileOpen={setMobileNav}
         onHelp={() => setHelpOpen(true)}
       />}

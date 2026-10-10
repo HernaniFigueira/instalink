@@ -35,14 +35,16 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
-  ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_STATUS,
+  ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
   FIT_IN_MARK_CLS, FIT_IN_STRIPE_CLS,
   bookingStatusDef, bookingBlockCls, bookingDotCls,
 } from '@/lib/status';
+import { ConfirmDialog, type PendingRequest } from '@/components/dashboard/OverlayDismissGuard';
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
+import { BookingEditDialog } from '@/components/dashboard/BookingEditDialog';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
@@ -129,8 +131,12 @@ interface BlockVM {
   leftPct: number;
   widthPct: number;
   time: string;
-  /** Linha 1: cliente · Linha 2: serviço · Linha 3: horário + estado. */
+  /** Resumo autorizado no evento e no HoverCard. */
   name: string;
+  customerName: string;
+  petName: string;
+  observation: string;
+  dateLabel: string;
   service: string;
   timeRange: string;
   statusLabel: string;
@@ -184,7 +190,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute }: {
+const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -193,7 +199,17 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   onPressMove: (id: string, e: React.PointerEvent) => void;
   onPressEnd: (id: string, e: React.PointerEvent) => void;
   onPressCancel: () => void;
-  onBlockClick: (id: string) => void;
+  /** `trigger` = o BOTÃO do evento (missão 3A): o resumo vive em portal e
+   *  desmonta quando o mouse sai, então o foco de volta do detalhe precisa do
+   *  evento, não do CTA do card. */
+  onBlockClick: (id: string, trigger?: HTMLElement | null) => void;
+  /** "Editar" abre a superfície CENTRAL; o painel de detalhe permanece leitura. */
+  onBlockEdit: (id: string, trigger?: HTMLElement | null) => void;
+  /** Botão direito / Shift+F10 / tecla Menu no evento: menu contextual real. */
+  onBlockContextMenu: (id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => void;
+  /** Com o MENU aberto no mesmo evento, o resumo do hover se cala: um painel
+   *  por vez (o insumo da confusão "o menu era o próprio resumo"). */
+  hoverSuppressed: boolean;
   /** A3.4: clique/toque em área vazia → criar agendamento naquele horário. */
   onEmptyPress: (columnKey: string, time: string, point: { x: number; y: number }) => void;
   onRangeSelect: (columnKey: string, time: string, durationMin: number, point: { x: number; y: number }) => void;
@@ -209,6 +225,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
 }) {
   const selection = useRef<{ origin: number; y: number; originPx: number; moved: boolean } | null>(null);
   const overlay = useRef<HTMLDivElement>(null);
+  // Mapa id → botão do evento: quem devolve o foco ao fechar o detalhe quando o
+  // clique veio do HoverCard (o card é portal e já saiu da tela).
+  const eventRefs = useRef(new Map<string, HTMLButtonElement>());
   const snapY = (e: React.PointerEvent<HTMLDivElement>) => Math.max(startMinute, Math.min(endMinute,
     snapGestureMinute(startMinute + (e.clientY - e.currentTarget.getBoundingClientRect().top) / PX_PER_HOUR * 60),
   ));
@@ -306,13 +325,37 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         </div>
       )}
 
-      {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-[5] inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
+      {/* Sombreamento de indisponibilidade = FUNDO (z-0): a ordem de camadas da
+          grade está em `globals.css` ("ORDEM DE CAMADAS DA GRADE"). Antes este
+          bloco vinha com `z-[5]`, ou seja, pintava POR CIMA dos atendimentos do
+          dia — um agendamento dentro de uma exceção aparecia só como uma faixa
+          fina na borda. Nada muda de semântica: continua sem ação de clique
+          (`pointer-events-none`) e o texto diz a janela do dia especial. */}
+      {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-0 inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
         <span className="block tabular-nums font-medium">{minToTime(r.start)}–{minToTime(r.end)}</span><span className="block">INDISPONÍVEL</span><span className="block">{r.label}</span>
       </div>)}
-      {operationalBlocks.map(({ block, top, height, label, timeLabel, scopeLabel }) => <button key={block.id} type="button"
-        data-schedule-block={block.id} aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`} title={`${timeLabel} · ${label} · ${scopeLabel}`} onClick={() => onOperationalBlock(block)}
-        className="absolute z-10 left-1 right-1 max-w-[380px] border border-dashed border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)] rounded-md px-2 py-1 text-left text-xs font-bold overflow-hidden"
-        style={{ top, height }}><span className="block tabular-nums">{timeLabel}</span><span className="block">BLOQUEIO · {label}</span>{height > 50 && <span className="block font-medium">{scopeLabel}</span>}</button>)}
+      {/* MISSÃO UX CLOSURE · item 4 — BLOQUEIO OPERACIONAL não domina a grade.
+          O tempo bloqueado é dito por HACHURA no próprio lugar (o mesmo
+          vocabulário visual do "indisponível"), com uma ETIQUETA compacta no
+          topo (ícone + horário) enquanto houver altura. O bloqueio continua
+          SEMANTICAMENTE distinto do atendimento: superfície própria, tracejado
+          e âmbar da família de atenção — sem caixa laranja gigante de texto, e
+          sem tooltip nativo: quem abre o detalhe é o clique (que sempre
+          existiu) e a etiqueta carrega o texto acessível completo. */}
+      {operationalBlocks.map(({ block, top, height, label, timeLabel, scopeLabel }) => (
+        <button key={block.id} type="button"
+          data-schedule-block={block.id}
+          aria-label={`Bloqueio operacional: ${timeLabel} · ${label} · ${scopeLabel}`}
+          onClick={() => onOperationalBlock(block)}
+          className="ag-block absolute z-10 left-1 right-1 max-w-[380px] overflow-hidden text-left"
+          style={{ top, height }}>
+          <span aria-hidden="true" className="ag-block__hatch" />
+          <span className="ag-block__tag">
+            <Icon n="lock" size={10} aria-hidden="true" />
+            <span className="tabular-nums">{timeLabel}</span>
+          </span>
+          {height >= 52 && <span className="ag-block__label">{label}</span>}
+        </button>))}
       {column.blocks.map((b) => {
         // DS 1.0 · §5 — HOVER CARD (180ms, foco equivalente, sem hover no
         // toque): prévia da MESMA informação do cartão, sem CTA próprio. O
@@ -321,21 +364,38 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const card = (
         <button
           type="button"
+          ref={(el) => { if (el) eventRefs.current.set(b.id, el); else eventRefs.current.delete(b.id); }}
           aria-label={b.label}
-          title={b.label}
+          /* SEM tooltip nativo: o resumo do evento é o HoverCard (item 3A) —
+             o `title` do navegador era o que aparecia em vez dele. */
           draggable={false}
           onPointerDown={(e) => onPressStart(b.id, e)}
           onPointerMove={(e) => onPressMove(b.id, e)}
           onPointerUp={(e) => onPressEnd(b.id, e)}
           onPointerCancel={onPressCancel}
-          onClick={() => onBlockClick(b.id)}
+          onClick={(e) => onBlockClick(b.id, e.currentTarget)}
+          /* AUDITORIA · rodada 2 — MENU CONTEXTUAL do atendimento: botão
+             direito, Shift+F10 e a tecla Menu (teclado equivalente exigido
+             pelos leitores de tela). Sem `title` nativo e sem inventar ação:
+             os itens vêm da máquina de estados (BOOKING_FLOW). */
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onBlockContextMenu(b.id, { x: e.clientX, y: e.clientY }, e.currentTarget);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+              e.preventDefault();
+              const r = e.currentTarget.getBoundingClientRect();
+              onBlockContextMenu(b.id, { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) }, e.currentTarget);
+            }
+          }}
           className={
             'ag-event absolute rounded-lg border border-l-4 px-2 py-1 text-left overflow-hidden touch-none select-none shadow-xs ' + (variant === 'day' ? 'ag-event--day ' : 'ag-event--week ')
             + b.cls
             + (b.attention && !b.dragging ? ` ${ATTENTION_RING_CLS}` : '')
             + (b.dragging
               ? ' il-dragging ring-2 ring-[var(--brand)] ring-offset-1 cursor-grabbing shadow-lg'
-              : ' hover:brightness-[0.97] hover:shadow-md cursor-grab active:cursor-grabbing')
+              : ' hover:brightness-[0.99] hover:shadow-sm cursor-grab active:cursor-grabbing')
           }
           style={{
             top: b.top,
@@ -363,7 +423,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
             </span>
           )}
           {b.editable && b.height >= 30 && (
-            <span aria-label={`Redimensionar ${b.name}`} title="Arraste para alterar duração"
+            <span data-resize-hint aria-hidden="true" className="ag-event__resize-hint" />
+          )}
+          {b.editable && b.height >= 30 && (
+            <span aria-label={`Redimensionar ${b.name}. Arraste para alterar a duração`}
               className="absolute bottom-0 inset-x-0 h-3 cursor-ns-resize touch-none z-10 border-b-2 border-transparent hover:border-[var(--brand)]"
               onPointerDown={(e) => {
                 e.stopPropagation(); e.preventDefault();
@@ -372,41 +435,68 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                 const card = handle.closest('button') as HTMLElement;
                 const originY = e.clientY;
                 const originalHeight = card.offsetHeight;
-                handle.setPointerCapture(e.pointerId);
-                const onMove = (ev: PointerEvent) => {
-                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
-                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
-                  handle.title = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
-                };
-                const onUp = (ev: PointerEvent) => {
+                const hint = card.querySelector<HTMLElement>('[data-resize-hint]');
+                let finished = false;
+                let moved = false;
+                const cleanup = () => {
+                  if (finished) return;
+                  finished = true;
+                  // A resize handle can release capture after Escape while the
+                  // pointer is already outside the card. The browser may then
+                  // synthesize a click on the empty grid; suppress that click
+                  // so canceling a resize never opens Quick Create.
+                  lastGridPressAt = Date.now();
                   handle.removeEventListener('pointermove', onMove);
                   handle.removeEventListener('pointerup', onUp);
                   handle.removeEventListener('pointercancel', onCancel);
-                  card.style.height = '';
-                  if (ev.type === 'pointercancel') return;
+                  handle.removeEventListener('lostpointercapture', onCancel);
+                  window.removeEventListener('keydown', onKey, true);
+                  // Restore the exact rendered height and clear every provisional
+                  // label before either opening confirmation or returning to idle.
+                  card.style.height = `${originalHeight}px`;
+                  if (hint) hint.textContent = '';
+                  try { if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+                };
+                const onMove = (ev: PointerEvent) => {
+                  moved = moved || Math.abs(ev.clientY - originY) > 1;
                   const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
-                  if (Math.abs(ev.clientY - originY) > 6) {
+                  card.style.height = `${blockHeight(proposed, PX_PER_HOUR)}px`;
+                  if (hint) hint.textContent = `${b.time}–${minToTime(timeToMin(b.time) + proposed)} · ${durationLabel(proposed)}`;
+                };
+                const onUp = (ev: PointerEvent) => {
+                  if (finished) return;
+                  cleanup();
+                  if (ev.type === 'pointercancel' || ev.type === 'lostpointercapture') return;
+                  const proposed = Math.max(5, Math.round((originalHeight + ev.clientY - originY) / PX_PER_HOUR * 60 / 5) * 5);
+                  if (moved && Math.abs(ev.clientY - originY) > 6) {
                     lastGridPressAt = Date.now();
                     onResize(b.id, minToTime(timeToMin(b.time) + proposed));
                   }
                 };
-                const onCancel = (ev: PointerEvent) => onUp(ev);
+                const onCancel = () => cleanup();
+                const onKey = (ev: KeyboardEvent) => {
+                  if (ev.key !== 'Escape') return;
+                  ev.preventDefault(); ev.stopPropagation(); cleanup();
+                };
+                handle.setPointerCapture(e.pointerId);
                 handle.addEventListener('pointermove', onMove);
                 handle.addEventListener('pointerup', onUp);
                 handle.addEventListener('pointercancel', onCancel);
+                handle.addEventListener('lostpointercapture', onCancel);
+                window.addEventListener('keydown', onKey, true);
               }} />
           )}
           {b.checkedInAt && (
-            <span title="Cliente já fez check-in" aria-hidden="true"
+            <span aria-label="Cliente já fez check-in" aria-hidden="true"
               className="absolute bottom-1 right-1 w-4 h-4 rounded-full text-[9px] font-semibold leading-4 text-center bg-[var(--success)] text-white">✓</span>
           )}
           {b.attention ? (
-            <span title="Precisa de fechamento" aria-hidden="true"
+            <span aria-label="Precisa de fechamento" aria-hidden="true"
               className={`absolute top-1 right-1 w-4.5 h-4.5 w-[18px] h-[18px] rounded-full text-[10px] font-semibold leading-[18px] text-center ${ATTENTION_MARK_CLS}`}>
               !
             </span>
           ) : (
-            <span title={b.statusLabel} aria-hidden="true"
+            <span aria-label={b.statusLabel} aria-hidden="true"
               className={`absolute top-1 right-1 w-[18px] h-[18px] rounded-full text-white flex items-center justify-center ${b.dot}`}>
               <Icon n={b.ico} size={10} />
             </span>
@@ -417,18 +507,34 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           <HoverCard
             key={b.id}
             side="right-start"
+            className="ag-hover"
+            suppress={hoverSuppressed}
             content={
-              <div className="w-[248px] space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="tabular-nums text-[12px] font-semibold text-[var(--gd-text-muted)]">{b.timeRange}</span>
-                  <StatusBadge tone={bookingStatusDef(b.status).tone}>{b.statusLabel}</StatusBadge>
+              /* MISSÃO UX CLOSURE · item 3A — RESUMO CONTEXTUAL do evento:
+                 horário, paciente/pet, serviço, profissional e status em um
+                 cartão compacto, colado no atendimento (offset 10px, flip
+                 quando falta espaço). Duas ações explícitas:
+                 "Editar" (modal central) e "Ver detalhes" (painel lateral),
+                 com camadas exclusivas. Nada de tooltip nativo ou card fixo. */
+              <div className="ag-hover__card">
+                <div className="ag-hover__head">
+                  <span className="ag-hover__heading">Agendamento</span>
+                  <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
                 </div>
-                <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">{b.name}</p>
-                {b.service && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.service}</p>}
-                {b.pro && <p className="text-[12.5px] text-[var(--gd-text-muted)]">{b.pro}</p>}
-                {b.fitIn && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">ENCAIXE · decisão da equipe</p>}
-                {b.attention && <p className="text-[11px] font-semibold text-[var(--gd-text-muted)]">Precisa de fechamento</p>}
-                <p className="pt-0.5 text-[11px] text-[var(--gd-text-faint)]">Clique para abrir o detalhe</p>
+                <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
+                <dl className="ag-hover__rows">
+                  <div><dt>{b.petName ? 'Paciente' : 'Tutor'}</dt><dd>{b.petName || b.customerName}</dd></div>
+                  {b.petName && <div><dt>Tutor</dt><dd>{b.customerName}</dd></div>}
+                  {b.service && <div><dt>Serviço</dt><dd>{b.service}</dd></div>}
+                  {b.pro && <div><dt>Profissional</dt><dd>{b.pro}</dd></div>}
+                </dl>
+                {b.observation && <p className="ag-hover__observation"><strong>Observação</strong> · {b.observation}</p>}
+                {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
+                {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
+                <div className="ag-hover__actions">
+                  {b.editable && <Button variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}
+                  <Button variant="ghost" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
+                </div>
               </div>
             }
           >
@@ -513,6 +619,10 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  /** true = o detalhe abre com o formulário de reagendamento já aberto
+   *  (vem do "Reagendar" do resumo do evento). O clique simples nunca ativa. */
+  const [detailReschedule, setDetailReschedule] = useState(false);
   // DS 1.0 · §5 — QUICK CREATE: popover ancorado no slot clicado/arrastado.
   // O fluxo COMPLETO (`creating`) continua existindo e é o destino de
   // "Mais opções" e do CTA "Novo agendamento".
@@ -521,6 +631,12 @@ export default function AgendaPage() {
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
     contactId?: string; name?: string; phone?: string; serviceId?: string;
+    /** Busca do Quick sem contato real e CTA de cadastro são intenções distintas. */
+    searchQuery?: string; openRegistration?: boolean; vetMode?: boolean;
+    /** Só clique direto de célula pode habilitar a conveniência de serviço único. */
+    allowSingleEligibleServicePrefill?: boolean;
+    /** Duplicação copia só os campos operacionais autorizados; nunca histórico clínico/pagamentos. */
+    petId?: string; note?: string;
   } | null>(null);
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
   // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
@@ -568,6 +684,7 @@ export default function AgendaPage() {
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [dropChecking, setDropChecking] = useState(false);
 
   const interactionRef = useRef<InteractionState>({ ...IDLE_INTERACTION });
   const dragSlotsRef = useRef<DragSlots>(emptyDragSlots());
@@ -575,11 +692,15 @@ export default function AgendaPage() {
   const columnsRef = useRef<DropColumn[]>([]);
   const bookingsRef = useRef<Map<string, Booking>>(new Map());
   const durationRef = useRef(30);
-  const geometryRef = useRef<{ g: GridGeometry; minX: number; minY: number } | null>(null);
+  const geometryRef = useRef<{ g: GridGeometry; minY: number } | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const dragSeq = useRef(0);
+  const pendingDropRef = useRef<{ id: string; point: Point; seq: number } | null>(null);
   const lastPointerUpRef = useRef<{ id: string; at: number }>({ id: '', at: 0 });
+  /** Botão do evento que abriu o detalhe — recebe o foco de volta no fechamento
+   *  quando o gatilho do clique foi um CTA do HoverCard (que desmonta junto). */
+  const detailTriggerRef = useRef<HTMLElement | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
   // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
@@ -592,6 +713,17 @@ export default function AgendaPage() {
 
   // A2-B5 (F9): '' enquanto carrega = default do produto (America/Sao_Paulo).
   const [rawBizTz, setBizTz] = useState('');
+  // A linguagem do Quick Create vem da unidade ativa. É só apresentação do
+  // cadastro (tutor/pet), nunca uma permissão ou um modo inferido do contato.
+  const [vetMode, setVetMode] = useState(false);
+  useEffect(() => {
+    if (!businessId) { setVetMode(false); return; }
+    let active = true;
+    apiGet<{ vet?: boolean }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
+      .then((r) => { if (active) setVetMode(!!r.data?.vet); })
+      .catch(() => { if (active) setVetMode(false); });
+    return () => { active = false; };
+  }, [businessId]);
   const bizTz = bookingTimezone(rawBizTz);
   // "hoje" e "agora" no FUSO DO NEGÓCIO (nunca o do navegador).
   const today = todayISO(new Date(), bizTz);
@@ -845,6 +977,10 @@ export default function AgendaPage() {
           time: b.time,
           // FASE 2 · P6 — veterinária: PET primeiro; tutor vira contexto.
           name: b.petName || b.customerName,
+          customerName: b.customerName,
+          petName: b.petName || '',
+          observation: (b.note || '').trim().slice(0, 180),
+          dateLabel: formatDateBR(b.date),
           service: serviceName(b.serviceId),
           timeRange: `${b.time}–${endHM}`,
           statusLabel,
@@ -975,7 +1111,7 @@ export default function AgendaPage() {
     return () => { obs.disconnect(); window.removeEventListener('resize', fit); };
   }, [loaded, view, pendencies.length, notice?.title, statusFilter, proFilter, specFilter, hbarReserve, showQueue]);
 
-  const readGeometry = useCallback((): { g: GridGeometry; minX: number; minY: number } | null => {
+  const readGeometry = useCallback((): { g: GridGeometry; minY: number } | null => {
     const scroll = scrollRef.current;
     const cols = colsRef.current;
     if (!scroll || !cols || colWidth <= 0) return null;
@@ -990,14 +1126,96 @@ export default function AgendaPage() {
       },
     );
     // O gutter (horas) e o cabeçalho são fixos: nada de destino atrás deles.
-    return { g, minX: scrollRect.left + GUTTER_W, minY: scrollRect.top + HEADER_H };
+    return { g, minY: scrollRect.top + HEADER_H };
   }, [colWidth, columns.length, grid.start, grid.end]);
 
   useEffect(() => { geometryRef.current = readGeometry(); }, [readGeometry]);
 
+  const clearDragVisuals = useCallback(() => {
+    interactionRef.current = { ...IDLE_INTERACTION };
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    setDragId('');
+    hoverRef.current = null;
+    setHover(null);
+    if (ghostRef.current) ghostRef.current.style.display = 'none';
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragSeq.current++;
+    pendingDropRef.current = null;
+    setDropChecking(false);
+    clearDragVisuals();
+    const empty = emptyDragSlots();
+    dragSlotsRef.current = empty;
+    setDrag(empty);
+  }, [clearDragVisuals]);
+
+  const planDropAt = useCallback((booking: Booking, point: Point, slots: DragSlots) => {
+    const geo = geometryRef.current || readGeometry();
+    if (!geo) return null;
+    geometryRef.current = geo;
+    return planDrop({
+      // Fora do eixo horizontal da grade é destino inválido; não clample à
+      // primeira coluna (um drop à esquerda não pode virar reagendamento).
+      point: { x: point.x, y: Math.max(point.y, geo.minY) },
+      geometry: geo.g,
+      columns: columnsRef.current,
+      drag: slots,
+      durationMin: bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30),
+      toleranceMin: DROP_TOLERANCE_MIN,
+      own: { date: booking.date, time: booking.time, professionalId: booking.professionalId || '' },
+    });
+  }, [readGeometry, services]);
+
+  const rejectDrop = useCallback((plan: ReturnType<typeof planDrop> | null, slots: DragSlots) => {
+    const col = plan && columnsRef.current[plan.column];
+    const attemptedTime = plan ? minToTime(plan.minute) : '';
+    const text = !plan || plan.column < 0
+      ? 'Nenhum horário livre perto de onde você soltou. Escolha outro ponto da grade.'
+      : slots.error
+        ? `Não foi possível verificar a disponibilidade: ${slots.error}`
+        : plan.availability === 'loading'
+          ? 'Ainda carregando os horários livres. Tente soltar novamente em instantes.'
+          : `${attemptedTime} em ${formatDateBR(col?.date || '')} não está disponível para este agendamento. O horário original foi mantido.`;
+    setFlash({ tone: 'error', text });
+    window.setTimeout(() => setFlash(null), 5000);
+  }, []);
+
+  const acceptDrop = useCallback((booking: Booking, plan: ReturnType<typeof planDrop> | null, slots: DragSlots) => {
+    if (!plan || plan.availability !== 'free' || !plan.target) {
+      rejectDrop(plan, slots);
+      return;
+    }
+    const col = columnsRef.current[plan.column];
+    setDropError('');
+    setDropAsk({
+      booking,
+      date: plan.target.date,
+      time: plan.target.time,
+      professionalId: col?.isProfessional ? col.professionalId : '',
+      columnLabel: col?.label || '',
+    });
+  }, [rejectDrop]);
+
+  const resolvePendingDrop = useCallback((seq: number, slots: DragSlots) => {
+    const pending = pendingDropRef.current;
+    if (!pending || pending.seq !== seq || seq !== dragSeq.current) return;
+    pendingDropRef.current = null;
+    setDropChecking(false);
+    const booking = bookingsRef.current.get(pending.id);
+    const plan = booking ? planDropAt(booking, pending.point, slots) : null;
+    // A rede já respondeu; só agora removemos o mapa e apresentamos o resultado.
+    endDrag();
+    setFlash(null);
+    if (!booking) { rejectDrop(null, slots); return; }
+    acceptDrop(booking, plan, slots);
+  }, [acceptDrop, endDrag, planDropAt, rejectDrop]);
+
   // ── Busca de horários: UMA vez por drag (nunca por pixel) ──
   const loadDragSlots = useCallback((b: Booking, dates: string[]) => {
     const seq = ++dragSeq.current;
+    pendingDropRef.current = null;
+    setDropChecking(false);
     const initial: DragSlots = { loading: true, error: '', slots: {}, byPro: {} };
     dragSlotsRef.current = initial;
     setDrag(initial);
@@ -1006,47 +1224,35 @@ export default function AgendaPage() {
       .then(async (res) => res.ok ? (await res.json()).days as Record<string, { slots: string[]; byPro: Record<string, string[]>; eligibleProfessionalIds: string[] }> : null)
       .catch(() => null)
       .then((days) => {
-      if (seq !== dragSeq.current) return;
-      const entries = dates.map((d) => [d, days?.[d] || null] as const);
-      const failed = entries.filter(([, j]) => !j).length;
-      const next: DragSlots = {
-        loading: false,
-        error: failed === entries.length ? SLOT_STATE_MESSAGE.error : '',
-        slots: {},
-        byPro: {},
-        eligibleProIds: {},
-      };
-      for (const [d, j] of entries) {
-        if (!j) continue;
-        next.slots[d] = withOwnSlot(d, Array.isArray(j.slots) ? [...j.slots] : [], own);
-        if (Array.isArray(j.eligibleProfessionalIds)) next.eligibleProIds![d] = j.eligibleProfessionalIds.map(String);
-        const byPro = (j.byPro || {}) as Record<string, string[]>;
-        next.byPro[d] = {};
-        for (const pid of Object.keys(byPro)) {
-          next.byPro[d][pid] = withOwnSlot(
-            d, Array.isArray(byPro[pid]) ? [...byPro[pid]] : [],
-            pid === b.professionalId ? own : null,
-          );
+        if (seq !== dragSeq.current) return;
+        const entries = dates.map((d) => [d, days?.[d] || null] as const);
+        const failed = entries.filter(([, j]) => !j).length;
+        const next: DragSlots = {
+          loading: false,
+          error: failed === entries.length ? SLOT_STATE_MESSAGE.error : '',
+          slots: {}, byPro: {}, eligibleProIds: {},
+        };
+        for (const [d, j] of entries) {
+          if (!j) continue;
+          next.slots[d] = withOwnSlot(d, Array.isArray(j.slots) ? [...j.slots] : [], own);
+          if (Array.isArray(j.eligibleProfessionalIds)) next.eligibleProIds![d] = j.eligibleProfessionalIds.map(String);
+          const byPro = (j.byPro || {}) as Record<string, string[]>;
+          next.byPro[d] = {};
+          for (const pid of Object.keys(byPro)) {
+            next.byPro[d][pid] = withOwnSlot(
+              d, Array.isArray(byPro[pid]) ? [...byPro[pid]] : [],
+              pid === b.professionalId ? own : null,
+            );
+          }
+          if (!b.professionalId) next.byPro[d][''] = next.slots[d];
         }
-        if (!b.professionalId) next.byPro[d][''] = next.slots[d];
-      }
-      dragSlotsRef.current = next;
-      setDrag(next);
-    });
-  }, [businessId]);
-
-  const endDrag = useCallback(() => {
-    dragSeq.current++;
-    interactionRef.current = { ...IDLE_INTERACTION };
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    setDragId('');
-    const empty = emptyDragSlots();
-    dragSlotsRef.current = empty;
-    setDrag(empty);
-    hoverRef.current = null;
-    setHover(null);
-    if (ghostRef.current) ghostRef.current.style.display = 'none';
-  }, []);
+        dragSlotsRef.current = next;
+        setDrag(next);
+        // Se o ponteiro foi solto antes da resposta, resolve o MESMO destino
+        // guardado. O registro continua intacto até a confirmação do usuário.
+        resolvePendingDrop(seq, next);
+      });
+  }, [businessId, resolvePendingDrop]);
 
   const visibleDates = useCallback(
     () => (view === 'week' ? weekDays : [focus]),
@@ -1067,7 +1273,7 @@ export default function AgendaPage() {
     if (!geo) return;
     geometryRef.current = geo;
     const b = bookingsRef.current.get(interactionRef.current.id);
-    const point: Point = { x: Math.max(at.x, geo.minX), y: Math.max(at.y, geo.minY) };
+    const point: Point = { x: at.x, y: Math.max(at.y, geo.minY) };
     const plan = planDrop({
       point,
       geometry: geo.g,
@@ -1179,14 +1385,14 @@ export default function AgendaPage() {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving) return;
+    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving || dropChecking) return;
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
     }).state;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [readGeometry, services, saving]);
+  }, [readGeometry, services, saving, dropChecking]);
 
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
@@ -1208,39 +1414,26 @@ export default function AgendaPage() {
     else scheduleHover(at);
   }, [computeHover, loadDragSlots, positionGhost, scheduleHover, visibleDates]);
 
-  const finishDrop = useCallback((id: string) => {
+  const finishDrop = useCallback((id: string, point: Point) => {
     const booking = bookingsRef.current.get(id);
-    const target = hoverRef.current;
+    if (!booking) { endDrag(); return; }
+    const slots = dragSlotsRef.current;
+    if (slots.loading) {
+      // Keep the single in-flight request alive, but immediately remove the
+      // ghost/selection. The user's actual pointer-up location is revalidated
+      // when the authoritative slot map arrives.
+      pendingDropRef.current = { id, point, seq: dragSeq.current };
+      setDropChecking(true);
+      setFlash({ tone: 'warn', text: 'Verificando a disponibilidade do horário…' });
+      clearDragVisuals();
+      return;
+    }
+    const plan = planDropAt(booking, point, slots);
     endDrag();
-    if (!booking) return;
-    if (!target || !target.time) {
-      setFlash({
-        tone: 'warn',
-        text: target && target.availability === 'loading'
-          ? 'Ainda carregando os horários livres. Tente soltar novamente em instantes.'
-          : 'Nenhum horário livre perto de onde você soltou. Escolha outro ponto da grade.',
-      });
-      window.setTimeout(() => setFlash(null), 4000);
-      return;
-    }
-    if (target.availability !== 'free') {
-      setFlash({ tone: 'error', text: `${target.time} em ${formatDateBR(target.date)} não está disponível para este atendimento.` });
-      window.setTimeout(() => setFlash(null), 4000);
-      return;
-    }
-    // Nada é salvo em silêncio: o drop abre a confirmação explícita.
-    // A coluna de um profissional envia o id dela; colunas de dia (semana)
-    // deixam o servidor resolver quem atende (política "equilibrar equipe").
-    const col = columnsRef.current[target.column];
-    setDropError('');
-    setDropAsk({
-      booking,
-      date: target.date,
-      time: target.time,
-      professionalId: col?.isProfessional ? col.professionalId : '',
-      columnLabel: col?.label || '',
-    });
-  }, [endDrag]);
+    setFlash(null);
+    acceptDrop(booking, plan, slots);
+  }, [acceptDrop, clearDragVisuals, endDrag, planDropAt]);
+
 
   const onPressEnd = useCallback((id: string, e: React.PointerEvent) => {
     const step = reduceInteraction(interactionRef.current, { type: 'up', at: { x: e.clientX, y: e.clientY } });
@@ -1250,10 +1443,10 @@ export default function AgendaPage() {
     if (step.effect === 'open-detail') {
       // CLIQUE SIMPLES → detalhe. Nunca inicia reagendamento.
       const booking = bookingsRef.current.get(id);
-      if (booking) setDetail(booking);
+      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); setDetail(booking); }
       return;
     }
-    if (step.effect === 'drop') finishDrop(id);
+    if (step.effect === 'drop') finishDrop(id, { x: e.clientX, y: e.clientY });
   }, [finishDrop]);
 
   const onPressCancel = useCallback(() => {
@@ -1261,34 +1454,215 @@ export default function AgendaPage() {
     endDrag();
   }, [endDrag]);
 
-  const onBlockClick = useCallback((id: string) => {
+  /**
+   * MISSÃO UX CLOSURE · item 3A — ação secundária do resumo do evento.
+   * Abre um editor CENTRAL para campos que o contrato PATCH da Agenda permite
+   * persistir. Dados gerais sem suporte continuam explicitamente somente leitura;
+   * a ação Reagendar segue sendo o fluxo de domínio já existente.
+   */
+  const onBlockEdit = useCallback((id: string, trigger?: HTMLElement | null) => {
+    const booking = bookingsRef.current.get(id);
+    if (!booking || rescheduleDecision(booking.status).kind !== 'move') return;
+    detailTriggerRef.current = trigger ?? null;
+    setCtxMenu(null);
+    setDetail(null);
+    setDetailReschedule(false);
+    setEditBooking(booking);
+  }, []);
+
+  const onBlockClick = useCallback((id: string, trigger?: HTMLElement | null) => {
     // O clique que vem logo depois do pointerup já foi tratado (detalhe ou
     // drop). Aqui só interessa o clique de TECLADO (Enter/Espaço), que não
     // gera eventos de ponteiro.
     const last = lastPointerUpRef.current;
     if (last.id === id && Date.now() - last.at < 700) return;
     const booking = bookingsRef.current.get(id);
-    if (booking) setDetail(booking);
+    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); setDetail(booking); }
   }, []);
+
+  /**
+   * AUDITORIA · RODADA 2 — MENU CONTEXTUAL DO ATENDIMENTO.
+   *
+   * Botão direito (e o equivalente de teclado Shift+F10 / tecla Menu) abre um
+   * menu REAL ancorado no ponteiro com as ações que o produto já sabe fazer:
+   * detalhe, as transições VÁLIDAS da máquina de estados, reagendar, duplicar
+   * e cancelar (com confirmação). Nada de menu decorativo e nada de transição
+   * inválida: os itens vêm de `BOOKING_FLOW[b.status]` — a mesma tabela que o
+   * servidor usa para recusar (`applyBookingStatusTx`).
+   */
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; point: { x: number; y: number }; trigger: HTMLElement | null } | null>(null);
+  const [ctxBusy, setCtxBusy] = useState('');
+  const [ctxError, setCtxError] = useState('');
+  const [ctxSuccess, setCtxSuccess] = useState('');
+  const [cancelPending, setCancelPending] = useState<PendingRequest | null>(null);
+
+  const onBlockContextMenu = useCallback((id: string, point: { x: number; y: number }, trigger: HTMLElement | null) => {
+    if (!bookingsRef.current.get(id)) return;
+    setCtxError(''); setCtxSuccess('');
+    setCtxMenu({ id, point, trigger });
+  }, []);
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  /** Transição pelo menu: MESMA porta do detalhe (PATCH /api/bookings). */
+  const changeStatus = useCallback(async (id: string, status: BookingStatus) => {
+    if (!bookingsRef.current.get(id) || ctxBusy) return;
+    setCtxBusy(status); setCtxError(''); setCtxSuccess('');
+    try {
+      // MESMA porta do detalhe: PATCH /api/bookings (o servidor revalida a
+      // máquina de estados, as automações e o histórico — o menu não é atalho).
+      const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id, status }),
+      }, { scope: 'action', area: 'Agenda' });
+      if (!res.ok) { setCtxError(res.message || 'Não foi possível mudar o status.'); return; }
+      setCtxSuccess(status === 'cancelled' ? 'Agendamento cancelado.' : 'Status do agendamento atualizado.');
+      void load();
+    } catch (cause) {
+      setCtxError(cause instanceof Error ? cause.message : 'Não foi possível mudar o status.');
+    } finally { setCtxBusy(''); }
+  }, [businessId, ctxBusy, load]);
+
+  /**
+   * Check-in pelo menu contextual — MESMA porta do detalhe
+   * (PATCH /api/bookings { action: 'check-in' }); não altera o status da reserva.
+   */
+  const checkIn = useCallback(async (id: string) => {
+    if (!bookingsRef.current.get(id) || ctxBusy) return;
+    setCtxBusy('check-in'); setCtxError(''); setCtxSuccess('');
+    try {
+      const res = await apiRequest<{ booking?: Booking }>('/api/bookings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, id, action: 'check-in' }),
+      }, { scope: 'action', area: 'Agenda' });
+      if (!res.ok) {
+        setCtxError(res.message || 'Não foi possível registrar a chegada.');
+        return;
+      }
+      setCtxSuccess('Chegada registrada.');
+      void load();
+    } catch (cause) {
+      setCtxError(cause instanceof Error ? cause.message : 'Não foi possível registrar a chegada.');
+    } finally { setCtxBusy(''); }
+  }, [businessId, ctxBusy, load]);
+
+  /** Itens do menu do atendimento — derivados do estado ATUAL do registro. */
+  const ctxItems: MenuItem[] = (() => {
+    const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
+    if (!b) return [];
+    const items: MenuItem[] = [
+      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); setDetail(b); } },
+    ];
+    if (rescheduleDecision(b.status).kind === 'move') {
+      items.push({
+        id: 'editar', label: 'Editar', icon: 'edit',
+        onSelect: () => onBlockEdit(b.id, ctxMenu?.trigger ?? null),
+      });
+    }
+    const alvos = BOOKING_FLOW[b.status] || [];
+    for (const to of alvos) {
+      if (to === 'cancelled') continue;   // destrutivo fica no fim, com confirmação
+      items.push({
+        id: `status-${to}`,
+        label: `${BOOKING_STATUS[to].panel}${to === 'pending' ? ' (reabrir)' : ''}`,
+        icon: to === 'confirmed' ? 'check' : to === 'completed' ? 'checkCircle' : to === 'no_show' ? 'clock' : 'history',
+        disabled: !!ctxBusy,
+        separatorBefore: to === (alvos.filter((x) => x !== 'cancelled')[0]),
+        onSelect: () => void changeStatus(b.id, to),
+      });
+    }
+    // Grupo de OPERAÇÕES (chegada/reagendar): um único separador no início do grupo.
+    const ops: MenuItem[] = [];
+    const wf = (b as { workflow?: { allowed?: string[] } }).workflow;
+    if (Array.isArray(wf?.allowed) && wf.allowed!.includes('check_in')) {
+      ops.push({
+        id: 'chegada', label: 'Registrar chegada', icon: 'check',
+        disabled: !!ctxBusy,
+        onSelect: () => void checkIn(b.id),
+      });
+    }
+    if (rescheduleDecision(b.status).kind === 'move') {
+      ops.push({
+        id: 'reagendar', label: 'Reagendar', icon: 'sync',
+        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); setDetail(b); },
+      });
+    }
+    ops.forEach((item, i) => items.push({ ...item, separatorBefore: i === 0 }));
+    items.push({
+      id: 'duplicar', label: 'Duplicar agendamento', icon: 'copy', separatorBefore: true,
+      onSelect: () => {
+        // Duplicar = abrir o fluxo COMPLETO já preenchido; a gravação continua
+        // sendo a criação canônica (POST /api/bookings) — nenhuma rota nova.
+        setCreating({
+          date: b.date, time: b.time, professionalId: b.professionalId,
+          serviceId: b.serviceId, contactId: b.customerId || undefined,
+          name: b.customerName, phone: b.customerPhone,
+          petId: b.petId || undefined,
+          note: b.note || '',
+          selectedDurationMin: durationOf(b),
+        });
+      },
+    });
+    if (alvos.includes('cancelled')) {
+      items.push({
+        id: 'cancelar', label: 'Cancelar agendamento', icon: 'x', danger: true, separatorBefore: true,
+        onSelect: () => setCancelPending({
+          reason: 'programmatic',
+          state: {
+            context: 'generic',
+            title: 'Cancelar este atendimento?',
+            description: `${b.petName || b.customerName} · ${formatDateBR(b.date)} às ${b.time}. O horário volta a ficar livre e o registro fica como cancelado no histórico — nada é apagado.`,
+            confirmLabel: 'Manter atendimento',
+            discardLabel: 'Cancelar agendamento',
+          },
+          proceed: () => setCancelPending(null),
+          discard: () => { setCancelPending(null); void changeStatus(b.id, 'cancelled'); },
+        }),
+      });
+    }
+    return items;
+  })();
+
+  /* Fechar o menu quando o registro muda por fora (load/patch): nada de menu
+     pendurado sobre um evento que já não é o mesmo. */
+  useEffect(() => { setCtxMenu(null); }, [bookings]);
 
   // ESC cancela o arraste sem salvar nada; fecha o popover de filtros;
   // sem nenhum dos dois, sai da tela cheia. (Ordem: mais interno primeiro.)
+  //
+  // P0 · RODADA 2 — CANCELAR APAGA A SELEÇÃO NA HORA. O intervalo pendente
+  // (`selectedRange`) é o que desenha a faixa na grade; ele só existe enquanto
+  // existe um gesto em andamento (quick create aberto, bloqueio, criar). Por
+  // isso TODO cancelamento limpa o estado no MESMO evento: ESC aqui, o
+  // `onClose` do popover ancorado (inclusive o clique fora), "Cancelar
+  // arraste", "Cancelar" do bloqueio, troca de modo/período. Antes o popover
+  // fechava e a faixa continuava na grade até o próximo clique.
+  const clearPendingSelection = useCallback(() => {
+    setSelectedRange(null);
+    setQuickCreate(null);
+  }, []);
   useEffect(() => {
-    if (!dragId && !filterOpen && !helpOpen) return;
+    if (!dragId && !dropChecking && !filterOpen && !helpOpen && !selectedRange) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (dragId) endDrag();
+      if (dragId || dropChecking) { e.preventDefault(); endDrag(); clearPendingSelection(); setFlash(null); }
       else if (filterOpen) setFilterOpen(false);
       else if (helpOpen) setHelpOpen(false);
+      else clearPendingSelection();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dragId, filterOpen, helpOpen, endDrag]);
+  }, [dragId, dropChecking, filterOpen, helpOpen, selectedRange, endDrag, clearPendingSelection]);
 
 
 
-  // Cancela o drag se a view mudar no meio do movimento.
-  useEffect(() => { endDrag(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [view, focus]);
+  // Cancela o drag se a view mudar no meio do movimento — e o gesto pendente
+  // (quick create/seleção visual) junto: período ou modo novo, grade limpa.
+  useEffect(() => {
+    endDrag();
+    clearPendingSelection();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [view, focus]);
 
   async function confirmDrop() {
     if (!dropAsk) return;
@@ -1390,6 +1764,17 @@ export default function AgendaPage() {
 
   const statusOptions = (['pending', 'confirmed', 'completed', 'no_show', 'cancelled'] as BookingStatus[]);
 
+  // Bloqueios do período VISÍVEL (mesma conta que já existia na faixa) + rótulo
+  // compacto do indicador: a contagem sai do dado, nunca de texto solto.
+  const blocksInView = scheduleBlocks.filter((block) => {
+    const dates = view === 'week' ? weekDays : [focus];
+    return dates.some((date) => block.startAt.slice(0, 10) === date
+      || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
+  });
+  const blockCountLabel = blocksInView.length === 1
+    ? '1 bloqueio neste período'
+    : `${blocksInView.length} bloqueios neste período`;
+
   return (
     <div data-agenda-page="true" className="ag-page">
       {/* LINHA 1 — TÍTULO / CONTROLES AUXILIARES (Agenda protagonista):
@@ -1397,7 +1782,7 @@ export default function AgendaPage() {
           São controles AUXILIARES — nada de Dia/Semana/Mês/Lista aqui (eles
           vivem na Linha 2) e nada de card só para o título. A ação principal
           ("Novo agendamento") também saiu daqui: é o CTA da Linha 2. */}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-2">
+      <header className="gd-toolbar justify-between gap-x-4 mb-2">
         <div className="min-w-0 flex items-center gap-3">
           {/* CONTRATO ÚNICO de títulos (refino final): chip 40×40 neutro
               sutil + borda 1px + ícone line na cor do TEMA — igual a todas
@@ -1407,12 +1792,12 @@ export default function AgendaPage() {
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
               contador quando há filtro ativo. Nada de três selects enormes
               fixos acima da grade. */}
           <div className="relative" ref={filterWrapRef}>
-            <Button variant="secondary" size="sm" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
+            <Button variant="secondary" onClick={() => { setFilterOpen((o) => !o); setProSearch(''); }}
               aria-expanded={filterOpen} aria-haspopup="dialog" title="Filtros da agenda">
               <Icon n="filter" size={14} />
               {activeFilterCount > 0 ? `Filtros · ${activeFilterCount}` : 'Filtros'}
@@ -1500,7 +1885,7 @@ export default function AgendaPage() {
               visual de Filtros). Abrir/fechar decide quem opera; a rail lateral
               continua sendo a superfície dela. */}
           {loaded && (
-            <Button variant="secondary" size="sm" onClick={() => setShowQueue((v) => !v)}
+            <Button variant="secondary" onClick={() => setShowQueue((v) => !v)}
               aria-expanded={showQueue} aria-pressed={showQueue} title="Fila de atendimento">
               <Icon n="users" size={14} />
               Fila
@@ -1548,23 +1933,18 @@ export default function AgendaPage() {
 
       <PermissionNotice message={notice?.title} hint={notice?.hint} onDismiss={dismiss} />
 
+      {/* DS 1.1 · §12 — a confirmação da ação que acabou de acontecer é um
+          aviso LOCAL: superfície canônica (`Notice`), no fluxo, sem disputar a
+          toolbar. Antes era um bloco com cor, raio, sombra e botão próprios. */}
       {flash && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={
-            'mb-3 border rounded-lg px-3 py-2.5 text-xs font-semibold flex items-start gap-2 shadow-xs '
-            + (flash.tone === 'ok'
-              ? 'border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success-fg)]'
-              : flash.tone === 'warn'
-                ? 'border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning-fg)]'
-                : 'border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger-fg)]')
-          }
+        <Notice
+          live
+          className="mb-3"
+          tone={flash.tone === 'ok' ? 'success' : flash.tone === 'warn' ? 'warning' : 'error'}
+          onDismiss={() => setFlash(null)}
         >
-          <Icon n={flash.tone === 'ok' ? 'checkCircle' : 'alert'} size={15} className="mt-px" />
-          <span>{flash.text}</span>
-          <button onClick={() => setFlash(null)} className="ml-auto font-semibold underline underline-offset-2 shrink-0">Fechar</button>
-        </div>
+          {flash.text}
+        </Notice>
       )}
 
       {pendencies.length > 0 && (
@@ -1612,7 +1992,12 @@ export default function AgendaPage() {
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-3 py-2.5">
+        <div className="gd-toolbar gap-x-4 px-3 py-2.5">
+          {/* MISSÃO UX CLOSURE · item 5 — UMA MÉTRICA: Hoje, setas, data,
+              Dia/Semana/Lista, Filtros, Fila, Bloquear horário e Novo
+              agendamento são todos controles de NÍVEL MD do DS
+              (`--gd-control-h`, 40px; ícone é quadrado na mesma altura).
+              Antes conviviam 34/40/28px na mesma linha. */}
           {/* Navegação no tempo (correção cirúrgica): [◀] [▶] apenas.
               O botão “Hoje” saiu da UI — a data/período continua visível ao
               lado e o seletor nativo de data segue permitindo saltar para
@@ -1623,10 +2008,9 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="gd-toolbar min-w-0">
             <Button
               variant="secondary"
-              size="sm"
               onClick={() => setFocus(today)}
               aria-pressed={focus === today}
               title={focus === today ? 'Você já está em hoje' : 'Ir para hoje'}
@@ -1645,7 +2029,7 @@ export default function AgendaPage() {
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
-          <div className="sm:ml-auto min-w-0 max-w-full flex flex-wrap items-center gap-2">
+          <div className="sm:ml-auto min-w-0 max-w-full gd-toolbar justify-end">
             {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
                 saiu da UI — a lógica do modo mês segue intacta para links
                 diretos com view=month; nada foi destruído). */}
@@ -1658,12 +2042,11 @@ export default function AgendaPage() {
               value={view}
               onChange={(v) => { endDrag(); setView(v); }}
               ariaLabel="Visualização da agenda"
-              size="sm"
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" size="sm" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
-            <Button variant="primary" size="sm" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+            <Button variant="secondary" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
+            <Button variant="primary" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /> Novo agendamento
             </Button>
           </div>
@@ -1705,7 +2088,7 @@ export default function AgendaPage() {
                 <span className="font-medium opacity-85 hidden sm:inline">— horário ocupado ou fora do expediente</span>
               )}
             </span>
-            <Button size="xs" variant="secondary" onClick={endDrag}>
+            <Button size="xs" variant="secondary" onClick={() => { endDrag(); clearPendingSelection(); }}>
               <Icon n="x" size={12} /> Cancelar arraste
             </Button>
           </div>
@@ -1713,23 +2096,29 @@ export default function AgendaPage() {
       </div>
 
       {blockMode && <div role="status" className="mb-3 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
-      {scheduleBlocks.filter(block => {
-        const dates = view === 'week' ? weekDays : [focus];
-        return dates.some(date => block.startAt.slice(0, 10) === date || instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date === date);
-      }).length > 0 && <section className="mb-3 border border-dashed border-amber-500 rounded-md bg-amber-50 p-2" aria-label="Bloqueios operacionais">
-        {/* DS 1.0 · §2 — título de seção com a escala do sistema (semibold), e a
-            explicação vira hint: uma frase em CAIXA ALTA não é hierarquia. */}
-        <h2 className="il-type-section font-semibold text-[var(--gd-text)]">Bloqueios operacionais</h2>
-        <p className="il-type-help text-[var(--gd-text-muted)]">Bloqueios não são atendimentos — aparecem separados da agenda do dia.</p>
-        <div className="flex flex-wrap gap-2 mt-1">{scheduleBlocks.filter(block => {
-          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
-          return (view === 'week' ? weekDays : [focus]).includes(date);
-        }).map(block => <button key={block.id} type="button" className="border-l-4 border-amber-700 bg-white px-3 py-2 text-left text-xs font-semibold" onClick={() => {
-          const date = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').date;
-          const time = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time;
-          openBlock({ date, time, professionalId: block.professionalId }, block);
-          setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-        }}>■ BLOQUEIO · {block.reason || block.note || 'Operacional'} · {block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</button>)}</div>
+      {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+            de horário/escopo. A explicação vira a dica curta de uma linha, e o
+            clique continua abrindo o MESMO formulário do bloqueio. */}
+        <span className="ag-blocks-bar__label">
+          <Icon n="lock" size={13} aria-hidden="true" />
+          {blockCountLabel}
+        </span>
+        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
+        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+          }}>
+            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+            <span>{block.reason || block.note || 'Operacional'}</span>
+            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+          </button>
+        ))}</div>
       </section>}
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll ag-list" aria-label="Lista de atendimentos do dia">
@@ -1742,7 +2131,7 @@ export default function AgendaPage() {
               <p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p>
             </div>
           )}
-          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={() => { const booking = bookings.find(b => b.id === item.id); if (booking) setDetail(booking); }} className="ag-list__row w-full flex gap-4 items-start text-left">
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); setDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
             <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
@@ -1823,7 +2212,14 @@ export default function AgendaPage() {
                         )
                       )}
                       <span className="min-w-0">
-                        <span className={`block text-[13px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                        {/* MISSÃO UX CLOSURE · item 4 — cabeçalho do profissional
+                            legível: nome um passo acima e, no dia de HOJE, uma
+                            etiqueta textual além do tom — a data atual não
+                            depende só de cor para ser reconhecida. */}
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className={`block text-[13.5px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
+                          {c.isToday && <span className="ag-col-today">Hoje</span>}
+                        </span>
                         {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
                     </div>
@@ -1863,6 +2259,9 @@ export default function AgendaPage() {
                       onPressEnd={onPressEnd}
                       onPressCancel={onPressCancel}
                       onBlockClick={onBlockClick}
+                      onBlockEdit={onBlockEdit}
+                      onBlockContextMenu={onBlockContextMenu}
+                      hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
@@ -1955,7 +2354,12 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {resizeAsk && <Drawer open title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+      {/* AUDITORIA · rodada 2 — CONFIRMAÇÃO DE EDIÇÃO É MODAL CENTRAL. Mudar a
+          duração/alteração de horário de um atendimento é uma DECISÃO sobre o
+          registro (o Material chama isso de alert dialog); estava em gaveta
+          lateral, que é a geometria de LER o registro. A leitura continua no
+          painel preso à direita (`.gd-detail`); a confirmação é central. */}
+      {resizeAsk && <Drawer open variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
         <div className="p-5 space-y-3">
           <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {durationLabel(timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time))}</p>
           <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
@@ -1982,7 +2386,7 @@ export default function AgendaPage() {
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
       {dropAsk && (
-        <Drawer open onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+        <Drawer open variant="dialog" dialogWidth="520px" onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
             <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
             <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
@@ -2010,7 +2414,11 @@ export default function AgendaPage() {
         </Drawer>
       )}
 
-      {blockForm && <Drawer open onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      {/* MISSÃO UX CLOSURE · item 5/6 — bloqueio é FORMULÁRIO CURTO: mesmo
+          overlay system (Drawer), geometria de MODAL CENTRAL — a faixa lateral
+          fica reservada para superfícies de trabalho longas. Nada de regra de
+          agenda muda aqui: mesmos campos, mesma validação, mesma API. */}
+      {blockForm && <Drawer open variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
         {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
             canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
             foco e dropdown do resto do sistema. O `<select>` cru e o
@@ -2075,7 +2483,10 @@ export default function AgendaPage() {
           services={services}
           pros={pros}
           timezone={bizTz}
-          onClose={() => setQuickCreate(null)}
+          vetMode={vetMode}
+          /* Cancelar/fechar (ESC, clique fora, botão) encerra o gesto: a
+             seleção sai da grade na mesma hora (P0 · rodada 2). */
+          onClose={clearPendingSelection}
           onCreated={() => { setQuickCreate(null); setSelectedRange(null); void load(); }}
           onMore={(seed) => {
             // "Mais opções" = fluxo COMPLETO com o mesmo preenchimento: nada do
@@ -2090,25 +2501,87 @@ export default function AgendaPage() {
               contactId: seed.contactId,
               name: seed.customerName,
               phone: seed.customerPhone,
+              searchQuery: seed.searchQuery,
+              openRegistration: seed.openRegistration,
+              vetMode,
+              // Handoff do Quick é SEMPRE explícito: serviço vazio continua
+              // vazio; o formulário completo não aplica o fallback de célula.
+              allowSingleEligibleServicePrefill: false,
             });
           }}
         />
       )}
+      {ctxMenu && (
+        <ContextMenu
+          open
+          onClose={closeCtxMenu}
+          point={ctxMenu.point}
+          items={ctxItems}
+          label="Ações do atendimento"
+          returnFocus={ctxMenu.trigger}
+          header={(() => {
+            const b = bookingsRef.current.get(ctxMenu.id);
+            if (!b) return null;
+            return (
+              <>
+                <strong>{b.petName || b.customerName}</strong>
+                <span>{formatDateBR(b.date)} · {b.time}–{minToTime(timeToMin(b.time) + durationOf(b))}</span>
+              </>
+            );
+          })()}
+        />
+      )}
+      {cancelPending && (
+        <ConfirmDialog
+          pending={cancelPending}
+          onContinue={() => { const pending = cancelPending; setCancelPending(null); pending?.proceed(); }}
+          onDiscard={() => { const pending = cancelPending; setCancelPending(null); pending?.discard?.(); }}
+        />
+      )}
+      {ctxSuccess && (
+        <div className="ag-ctx-success" role="status">
+          <Icon n="check" size={14} />
+          <span>{ctxSuccess}</span>
+          <button type="button" onClick={() => setCtxSuccess('')} aria-label="Fechar aviso"><Icon n="x" size={13} /></button>
+        </div>
+      )}
+      {ctxError && (
+        <div className="ag-ctx-error" role="alert">
+          <Icon n="alert" size={14} />
+          <span>{ctxError}</span>
+          <button type="button" onClick={() => setCtxError('')} aria-label="Fechar aviso"><Icon n="x" size={13} /></button>
+        </div>
+      )}
       {detail && (
         <BookingDetailSheet
           booking={detail}
+          returnFocus={detailTriggerRef}
+          startRescheduling={detailReschedule}
           timezone={bizTz}
           service={serviceOf(detail.serviceId)}
           resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
-          onClose={() => setDetail(null)}
+          onClose={() => { setDetail(null); setDetailReschedule(false); }}
           /* Mudança estrutural (status/finalizar): atualiza dados, mantém
              sheets abertos — o fechamento é só onClose (ação do usuário). */
           onChanged={() => { void load(); }}
         />
       )}
 
+
+      {editBooking && (
+        <BookingEditDialog
+          booking={editBooking}
+          businessId={businessId}
+          services={services}
+          pros={pros}
+          timezone={bizTz}
+          returnFocus={detailTriggerRef}
+          onClose={() => setEditBooking(null)}
+          onChanged={() => { void load(); }}
+        />
+      )}
 
       {creating && (
         <NewBookingSheet
@@ -2121,10 +2594,16 @@ export default function AgendaPage() {
           initial={{
             name: creating.name || '', phone: creating.phone || '',
             contactId: creating.contactId, serviceId: creating.serviceId,
+            searchQuery: creating.searchQuery,
+            openRegistration: creating.openRegistration,
+            vetMode: creating.vetMode,
+            allowSingleEligibleServicePrefill: creating.allowSingleEligibleServicePrefill,
             date: creating.date || focus,
             time: creating.time,
             professionalId: creating.professionalId,
             selectedDurationMin: creating.selectedDurationMin,
+            petId: creating.petId,
+            note: creating.note,
           }}
           onClose={() => { setCreating(null); setSelectedRange(null); }}
           onCreated={() => { setSelectedRange(null); void load(); }}

@@ -66,10 +66,10 @@ export default function OrganizationPage() {
       {org.units.length===0&&<p>Esta organização ainda não possui filiais.</p>}
       {org.units.map(u=><article key={u.id} className="bg-white border border-[var(--border)] rounded-lg p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{u.name}</h3><p className="text-sm text-[var(--text-muted)]">{u.address} · {u.timezone}</p></div><div className="flex flex-wrap gap-3"><Link className="workspace-link" href={`/dashboard?b=${u.id}`}>Abrir filial →</Link>{u.canAgenda&&<Link className="workspace-link" href={`/agenda?b=${u.id}`}>Abrir agenda desta filial</Link>}</div></div>
         <p className="mt-3">Agendamentos: {number(u.summary.bookings)} · Concluídos: {number(u.summary.completed)} · Cadastros: {number(u.summary.clients)}</p>{u.summary.predictedRevenue!==undefined&&<p>Receita prevista: {money(u.summary.predictedRevenue)}</p>}
-        {u.canDelete&&<Button variant="destructive" size="sm" className="mt-4" onClick={()=>setDeleting({kind:'business',id:u.id,organizationId:org.id,name:u.name})}>Excluir filial</Button>}
+        {u.canDelete&&<Button variant="destructive-soft" size="sm" className="mt-4" onClick={()=>setDeleting({kind:'business',id:u.id,organizationId:org.id,name:u.name})}>Excluir filial</Button>}
       </article>)}
     </section>
-    {org.canDelete&&<section className="border border-[var(--danger-border)] rounded-lg p-4"><h2 className="font-semibold">Excluir organização</h2><p className="mb-3 text-sm">Somente quando não houver filiais ou dependências. Não exclui filiais em cascata.</p><Button variant="destructive" onClick={()=>setDeleting({kind:'organization',id:org.id,organizationId:org.id,name:org.name})}>Verificar exclusão da organização</Button></section>}
+    {org.canDelete&&<section className="border border-[var(--danger-border)] rounded-lg p-4"><h2 className="font-semibold">Excluir organização</h2><p className="mb-3 text-sm">Somente quando não houver filiais ou dependências. Não exclui filiais em cascata.</p><Button variant="destructive-soft" onClick={()=>setDeleting({kind:'organization',id:org.id,organizationId:org.id,name:org.name})}>Verificar exclusão da organização</Button></section>}
     {deleting&&<DeleteEntityDialog target={deleting} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deleting.kind;setDeleting(null);window.dispatchEvent(new Event('godoutor:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
   </div>;
 }
