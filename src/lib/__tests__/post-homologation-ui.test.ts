@@ -34,8 +34,7 @@ describe('pós-homologação manual — atendimento, anamnese e proteção de tr
   it('resposta salva é enviada ao pai com identidade do template e exibida sem recarregar', () => {
     expect(filler).toContain('setLastResponse(savedResponse)');
     expect(filler).toContain('onSaved?.(savedResponse)');
-    expect(encounter).toContain('setAnamneseLast({ id: savedResponse.id, templateId: savedResponse.templateId');
-    expect(encounter).toContain('setAnamneseHistoryOpen(true)');
+    expect(encounter).toContain('secao=anamnese');
     expect(encounter).toContain('Ficha deste atendimento salva');
     expect(encounter).toContain('Preencher outra ficha');
   });

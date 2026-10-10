@@ -23,9 +23,9 @@ const ruleBody = (sel: string) => {
 };
 
 describe('P1 · botões e ícones sem contorno ocioso', () => {
-  it('secundário: repouso neutro e sem borda, hover/active com superfície neutra', () => {
+  it('secundário: repouso com contorno visível (P1.6: ação sem contorno parecia texto), hover/active com superfície neutra', () => {
     const cls = buttonCls('secondary');
-    expect(cls).toContain('border-transparent');
+    expect(cls).toContain('border-[var(--border-strong)]');
     expect(cls).not.toContain('border-[var(--brand)]');
     expect(cls).toContain('text-[var(--text)]');
     expect(cls).toContain('hover:bg-[var(--surface-3)]');
@@ -83,13 +83,13 @@ describe('Pass 2 · régua canônica de controles e Quick Create', () => {
 
 describe('P1 · toolbar da Agenda — uma família de controles', () => {
   it('o gatilho de data entra na régua dos botões (repouso sem contorno, hover suave)', () => {
-    const body = ruleBody('.ag-page .gd-toolbar .il-field-control {');
+    const body = ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger) {');
     expect(body).toContain('background: transparent');
     expect(body).toContain('border-color: transparent');
-    const hover = ruleBody('.ag-page .gd-toolbar .il-field-control:hover');
+    const hover = ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):hover');
     expect(hover).toContain('background: var(--surface-hover)');
     // Foco visível continua: o anel do DS (shadow) + borda de acento.
-    expect(ruleBody('.ag-page .gd-toolbar .il-field-control:focus-visible')).toContain('border-color: var(--accent)');
+    expect(ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):focus-visible')).toContain('border-color: var(--accent)');
   });
 
   it('o seletor Dia/Semana/Lista é um poço neutro com polegar suave (sem contorno duplo)', () => {
@@ -320,7 +320,7 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
     // o requisito é que o menu contextual SEMPRE silencie o resumo.
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain('suppress={hoverSuppressed}');
-    expect(agenda).toMatch(/hoverSuppressed=\{ctxMenu !== null/);
+    expect(agenda).toMatch(/hoverSuppressed=\{!!dragId \|\| ctxMenu !== null/);
   });
 
 describe('AUDITORIA · rodada 2 — rótulos de navegação e resumo do cliente', () => {

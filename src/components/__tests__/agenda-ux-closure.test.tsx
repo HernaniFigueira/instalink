@@ -150,7 +150,7 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
   });
 
   it('hover, detalhe e editor central são mutuamente exclusivos e devolvem foco ao evento', () => {
-    expect(agenda).toContain('hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null');
+    expect(agenda).toContain('hoverSuppressed={!!dragId || ctxMenu !== null || detail !== null || editBooking !== null');
     expect(agenda).toContain('returnFocus={detailTriggerRef}');
     expect(read('src/components/dashboard/BookingEditDialog.tsx')).toContain('returnFocus={returnFocus}');
   });
@@ -414,8 +414,8 @@ describe('Fechamento — queda inválida, Fila e toque compacto', () => {
   it('drop horizontal fora da grade continua inválido em vez de cair na primeira coluna', () => {
     const drop = agenda.slice(agenda.indexOf('const planDropAt ='), agenda.indexOf('const acceptDrop ='));
     const hover = agenda.slice(agenda.indexOf('const computeHover ='), agenda.indexOf('const scheduleHover ='));
-    expect(drop).toMatch(/point:\s*\{\s*x:\s*point\.x,\s*y:\s*Math\.max\(point\.y, geo\.minY\)\s*\}/);
-    expect(hover).toMatch(/const point: Point = \{ x: at\.x, y: Math\.max\(at\.y, geo\.minY\) \}/);
+    expect(drop).toMatch(/point:\s*\{\s*x:\s*point\.x,\s*y:\s*Math\.max\(point\.y - grabOffsetRef\.current, geo\.minY\)\s*\}/);
+    expect(hover).toMatch(/const point: Point = \{ x: at\.x, y: Math\.max\(at\.y - grabOffsetRef\.current, geo\.minY\) \}/);
     expect(agenda).not.toContain('geo.minX');
   });
 

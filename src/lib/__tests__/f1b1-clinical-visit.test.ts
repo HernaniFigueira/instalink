@@ -543,7 +543,7 @@ describe('F1B1 · legado preservado', () => {
     expect(fs.existsSync(`${root}/src/app/(dashboard)/atendimento/[encounterId]/registro/page.tsx`)).toBe(true);
     expect(fs.existsSync(`${root}/src/app/api/anamnese/route.ts`)).toBe(true);
     const sheet = fs.readFileSync(`${root}/src/components/dashboard/EncounterSheet.tsx`, 'utf8');
-    expect(sheet).toMatch(/AnamneseFiller/);
+    expect(sheet).toMatch(/secao=anamnese/);
     const filler = fs.readFileSync(`${root}/src/components/dashboard/AnamneseFiller.tsx`, 'utf8');
     expect(filler).toContain("action: 'response.save'");
   });

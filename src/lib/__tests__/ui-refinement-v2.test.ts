@@ -34,7 +34,7 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     const ui = read('src/components/ui.tsx');
     // Pass 2 — secundário sem contorno OU acento em repouso; só o estado ganha
     // superfície neutra. Links reais continuam sendo a variante `link`.
-    expect(ui).toContain("'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]'");
+    expect(ui).toContain("'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]'");
     expect(ui).not.toContain("secondary:\n    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)]");
   });
 
