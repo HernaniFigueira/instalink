@@ -136,7 +136,7 @@ describe('5 · composição aninhada usa o preset compartilhado 50/50', () => {
 
   it('o formulário padrão preserva a largura; criação rápida usa o preset compacto', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(booking).toContain('width={WORKSPACE_SHEET_SIZES.standard}');
+    expect(booking).toContain('width={WORKSPACE_SHEET_SIZES.booking}');
     expect(booking).not.toContain('width={WORKSPACE_SHEET_SIZES.wide}');
     // Preset existe na fonte única do Design System.
     const sizes = read('src/lib/workspace-sheet-sizes.ts');
@@ -183,7 +183,7 @@ describe('6 · viewport estreita: cadastro assume a faixa e o agendamento volta 
     await waitFor(() => expect(within(dialog()).getAllByRole('button').some((b) => b.textContent?.trim() === '09:30')).toBe(true));
 
     // Abre o cadastro DENTRO do mesmo overlay.
-    const openRegister = within(dialog()).getAllByRole('button').find((b) => /Cadastrar/i.test(b.textContent || ''))!;
+    const openRegister = within(dialog()).getAllByRole('button').find((b) => /Cadastrar|Novo cliente/i.test(b.textContent || ''))!;
     await user.click(openRegister);
     expect(document.querySelectorAll('dialog')).toHaveLength(1);
     expect(sidePanel()).toBeTruthy();

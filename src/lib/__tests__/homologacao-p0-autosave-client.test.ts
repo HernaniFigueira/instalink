@@ -109,8 +109,8 @@ describe('P0-2 · cadastro real dentro do agendamento (fechamento Fase 2)', () =
     expect(NEW_BOOKING).toMatch(/requestId/);
   });
 
-  it('gatilho de busca é "+ Cadastrar paciente" e abre cadastro real', () => {
-    expect(NEW_BOOKING).toContain('+ Cadastrar paciente');
+  it('gatilho de cadastro é "+ Novo cliente" e abre cadastro real', () => {
+    expect(NEW_BOOKING).toContain('+ Novo cliente');
     expect(NEW_BOOKING).toContain('data-new-client-trigger');
   });
 

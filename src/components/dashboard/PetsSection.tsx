@@ -155,7 +155,7 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
           o canto superior direito ficou só para o conteúdo (leitura mais
           natural; hierarquia pet × tutor preservada). */}
       <div className="mt-3.5">
-        <Button size="sm" variant="primary" onClick={() => startPetForm(EMPTY_PET)}>
+        <Button size="sm" variant="secondary" onClick={() => startPetForm(EMPTY_PET)}>
           <Icon n="plus" size={14} /> Cadastrar pet
         </Button>
       </div>

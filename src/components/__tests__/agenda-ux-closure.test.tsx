@@ -173,7 +173,7 @@ describe('3C · criar/editar agendamento é MODAL CENTRAL', () => {
     // Atualizado (fechamento visual): criação COMPLETA é painel lateral canônico;
     // o Quick Create é o popover ancorado ao slot. Nunca diálogo central.
     expect(sheet).not.toMatch(/variant="dialog"/);
-    expect(sheet).toMatch(/width=\{WORKSPACE_SHEET_SIZES\.standard\}/);
+    expect(sheet).toMatch(/width=\{WORKSPACE_SHEET_SIZES\.booking\}/);
     // Faixa central = token do DS (uma fonte), com fallback no componente.
     expect(dsCss).toContain('--gd-booking-modal-w: 672px');
     expect(css).toMatch(/dialog\.il-drawer--dialog \{[\s\S]*?transform: translate\(-50%, -50%\)/);

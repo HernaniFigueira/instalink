@@ -504,7 +504,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       title="Novo agendamento"
       subtitle={registerOpen ? undefined : ctxSubtitle}
       footer={registerOpen ? undefined : footerActions}
-      width={WORKSPACE_SHEET_SIZES.standard}
+      width={WORKSPACE_SHEET_SIZES.booking}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (
@@ -562,6 +562,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             <span className="mb-1.5 flex items-center gap-1.5">
               <span className="gd-t-label text-[var(--text)]">Cliente <span className="text-[var(--danger)]">*</span></span>
               {errorField === 'client' && error && <span role="alert" className="ml-auto text-xs font-medium text-[var(--danger)]">{error}</span>}
+              {/* Ação de cadastro: pequena (ghost sm), na linha do rótulo — nunca uma
+                  linha inteira com peso de campo. */}
+              {!picked && !unlinkedPrefill && (
+                <Button type="button" variant="ghost" size="sm" onClick={startNew} className="ml-auto" data-new-client-trigger="true">
+                  + Novo cliente
+                </Button>
+              )}
               {!picked && (
                 <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
                   <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
@@ -598,15 +605,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
-                  <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
-                    + Cadastrar paciente {vetMode ? '(tutor e pet)' : `“${query.trim()}”`}
-                  </Button>
-                )}
-                {!searching && query.trim().length < 2 && (
-                  <Button type="button" variant="secondary" onClick={startNew}
-                    className="mt-2 w-full justify-start" data-new-client-trigger="true">
-                    + Cadastrar paciente
-                  </Button>
+                  <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                    Nenhum {vetMode ? 'tutor' : 'cliente'} encontrado para “{query.trim()}”. Use “+ Novo cliente”.
+                  </p>
                 )}
                 {!searching && results.length > 0 && (
                   <ul className="mt-2 border border-[var(--border)] rounded-lg divide-y divide-[var(--border)] overflow-hidden">

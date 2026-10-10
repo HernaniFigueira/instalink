@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api-client';
 import { professionalServesService } from '@/lib/booking';
-import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
+import { Button, Combobox, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
 import { nowHM, todayISO } from '@/lib/tz';
@@ -31,7 +31,6 @@ import type { Professional, Service } from '@/lib/types';
 // servidor (só duração > 0) e o formulário completo vai até 720 min. O teto
 // antigo de 120 min era uma lista fixa de UI. Uma duração vinda de arraste
 // (ex.: 135 min) entra na lista para o campo nunca mostrar um valor órfão.
-const DURATIONS = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 240, 300, 360, 480, 720];
 
 export interface QuickBookingAnchor {
   /** Ponto do clique, em coordenadas de viewport (posição do popover). */
@@ -78,14 +77,11 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   const bookable = useMemo(() => services.filter((s) => s.bookable && s.active !== false), [services]);
   const [serviceId, setServiceId] = useState('');
   const [professionalId, setProfessionalId] = useState(anchor.professionalId);
-  const [date, setDate] = useState(anchor.date);
+  // Data, horário e profissional vêm do slot: leitura no contexto, não campos.
+  const [date] = useState(anchor.date);
   const [time, setTime] = useState(anchor.time);
-  const [durationMin, setDurationMin] = useState<number | undefined>(anchor.durationMin);
-  // Data/duração recolhidos por padrão; abrem sozinhos quando o gesto já trouxe duração.
-  const [moreTime, setMoreTime] = useState<boolean>(anchor.durationMin != null);
-  const durationOptions = durationMin != null && !DURATIONS.includes(durationMin)
-    ? [...DURATIONS, durationMin].sort((a, b) => a - b)
-    : DURATIONS;
+  // Duração: vem do gesto (arraste) ou do serviço; ajuste fica em "Mais opções".
+  const [durationMin] = useState<number | undefined>(anchor.durationMin);
   const [contactId, setContactId] = useState('');
   // O contato escolhido é guardado por INTEIRO (a lista de resultados é
   // limpa ao escolher) — o nome/telefone vão no payload, como no fluxo completo.
@@ -309,7 +305,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
               <p className="text-[12px] text-[var(--gd-text-muted)]">
                 Nenhum {vetMode ? 'tutor ou paciente' : 'paciente'} encontrado para “{query.trim()}”.
               </p>
-              <Button type="button" variant="secondary" className="mt-2 w-full justify-start"
+              <Button type="button" variant="ghost" className="mt-1.5"
                 onClick={() => onMore(seedIntent({ openRegistration: true }))}>
                 {vetMode ? '+ Cadastrar tutor e pet' : '+ Cadastrar paciente'}
               </Button>
@@ -329,61 +325,6 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
               options={[{ value: '', label: 'Selecione…' }, ...serviceOptions.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
           </Field>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <Field label="Profissional">
-              <Combobox label="Profissional" value={professionalId} disabled={saving} placeholder="Automático"
-                onChange={(v) => {
-                  const next = String(v);
-                  setProfessionalId(next);
-                  // Serviço escolhido que este profissional não atende: limpa o serviço.
-                  const svc = serviceById(serviceId);
-                  if (svc && next && !professionalServesService(svc, next, pros)) setServiceId('');
-                }}
-                options={[{ value: '', label: 'Automático' }, ...proOptions.map((p) => ({ value: p.id, label: p.name }))]} />
-            </Field>
-            {/* Os campos de hora explicam o estado; o horário do gesto continua
-                visível mesmo fora da lista (o servidor decide o encaixe). */}
-            <Field
-              label="Hora"
-              hint={!serviceId ? 'Escolha o serviço' : slots.empty ? 'Nenhum horário livre' : undefined}
-            >
-              <Combobox label="Hora" value={time}
-                disabled={saving || !serviceId || slots.loading || slots.times.length === 0}
-                onChange={(v) => setTime(String(v))}
-                options={[
-                  ...(time && (!serviceId || !slots.times.includes(time)) ? [{ value: time, label: time, hint: 'na grade' }] : []),
-                  ...(slots.loading ? [{ value: '', label: 'Carregando…' }] : []),
-                  ...(!slots.loading && serviceId && slots.times.length === 0 ? [{ value: '', label: 'Sem horários' }] : []),
-                  ...slots.times.map((t) => ({ value: t, label: t })),
-                ]} />
-            </Field>
-          </div>
-        </div>
-
-        {/* PROGRESSIVE DISCLOSURE — data e duração só ocupam espaço quando a
-            pessoa quer ajustá-los. O resumo fica visível: nada se esconde. */}
-        <div className="mt-2.5 border-t border-[var(--gd-border-soft)] pt-2">
-          <button type="button" aria-expanded={moreTime} aria-controls="qc-time-adjust"
-            onClick={() => setMoreTime((o) => !o)}
-            className="flex w-full items-center justify-between gap-2 rounded-[var(--gd-radius-sm)] px-1 py-1 text-left text-[12.5px] hover:bg-[var(--gd-nav-hover)]">
-            <span className="font-medium text-[var(--gd-text-secondary)]">Data e duração</span>
-            <span className="flex items-center gap-1.5 truncate tabular-nums text-[var(--gd-text-muted)]">
-              {formatDayLabel(date)} · {durationMin ? durationLabel(durationMin) : 'padrão do serviço'}
-              <Icon n="chevD" size={12} className={moreTime ? 'rotate-180 transition-transform' : 'transition-transform'} />
-            </span>
-          </button>
-          {moreTime && (
-            <div id="qc-time-adjust" className="mt-2 grid grid-cols-2 gap-2.5">
-              <Field label="Data">
-                <DatePicker value={date} onChange={setDate} min={today} label="Data do agendamento" className="w-full" />
-              </Field>
-              <Field label="Duração">
-                <Combobox label="Duração" value={durationMin != null ? String(durationMin) : ''} disabled={saving}
-                  onChange={(v) => { const x = String(v); setDurationMin(x === '' ? undefined : Number(x)); }}
-                  options={[{ value: '', label: 'Padrão do serviço' }, ...durationOptions.map((d) => ({ value: String(d), label: durationLabel(d) }))]} />
-              </Field>
-            </div>
-          )}
         </div>
 
         <div className="mt-2 space-y-2">

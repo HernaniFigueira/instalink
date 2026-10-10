@@ -77,7 +77,7 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     const drawer = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
     // Sozinho: preset operacional compartilhado. Aninhado: a faixa expande.
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.standard');
+    expect(booking).toContain('WORKSPACE_SHEET_SIZES.booking');
     expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(booking).toContain('sideTitle="Cadastrar novo paciente"');
     expect(css).toContain('@media (max-width: 1359px)');
