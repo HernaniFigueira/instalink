@@ -405,7 +405,10 @@ export async function POST(req: NextRequest) {
       if (!isOwner) return NextResponse.json({ error: 'Escolha de pet exige permissão de Agenda.' }, { status: 403 });
       const requestedPet = db.pets.find((x) => x.id === requestedPetId && x.businessId === business.id);
       if (!requestedPet) return NextResponse.json({ error: 'Pet não encontrado nesta unidade.' }, { status: 400 });
-      if (!linkedContact || requestedPet.tutorId !== linkedContact.id) {
+      if (!linkedContact) {
+        return NextResponse.json({ error: 'Escolha o tutor antes do pet.' }, { status: 400 });
+      }
+      if (requestedPet.tutorId !== linkedContact.id) {
         return NextResponse.json({ error: 'Este pet não pertence ao tutor selecionado.' }, { status: 400 });
       }
     }

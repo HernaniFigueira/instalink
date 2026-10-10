@@ -38,6 +38,10 @@ const users = [
   ['fora', 'Fora da Unidade F1B1', 'fora.f1b1', 'owner'],
   ['odonto', 'Dentista QA F1B1', 'odonto.f1b1', 'admin'],
   ['estetica', 'Esteticista QA F1B1', 'estetica.f1b1', 'admin'],
+  ['visualizador', 'Visualizador QA F1B1', 'visualizador.f1b1', 'admin'],
+  ['vendedor', 'Vendedor QA F1B1', 'vendedor.f1b1', 'admin'],
+  ['admin', 'Administrador QA F1B1', 'admin.f1b1', 'admin'],
+  ['semagenda', 'Recepção sem agenda QA F1B1', 'semagenda.f1b1', 'admin'],
 ].map(([id, name, email, role]) => ({
   id: `f1b1-${id}`, name, email: `${email}@godoutor.local`, passwordHash: hash(),
   role, createdAt: now, lastLoginAt: '',
@@ -58,6 +62,11 @@ const business = (id, name) => ({
 const members = [
   { id: 'f1b1-m-recepcao', businessId: A, userId: 'f1b1-recepcao', role: 'SECRETARIA', permissions: {}, note: 'Recepção', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-michelle', businessId: A, userId: 'f1b1-michelle', role: 'PROFISSIONAL', permissions: {}, note: 'Veterinária', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  // Matriz de permissões (A4-PERM): papéis SEM agenda e override explícito (agenda:false) — todos devem ser recusados.
+  { id: 'f1b1-m-visualizador', businessId: A, userId: 'f1b1-visualizador', role: 'VIEWER', permissions: {}, note: 'Visualizador', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-admin', businessId: A, userId: 'f1b1-admin', role: 'ADMIN', permissions: {}, note: 'Administrador', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-vendedor', businessId: A, userId: 'f1b1-vendedor', role: 'VENDEDOR', permissions: {}, note: 'Vendedor', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-semagenda', businessId: A, userId: 'f1b1-semagenda', role: 'SECRETARIA', permissions: { agenda: false }, note: 'Recepção sem agenda', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-odonto', businessId: OD, userId: 'f1b1-odonto', role: 'PROFISSIONAL', permissions: {}, note: 'Dentista', invitedBy: 'f1b1-odonto', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-estetica', businessId: ES, userId: 'f1b1-estetica', role: 'PROFISSIONAL', permissions: {}, note: 'Esteticista', invitedBy: 'f1b1-estetica', active: true, createdAt: now, updatedAt: now },
 ];
