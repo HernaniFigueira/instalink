@@ -82,9 +82,10 @@ describe('GoDoutor UI contract v2 · visual primitives', () => {
   it('uses neutral panels, compact radius tokens, and flat workspace surfaces', () => {
     // Escala compacta na FONTE ÚNICA; globals só aliasa.
     expect(rawToken('--gd-radius-xs')).toBe('4px');
-    expect(rawToken('--gd-radius-sm')).toBe('8px');
+    // Geometria Nova (PR #69): controles 6/8, cards e dialogs 12; pill só em badge.
+    expect(rawToken('--gd-radius-sm')).toBe('6px');
     expect(rawToken('--gd-radius-md')).toBe('8px');
-    for (const tok of ['lg', 'xl', '2xl']) expect(rawToken(`--gd-radius-${tok}`), tok).toBe('8px');
+    for (const tok of ['lg', 'xl', '2xl']) expect(rawToken(`--gd-radius-${tok}`), tok).toBe('12px');
     expect(rawToken('--radius-xs')).toBe('var(--gd-radius-xs)');
     expect(rawToken('--workspace-bg')).toBe('var(--gd-bg-app)');
     expect(css).toMatch(/\.ws-panel\s*\{[^}]*box-shadow: none/);
