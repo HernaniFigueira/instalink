@@ -35,7 +35,7 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, DatePicker, Select, SelectMenu, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
@@ -377,6 +377,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           type="button"
           ref={(el) => { if (el) eventRefs.current.set(b.id, el); else eventRefs.current.delete(b.id); }}
           aria-label={b.label}
+          data-booking-id={b.id}
           /* SEM tooltip nativo: o resumo do evento é o HoverCard (item 3A) —
              o `title` do navegador era o que aparecia em vez dele. */
           draggable={false}
@@ -572,6 +573,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
 
 // Chip de filtro do popover — ativo usa a cor de AÇÃO (tokens), não cor de
 // estado: filtrar não é status.
+/** Visões da agenda (um único seletor). `month` reaproveita a grade e o intervalo já existentes. */
+const AGENDA_VIEW_OPTIONS: Array<{ value: View; label: string }> = [
+  { value: 'day', label: 'Dia' },
+  { value: 'week', label: 'Semana' },
+  { value: 'month', label: 'Mês' },
+  { value: 'list', label: 'Lista' },
+];
+
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active} className="il-chip">
@@ -2091,26 +2100,31 @@ export default function AgendaPage() {
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
           <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
-            {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
-                saiu da UI — a lógica do modo mês segue intacta para links
-                diretos com view=month; nada foi destruído). */}
-                        <Segmented
-              items={[
-                { id: 'day' as View, label: 'Dia', icon: 'calendar' },
-                { id: 'week' as View, label: 'Semana', icon: 'grid' },
-                { id: 'list' as View, label: 'Lista', icon: 'tasks' },
-              ]}
+            {/* E3 · UM seletor de visualização (Dia · Semana · Mês · Lista) no
+                SelectMenu canônico — listbox não nativo, teclado completo
+                (↑/↓, Home/End, Enter, Escape devolve o foco ao gatilho). */}
+            <SelectMenu
+              aria-label="Visualização da agenda"
+              className="ag-view-select w-full sm:w-[150px]"
               value={view}
-              onChange={(v) => { endDrag(); setView(v); }}
-              ariaLabel="Visualização da agenda"
+              options={AGENDA_VIEW_OPTIONS}
+              onChange={(v) => { endDrag(); setView(v as View); }}
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
             {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
                 segmentado. Desktop mantém o rótulo visível. */}
-            <Button variant="secondary" className="ag-toolbar__block w-full sm:w-auto" aria-label="Bloquear horário" aria-pressed={blockMode} title="Bloquear horário" onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>
-              <Icon n="lock" size={15} /><span className="ag-toolbar__label">Bloquear horário</span>
-            </Button>
+            {/* E3 · Bloquear horário vira ÍCONE (cadeado) com tooltip e nome
+                acessível — o rótulo longo saiu da toolbar. */}
+            <IconButton
+              icon="lock"
+              label="Bloquear horário"
+              tip="Bloquear horário"
+              variant="secondary"
+              aria-pressed={blockMode}
+              className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
+              onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
+            />
             <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
               <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>
@@ -2179,34 +2193,73 @@ export default function AgendaPage() {
           </button>)}
         </section>
       ) : view === 'month' ? (
-        <div className="ag-mode-scroll ag-grid-surface overflow-hidden p-2">
+        // E3 · MÊS FUNCIONAL: a MESMA fonte (`bookings`, já filtrada pelo escopo do
+        // servidor e pelos filtros) e o MESMO intervalo `range` (grade de 6 semanas).
+        // Cada agendamento abre o detalhe da agenda; o número do dia leva ao Dia.
+        <div className="ag-mode-scroll ag-grid-surface overflow-hidden p-2" data-agenda-view="month">
           <div className="grid grid-cols-7 gap-px mb-1">
             {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
-              <span key={d} className="text-[10px] font-semibold tracking-wider uppercase text-zinc-400 text-center py-1">{d}</span>
+              <span key={d} className="text-[10px] font-semibold tracking-wider uppercase text-[var(--text-muted)] text-center py-1">{d}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-px bg-zinc-200 border border-zinc-200">
+          <div className="grid grid-cols-7 gap-px bg-[var(--border)] border border-[var(--border)] rounded-[var(--radius-md)] overflow-hidden">
             {Array.from({ length: 42 }, (_, i) => addDaysISO(range.from, i)).map((d) => {
               const list = bookings
                 .filter((b) => b.date === d && b.status !== 'cancelled')
                 .filter((b) => !statusFilter || b.status === statusFilter)
                 .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
-                .filter((b) => !proFilter || b.professionalId === proFilter);
+                .filter((b) => !proFilter || b.professionalId === proFilter)
+                .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
               const pend = list.filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
+              const isToday = d === today;
+              const shown = list.slice(0, 3);
               return (
-                <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
-                  <span className="flex items-center justify-between">
-                    <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
-                    {pend > 0 && <span className="text-[9px] font-semibold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
-                  </span>
-                  {list.length > 0 && (
-                    <>
-                      <span className="block text-[10px] font-medium text-zinc-600 mt-1">{list.length} · {list.slice(0, 2).map((b) => b.time).join(', ')}</span>
-                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${bookingDotCls(b.status)}`} />)}</span>
-                    </>
+                <div
+                  key={d}
+                  data-month-day={d}
+                  className={`flex flex-col gap-0.5 p-1.5 min-h-[104px] min-w-0 bg-[var(--surface)] ${!inMonth ? 'bg-[var(--surface-subtle)] text-[var(--text-faint)]' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPresentation({ data: d, view: 'day' })}
+                      aria-label={`Abrir o dia ${formatDateBR(d)}`}
+                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-fg)] ${isToday ? 'bg-[var(--brand-fg)] text-white' : inMonth ? 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]' : 'text-[var(--text-faint)]'}`}
+                    >
+                      {Number(d.slice(8, 10))}
+                    </button>
+                    {pend > 0 && (
+                      <span className="rounded-full bg-[var(--warning-bg)] px-1.5 text-[10px] font-semibold text-[var(--warning-fg)]" title={`${pend} pendente${pend > 1 ? 's' : ''} de registro`} aria-label={`${pend} pendente${pend > 1 ? 's' : ''} de registro`}>{pend}</span>
+                    )}
+                  </div>
+                  {shown.map((b) => {
+                    const svc = serviceOf(b.serviceId)?.name || 'Serviço';
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={(e) => { detailTriggerRef.current = e.currentTarget as HTMLElement; setEditBooking(null); setDetailReschedule(false); setDetail(b); }}
+                        aria-label={`${b.time} · ${b.customerName} · ${svc}`}
+                        title={`${b.time} · ${b.customerName} · ${svc}`}
+                        className="flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand-fg)]"
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bookingDotCls(b.status)}`} aria-hidden="true" />
+                        <span className="shrink-0 tabular-nums font-semibold">{b.time}</span>
+                        <span className="min-w-0 truncate">{b.customerName}</span>
+                      </button>
+                    );
+                  })}
+                  {list.length > shown.length && (
+                    <button
+                      type="button"
+                      onClick={() => setPresentation({ data: d, view: 'day' })}
+                      className="px-1 text-left text-[11px] font-semibold text-[var(--brand-fg)] hover:underline"
+                    >
+                      +{list.length - shown.length} mais
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

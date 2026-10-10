@@ -221,6 +221,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
   // pessoa errada quando há contato e cliente com o mesmo nome.
   const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
+  // E3 · "Ver na agenda" abre o DIA e o profissional do próprio evento (nunca hoje por omissão).
+  const agendaHrefFor = (bk?: { date: string; professionalId?: string } | null) => {
+    if (!bk) return `/agenda?b=${encodeURIComponent(businessId)}`;
+    const pro = bk.professionalId ? `&professionalId=${encodeURIComponent(bk.professionalId)}` : '';
+    return `/agenda?b=${encodeURIComponent(businessId)}&view=day&data=${bk.date}${pro}`;
+  };
   // Dois destinos, um só domínio:
   //   • agendamento (`bookingId`)  → resolvedor → workspace canônico F1A;
   //   • registro JÁ EXISTENTE (`id`) → registro completo (legado), que é onde
@@ -343,7 +349,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         title: b.service,
         subtitle: [b.seriesId ? `Série · ${b.seriesIndex} de ${b.seriesCount}` : '', b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone,
-        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={10} /></Link>,
+        body: <Link href={agendaHrefFor(b)} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={10} /></Link>,
       });
     }
     for (const c of person.conversations || []) {
@@ -399,7 +405,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         body: (
           <div className="flex flex-wrap gap-1.5">
             {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
-            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
+            {t.bookingId && <Link href={agendaHrefFor(person.bookings.find((x) => x.id === t.bookingId))} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
           </div>
         ),
       });
@@ -480,7 +486,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const nextBooking = useMemo(
     () => [...person.bookings]
       .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
-      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null,
+      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? -1 : 1))[0] || null,
     [person.bookings, today],
   );
   const lastEncounter = encounters[0] || null; // a API devolve mais recente primeiro
@@ -911,7 +917,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <>
                       <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
                       <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
-                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
+                      <Link href={agendaHrefFor(nextBooking)} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
                 </div>
@@ -1065,7 +1071,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </p>
                         </div>
                         <StatusBadge tone={d.tone}>{d.panel}</StatusBadge>
-                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
+                        <Link href={agendaHrefFor(b)} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                       </li>
                     );
                   })}

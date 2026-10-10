@@ -435,3 +435,16 @@ Cada fase = PR pequena, segura e cumulativa; nada de reescrita.
   auditoria de grants no alvo — a auditoria de 2026-09-28 que abriu o gap da
   `godoutor_internal` é justamente a verificação pós-aplicação que motivou a
   `0003`, esta ainda **pendente**).
+
+## 10. Jornada operacional end-to-end (Entrega 3)
+
+Validada em navegador real, com dados sintéticos isolados (`scripts/seed-entrega3-qa.mjs` + `tests/uiux-entrega3/`):
+
+1. **Recepção:** Agenda em data futura → criar agendamento (tutora, pet, serviço, profissional) → abrir detalhe → registrar chegada. A chegada grava `checkedInAt`; o `BookingStatus` não muda por ela.
+2. **Profissional:** login real → dashboard ("Meu dia · agora") → paciente que chegou → iniciar atendimento (timer a partir de `startedAt` do servidor) → autosave contínuo → Anamnese, Avaliação, Problemas, Conduta e Procedimentos → reload preserva o conteúdo → finalizar (exige queixa principal) → leitura somente → Registro completo → switcher → Agenda (mesma data/visão/profissional) → Cliente 360 com o atendimento na história correta.
+3. **Segunda jornada:** Cliente 360 → Atendimento → Registro → "Voltar para [Cliente]" (`returnTo` validado, nome do cliente, sem passar pela Agenda).
+4. **Dashboard → Agenda:** "Ver na agenda" abre a data, a visão Dia e o profissional do próprio atendimento, inclusive quando é futuro.
+
+Regras preservadas: Clinical Access não muda por causa de UI; check-in não altera BookingStatus; finalizado é somente leitura (exceto adendo append-only); disponibilidade e conflito 409 seguem o motor atual.
+
+**Dívidas conhecidas (fora do escopo da Entrega 3):** abas internas do Pet 360 com rolagem horizontal em 1024px; timer sem fuso horário persistido por clínica (o cálculo usa o fuso efetivo do negócio, mas a regra não é gravada por clínica).

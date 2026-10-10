@@ -225,10 +225,11 @@ describe('5 · toolbar da Agenda com UMA métrica', () => {
   it('todos os controles da linha de ações usam o nível MD (sem size="sm")', () => {
     const line2 = agenda.slice(agenda.indexOf('LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL'), agenda.indexOf('{isDragging && view !== \'month\''));
     expect(line2).not.toMatch(/size="sm"/);
-    expect(line2).toContain('<Button variant="secondary"');   // Hoje
+    expect(line2).toMatch(/<Button\s+variant="secondary"/);      // Hoje
     expect(line2).toContain('<IconButton icon="chevL"');       // setas (quadradas MD)
     expect(line2).toContain('<DatePicker');
-    expect(line2).toContain('<Segmented');
+    expect(line2).toContain('<SelectMenu');                       // seletor único Dia/Semana/Mês/Lista (E3)
+    expect(line2).toContain('icon="lock"');                      // Bloquear horário = cadeado (E3)
     expect(line2).toContain('Novo agendamento');
   });
 
