@@ -469,6 +469,22 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     }
   }
 
+  /* Contexto já determinado (slot da Agenda / pré-preenchimento) vai para o
+     cabeçalho como uma linha compacta: profissional · data · hora. */
+  const ctxProName = pros.find((p) => p.id === activeProId)?.name;
+  const ctxDateBR = date ? date.split('-').reverse().join('/') : '';
+  const ctxSubtitle = [ctxProName, ctxDateBR, time].filter(Boolean).join(' · ') || undefined;
+  /* Rodapé do diálogo: Cancelar (secundário) · Criar agendamento (primário). */
+  const createDisabled = saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')));
+  const footerActions = created ? undefined : (
+    <>
+      <Button type="button" variant="secondary" onClick={() => { if (!saving && !reviewing) onClose(); }} disabled={saving || reviewing}>Cancelar</Button>
+      <Button type="button" variant="primary" onClick={() => save()} disabled={createDisabled}>
+        {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Criar agendamento'}
+      </Button>
+    </>
+  );
+
   return (
     <Drawer
       open
@@ -485,6 +501,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
+      subtitle={registerOpen ? undefined : ctxSubtitle}
+      footer={registerOpen ? undefined : footerActions}
       width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
@@ -541,7 +559,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               em vez de parágrafo permanente sob o campo (§13). */}
           <div data-field="client">
             <span className="mb-1.5 flex items-center gap-1.5">
-              <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+              <span className="gd-t-label text-[var(--text)]">Cliente <span className="text-[var(--danger)]">*</span></span>
               {errorField === 'client' && error && <span role="alert" className="ml-auto text-xs font-medium text-[var(--danger)]">{error}</span>}
               {!picked && (
                 <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
@@ -628,7 +646,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <div data-field="service"><Field label="2. Serviço" required error={errorField === 'service' ? error : undefined}>
+          <div data-field="service"><Field label="Serviço" required error={errorField === 'service' ? error : undefined}>
             {/* CP3 · Combobox do DS (busca + teclado), no lugar do select nativo. */}
             <Combobox
               label="Serviço"
@@ -648,8 +666,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
 
 
+          {/* Contexto compacto: profissional e data lado a lado (sem três campos
+              burocráticos empilhados). */}
+          <div className={(eligiblePros.length > 0 || incompatiblePro) ? 'grid grid-cols-2 items-start gap-3' : undefined}>
           {(eligiblePros.length > 0 || incompatiblePro) && (
-            <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
+            <Field label="Profissional" hint="Em branco: a agenda equilibra a equipe">
               <Combobox
                 label="Profissional"
                 placeholder="Buscar profissional…"
@@ -666,16 +687,17 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </Field>
           )}
 
-          {proIssue && error !== proIssue && <Notice tone="warning">{proIssue}</Notice>}
-          <div data-field="date"><Field label="3. Data" required error={errorField === 'date' ? error : undefined}>
+          <div data-field="date"><Field label="Data" required error={errorField === 'date' ? error : undefined}>
             {/* CP3 · DatePicker do DS: o input date nativo não é mais usado no produto. */}
             <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => setDate(iso)} />
           </Field></div>
+          </div>
+          {proIssue && error !== proIssue && <Notice tone="warning">{proIssue}</Notice>}
 
           {slotIssue && error !== slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
           {date && serviceId && !proIssue && (!rangeIntent || editingTime) && (
             <div data-field="time">
-              <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
+              <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Horário <span className="text-[var(--danger)]">*</span></span>
               {errorField === 'time' && error && <p role="alert" className="-mt-1 mb-1.5 text-xs font-medium text-[var(--danger)]">{error}</p>}
               {loadingSlots ? (
                 <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
@@ -720,7 +742,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               fechada). O `<details>`+`<summary>` com chevron próprio desenhava
               um segundo padrão de abrir/fechar; agora é o `Disclosure` do DS,
               controlado pelo mesmo estado que decide o conteúdo. */}
-          <Disclosure label="Opções avançadas" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
+          <Disclosure label="Mais opções" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
             <div className="space-y-3 p-3">
           <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin ? durationLabel(service.durationMin) : '—'}; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
@@ -801,15 +823,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
             </div>
           </Disclosure>
-          {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
-            <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
-          </section>}
           {error && !errorField && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
-          <Button type="button" variant="primary" size="lg" onClick={() => save()}
-            disabled={saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
-            className="w-full">
-            {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}
-          </Button>
         </div>
       )}
         </div>

@@ -529,33 +529,38 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                  "Editar" (modal central) e "Ver detalhes" (painel lateral),
                  com camadas exclusivas. Nada de tooltip nativo ou card fixo. */
               <div className="ag-hover__card">
+                {/* Composição CE: cabeçalho com ícone + data forte; pessoa com avatar;
+                    linhas com ícone (status, profissional, serviço, observação);
+                    rodapé com Editar (contorno) e Ver detalhes (sólido). */}
                 <div className="ag-hover__head">
-                  <span className="ag-hover__heading"><Icon n="calendar" size={16} className="ag-hover__heading-ico" />Agendamento</span>
-                  <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
+                  <span aria-hidden="true" className="ag-hover__tile"><Icon n="calendar" size={16} /></span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="ag-hover__heading">Agendamento</h3>
+                    <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
+                  </div>
                 </div>
-                <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
-                {/* Leitura por ÍCONE + valor (não grade rótulo→valor): paciente
-                    e tutor, profissional, serviço e observação. O rótulo vira
-                    texto de apoio ou sr-only; o valor é a informação forte. */}
-                <dl className="ag-hover__rows">
+                <div className="ag-hover__person">
+                  <Avatar name={b.petName || b.customerName || '?'} size={36} />
+                  <div className="min-w-0">
+                    <p className="ag-hover__value">{b.petName || b.customerName}</p>
+                    {b.petName && <p className="ag-hover__sub">Tutor · {b.customerName}</p>}
+                  </div>
+                </div>
+                <div className="ag-hover__rows">
                   <div>
-                    <dt className="ag-hover__ico"><Icon n={b.petName ? 'paw' : 'user'} size={15} /><span className="sr-only">{b.petName ? 'Paciente' : 'Tutor'}</span></dt>
-                    <dd><span className="ag-hover__value">{b.petName || b.customerName}</span>{b.petName && <span className="ag-hover__sub">Tutor · {b.customerName}</span>}</dd>
+                    <span className="ag-hover__ico" aria-hidden="true"><span className={`ag-hover__dot ${b.dot}`} /></span>
+                    <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
                   </div>
                   {b.pro && (
-                    <div>
-                      <dt className="ag-hover__ico"><Icon n="userCircle" size={15} /><span className="sr-only">Profissional</span></dt>
-                      <dd><span className="ag-hover__value">{b.pro}</span></dd>
-                    </div>
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="userCircle" size={15} /></span><span>{b.pro}</span></div>
                   )}
                   {b.service && (
-                    <div>
-                      <dt className="ag-hover__ico"><Icon n="service" size={15} /><span className="sr-only">Serviço</span></dt>
-                      <dd><span className="ag-hover__value">{b.service}</span></dd>
-                    </div>
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="service" size={15} /></span><span>{b.service}</span></div>
                   )}
-                </dl>
-                {b.observation && <p className="ag-hover__observation"><Icon n="chat" size={14} className="ag-hover__obs-ico" /><span>{b.observation}</span></p>}
+                  {b.observation && (
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="chat" size={15} /></span><span className="ag-hover__obs">{b.observation}</span></div>
+                  )}
+                </div>
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">

@@ -284,9 +284,9 @@ describe('CTA, Filtros e Fila continuam abrindo os fluxos existentes', () => {
     const texto = dialog.textContent || '';
     expect(texto).not.toContain('Paciente → serviço → data e horário');
     // A sequência continua legível nos rótulos numerados do formulário.
-    expect(texto).toContain('1. Cliente');
-    expect(texto).toContain('2. Serviço');
-    expect(texto).toContain('3. Data');
+    expect(texto).toContain('Cliente');
+    expect(texto).toContain('Serviço');
+    expect(texto).toContain('Data');
   });
 
   it('10. Filtros continua abrindo (popover com Status · Serviços · Profissional)', async () => {

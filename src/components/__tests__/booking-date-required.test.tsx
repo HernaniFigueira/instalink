@@ -52,7 +52,7 @@ describe('Novo agendamento · data obrigatória no submit', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar agendamento' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Criar agendamento' }));
 
     expect(await within(dialog).findByText('Escolha a data deste atendimento.')).toBeTruthy();
     expect(apiSend).not.toHaveBeenCalled();

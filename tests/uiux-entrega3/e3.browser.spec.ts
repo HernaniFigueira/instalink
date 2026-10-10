@@ -161,7 +161,7 @@ test.describe('Entrega 3 · E2E A — Recepção', () => {
     await slotBtn.click();
     await shot(page, 'quick-create-1440');
     const created = page.waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST', { timeout: 30000 });
-    await sheet.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+    await sheet.getByRole('button', { name: 'Criar agendamento', exact: true }).click();
     const createdRes = await created;
     expect(createdRes.ok()).toBeTruthy();
     // ID real do booking criado PELA UI + o que a UI enviou (pet e profissional escolhidos).

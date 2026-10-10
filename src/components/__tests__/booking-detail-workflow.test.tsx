@@ -25,7 +25,8 @@ vi.mock('@/components/ui', () => ({
   StatusBadge: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   buttonCls: () => 'button',
-  DetailSideModal: ({ children }: any) => <section data-testid="detail-modal">{children}</section>,
+  DetailSideModal: ({ children, footer }: any) => <section data-testid="detail-modal">{children}{footer}</section>,
+  Avatar: ({ name }: any) => <span aria-hidden="true">{name}</span>,
 }));
 
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';

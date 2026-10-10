@@ -43,10 +43,10 @@ try {
  // Save the selected four-hour appointment through the real clinical UI.
  await range(p);await p.getByRole('searchbox',{name:'Buscar cliente'}).fill('Ana');
  await p.getByRole('button',{name:/Ana Tutora QA/}).click();
- await p.getByLabel('2. Serviço',{exact:false}).selectOption('svc-consulta');
+ await p.getByLabel('Serviço',{exact:false}).selectOption('svc-consulta');
  await p.getByLabel('Pet (paciente)',{exact:false}).selectOption('qa-pet');
  await p.getByRole('button',{name:'09:00',exact:true}).waitFor();
- await p.getByRole('button',{name:'Salvar agendamento',exact:true}).click();
+ await p.getByRole('button',{name:'Criar agendamento',exact:true}).click();
  await p.locator('[data-booking-created="true"]').waitFor();
  assert.equal(await p.getByTestId('agenda-selected-range').count(),0);
  const bookings=await p.evaluate(async url => { const r=await fetch(url); if(!r.ok)throw Error(`QA API ${r.status}`); return r.json(); }, `/api/bookings?mode=manage&businessId=${b}&from=${date}&to=${date}`);

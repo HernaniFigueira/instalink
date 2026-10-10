@@ -213,7 +213,7 @@ describe('P0.2 · hover da Agenda é RESUMO colado no evento (não painel)', () 
     expect(card).toContain('width: 100%');
     expect(card).toContain('max-width: 100%');
     expect(card).toContain('padding: var(--gd-space-4)');
-    expect(card).toContain('gap: var(--gd-space-2)');
+    expect(card).toContain('gap: var(--gd-space-3)');
     expect(ruleBody('.ag-hover__heading {')).toContain('font-size: var(--gd-type-section-size)');
     expect(ruleBody('.ag-hover__rows > div {')).toContain('font-size: var(--gd-type-body-size)');
     expect(read('src/app/(dashboard)/agenda/page.tsx')).toContain('className="text-[12px]">{b.statusLabel}</StatusBadge>');
