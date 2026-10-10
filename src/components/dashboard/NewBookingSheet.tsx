@@ -494,8 +494,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
          confortável (672px; criação rápida vinda do slot fica mais compacta) e
          o par 50/50 preservado quando o cadastro de paciente abre no MESMO
          overlay. Regras de agenda, guardas de descarte e presets: intactos. */
-      variant="dialog"
-      dialogWidth={quick && !advanced ? '560px' : '672px'}
+      /* Contrato de superfície: criação COMPLETA = painel lateral canônico
+         (variant padrão "side"). O Quick Create é o popover ancorado ao slot;
+         "Mais opções" leva o mesmo contexto para cá, sem recomeçar o fluxo. */
       dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
@@ -503,7 +504,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
       title="Novo agendamento"
       subtitle={registerOpen ? undefined : ctxSubtitle}
       footer={registerOpen ? undefined : footerActions}
-      width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
+      width={WORKSPACE_SHEET_SIZES.standard}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (

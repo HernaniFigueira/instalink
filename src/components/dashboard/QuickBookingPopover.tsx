@@ -243,9 +243,18 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
         <div className="flex items-start justify-between gap-2 pb-2.5">
           <div className="min-w-0">
             <p className="gd-ovl__title">Novo agendamento</p>
-            <p className="mt-0.5 truncate text-[12px] tabular-nums text-[var(--gd-text-muted)]">
-              {formatDayLabel(date)} · {time || 'escolha o horário'}{professionalId ? ` · ${pros.find((p) => p.id === professionalId)?.name ?? ''}` : ''}
-            </p>
+            {/* Contexto já conhecido (slot) em chips compactos: lido, não perguntado de novo. */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-quick-context>
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium tabular-nums text-[var(--gd-text)]">
+                <Icon n="calendar" size={12} className="text-[var(--gd-text-muted)]" />{formatDayLabel(date)}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium tabular-nums text-[var(--gd-text)]">
+                <Icon n="clock" size={12} className="text-[var(--gd-text-muted)]" />{time || 'horário'}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-0.5 text-[12px] font-medium text-[var(--gd-text)]">
+                <Icon n="userCircle" size={12} className="text-[var(--gd-text-muted)]" />{professionalId ? (pros.find((p) => p.id === professionalId)?.name ?? 'Profissional') : 'Automático'}
+              </span>
+            </div>
           </div>
           <IconButton type="button" icon="x" label="Fechar criação rápida" onClick={onClose} />
         </div>
@@ -385,10 +394,16 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
 
         {/* RODAPÉ — uma ação primária; "Mais opções" é o caminho secundário. */}
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--gd-border-soft)] pt-2.5">
-          <Button variant="ghost" disabled={saving} onClick={() => onMore(seedIntent())}>Mais opções</Button>
-          <Button disabled={saving || !!pastIssue} onClick={() => void create()}>
-            {saving ? 'Criando…' : 'Criar agendamento'}
+          {/* Tertiary com ícone: caminho para o painel completo, com a intenção preservada. */}
+          <Button variant="ghost" disabled={saving} onClick={() => onMore(seedIntent())}>
+            Mais opções <Icon n="chevR" size={12} />
           </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" disabled={saving} onClick={onClose}>Cancelar</Button>
+            <Button disabled={saving || !!pastIssue} onClick={() => void create()}>
+              {saving ? 'Agendando…' : 'Agendar'}
+            </Button>
+          </div>
         </div>
         {time && (
           <p className="mt-1.5 text-right text-[11px] tabular-nums text-[var(--gd-text-faint)]">

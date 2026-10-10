@@ -43,7 +43,7 @@
   --gd-text-on-accent: #ffffff;
 
   /* ── COLOR · bordas ───────────────────────────────────────────────────── */
-  --gd-border: #e2e8f0;          /* borda estrutural/divisória sutil */
+  --gd-border: #c5cfdc;          /* hairline estrutural: visível (1.6:1 no branco), nunca some */
   --gd-border-soft: #eef2f6;     /* divisória interna */
   --gd-border-2: #dbe3ec;        /* degrau intermediário */
   --gd-border-strong: #7d8ca3;   /* borda de CONTROLE (input/botão) — 3:1 */

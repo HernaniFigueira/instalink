@@ -99,8 +99,8 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     // passa a ser o token do dialog (`--gd-booking-modal-w` / --il-dialog-w),
     // não mais o preset de faixa lateral; a faixa continua existindo para
     // superfícies de trabalho longas.
-    expect(dialog.className).toContain('il-drawer--dialog');
-    expect(dialog.getAttribute('style') || '').toContain('--il-dialog-w: 672px');
+    expect(dialog.className).not.toContain('il-drawer--dialog'); // painel lateral canônico
+    expect(dialog.getAttribute('style') || '').not.toContain('--il-dialog-w'); // sem geometria de diálogo central
     expect(document.querySelector('.il-drawer__strip')?.className).toContain('w-full');
     // A reserva de largura do modal está declarada como token no DS (uma fonte).
     const dsTokens = readFileSync(path.join(process.cwd(), 'src/styles/godoutor-design-system.css'), 'utf8');

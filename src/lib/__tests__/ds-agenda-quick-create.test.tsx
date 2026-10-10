@@ -278,7 +278,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     await clickSlot('10:00');
     const layer = quick();
     await pickQuick(layer, 'Serviço', 'svc-1');
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     expect(await within(layer).findByText(/Escolha um paciente já cadastrado/)).toBeTruthy();
     expect(net.posts).toHaveLength(0);
@@ -287,7 +287,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     const hit = await within(layer).findByRole('button', { name: /Ana Tutora/ });
     fireEvent.click(hit);
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     await waitFor(() => expect(net.posts).toHaveLength(1));
     expect(net.posts[0]).toMatchObject({
@@ -311,7 +311,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     fireEvent.click(await within(layer).findByRole('button', { name: /Ana Tutora/ }));
     await pickQuick(layer, 'Serviço', 'svc-1');
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     expect(await within(layer).findByText('Este horário já está ocupado.')).toBeTruthy();
     expect(document.querySelector('[data-booking-created="true"]')).toBeNull();

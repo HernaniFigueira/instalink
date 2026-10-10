@@ -305,7 +305,7 @@ body {
   gap: 2px;
   padding: 3px;
   background: var(--surface-3);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
 .il-tab {
@@ -325,8 +325,8 @@ body {
 .il-tab[aria-selected='true'] {
   background: var(--surface);
   color: var(--accent);
-  box-shadow: none;
-  outline: 1px solid var(--border-soft);
+  box-shadow: 0 1px 2px rgba(20, 16, 13, 0.10);
+  outline: 1px solid var(--border-strong);
 }
 .il-tab:disabled { opacity: 0.45; pointer-events: none; }
 
@@ -2638,9 +2638,10 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   margin: 0; font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line);
   font-weight: var(--gd-weight-semibold); color: var(--gd-text-strong);
 }
+/* Data/hora é a leitura forte do hover (REF-CE-01): 14/600, cor de título. */
 .ag-hover__date {
-  margin: 2px 0 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
-  font-weight: var(--gd-weight-medium); color: var(--gd-text);
+  margin: 2px 0 0; font-size: 14px; line-height: 20px;
+  font-weight: var(--gd-weight-semibold); color: var(--gd-text-strong);
 }
 .ag-hover__person {
   display: flex; align-items: center; gap: var(--gd-space-3);
