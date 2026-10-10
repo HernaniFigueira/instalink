@@ -394,11 +394,12 @@ export default function DashboardPage() {
 
   /** Linha de lista: com permissão vira link (linha inteira clicável, com
       indicação visual); sem permissão vira texto — nunca um 403 à toa. */
-  function ListRow({ href, allowed, className, children, style }: {
-    href: string; allowed: boolean; className: string; children: React.ReactNode; style?: React.CSSProperties;
+  function ListRow({ href, allowed, className, children, style, bookingId }: {
+    href: string; allowed: boolean; className: string; children: React.ReactNode; style?: React.CSSProperties; bookingId?: string;
   }) {
-    if (!allowed) return <div className={className} style={style}>{children}</div>;
-    return <Link href={href} style={style} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
+    // data-booking-id: identidade estável do atendimento (testes/E2E); não muda comportamento.
+    if (!allowed) return <div className={className} style={style} data-booking-id={bookingId}>{children}</div>;
+    return <Link href={href} style={style} data-booking-id={bookingId} className={`${className} hover:bg-zinc-50 transition-colors`}>{children}</Link>;
   }
 
   // 6 · ONDE AGIR — só ações que EXISTEM: checklist real + conectar canal.
@@ -816,7 +817,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-1.5">
                   {upcoming.slice(0, 5).map((b) => (
-                    <ListRow key={b.id} allowed={links.agenda === true} href={agendaHrefFor(b.date, b.professionalId)}
+                    <ListRow key={b.id} bookingId={b.id} allowed={links.agenda === true} href={agendaHrefFor(b.date, b.professionalId)}
                       className="flex flex-col items-stretch gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-[12.5px]"
                       style={{ borderLeft: `3px solid ${STATUS_BAR[b.status] || 'var(--border-strong)'}` }}>
                       <strong className="min-w-0 font-semibold leading-snug text-[var(--text)] break-words">{b.customerName}</strong>

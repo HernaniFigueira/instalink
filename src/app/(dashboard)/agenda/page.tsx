@@ -377,6 +377,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           type="button"
           ref={(el) => { if (el) eventRefs.current.set(b.id, el); else eventRefs.current.delete(b.id); }}
           aria-label={b.label}
+          data-booking-id={b.id}
           /* SEM tooltip nativo: o resumo do evento é o HoverCard (item 3A) —
              o `title` do navegador era o que aparecia em vez dele. */
           draggable={false}

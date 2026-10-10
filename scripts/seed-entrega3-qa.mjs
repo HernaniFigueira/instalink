@@ -86,40 +86,18 @@ const lunaId = luna.pet?.id || luna.id;
 const mel = await api('/api/pets', { businessId: b, action: 'create', tutorId: carolinaId, pet: { name: 'Mel', species: 'cachorro', breed: 'Vira-lata', sex: 'F', birthDate: '2020-01-10', weightKg: 12.8, notes: '' } });
 const melId = mel.pet?.id || mel.id;
 
-// Atendimento FUTURO já existente (Michele · Thor · +9 dias às 10:00): alvo do
-// teste Dashboard → "Ver na agenda" (a data PRECISA ser a do evento).
+// Booking FUTURO ISOLADO para o teste Dashboard → \"Ver na agenda\" (Michele · Thor,
+// +9 dias às 10:00). Identificado como `dashboardFutureBookingId` e SEM check-in: não
+// satisfaz o E2E principal, que usa APENAS o booking criado pela Recepção na UI
+// (tests/uiux-entrega3/e3.browser.spec.ts → cadeia E2E A → E2E B por bookingId).
 const today = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10); // dia local (UTC-3)
 const plusDays = (n) => new Date(Date.parse(`${today}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 const futureDate = plusDays(9);
-const futureBooking = await api('/api/bookings', {
+const dashboardFuture = await api('/api/bookings', {
   businessId: b, asOwner: true, serviceId, date: futureDate, time: '10:00', professionalId: micheleId,
   customerName: 'Bernardo Almeida', customerPhone: '21987650011', customerEmail: 'bernardo.almeida@example.invalid',
   contactId: bernardoId, petId: thorId, petName: 'Thor',
 });
-
-// Atendimento de HOJE já com chegada (Michele · Thor): base do cenário B do E2E
-// (profissional abre o paciente que chegou). Antecedência mínima da unidade pode
-// recusar horários muito próximos: avança de 30 em 30 min pela MESMA regra da agenda.
-const nowLocal = new Date(Date.now() - 3 * 3600000);
-const slotAt = (offsetMin) => {
-  const d = new Date(nowLocal.getTime() + offsetMin * 60000);
-  const m = d.getUTCMinutes() < 30 ? '00' : '30';
-  return { date: d.toISOString().slice(0, 10), time: `${String(d.getUTCHours()).padStart(2, '0')}:${m}` };
-};
-let todayBooking = null;
-for (let off = 40; off < 40 + 24 * 60 && !todayBooking; off += 30) {
-  const s2 = slotAt(off);
-  if (s2.date !== today) continue;
-  try {
-    todayBooking = await api('/api/bookings', {
-      businessId: b, asOwner: true, serviceId, date: s2.date, time: s2.time, professionalId: micheleId,
-      customerName: 'Bernardo Almeida', customerPhone: '21987650011', customerEmail: 'bernardo.almeida@example.invalid',
-      contactId: bernardoId, petId: thorId, petName: 'Thor',
-    });
-  } catch (e) { if (!/409|passou/.test(e.message)) throw e; }
-}
-if (!todayBooking) throw Error('Sem horário de hoje livre para o cenário B.');
-await api('/api/bookings', { businessId: b, id: todayBooking.bookingId, action: 'check-in' }, 'PATCH');
 
 await fs.mkdir(path.dirname(file), { recursive: true });
 await fs.writeFile(file, JSON.stringify({
@@ -129,7 +107,6 @@ await fs.writeFile(file, JSON.stringify({
   tutor: { id: bernardoId, name: 'Bernardo Almeida', phone: '21987650011' },
   otherTutor: { id: carolinaId, name: 'Carolina Prado' },
   pets: { thorId, lunaId, melId },
-  today, futureDate, futureBookingId: futureBooking.bookingId,
-  todayBookingId: todayBooking.bookingId, todayBookingTime: todayBooking.time || null,
+  today, futureDate, dashboardFutureBookingId: dashboardFuture.bookingId,
 }, null, 2), { mode: 0o600 });
 console.log('Fixture Entrega 3 pronta:', file);

@@ -41,9 +41,10 @@ test.describe('Entrega 3 · Agenda', () => {
     const errors = noPageErrors(page);
     await login(page, f.owner);
     // Fonte da verdade: o próximo atendimento real que o painel recebe do servidor.
-    const overviewP = page.waitForResponse((r) => r.url().includes('/api/overview') && r.ok(), { timeout: 30000 });
     await page.goto(`/dashboard?b=${f.b}`);
-    const ov = await (await overviewP).json();
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+    // fetch same-origin (cookies do navegador) — mesma fonte que o painel consome.
+    const ov = await page.evaluate(async (bid: string) => (await fetch(`/api/overview?businessId=${bid}`)).json(), f.b);
     const next = ov.upcoming[0];
     expect(next, 'precisa existir próximo atendimento').toBeTruthy();
     const card = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Próximos atendimentos' }) });
@@ -121,9 +122,20 @@ test.describe('Entrega 3 · Agenda', () => {
   });
 });
 
+// Cadeia ÚNICA E2E A → E2E B: o booking criado pela Recepção na UI. O E2E B NÃO escolhe
+// paciente por nome/status: localiza exatamente este bookingId (dashboard e agenda).
+const CHAIN = path.join(os.homedir(), '.cache/e3/e2e-chain.json');
+type Chain = { bookingId: string; date: string; time: string; petId: string; professionalId: string; contactId: string };
+function readChain(): Chain {
+  if (!fs.existsSync(CHAIN)) throw new Error('E2E B exige o booking criado pela Recepção no E2E A (cadeia ausente).');
+  return JSON.parse(fs.readFileSync(CHAIN, 'utf8')) as Chain;
+}
+const bookingEvent = (page: Page, bookingId: string) => page.locator(`[data-booking-id="${bookingId}"]`).first();
+
 test.describe('Entrega 3 · E2E A — Recepção', () => {
   test('agenda → data futura → criar agendamento (tutora, pet, serviço, profissional) → detalhe → check-in', async ({ page }) => {
     const errors = noPageErrors(page);
+    fs.rmSync(CHAIN, { force: true });
     await login(page, f.recepcao);
     await page.goto(`/agenda?b=${f.b}&view=day&data=${f.futureDate}`);
     await expect(page.getByText(BR(f.futureDate)).first()).toBeVisible();
@@ -141,45 +153,83 @@ test.describe('Entrega 3 · E2E A — Recepção', () => {
     await page.getByRole('option', { name: /Consulta clínica/ }).first().click();
     await sheet.getByPlaceholder('Buscar profissional…').fill('Michele');
     await page.getByRole('option', { name: /Michele/ }).first().click();
-    // Horário livre e salvar
-    // Primeiro horário LIVRE da grade (a base de teste persiste entre execuções).
+    // Horário livre (primeiro da grade) e salvar
     const slotBtn = sheet.locator('button[aria-pressed]').filter({ hasText: /^\d{2}:\d{2}$/ }).first();
     await expect(slotBtn).toBeVisible({ timeout: 20000 });
     const slotTime = (await slotBtn.textContent())?.trim() || '';
     expect(slotTime).toMatch(/^\d{2}:\d{2}$/);
     await slotBtn.click();
     await shot(page, 'quick-create-1440');
+    const created = page.waitForResponse((r) => r.url().includes('/api/bookings') && r.request().method() === 'POST', { timeout: 30000 });
     await sheet.getByRole('button', { name: 'Salvar agendamento', exact: true }).click();
+    const createdRes = await created;
+    expect(createdRes.ok()).toBeTruthy();
+    // ID real do booking criado PELA UI + o que a UI enviou (pet e profissional escolhidos).
+    const createdBody = await createdRes.json();
+    const bookingId = String(createdBody.bookingId || createdBody.booking?.id || createdBody.id || '');
+    expect(bookingId).toMatch(/^[\w-]{8,}$/);
+    const sent = createdRes.request().postDataJSON() as Record<string, unknown>;
+    expect(sent.petId).toBe(f.pets.lunaId);
+    expect(sent.professionalId).toBe(f.micheleId);
     await expect(sheet.getByText('Agendamento criado')).toBeVisible({ timeout: 20000 });
     await sheet.locator('button').filter({ hasText: /^Fechar$/ }).last().click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    // Detalhe → check-in (Chegou) sem alterar a leitura de status do agendamento
-    await page.getByRole('button', { name: new RegExp(`^Bernardo Almeida · Consulta clínica · ${BR(f.futureDate)} ${slotTime}`) }).first().click();
+    // Detalhe do PRÓPRIO booking (pelo id) → check-in (Chegou), sem alterar BookingStatus
+    const ev = bookingEvent(page, bookingId);
+    await expect(ev).toBeVisible({ timeout: 20000 });
+    await expect(ev).toHaveAttribute('aria-label', /Bernardo Almeida · Consulta clínica .* · Dra\. Michele Martins/);
+    await ev.click();
     const detail = page.getByRole('dialog').first();
     await expect(detail).toBeVisible();
     await detail.getByRole('button', { name: 'Registrar chegada', exact: true }).click();
     await expect(page.getByText(/Chegada registrada/).first()).toBeVisible({ timeout: 15000 });
+    await expect(bookingEvent(page, bookingId)).toHaveAttribute('aria-label', /cliente já chegou/, { timeout: 15000 });
     await shot(page, 'pos-check-in-1440');
+    fs.mkdirSync(path.dirname(CHAIN), { recursive: true });
+    fs.writeFileSync(CHAIN, JSON.stringify({
+      bookingId, date: f.futureDate, time: slotTime,
+      petId: f.pets.lunaId, professionalId: f.micheleId, contactId: f.tutor.id,
+    } satisfies Chain, null, 2), { mode: 0o600 });
     expect(errors).toEqual([]);
   });
 });
 
-test.describe('Entrega 3 · E2E B — Profissional', () => {
-  test('dashboard → paciente que chegou → atendimento → finalização → Registro → Agenda → Cliente 360', async ({ page }) => {
+test.describe('Entrega 3 · E2E B — Profissional (mesmo booking da Recepção)', () => {
+  test('dashboard → booking criado pela Recepção → atendimento → finalização → Registro → Agenda → Cliente 360', async ({ page }) => {
     const errors = noPageErrors(page);
+    const chain = readChain();
     await login(page, f.michele);
+    // 1) Dashboard: a linha do PRÓPRIO bookingId em "Próximos atendimentos"
     await page.goto(`/dashboard?b=${f.b}`);
-    // "Meu dia · agora": o paciente da chegada (aguardando, ou já em atendimento em re-execuções)
-    const patient = page.locator('[data-flow-group="arrived"], [data-flow-group="in_care"]').filter({ hasText: 'Bernardo Almeida' });
-    await expect(patient.first()).toBeVisible();
+    const upcomingCard = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Próximos atendimentos' }) });
+    await expect(upcomingCard.locator(`[data-booking-id="${chain.bookingId}"]`)).toBeVisible({ timeout: 20000 });
     await shot(page, 'dashboard-profissional-1440');
-    await patient.getByRole('link', { name: /Bernardo Almeida/ }).first().click();
-    await page.waitForURL(/data=/);
-    await page.getByRole('button', { name: /Bernardo Almeida/ }).first().click();
+    await upcomingCard.locator(`[data-booking-id="${chain.bookingId}"]`).click();
+    // 2) Agenda: mesma data e profissional; o MESMO bookingId, já com chegada
+    await page.waitForURL(/data=/, { timeout: 20000 });
+    const agendaUrl = new URL(page.url());
+    expect(agendaUrl.searchParams.get('data')).toBe(chain.date);
+    expect(agendaUrl.searchParams.get('professionalId')).toBe(chain.professionalId);
+    const ev = bookingEvent(page, chain.bookingId);
+    await expect(ev).toBeVisible({ timeout: 20000 });
+    await expect(ev).toHaveAttribute('aria-label', /cliente já chegou/);
+    await ev.click();
     const detail = page.getByRole('dialog').first();
     await detail.getByRole('button', { name: /^(Iniciar atendimento|Retomar atendimento|Ver atendimento)$/ }).click();
     await page.waitForURL(/\/atendimento\//, { timeout: 30000 });
     const encounterUrl = page.url();
+    const encounterId = new URL(encounterUrl).pathname.split('/')[2];
+    // 3) Vínculo PROVADO pelo servidor: encounter → mesmo booking, tutor, pet e profissional
+    const got = await page.evaluate(async (u: string) => {
+      const r = await fetch(u);
+      return { status: r.status, body: await r.json() };
+    }, `/api/encounters?businessId=${f.b}&id=${encounterId}`);
+    expect(got.status).toBe(200);
+    const enc = got.body.encounter ?? got.body;
+    expect(enc.bookingId).toBe(chain.bookingId);
+    expect(enc.professionalId).toBe(chain.professionalId);
+    expect(enc.petId).toBe(chain.petId);
+    expect(enc.contactId).toBe(chain.contactId);
     const timer = page.getByRole('timer').first();
     await expect(timer).toContainText('Em atendimento', { timeout: 20000 });
     await shot(page, 'atendimento-timer-1440');
@@ -222,21 +272,21 @@ test.describe('Entrega 3 · E2E B — Profissional', () => {
     await page.getByRole('navigation', { name: 'Superfícies do atendimento' }).getByRole('button', { name: 'Registro completo', exact: true }).click();
     await page.waitForURL(/\/registro/, { timeout: 30000 });
     await shot(page, 'registro-completo-1440');
-    // Switcher de volta ao Atendimento (mesma sessão) e "Voltar para agenda" com o MESMO contexto
     await page.getByRole('navigation', { name: 'Superfícies do atendimento' }).getByRole('button', { name: 'Atendimento', exact: true }).click();
     await page.waitForURL(/\/atendimento\/[^/]+(\?|$)/, { timeout: 30000 });
     await page.getByRole('button', { name: 'Voltar para agenda', exact: true }).click();
     await page.waitForURL(/\/agenda/, { timeout: 30000 });
     const back = new URL(page.url());
-    expect(back.searchParams.get('data')).toBe(f.today);
+    expect(back.searchParams.get('data')).toBe(chain.date);
     expect(back.searchParams.get('view')).toBe('day');
-    expect(back.searchParams.get('professionalId')).toBe(f.micheleId);
+    expect(back.searchParams.get('professionalId')).toBe(chain.professionalId);
+    await expect(bookingEvent(page, chain.bookingId)).toBeVisible({ timeout: 20000 });
     await shot(page, 'agenda-apos-atendimento-1440');
-    // Cliente 360: o atendimento finalizado aparece na história CORRETA (do Bernardo)
+    // Cliente 360: o atendimento deste booking aparece na história do Bernardo
     await page.goto(`/clientes?b=${f.b}`);
     await page.getByRole('button', { name: 'Abrir perfil de Bernardo Almeida' }).first().click();
     await expect(page.getByText('Thor').first()).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText(`Coceira intensa nas axilas`)).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(stamp).first()).toBeVisible({ timeout: 20000 });
     await shot(page, 'cliente-360-historia-1440');
     expect(errors).toEqual([]);
     expect(encounterUrl).toContain('/atendimento/');
