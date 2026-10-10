@@ -135,9 +135,11 @@ function requestAnamneseDismiss(dialog: HTMLElement, reason: 'backdrop' | 'escap
 describe('homologação manual — Anamnese mantém semântica e protege trabalho', () => {
   it('booleano pristine permanece Não informado, não Não', async () => {
     await openAnamnese();
-    const answer = screen.getByLabelText('Vômitos') as HTMLSelectElement;
-    expect(answer.value).toBe('');
-    expect(screen.getByRole('option', { name: 'Não informado' }).getAttribute('value')).toBe('');
+    const answer = screen.getByLabelText('Vômitos');
+    expect(answer.getAttribute('data-value')).toBe('');
+    fireEvent.click(answer);
+    expect(within(screen.getByRole('listbox')).getByRole('option', { name: 'Não informado' }).getAttribute('data-value')).toBe('');
+    fireEvent.keyDown(answer, { key: 'Escape' });
   });
 
   it.each(['backdrop', 'escape', 'x'] as const)('DIRTY + %s pede decisão e mantém respostas', async (reason) => {

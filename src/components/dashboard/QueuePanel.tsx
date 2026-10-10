@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { Avatar, Badge, Button, EmptyState, Field, IconButton, Input, Notice, Select } from '@/components/ui';
+import { Avatar, Badge, Button, EmptyState, Field, IconButton, Input, Notice, SelectMenu } from '@/components/ui';
 import { apiSend } from '@/lib/api-client';
 import { QUEUE_LONG_WAIT_MIN, QUEUE_STATUS, queuePosition, queueTransitionAllowed, waitLabel, waitMinutes } from '@/lib/queue';
 import { eligibleProfessionalIds, serviceProfessionalMode } from '@/lib/booking';
@@ -317,19 +317,15 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Serviço">
-              {/* DS 1.0 · §6 — controle canônico (era `<select>` cru com estilo próprio). */}
-              <Select value={form.serviceId} onChange={(e) => chooseService(e.target.value)} aria-label="Serviço">
-                <option value="">A definir</option>
-                {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
+              {/* DS · SelectMenu canônico não-nativo (menu desenhado pelo GoDoutor). */}
+              <SelectMenu value={form.serviceId} onChange={(v) => chooseService(v)} aria-label="Serviço"
+                options={[{ value: '', label: 'A definir' }, ...services.map((s) => ({ value: s.id, label: s.name }))]} />
             </Field>
             <Field label="Profissional" hint={mode === 'selected' && eligiblePros.length > 1
               ? 'Só quem atende este serviço'
               : undefined}>
-              <Select value={form.professionalId} onChange={(e) => setForm({ ...form, professionalId: e.target.value })} aria-label="Profissional">
-                <option value="">Quem estiver livre</option>
-                {eligiblePros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <SelectMenu value={form.professionalId} onChange={(v) => setForm({ ...form, professionalId: v })} aria-label="Profissional"
+                options={[{ value: '', label: 'Quem estiver livre' }, ...eligiblePros.map((p) => ({ value: p.id, label: p.name }))]} />
             </Field>
           </div>
           {mode === 'selected' && eligiblePros.length === 0 && (

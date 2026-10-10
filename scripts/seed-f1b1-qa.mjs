@@ -38,6 +38,10 @@ const users = [
   ['fora', 'Fora da Unidade F1B1', 'fora.f1b1', 'owner'],
   ['odonto', 'Dentista QA F1B1', 'odonto.f1b1', 'admin'],
   ['estetica', 'Esteticista QA F1B1', 'estetica.f1b1', 'admin'],
+  ['visualizador', 'Visualizador QA F1B1', 'visualizador.f1b1', 'admin'],
+  ['vendedor', 'Vendedor QA F1B1', 'vendedor.f1b1', 'admin'],
+  ['admin', 'Administrador QA F1B1', 'admin.f1b1', 'admin'],
+  ['semagenda', 'Recepção sem agenda QA F1B1', 'semagenda.f1b1', 'admin'],
 ].map(([id, name, email, role]) => ({
   id: `f1b1-${id}`, name, email: `${email}@godoutor.local`, passwordHash: hash(),
   role, createdAt: now, lastLoginAt: '',
@@ -58,6 +62,11 @@ const business = (id, name) => ({
 const members = [
   { id: 'f1b1-m-recepcao', businessId: A, userId: 'f1b1-recepcao', role: 'SECRETARIA', permissions: {}, note: 'Recepção', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-michelle', businessId: A, userId: 'f1b1-michelle', role: 'PROFISSIONAL', permissions: {}, note: 'Veterinária', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  // Matriz de permissões (A4-PERM): papéis SEM agenda e override explícito (agenda:false) — todos devem ser recusados.
+  { id: 'f1b1-m-visualizador', businessId: A, userId: 'f1b1-visualizador', role: 'VIEWER', permissions: {}, note: 'Visualizador', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-admin', businessId: A, userId: 'f1b1-admin', role: 'ADMIN', permissions: {}, note: 'Administrador', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-vendedor', businessId: A, userId: 'f1b1-vendedor', role: 'VENDEDOR', permissions: {}, note: 'Vendedor', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
+  { id: 'f1b1-m-semagenda', businessId: A, userId: 'f1b1-semagenda', role: 'SECRETARIA', permissions: { agenda: false }, note: 'Recepção sem agenda', invitedBy: 'f1b1-owner', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-odonto', businessId: OD, userId: 'f1b1-odonto', role: 'PROFISSIONAL', permissions: {}, note: 'Dentista', invitedBy: 'f1b1-odonto', active: true, createdAt: now, updatedAt: now },
   { id: 'f1b1-m-estetica', businessId: ES, userId: 'f1b1-estetica', role: 'PROFISSIONAL', permissions: {}, note: 'Esteticista', invitedBy: 'f1b1-estetica', active: true, createdAt: now, updatedAt: now },
 ];
@@ -72,6 +81,7 @@ const professionals = [
 
 const services = [
   { id: 'svc-derma', businessId: A, name: 'Consulta dermatológica', durationMin: 30, price: 18000, description: '', categoryId: 'cat-f1b1', image: '', featured: false, questions: [], active: true, bookable: true, professionalIds: [] },
+  { id: 'svc-restrito', businessId: A, name: 'Consulta restrita ao Orlando', durationMin: 30, price: 18000, description: '', categoryId: 'cat-f1b1', image: '', featured: false, questions: [], active: true, bookable: true, professionalMode: 'selected', professionalIds: ['pro-outro-a'] },
   { id: 'svc-outra-b', businessId: B, name: 'Consulta de outra unidade', durationMin: 30, price: 10000, description: '', categoryId: 'cat-f1b1-b', image: '', featured: false, questions: [], active: true, bookable: true, professionalIds: [] },
   { id: 'svc-odonto', businessId: OD, name: 'Avaliação odontológica', durationMin: 30, price: 15000, description: '', categoryId: '', image: '', featured: false, questions: [], active: true, bookable: true, professionalIds: [] },
   { id: 'svc-estetica', businessId: ES, name: 'Avaliação estética', durationMin: 30, price: 15000, description: '', categoryId: '', image: '', featured: false, questions: [], active: true, bookable: true, professionalIds: [] },
@@ -79,12 +89,24 @@ const services = [
 
 const contacts = [
   { id: 'ct-isabelle', businessId: A, customerId: '', name: 'Isabelle Tutora QA', phone: '11988880001', email: 'isabelle@example.invalid', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: true, note: 'Dado fictício de QA' },
+  { id: 'ct-sempet', businessId: A, customerId: '', name: 'Tutor Sem Pet QA', phone: '11988880003', email: 'sempet@example.invalid', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: true, note: 'Dado fictício de QA' },
+  { id: 'ct-unico', businessId: A, customerId: '', name: 'Tutor Único QA', phone: '11988880002', email: 'unico@example.invalid', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: true, note: 'Dado fictício de QA' },
   { id: 'ct-outra-b', businessId: B, customerId: '', name: 'Tutor de outra unidade', phone: '11977770002', email: '', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: false },
   { id: 'ct-odonto', businessId: OD, customerId: '', name: 'Paciente Odonto QA', phone: '11966660003', email: '', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: false },
   { id: 'ct-estetica', businessId: ES, customerId: '', name: 'Paciente Estética QA', phone: '11955550004', email: '', createdAt: now, updatedAt: now, source: 'manual', lastInteraction: now, marketingOptIn: false },
 ];
 
 const pets = [
+  // FIXTURE Quick Create (1 pet): tutor com exatamente UM pet → pré-seleção automática.
+  {
+    id: 'pet-bidu', businessId: A, tutorId: 'ct-unico', name: 'Bidu', photo: '',
+    species: 'cachorro', breed: 'SRD', sex: 'M', birthDate: '', weightKg: 7, notes: 'Paciente fictício de QA (único pet)', active: true, createdAt: now, updatedAt: now,
+  },
+  // FIXTURE Quick Create: a tutora tem DOIS pets → o Quick Create exige escolha.
+  {
+    id: 'pet-thor', businessId: A, tutorId: 'ct-isabelle', name: 'Thor', photo: '',
+    species: 'cachorro', breed: 'SRD', sex: 'M', birthDate: '', weightKg: 18, notes: 'Paciente fictício de QA (2º pet)', active: true, createdAt: now, updatedAt: now,
+  },
   {
     id: 'pet-mel', businessId: A, tutorId: 'ct-isabelle', name: 'Mel', photo: '',
     species: 'cachorro', breed: 'SRD', sex: 'F', birthDate: `${Number(today.slice(0, 4)) - 2}-01-15`,
@@ -162,7 +184,20 @@ const db = {
   })),
   customers: [], orders: [], pages: [], products: [], leads: [], reviews: [], events: [],
   pipelines: [], tasks: [], automations: [], automationRuns: [], queue: [],
-  conversations: [], messages: [], campaigns: [], campaignRecipients: [], audit: [],
+  conversations: [{
+    // FIXTURE truncamento da prévia: mensagem longa → corte de 3 linhas + CTA "Ler conversa completa".
+    // Conversa ANTIGA e inserida ANTES da recente: se a rota não ordenar por atividade, a prévia mostra esta.
+    id: 'conv-qa-antiga', businessId: A, channel: 'whatsapp', channelUserId: '5511988880098', channelAccountId: 'qa-acc',
+    status: 'closed', contactId: 'ct-isabelle', customerId: '', phone: '11988880098', name: 'Isabelle Tutora QA',
+    lastMessageAt: '2001-01-01T00:00:00.000Z', lastMessagePreview: 'Conversa antiga de QA (não deve aparecer na prévia).',
+    unread: 0, createdAt: '2001-01-01T00:00:00.000Z', updatedAt: '2001-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'conv-qa-longa', businessId: A, channel: 'whatsapp', channelUserId: '5511988880099', channelAccountId: 'qa-acc',
+    status: 'open', contactId: 'ct-isabelle', customerId: '', phone: '11988880099', name: 'Isabelle Tutora QA',
+    lastMessageAt: '2099-01-01T00:00:00.000Z', lastMessagePreview: 'Oi! Desde ontem a Mel está coçando muito as orelhas, principalmente à noite, e ontem ela sacudiu a cabeça e ficou com um cheiro forte. Consigo trazer ela antes da consulta de amanhã? Obrigada.',
+    unread: 0, createdAt: now, updatedAt: now,
+  }], messages: [], campaigns: [], campaignRecipients: [], audit: [],
   supportSessions: [], passwordResets: [], organizations: [], organizationMembers: [],
   apiKeys: [], webhooks: [], webhookDeliveries: [], idempotencyKeys: [], integrationLogs: [],
   integrations: [], integrationEvents: [], aiProposals: [], anamneseTemplates: [],

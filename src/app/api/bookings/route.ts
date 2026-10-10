@@ -398,6 +398,20 @@ export async function POST(req: NextRequest) {
     if (guard?.ok && guard.ctx.professionalScope && body.professionalId && body.professionalId !== guard.ctx.professionalScope) {
       return NextResponse.json({ error: 'Você só pode agendar para o seu profissional.' }, { status: 403 });
     }
+    // A4 — pet escolhido precisa existir nesta unidade e pertencer ao tutor do agendamento.
+    // Nunca é descartado em silêncio: associação incorreta é recusada com motivo explícito.
+    const requestedPetId = body.petId ? String(body.petId) : '';
+    if (requestedPetId) {
+      if (!isOwner) return NextResponse.json({ error: 'Escolha de pet exige permissão de Agenda.' }, { status: 403 });
+      const requestedPet = db.pets.find((x) => x.id === requestedPetId && x.businessId === business.id);
+      if (!requestedPet) return NextResponse.json({ error: 'Pet não encontrado nesta unidade.' }, { status: 400 });
+      if (!linkedContact) {
+        return NextResponse.json({ error: 'Escolha o tutor antes do pet.' }, { status: 400 });
+      }
+      if (requestedPet.tutorId !== linkedContact.id) {
+        return NextResponse.json({ error: 'Este pet não pertence ao tutor selecionado.' }, { status: 400 });
+      }
+    }
     const params: CreateBookingParams = {
       business,
       service,

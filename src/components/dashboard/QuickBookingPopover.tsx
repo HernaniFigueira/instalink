@@ -14,6 +14,8 @@
 // `DatePicker`, `Button`, `Notice`, `StatusBadge`). Nenhum controle desenhado
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiGet } from '@/lib/api-client';
+import { professionalServesService } from '@/lib/booking';
 import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
@@ -21,7 +23,7 @@ import { nowHM, todayISO } from '@/lib/tz';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { timeToMin } from '@/lib/utils';
 import {
-  fetchSlotTimes, searchContacts, submitBookingIntent, type Contact,
+  fetchSlotTimes, resolvePetSelection, searchContacts, submitBookingIntent, type Contact, type PetChoice,
 } from '@/lib/booking-quick-create';
 import type { Professional, Service } from '@/lib/types';
 
@@ -81,6 +83,24 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   // O contato escolhido é guardado por INTEIRO (a lista de resultados é
   // limpa ao escolher) — o nome/telefone vão no payload, como no fluxo completo.
   const [picked, setPicked] = useState<Contact | null>(null);
+  // PACIENTE (veterinária): o pet do tutor é campo de primeira classe — nunca
+  // escondido em "Mais opções". A regra (1 pet = automático; 2+ = escolha
+  // obrigatória) vive em `resolvePetSelection`, testada à parte.
+  const [pets, setPets] = useState<PetChoice[]>([]);
+  const [petChoice, setPetChoice] = useState('');
+  const petRule = resolvePetSelection(pets, petChoice);
+  useEffect(() => {
+    setPetChoice('');
+    setPets([]);
+    if (!vetMode || !contactId) return;
+    let on = true;
+    apiGet<{ pets: PetChoice[] }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
+      { scope: 'area', area: 'Agenda' },
+    ).then((r) => { if (on) setPets((r.data?.pets || []).filter((p) => p.active !== false)); })
+      .catch(() => { if (on) setPets([]); });
+    return () => { on = false; };
+  }, [businessId, contactId, vetMode]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
@@ -155,6 +175,19 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     };
   }
 
+  // VÍNCULO SERVIÇO ↔ PROFISSIONAL: autoridade é o próprio serviço
+  // (professionalMode/professionalIds), pela mesma regra do fluxo completo
+  // (professionalServesService). Filtra nos dois sentidos; nada é inventado.
+  const activePros = useMemo(() => pros.filter((p) => p.active !== false), [pros]);
+  const serviceById = (id: string) => bookable.find((s) => s.id === id);
+  const proOptions = useMemo(() => {
+    const svc = serviceById(serviceId);
+    return svc ? activePros.filter((p) => professionalServesService(svc, p.id, pros)) : activePros;
+  }, [serviceId, activePros, bookable, pros]);
+  const serviceOptions = useMemo(() => (
+    professionalId ? bookable.filter((s) => professionalServesService(s, professionalId, pros)) : bookable
+  ), [professionalId, bookable, pros]);
+
   const noContactFound = !contactId && query.trim().length >= 2 && !searching
     && searchedTerm === query.trim() && results.length === 0;
 
@@ -162,6 +195,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
     if (saving) return;
     setError('');
     if (!contactId || !picked) { setError('Escolha um paciente já cadastrado — ou use "Mais opções" para cadastrar.'); return; }
+    if (petRule.missing) { setError(petRule.missing); return; }
     if (!serviceId) { setError('Escolha o serviço.'); return; }
     if (!date || !time) { setError('Escolha data e horário.'); return; }
     if (pastIssue) { setError(pastIssue); return; }
@@ -172,6 +206,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
       customerPhone: picked.phone || '',
       serviceId, professionalId, date, time,
       ...(durationMin ? { durationMin } : {}),
+      ...(petRule.petId ? { petId: petRule.petId } : {}),
     });
     setSaving(false);
     if (!res.ok) {
@@ -223,6 +258,19 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
               Selecionado: {picked.name || picked.phone}
             </p>
           )}
+          {contactId && picked && vetMode && pets.length > 0 && (
+            <Field label="Pet (paciente)" required={petRule.required}
+              hint={pets.length === 1 ? 'Único pet do tutor — selecionado automaticamente' : 'Quem será atendido'}>
+              <Combobox label="Pet (paciente)" value={petRule.petId} disabled={saving} placeholder="Escolha o pet…"
+                options={pets.map((p) => ({ value: p.id, label: p.name }))}
+                onChange={(v) => setPetChoice(String(v))} />
+            </Field>
+          )}
+          {contactId && picked && vetMode && pets.length === 0 && (
+            <p data-quick-create-no-pet="true" className="-mt-1.5 text-[12px] text-[var(--gd-text-muted)]">
+              Este tutor ainda não tem pet cadastrado. Use “Mais opções” para cadastrar o pet antes de agendar.
+            </p>
+          )}
           {!contactId && (searching || results.length > 0) && (
             <ul className="max-h-32 overflow-y-auto rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface)]">
               {searching && results.length === 0 && (
@@ -255,15 +303,27 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
           <Field label="Serviço" required>
             {/* DS · Combobox canônico (lista do DS, não o select nativo do navegador). */}
             <Combobox label="Serviço" value={serviceId} disabled={saving} placeholder="Selecione…"
-              onChange={(v) => { setServiceId(String(v)); setTime(anchor.time); }}
-              options={[{ value: '', label: 'Selecione…' }, ...bookable.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
+              onChange={(v) => {
+                const next = String(v);
+                setServiceId(next); setTime(anchor.time);
+                // Profissional escolhido que não atende o novo serviço: limpa (não deixa inválido).
+                const svc = serviceById(next);
+                if (svc && professionalId && !professionalServesService(svc, professionalId, pros)) setProfessionalId('');
+              }}
+              options={[{ value: '', label: 'Selecione…' }, ...serviceOptions.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
           </Field>
 
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="Profissional">
               <Combobox label="Profissional" value={professionalId} disabled={saving} placeholder="Automático"
-                onChange={(v) => setProfessionalId(String(v))}
-                options={[{ value: '', label: 'Automático' }, ...pros.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name }))]} />
+                onChange={(v) => {
+                  const next = String(v);
+                  setProfessionalId(next);
+                  // Serviço escolhido que este profissional não atende: limpa o serviço.
+                  const svc = serviceById(serviceId);
+                  if (svc && next && !professionalServesService(svc, next, pros)) setServiceId('');
+                }}
+                options={[{ value: '', label: 'Automático' }, ...proOptions.map((p) => ({ value: p.id, label: p.name }))]} />
             </Field>
             {/* Os campos de hora explicam o estado; o horário do gesto continua
                 visível mesmo fora da lista (o servidor decide o encaixe). */}

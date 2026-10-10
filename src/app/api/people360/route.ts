@@ -297,6 +297,9 @@ export async function GET(req: NextRequest) {
     if (!p.lastSeen || (c.lastMessageAt || '') > p.lastSeen) p.lastSeen = c.lastMessageAt || p.lastSeen;
   }
 
+  // Conversas mais recentes primeiro: a prévia do cliente usa a primeira como "última conversa".
+  for (const p of map.values()) p.conversations.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+
   let people = [...map.values()];
   // PROJEÇÃO CLÍNICA: o recorte de linhas e a projeção de campos são
   // autoridades diferentes. A lista continua limitada à pegada clínica da

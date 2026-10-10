@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { generateOccurrences, MAX_SERIES_OCCURRENCES, type BookingOccurrence, type RecurrenceFrequency } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import type { Professional } from '@/lib/types';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, Input, SelectMenu } from '@/components/ui';
 import { Icon } from '@/components/icons';
 
 const FREQUENCY_LABEL: Record<string, string> = {
@@ -69,20 +69,19 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
           <Step n={1} /> Como repetir
         </p>
         <label className="block text-xs font-semibold text-[var(--text-muted)]">Frequência
-          <Select aria-label="Frequência" className="mt-1" value={frequency} onChange={(e) => {
-            if (e.target.value === 'none') { onDisable(); return; }
-            setFrequency(e.target.value as typeof frequency); onChange([]); setStep('config');
-          }}>
-            {Object.entries(FREQUENCY_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-          </Select>
+          <SelectMenu aria-label="Frequência" className="mt-1" value={frequency} onChange={(v) => {
+            if (v === 'none') { onDisable(); return; }
+            setFrequency(v as typeof frequency); onChange([]); setStep('config');
+          }} options={Object.entries(FREQUENCY_LABEL).map(([v, label]) => ({ value: v, label }))} />
         </label>
 
         {frequency !== 'custom' && <>
           <label className="block text-xs font-semibold text-[var(--text-muted)]">Quando termina
-            <Select className="mt-1" value={endMode} onChange={(e) => { setEndMode(e.target.value); onChange([]); }}>
-              <option value="count">Depois de uma quantidade de atendimentos</option>
-              <option value="until">Em uma data final</option>
-            </Select>
+            <SelectMenu className="mt-1" aria-label="Quando termina" value={endMode} onChange={(v) => { setEndMode(v); onChange([]); }}
+              options={[
+                { value: 'count', label: 'Depois de uma quantidade de atendimentos' },
+                { value: 'until', label: 'Em uma data final' },
+              ]} />
           </label>
           {endMode === 'count'
             ? <label className="block text-xs font-semibold text-[var(--text-muted)]">Quantidade de atendimentos (inclui o primeiro)
@@ -170,11 +169,9 @@ export function BookingRecurrence({ first, rows, preview, pros, min, max, busy, 
                     <Input aria-label={`Horário ${i + 1}`} type="time" value={row.time}
                       onChange={(e) => change(i, { time: e.target.value })} />
                   </div>
-                  <Select aria-label={`Profissional ${i + 1}`} value={row.professionalId}
-                    onChange={(e) => change(i, { professionalId: e.target.value })}>
-                    <option value="">Automático (equipe elegível)</option>
-                    {pros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </Select>
+                  <SelectMenu aria-label={`Profissional ${i + 1}`} value={row.professionalId}
+                    onChange={(v) => change(i, { professionalId: v })}
+                    options={[{ value: '', label: 'Automático (equipe elegível)' }, ...pros.map((p) => ({ value: p.id, label: p.name }))]} />
                   <p role="status" className={
                     'text-xs font-semibold inline-flex items-center gap-1.5 '
                     + (st ? (ok ? 'text-[var(--success-fg)]' : 'text-[var(--warning-fg)]') : 'text-[var(--text-muted)]')

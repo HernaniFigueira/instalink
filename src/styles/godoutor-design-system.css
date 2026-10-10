@@ -769,7 +769,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
    geometria do contrato GoDoutor: PRESO à borda direita, 100dvh, sem gap e sem
    margem no desktop. O painel flutuante insetado de 16px (DS 1.0) NÃO é mais o
    comportamento final: ele lia como card solto, não como detalhe do registro. */
-.gd-detail::backdrop { background: var(--gd-overlay-strong); animation: gd-fade-in var(--gd-motion-base) var(--gd-ease); }
+.gd-detail::backdrop { background: var(--gd-overlay-strong); animation: gd-fade-in var(--gd-motion-side-modal) var(--gd-ease); }
 /* Saída do detail: o backdrop esmaece junto com o painel (antes sumia de corte). */
 .gd-detail[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 .gd-detail__panel {
@@ -788,13 +788,16 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 }
 .gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-side-modal) var(--gd-ease); }
 .gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
-/* CP1 · Drawer genérico: entra pela direita (24px→0) e sai simétrico (0→24px),
-   com opacidade pareada. A saída roda com o painel MONTADO (data-closing). */
-@keyframes gd-drawer-strip-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes gd-drawer-strip-out { from { transform: none; opacity: 1; } to { transform: translateX(24px); opacity: 0; } }
+/* CP1 · Drawer genérico: ENTRA da borda direita (translateX 100% → 0) e SAI
+   pela mesma borda (0 → 100%). Sem scale, sem fade no painel e sem deslocamento
+   simbólico: é uma folha presa à lateral. O backdrop segue a MESMA duração do
+   painel (entrada e saída). A saída roda com o painel MONTADO (data-closing). */
+@keyframes gd-drawer-strip-in { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes gd-drawer-strip-out { from { transform: none; } to { transform: translateX(100%); } }
 .il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
-.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
-.il-drawer[data-closing]::backdrop { animation: none; }
+.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.il-drawer::backdrop { animation: gd-fade-in var(--gd-motion-side-modal) var(--gd-ease); }
+.il-drawer[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:
    é uma folha presa à lateral, não um card que aparece. */
 /* Contrato único de folha lateral: ENTRA da borda direita (direita → esquerda)
@@ -856,6 +859,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 @media (prefers-reduced-motion: reduce) {
   .gd-detail[open] .gd-detail__panel, .gd-detail[data-closing] .gd-detail__panel { animation: none; }
   .il-drawer__strip, .il-drawer[data-closing] .il-drawer__strip { animation: none; }
+  .il-drawer::backdrop, .il-drawer[data-closing]::backdrop { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════

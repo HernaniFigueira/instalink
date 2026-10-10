@@ -2569,6 +2569,155 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
   );
 }
 
+// ── SelectMenu — Select CANÔNICO NÃO-NATIVO para listas simples ─────────
+/**
+ * Para listas pequenas e conhecidas (status, sexo, apetite, hidratação,
+ * mucosas, visão da agenda…). O menu é desenhado pelo GoDoutor (portal,
+ * tokens do DS, Barlow), nunca pelo navegador/SO — o `<select>` nativo não
+ * deve aparecer nas superfícies operacionais. Para listas com volume que
+ * justifique busca, use `Combobox`.
+ *
+ * Teclado (ARIA 1.2 select-only combobox): foco permanece no gatilho;
+ * ↑/↓ movem o ativo, Home/End vão às pontas, Enter/Espaço escolhem,
+ * Escape fecha SEM sair do campo, Tab fecha. `aria-activedescendant` aponta
+ * para a opção ativa.
+ */
+export function SelectMenu({ options, value, onChange, label = 'Selecionar', placeholder = 'Selecione…', disabled, className, id, 'aria-label': ariaLabel, 'aria-describedby': describedBy, 'aria-invalid': invalidProp, required }: {
+  options: ComboOption[];
+  value: string;
+  onChange: (v: string) => void;
+  label?: string; placeholder?: string; disabled?: boolean; className?: string;
+  id?: string; 'aria-label'?: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean; required?: boolean;
+}) {
+  const autoId = useId();
+  const listId = `${autoId}-list`;
+  const field = useContext(FieldContext);
+  const inShell = !!field?.inShell;
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [anchorW, setAnchorW] = useState<number | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredLayer(open, anchorRef, 'bottom-start', 6, posRef);
+  const selectedIdx = options.findIndex((o) => o.value === value);
+  const selectedOpt = selectedIdx >= 0 ? options[selectedIdx] : undefined;
+
+  useDismissOnEscape(open, () => setOpen(false));
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!layerRef.current?.contains(t) && !anchorRef.current?.contains(t)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+  useEffect(() => {
+    if (!open) { setAnchorW(null); return; }
+    const box = fieldBoxOf(anchorRef.current);
+    setAnchorW(box ? Math.round(box.getBoundingClientRect().width) : (anchorRef.current?.offsetWidth ?? null));
+  }, [open]);
+  useEffect(() => {
+    // Rolagem da opção ativa (defensiva: ambientes sem scrollIntoView, como jsdom, não quebram).
+    if (open && active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, active, listId]);
+
+  function openMenu() {
+    if (disabled) return;
+    setActive(selectedIdx >= 0 ? selectedIdx : options.findIndex((o) => !o.disabled));
+    setOpen(true);
+  }
+  function step(dir: 1 | -1) {
+    if (!open) { openMenu(); return; }
+    let i = active;
+    for (let n = 0; n < options.length; n += 1) {
+      i = (i + dir + options.length) % options.length;
+      if (!options[i].disabled) { setActive(i); return; }
+    }
+  }
+  function pick(idx: number) {
+    const opt = options[idx];
+    if (!opt || opt.disabled) return;
+    onChange(opt.value);
+    setOpen(false);
+  }
+
+  // ARIA do Field (id, labelledby, describedby, invalid) sem vazar `required` ao DOM.
+  const base = { id, 'aria-label': ariaLabel || (inShell ? undefined : label), 'aria-describedby': describedBy, 'aria-invalid': invalidProp };
+  const { required: _required, ...repoProps } = (inShell && field ? fieldControlProps(base, field) : base) as typeof base & { required?: boolean; 'aria-labelledby'?: string; 'aria-required'?: boolean };
+  const ariaRequired = required || field?.required || undefined;
+
+  return (
+    <div className={cn('relative', inShell && 'gd-field__control-host', className)} ref={anchorRef}>
+      <button
+        {...repoProps}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+        aria-required={ariaRequired}
+        data-value={value}
+        disabled={disabled}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); step(1); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); step(-1); }
+          else if (e.key === 'Home' && open) { e.preventDefault(); setActive(options.findIndex((o) => !o.disabled)); }
+          else if (e.key === 'End' && open) { e.preventDefault(); setActive(options.map((o) => !o.disabled).lastIndexOf(true)); }
+          else if ((e.key === 'Enter' || e.key === ' ') && open) { e.preventDefault(); pick(active); }
+          else if ((e.key === 'Enter' || e.key === ' ') && !open) { e.preventDefault(); openMenu(); }
+          else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+          else if (e.key === 'Tab' && open) { setOpen(false); }
+        }}
+        className={cn(
+          FIELD_CLS, inShell && 'gd-field__control--inline',
+          'flex items-center justify-between gap-2 text-left cursor-pointer',
+          'aria-[invalid=true]:border-[var(--gd-danger-fg)]',
+          'disabled:opacity-60',
+        )}
+      >
+        <span className={cn('min-w-0 flex-1 truncate', !selectedOpt && 'text-[var(--text-faint)]')}>
+          {selectedOpt ? selectedOpt.label : placeholder}
+        </span>
+        <span aria-hidden="true" className={cn('shrink-0 text-[var(--gd-text-muted)] transition-transform duration-[var(--gd-motion-fast)]', open && 'rotate-180')}>
+          <Icon n="chevron" size={14} />
+        </span>
+      </button>
+      {open && (
+        <LayerPortal style={anchorW ? { ...style, minWidth: anchorW } : style} className="gd-layer gd-menu max-h-[280px] overflow-y-auto" role="listbox" label={label} positionRef={posRef}>
+          <div id={listId} ref={layerRef} role="presentation">
+            {options.map((o, idx) => (
+              <div
+                key={o.value}
+                id={`${listId}-${idx}`}
+                role="option"
+                aria-selected={o.value === value}
+                aria-disabled={o.disabled || undefined}
+                data-value={o.value}
+                data-active={idx === active}
+                data-selected={o.value === value || undefined}
+                onMouseEnter={() => { if (!o.disabled) setActive(idx); }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(idx)}
+                className={cn('gd-menu__item', o.disabled && 'opacity-50 cursor-not-allowed')}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{o.label}</span>
+                  {o.hint && <span className="il-type-help block truncate text-[var(--gd-text-muted)]">{o.hint}</span>}
+                </span>
+                {o.value === value && <Icon n="check" size={14} />}
+              </div>
+            ))}
+          </div>
+        </LayerPortal>
+      )}
+    </div>
+  );
+}
+
 // ── Ações de seção/página ───────────────────────────────────────────────
 /** ActionSection: texto à esquerda, ação à direita, com respiro (§41–43). */
 export function ActionSection({ title, hint, children, className }: {

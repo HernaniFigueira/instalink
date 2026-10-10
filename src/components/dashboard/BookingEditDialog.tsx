@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Dialog, Field, Select, DatePicker, Button } from '@/components/ui';
+import { Dialog, Field, DatePicker, Button, SelectMenu, Combobox } from '@/components/ui';
 import { durationLabel } from '@/lib/duration-label';
 import { adminBookingMaxDate, bookingDurationOf, rescheduleDecision } from '@/lib/booking-ops';
 import { eligibleProfessionalIds } from '@/lib/booking';
@@ -130,16 +130,15 @@ export function BookingEditDialog({ booking, businessId, services, pros, timezon
               <DatePicker value={date} onChange={(value) => { setDate(value); setTime(''); }} label="Data" min={today} max={adminBookingMaxDate(today)} />
             </Field>
             <Field label="Profissional">
-              <Select value={professionalId} onChange={(event) => { setProfessionalId(event.target.value); setTime(''); }}>
-                <option value="">Definido pela agenda</option>
-                {eligiblePros.map((pro) => <option key={pro.id} value={pro.id}>{pro.name}</option>)}
-              </Select>
+              <SelectMenu aria-label="Profissional" value={professionalId} onChange={(v) => { setProfessionalId(v); setTime(''); }}
+                options={[{ value: '', label: 'Definido pela agenda' }, ...eligiblePros.map((pro) => ({ value: pro.id, label: pro.name }))]} />
             </Field>
             <Field label="Horário" hint={loadingSlots ? 'Carregando disponibilidade…' : slotsError || `${slots.length} horários disponíveis`}>
-              <Select value={time} disabled={loadingSlots || !!slotsError || slots.length === 0} onChange={(event) => setTime(event.target.value)}>
-                <option value="">{loadingSlots ? 'Carregando…' : 'Selecione um horário'}</option>
-                {slots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
-              </Select>
+              {/* Horários: lista de volume (digitar "14" acha 14:00/14:30) → Combobox. */}
+              <Combobox label="Horário" value={time} disabled={loadingSlots || !!slotsError || slots.length === 0}
+                placeholder={loadingSlots ? 'Carregando…' : 'Selecione um horário'}
+                options={slots.map((slot) => ({ value: slot, label: slot }))}
+                onChange={(v) => setTime(String(v))} />
             </Field>
             <div className="gd-readonly-summary"><span>Horário atual</span><strong>{formatDateBR(booking.date)} · {booking.time}</strong></div>
           </div>

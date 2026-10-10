@@ -11,7 +11,7 @@
 //   4. 409 → o conflito é do WORKSPACE e o texto local CONTINUA na tela;
 //   5. trocar de seção grava antes: falhou → permanece na seção e o texto fica;
 //   6. o peso do cadastro do Pet aparece como contexto, nunca como valor salvo.
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, useState } from 'react';
 import { EncounterVisitAnamnesisSection } from '../dashboard/EncounterVisitAnamnesisSection';
@@ -19,6 +19,19 @@ import { EncounterVeterinaryAssessmentSection } from '../dashboard/EncounterVete
 import { EncounterWorkspaceBody } from '../dashboard/EncounterWorkspaceBody';
 import { useEncounterAuthority, type EncounterAuthorityRow } from '../dashboard/useEncounterAuthority';
 import { apiGet, apiSend } from '@/lib/api-client';
+
+/** SelectMenu canônico: lê as opções abrindo o menu (não é mais <select> nativo). */
+function menuOptionLabels(trigger: HTMLElement): string[] {
+  fireEvent.click(trigger);
+  const labels = within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent?.trim() || '');
+  fireEvent.keyDown(trigger, { key: 'Escape' });
+  return labels;
+}
+/** Escolhe uma opção do SelectMenu pelo nome visível (clique no menu aberto). */
+function chooseMenuOption(trigger: HTMLElement, name: string): void {
+  fireEvent.click(trigger);
+  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name }));
+}
 
 vi.mock('@/lib/api-client', () => ({ apiSend: vi.fn(), apiGet: vi.fn() }));
 const send = vi.mocked(apiSend);
@@ -94,12 +107,10 @@ describe('F1B1 · seção Anamnese (campos, unidades e persistência)', () => {
     expect(screen.getByLabelText(/História atual \/ evolução do problema/)).toBeTruthy();
     expect(screen.getByLabelText(/^Alimentação/)).toBeTruthy();
     for (const label of ['Apetite', 'Ingestão de água', 'Urina', 'Fezes']) {
-      const select = screen.getByLabelText(new RegExp(`^${label}`)) as HTMLSelectElement;
-      expect([...select.options].map((o) => o.textContent)).toEqual(['Não informado', 'Normal', 'Alterado']);
+      expect(menuOptionLabels(screen.getByLabelText(new RegExp(`^${label}`)))).toEqual(['Não informado', 'Normal', 'Alterado']);
     }
     for (const label of ['Vômito', 'Diarreia']) {
-      const select = screen.getByLabelText(new RegExp(`^${label}`)) as HTMLSelectElement;
-      expect([...select.options].map((o) => o.textContent)).toEqual(['Não informado', 'Sim', 'Não']);
+      expect(menuOptionLabels(screen.getByLabelText(new RegExp(`^${label}`)))).toEqual(['Não informado', 'Sim', 'Não']);
     }
     expect(screen.getByLabelText(/Medicações em uso/)).toBeTruthy();
     expect(screen.getByLabelText(/^Alergias/)).toBeTruthy();
@@ -118,10 +129,9 @@ describe('F1B1 · seção Anamnese (campos, unidades e persistência)', () => {
         )}
       </Harmony>,
     );
-    await act(async () => {
-      fireEvent.change(screen.getByLabelText(/História atual/), { target: { value: 'Coceira há 3 dias' } });
-      fireEvent.change(screen.getByLabelText(/^Apetite/), { target: { value: 'changed' } });
-    });
+    fireEvent.change(screen.getByLabelText(/História atual/), { target: { value: 'Coceira há 3 dias' } });
+    // Menu canônico: a escolha acontece FORA de um act() externo (o popup é commitado pelo próprio fireEvent).
+    chooseMenuOption(screen.getByLabelText(/^Apetite/), 'Alterado');
     await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 1150); }); });
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     const [, method, body] = send.mock.calls[0];

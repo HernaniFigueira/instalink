@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Select, Textarea } from '@/components/ui';
+import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Textarea, SelectMenu } from '@/components/ui';
 import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -185,10 +185,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               </Field>
               <div className="grid grid-cols-2 gap-3">
               <Field label="Espécie" htmlFor="pet-species">
-                <Select id="pet-species" value={editing.species || ''} onChange={(e) => setEditing({ ...editing, species: e.target.value })}>
-                  <option value="">—</option>
-                  {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s]}</option>)}
-                </Select>
+                <SelectMenu id="pet-species" value={editing.species || ''} onChange={(v) => setEditing({ ...editing, species: v })}
+                  options={[{ value: '', label: '—' }, ...PET_SPECIES.map((s) => ({ value: s, label: PET_SPECIES_LABELS[s] }))]} />
               </Field>
               <Field label="Raça" htmlFor="pet-breed" hint="Autocomplete pela espécie — pode digitar outra.">
                 <Input id="pet-breed" list="pet-breeds-datalist" value={editing.breed || ''} onChange={(e) => setEditing({ ...editing, breed: e.target.value })} placeholder="Ex.: Pastor alemão" />
@@ -202,11 +200,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Características</p>
               <div className="grid grid-cols-2 gap-3">
               <Field label="Sexo" htmlFor="pet-sex">
-                <Select id="pet-sex" value={editing.sex || ''} onChange={(e) => setEditing({ ...editing, sex: e.target.value as any })}>
-                  <option value="">Não informado</option>
-                  <option value="M">Macho</option>
-                  <option value="F">Fêmea</option>
-                </Select>
+                <SelectMenu id="pet-sex" value={editing.sex || ''} onChange={(v) => setEditing({ ...editing, sex: v as any })}
+                  options={[{ value: '', label: 'Não informado' }, { value: 'M', label: 'Macho' }, { value: 'F', label: 'Fêmea' }]} />
               </Field>
               <Field label="Nascimento" htmlFor="pet-birth">
                 <Input id="pet-birth" type="date" value={editing.birthDate || ''} onChange={(e) => setEditing({ ...editing, birthDate: e.target.value })} />
