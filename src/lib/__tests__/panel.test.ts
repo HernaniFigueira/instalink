@@ -100,14 +100,14 @@ describe('catálogo — completude (por qual porta se chega até mim?)', () => {
   });
 
   it('todas as rotas declaram arquétipo oficial e respeitam o tipo de tela', () => {
-    const valid = ['workspace', 'record', 'detail', 'form', 'hub'];
+    const valid = ['workspace', 'context', 'record', 'detail', 'form', 'hub'];
     for (const r of PANEL_ROUTES) expect(valid, `${r.href} sem pageType válido`).toContain(r.pageType);
     expect(panelRouteFor('/agenda')?.pageType).toBe('workspace');
     expect(panelRouteFor('/funil')?.pageType).toBe('workspace');
     expect(panelRouteFor('/conversas')?.pageType).toBe('workspace');
     expect(panelRouteFor('/configuracoes')?.pageType).toBe('form');
-    expect(panelRouteFor('/atendimento')?.pageType).toBe('record');
-    expect(pageTypeForPath('/clientes/123')).toBe('detail');
+    expect(panelRouteFor('/atendimento')?.pageType).toBe('context');
+    expect(pageTypeForPath('/clientes/123')).toBe('context');
     expect(pageTypeForPath('/nao-existe')).toBeUndefined();
   });
 

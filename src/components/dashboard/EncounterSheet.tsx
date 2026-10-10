@@ -34,8 +34,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Badge, Button, Disclosure, Field, Input, Notice, PageBackAction, ReadOnlyField, Textarea } from '@/components/ui';
 import { EncounterSessionRail } from './EncounterSessionRail';
-import { BOOKING_STATUS } from '@/lib/status';
-import type { BookingStatus } from '@/lib/types';
+import { EncounterClinicalDocument } from './EncounterClinicalDocument';
+import { encounterSessionModel } from './encounter-session-model';
+import { encounterReturnLabel, type EncounterSurface } from '@/lib/encounter-workspace';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -109,6 +110,8 @@ interface Props {
   onChanged?: () => void;
   /** `page` is the canonical clinical workspace; `sheet` is retained only for compatibility tests. */
   layout?: 'page' | 'sheet';
+  /** Origem da sessão (rótulo previsível do Voltar no rail). */
+  returnTo?: string;
 }
 
 const EMPTY = {
@@ -130,8 +133,12 @@ const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? cryp
 
 export function EncounterSheet({
   businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
-  workspaceHref, onOpenWorkspace,
+  workspaceHref, onOpenWorkspace, returnTo,
 }: Props) {
+  // Entrega 2 — em página, o Registro completo é DOCUMENTO da sessão: o
+  // conteúdo clínico é lido (a escrita acontece no Atendimento, fonte única).
+  // Anexos e fichas de anamnese continuam disponíveis enquanto rascunho.
+  const documentMode = layout === 'page';
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [compactHeader, setCompactHeader] = useState(false);
   const compactSentinel = useRef<HTMLSpanElement>(null);
@@ -543,6 +550,12 @@ export function EncounterSheet({
   }
 
   const statusDef = row ? ENCOUNTER_STATUS[row.status] : null;
+  const addenda = ((row as (EncounterRow & { addenda?: Array<{ id: string; text: string; createdAt: string }> }) | null)?.addenda) || [];
+  /** Fechamento (finalizar · nota complementar · reabertura) mora no Atendimento. */
+  const openClosing = () => {
+    if (!workspaceHref || !onOpenWorkspace) return;
+    void requestClose('navigation', () => onOpenWorkspace(`${workspaceHref}#encounter-closing`));
+  };
   // A3.4 (teste humano): a via do cliente sai do que está VISÍVEL agora — não
   // do último payload que o autosave confirmou. Metadados seguem do registro.
   const printBlocks = row ? encounterFormPrintBlocks(form) : [];
@@ -592,37 +605,20 @@ export function EncounterSheet({
           )}
         </>
       );
-  const encounterContent = (
-    <>
-      <div className="px-5 py-4 space-y-4">
-        {error && <Notice tone="error">{error}</Notice>}
-        {saved && !error && <Notice tone="success">{saved}</Notice>}
-        {taskDone && !error && <Notice tone="success">{taskDone}</Notice>}
-        {loading && <p className="text-sm text-[var(--text-muted)]">Abrindo o atendimento…</p>}
-
-        {row && (
-          <>
-            {conflict && (
-              <Notice tone="warning" title="Esta versão ficou velha">
-                {ENCOUNTER_VERSION_ERROR} O que você digitou continua na tela — recarregue o registro
-                para ver o que a outra aba salvou antes de decidir o que fica.
-                <button type="button" className="ml-1 underline font-semibold" onClick={() => { void reload(); }}>
-                  Recarregar registro
-                </button>
-              </Notice>
-            )}
-
-            {row.status === 'finalized' && (
-              <Notice tone="info" title="Registro finalizado">
-                Este documento foi finalizado por {encounterSignature(row)}. Alterar exige reabrir — e a
-                reabertura fica registrada na auditoria da unidade.
-              </Notice>
-            )}
-
-            {/* ── Pós-atendimento: "como fica o acompanhamento?" ── */}
-            {followUpOpen && row.status === 'finalized' && (
-              <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
-                <p className="text-sm font-semibold text-[var(--text)]">Atendimento finalizado. Próximo passo:</p>
+  // ── Pós-atendimento: "como fica o acompanhamento?" ──
+  // Na gaveta aparece logo após finalizar; no Registro (documento) vem DEPOIS
+  // do conteúdo clínico — primeiro o que aconteceu, depois o próximo passo.
+  const followUpPanel = row && (followUpOpen || documentMode) && row.status === 'finalized' ? (
+              <div className={documentMode ? 'encounter-doc__section encounter-doc__followup space-y-3' : 'rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3'}
+                data-testid="encounter-followup-actions">
+                {documentMode ? (
+                  <header className="encounter-doc__head">
+                    <p className="encounter-doc__group">Depois do atendimento</p>
+                    <h3 className="encounter-doc__title">Acompanhamento</h3>
+                  </header>
+                ) : (
+                  <p className="text-sm font-semibold text-[var(--text)]">Atendimento finalizado. Próximo passo:</p>
+                )}
                 {paymentDone && <Notice tone="success">{paymentDone}</Notice>}
                 {/* FASE 2 · P3 — retorno estruturado: mostra a data-alvo calculada. */}
                 {row.followUpMode && row.followUpMode !== 'none' && row.followUpMode !== 'custom' && (
@@ -632,7 +628,7 @@ export function EncounterSheet({
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); void requestClose('programmatic'); }}>Encerrar</Button>
+                  {!documentMode && <Button size="sm" variant="primary" onClick={() => { setFollowUpOpen(false); void requestClose('programmatic'); }}>Encerrar</Button>}
                   {onScheduleReturn && (
                     <Button size="sm" variant="secondary" onClick={() => {
                       onScheduleReturn({
@@ -667,24 +663,65 @@ export function EncounterSheet({
                   Pedir à recepção cria uma tarefa para a equipe.
                 </p>
               </div>
+  ) : null;
+  const encounterContent = (
+    <>
+      <div className="px-5 py-4 space-y-4">
+        {error && <Notice tone="error">{error}</Notice>}
+        {saved && !error && <Notice tone="success">{saved}</Notice>}
+        {taskDone && !error && <Notice tone="success">{taskDone}</Notice>}
+        {loading && <p className="text-sm text-[var(--text-muted)]">Abrindo o atendimento…</p>}
+
+        {row && (
+          <>
+            {conflict && (
+              <Notice tone="warning" title="Esta versão ficou velha">
+                {ENCOUNTER_VERSION_ERROR} O que você digitou continua na tela — recarregue o registro
+                para ver o que a outra aba salvou antes de decidir o que fica.
+                <button type="button" className="ml-1 underline font-semibold" onClick={() => { void reload(); }}>
+                  Recarregar registro
+                </button>
+              </Notice>
             )}
 
-            {isDraft && editable && (
+            {row.status === 'finalized' && (
+              <Notice tone="info" title="Registro finalizado">
+                Este documento foi finalizado por {encounterSignature(row)}. Alterar exige reabrir — e a
+                reabertura fica registrada na auditoria da unidade.
+              </Notice>
+            )}
+
+            {!documentMode && followUpPanel}
+
+            {isDraft && editable && !documentMode && (
               <p className="text-xs text-[var(--text-muted)]">
                 Enquanto é rascunho, o texto é salvo sozinho um segundo depois de você parar de digitar.
               </p>
+            )}
+            {isDraft && documentMode && (
+              <div className="encounter-doc__notice" role="status" data-testid="registro-draft-notice">
+                <p>
+                  <strong>Atendimento em andamento.</strong> Este é o documento da sessão — o conteúdo
+                  clínico é escrito na tela de Atendimento e aparece aqui assim que é salvo.
+                </p>
+                {workspaceHref && onOpenWorkspace && (
+                  <Button size="sm" variant="secondary" onClick={() => { void requestClose('navigation', () => onOpenWorkspace(workspaceHref)); }}>
+                    Continuar em Atendimento
+                  </Button>
+                )}
+              </div>
             )}
             {/* §13 — o aviso de leitura JÁ está no Notice "Registro finalizado"
                 acima; repetir aqui em parágrafo era o padrão "título + descrição
                 explicando a própria tela". Fica só o que o Notice NÃO diz: quem
                 NÃO pode reabrir precisa saber que a porta existe em outro lugar. */}
-            {!isDraft && !canReopen && (
+            {!isDraft && !canReopen && !documentMode && (
               <p className="text-xs text-[var(--text-muted)]">
                 Somente quem administra a unidade reabre um registro finalizado.
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+            {!documentMode && <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-1.5">
                 <Icon n="user" size={13} /> {row.petName || row.customerName || 'Cliente'}
                 {row.petName && row.customerName ? <span className="text-[var(--text-faint)]">· Tutor: {row.customerName}</span> : null}
@@ -693,9 +730,47 @@ export function EncounterSheet({
               {row.professionalName && <span className="inline-flex items-center gap-1.5"><Icon n="users" size={13} /> {row.professionalName}</span>}
               {row.bookingId && <span className="inline-flex items-center gap-1.5"><Icon n="calendar" size={13} /> veio de um agendamento</span>}
               {row.queueId && <span className="inline-flex items-center gap-1.5"><Icon n="clock" size={13} /> veio da fila do balcão</span>}
-            </div>
+            </div>}
 
             {/* ── Conteúdo do registro ── */}
+            {documentMode ? (
+              <>
+                <EncounterClinicalDocument row={row} />
+                {/* Nota interna: seção do documento (texto presente já no
+                    primeiro render — impressão/hidratação), marcada como
+                    "só na unidade". Não entra na via do cliente. */}
+                <section className="encounter-doc__section" aria-labelledby="doc-internal-note" data-doc-section="internal-note">
+                  <header className="encounter-doc__head">
+                    <p className="encounter-doc__group">Só na unidade</p>
+                    <h3 id="doc-internal-note" className="encounter-doc__title">{ENCOUNTER_LABELS.internalNote}</h3>
+                  </header>
+                  <ReadOnlyField value={form.internalNote} multiline block empty="Sem nota interna neste atendimento."
+                    hint="Fica só na unidade — não entra na via do cliente." />
+                </section>
+                {addenda.length > 0 && (
+                  <section className="encounter-doc__section" aria-labelledby="doc-addenda" data-doc-section="addenda">
+                    <header className="encounter-doc__head">
+                      <p className="encounter-doc__group">Pós-finalização</p>
+                      <h3 id="doc-addenda" className="encounter-doc__title">Notas complementares</h3>
+                    </header>
+                    <ul className="encounter-doc__list">
+                      {addenda.map((note) => (
+                        <li key={note.id}>
+                          <p className="encounter-doc__note">{note.text}</p>
+                          <p className="encounter-doc__meta">{note.createdAt ? formatDateTimeBR(note.createdAt) : ''}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {followUpPanel}
+                {!isDraft && !canReopen && (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Somente quem administra a unidade reabre um registro finalizado.
+                  </p>
+                )}
+              </>
+            ) : (<>
             {editable ? (
               <Field label={ENCOUNTER_LABELS.complaint}>
                 <Textarea value={form.complaint} maxLength={600}
@@ -791,9 +866,11 @@ export function EncounterSheet({
                 <ReadOnlyField value={form.internalNote} multiline empty="Sem nota interna neste atendimento." />
               </Disclosure>
             )}
+            </>)}
 
-            {/* ── FASE 2 · P4 — anamnese vinculada a este atendimento ── */}
-            <div className="rounded-md border border-[var(--border)] p-3">
+            {/* ── FASE 2 · P4 — anamnese vinculada a este atendimento ──
+                No Registro (documento) vira seção com divisor, não card. */}
+            <div className={documentMode ? 'encounter-doc__section encounter-doc__attach' : 'rounded-md border border-[var(--border)] p-3'} data-doc-section={documentMode ? 'anamnese' : undefined}>
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
                   <p className="text-[13px] font-semibold text-[var(--text)]">Anamnese</p>
@@ -811,7 +888,7 @@ export function EncounterSheet({
                   ) : <p className="text-[11.5px] text-[var(--text-muted)]">Ainda não há ficha neste atendimento.</p>}
                 </div>
                 {anamneseTemplates.length > 0 && row.contactId ? (
-                  <Button size="sm" variant={anamneseCount > 0 ? 'secondary' : 'primary'} onClick={() => setAnamneseOpen(true)}>
+                  <Button size="sm" variant={anamneseCount > 0 || documentMode ? 'secondary' : 'primary'} onClick={() => setAnamneseOpen(true)}>
                     {anamneseCount > 0 ? 'Preencher outra ficha' : 'Preencher anamnese'}
                   </Button>
                 ) : (
@@ -834,7 +911,7 @@ export function EncounterSheet({
             </div>
 
             {/* ── FASE 2 · P3 — arquivos (Storage + referência no documento) ── */}
-            <div className="rounded-md border border-[var(--border)] p-3">
+            <div className={documentMode ? 'encounter-doc__section encounter-doc__attach' : 'rounded-md border border-[var(--border)] p-3'} data-doc-section={documentMode ? 'files' : undefined}>
               <p className="text-[13px] font-semibold text-[var(--text)]">Arquivos</p>
               <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5">Exames, laudos, receitas, imagens ou documentos em PDF.</p>
               {fileError && <p className="text-[12px] text-[var(--danger-fg)] mt-1">{fileError}</p>}
@@ -941,34 +1018,61 @@ export function EncounterSheet({
     ? `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}${row.professionalName ? ` · ${row.professionalName}` : ''}`
     : 'Registro clínico do atendimento';
 
+  const pageFooter = (
+    <>
+      {row && (
+        <span className="encounter-page__footer-state">
+          <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>
+          {row.status === 'finalized' && <span>Finalizado por {encounterSignature(row)}</span>}
+          {isDraft && <span>Documento em leitura · a escrita é no Atendimento</span>}
+        </span>
+      )}
+      <div className="encounter-page__footer-actions">
+        <Button variant="secondary" size="sm" onClick={print} disabled={!row}>
+          <Icon n="printer" size={13} /> Imprimir via do cliente
+        </Button>
+        {row && workspaceHref && onOpenWorkspace && (
+          isDraft ? (
+            <Button variant="primary" size="sm" onClick={openClosing}>Revisar e finalizar no Atendimento</Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={openClosing}>
+              {canReopen ? 'Nota complementar ou reabertura' : 'Ver fechamento'}
+            </Button>
+          )
+        )}
+      </div>
+    </>
+  );
+
   return layout === 'page' ? (
     <main className="encounter-page encounter-session" data-persistence-state={persistence}>
       {/* Mesmo rail do workspace (/atendimento/[id]): contexto do paciente
           fica à esquerda durante todo o registro. Só dados reais da linha. */}
-      {row && (
-        <EncounterSessionRail
-          onBack={() => { void requestClose('navigation'); }}
-          eyebrow={row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
-          headline={row.petName || row.customerName || 'Paciente'}
-          tutor={row.petName ? row.customerName : ''}
-          tutorPhone={row.customerPhone || ''}
-          facts={[
-            { label: 'Serviço', value: row.serviceName || '' },
-            { label: 'Profissional', value: row.professionalName || '' },
-            { label: 'Agendado', value: `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` },
-          ]}
-          statusLabel={statusDef!.label.toUpperCase()}
-          statusTone={statusDef!.tone === 'green' ? 'emerald' : 'amber'}
-          bookingLabel={row.bookingStatus && BOOKING_STATUS[row.bookingStatus as BookingStatus] ? BOOKING_STATUS[row.bookingStatus as BookingStatus].panel : ''}
-          nav={[
-            ...(workspaceHref && onOpenWorkspace ? [{
-              key: 'atendimento', label: 'Atendimento', current: false,
-              onSelect: () => { void requestClose('navigation', () => onOpenWorkspace(workspaceHref)); },
-            }] : []),
-            { key: 'registro', label: 'Registro completo', current: true, onSelect: () => {} },
-          ]}
-        />
-      )}
+      {row && (() => {
+        const model = encounterSessionModel(row as never);
+        return (
+          <EncounterSessionRail
+            onBack={() => { void requestClose('navigation'); }}
+            backLabel={encounterReturnLabel(returnTo, model.clientName)}
+            eyebrow={model.eyebrow}
+            headline={model.headline}
+            patientLine={model.patientLine}
+            tutor={model.tutor}
+            tutorPhone={model.tutorPhone}
+            facts={model.facts}
+            statusLabel={model.statusLabel}
+            statusTone={model.statusTone}
+            bookingLabel={model.bookingLabel}
+            timer={model.live ? { startedAt: row.startedAt } : null}
+            surfaces={workspaceHref && onOpenWorkspace ? {
+              current: 'registro',
+              onSelect: (surface: EncounterSurface) => {
+                if (surface === 'atendimento') void requestClose('navigation', () => onOpenWorkspace(workspaceHref));
+              },
+            } : null}
+          />
+        );
+      })()}
       <div className="encounter-session__main">
       <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
       <header className="encounter-page__header" data-compact={compactHeader || undefined}>
@@ -987,12 +1091,7 @@ export function EncounterSheet({
             finalizado (leitura) "Salvo agora" seria falso: nada está sendo
             gravado. O estado do registro é dito pelo chip "Finalizado" e pelo
             bloco de finalização, que continuam ali. */}
-        {isDraft && (
-          <span className={`encounter-page__save-state encounter-page__save-state--${persistence}`} role="status" aria-live="polite">
-            {persistence === 'saving' ? ENCOUNTER_AUTOSAVE_LABELS.saving : persistence === 'error' ? ENCOUNTER_AUTOSAVE_LABELS.error : persistence === 'saved' ? ENCOUNTER_AUTOSAVE_LABELS.saved : 'Rascunho'}
-          </span>
-        )}
-        {encounterFooter}
+        {pageFooter}
       </footer>
       </div>
       {routeDismiss.dialog}

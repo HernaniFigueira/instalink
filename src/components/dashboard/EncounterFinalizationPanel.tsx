@@ -148,17 +148,21 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
     ...addenda.map((note) => ({ id: `addendum-${note.id}`, at: note.createdAt, kind: 'addendum' as const, label: 'Nota complementar', detail: note.text })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   return (
-    <section className="ws-panel mt-4" aria-labelledby="encounter-finalization-title" data-testid="encounter-finalization">
+    /* Entrega 2 — FECHAMENTO PLANO: sem card externo. Uma sequência com o
+       mesmo gutter do conteúdo da sessão, separada por divisores:
+       Registro clínico → Revisão e finalização → Pós-finalização. */
+    <section className="encounter-closing-flow" aria-label="Fechamento clínico" data-testid="encounter-finalization">
       {/* DS 1.0 · §4/§43 — texto à esquerda, ação à direita, com respiro: o
           fechamento clínico usa o MESMO ActionSection das outras superfícies.
           A autoridade continua vindo do servidor (`canFinalize`): a única
-          PRIMARY daqui é "Revisar e finalizar". */}
+          ação daqui é "Revisar e finalizar" — SECUNDÁRIA, porque a primária
+          única da tela é "Finalizar atendimento" no rodapé (mesma revisão). */}
       <ActionSection
         title="Fechamento clínico"
         hint={row.status === 'finalized' ? 'FINALIZADO · somente leitura' : 'Revise o atendimento antes de criar a fronteira clínica.'}
       >
         {row.status === 'draft' && (
-          <Button type="button" onClick={() => { setError(''); setReviewError(''); setReviewOpen(true); }} disabled={!canFinalize}>
+          <Button type="button" variant="secondary" onClick={() => { setError(''); setReviewError(''); setReviewOpen(true); }} disabled={!canFinalize}>
             Revisar e finalizar
           </Button>
         )}
@@ -178,12 +182,12 @@ export function EncounterFinalizationPanel({ businessId, row, canFinalize, flush
             <p className="encounter-final__band-text">Conteúdo finalizado e somente leitura. Alterações exigem reabertura.</p>
           </section>
           <section className="encounter-final__band encounter-final__band--review" aria-label="Revisão-finalização">
-            <h3 className="encounter-final__band-title">Revisão-finalização</h3>
-            <p className="encounter-final__band-text">
-              {finalRevision?.revisionNumber ? <><span className="encounter-final__label">Revisão vigente</span> <span className="tabular-nums">{finalRevision.revisionNumber}</span> · </> : null}
-              <span className="tabular-nums">{fmt(row.finalizedAt)}</span>
-              {' · '}{row.signedBy || 'Profissional responsável'}
-            </p>
+            <h3 className="encounter-final__band-title">Revisão e finalização</h3>
+            <dl className="encounter-final__facts">
+              <div><dt>Responsável</dt><dd>{row.signedBy || 'Profissional responsável'}</dd></div>
+              <div><dt>Finalizado em</dt><dd className="tabular-nums">{fmt(row.finalizedAt)}</dd></div>
+              <div><dt>Revisão vigente</dt><dd className="tabular-nums">{finalRevision?.revisionNumber || 1}</dd></div>
+            </dl>
           </section>
           <section className="encounter-final__band encounter-final__band--after" aria-label="Pós-finalização">
             <h3 className="encounter-final__band-title">Pós-finalização</h3>

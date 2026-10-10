@@ -271,3 +271,6 @@ export function EncounterVeterinaryAssessmentSection({
     </section>
   );
 }
+
+/** Entrega 2 — o Registro completo lê a avaliação com os MESMOS rótulos/unidades. */
+export { NUMBER_FIELDS as ASSESSMENT_NUMBER_FIELDS, TEXT_FIELDS as ASSESSMENT_TEXT_FIELDS };

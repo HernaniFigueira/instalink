@@ -29,7 +29,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -123,8 +123,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<HistoryTab>('overview');
-  const tabsViewportRef = useRef<HTMLDivElement>(null);
-  const [tabsOverflowRight, setTabsOverflowRight] = useState(false);
   // FASE 2 · P2/P7 — financeiro do paciente (carga única, escopo do contato).
   const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
   const [financeLoaded, setFinanceLoaded] = useState(false);
@@ -437,24 +435,6 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     ...(clinicalView ? [] : [{ id: 'notes' as const, label: 'Observações administrativas', icon: 'receipt', count: (person.notes || []).length }]),
   ];
 
-  useEffect(() => {
-    const host = tabsViewportRef.current;
-    const tabs = host?.querySelector<HTMLElement>('[role="tablist"]');
-    if (!host || !tabs) return;
-    const measure = () => setTabsOverflowRight(tabs.scrollWidth > tabs.clientWidth + 1
-      && tabs.scrollLeft + tabs.clientWidth < tabs.scrollWidth - 2);
-    measure();
-    tabs.addEventListener('scroll', measure, { passive: true });
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    observer?.observe(host);
-    observer?.observe(tabs);
-    window.addEventListener('resize', measure);
-    return () => {
-      tabs.removeEventListener('scroll', measure);
-      observer?.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [tabItems.length, canFinance, canEncounter]);
 
   const notes = person.notes || [];
 
@@ -515,6 +495,44 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // Arquivos reais: anexos dos atendimentos desta pessoa (Storage + referência).
   const files = useMemo(() => encounters.flatMap((e) => (e.files || []).map((f) => ({ ...f, encounterDate: e.date, encounterId: e.id }))), [encounters]);
 
+  const pageBack = pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`;
+  // Ações da ficha em PÁGINA: no cabeçalho do workspace (não sticky), uma
+  // única primária (Novo agendamento).
+  const pageActions = (
+    <>
+      {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+      {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
+      {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
+          textarea e o foca com highlight sutil (sem modal novo). */}
+      {!clinicalView && (
+        <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
+          <Icon n="pencil" size={14} /> Registrar nota
+        </Button>
+      )}
+      {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
+          registro; antes disso a chegada é registrada na Agenda. */}
+      {canEncounter && canStartBooking(nextBooking) && (nextBooking!.workflowState === 'arrived' || nextBooking!.workflowState === 'in_care') && (
+        <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
+          <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
+        </Button>
+      )}
+      {!clinicalView && (
+        <Button variant="secondary" size="sm" onClick={() => {
+          const opening = !editing;
+          if (editing) requestCloseEdit(); else setEditing(true);
+          // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+          // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+          if (opening) focusFieldSoon('client-edit-name');
+        }}>
+          <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
+        </Button>
+      )}
+      <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
+        <Icon n="calendarPlus" size={14} /> Novo agendamento
+      </Button>
+    </>
+  );
+
   return (
     <>
     <ProfileShell
@@ -525,41 +543,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
       subtitle={variant === 'page'
         ? (person.contactId ? 'Paciente 360 — perfil, agenda, atendimentos, arquivos e financeiro' : 'Pessoa ainda sem cadastro no CRM')
         : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
-      backHref={variant === 'page' ? (pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`) : profileHref(`?b=${encodeURIComponent(businessId)}`)}
-      footer={variant === 'page' ? (
-        <>
-          {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
-          {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
-          {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
-              textarea e o foca com highlight sutil (sem modal novo). */}
-          {!clinicalView && (
-            <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
-              <Icon n="pencil" size={14} /> Registrar nota
-            </Button>
-          )}
-          {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
-              registro; antes disso a chegada é registrada na Agenda. */}
-          {canEncounter && canStartBooking(nextBooking) && (nextBooking!.workflowState === 'arrived' || nextBooking!.workflowState === 'in_care') && (
-            <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
-              <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
-            </Button>
-          )}
-          {!clinicalView && (
-            <Button variant="secondary" size="sm" onClick={() => {
-              const opening = !editing;
-              if (editing) requestCloseEdit(); else setEditing(true);
-              // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
-              // campo + highlight sutil (1–2s). Fechar não mexe no foco.
-              if (opening) focusFieldSoon('client-edit-name');
-            }}>
-              <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
-            </Button>
-          )}
-          <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
-            <Icon n="calendarPlus" size={14} /> Novo agendamento
-          </Button>
-        </>
-      ) : (
+      backHref={variant === 'page' ? pageBack : profileHref(`?b=${encodeURIComponent(businessId)}`)}
+      footer={variant === 'page' ? null : (
         <>
           {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
@@ -581,14 +566,22 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           embora. Em largura estreita o rail vira o bloco de topo da página. */}
       <div className="entity-shell">
         <aside className="entity-rail" aria-label="Contexto do cliente">
-          <div className="entity-rail__identity">
-            <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={56} />
-            <h2 className="entity-rail__name">{person.name || 'Sem nome'}</h2>
+          <PageBackAction href={pageBack} label="Voltar para clientes" className="entity-rail__back" />
+          {/* IDENTIDADE — avatar pequeno com o nome AO LADO; idade logo abaixo. */}
+          <section className="entity-rail__section entity-rail__identity" aria-label="Identidade">
+            <div className="entity-rail__who">
+              <Avatar name={person.name} src={!clinicalView ? (person.avatar || undefined) : undefined} size={44} />
+              <div className="min-w-0">
+                <h1 className="entity-rail__name">{person.name || 'Sem nome'}</h1>
+                {!clinicalView && (
+                  <p className="entity-rail__age">{age !== null ? `${age} anos` : 'Idade não informada'}</p>
+                )}
+              </div>
+            </div>
             {!clinicalView && (
-              <p className="entity-rail__age">
-                {age !== null ? `${age} anos` : 'Idade não informada'}
-                {profile.birthDate ? ` · nasceu em ${profile.birthDate.split('-').reverse().join('/')}` : ''}
-              </p>
+              <dl className="entity-rail__data">
+                <Data label="Nascimento" value={profile.birthDate ? profile.birthDate.split('-').reverse().join('/') : '—'} />
+              </dl>
             )}
             {!clinicalView && (
               <div className="entity-rail__tags">
@@ -600,25 +593,36 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
               </div>
             )}
-          </div>
-          <dl className="entity-rail__data">
-            <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
-              action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
-            {!clinicalView && <Data label="E-mail" value={person.email || '—'} />}
-          </dl>
+          </section>
+          <section className="entity-rail__section" aria-labelledby="entity-rail-contact">
+            <h2 id="entity-rail-contact" className="entity-rail__heading">Contato</h2>
+            <dl className="entity-rail__data">
+              <Data label="Telefone / WhatsApp" value={person.phone ? formatPhoneBR(person.phone) : '—'}
+                action={person.phone ? <CopyChip value={person.phone} /> : undefined} />
+              {!clinicalView && <Data label="E-mail" value={person.email || '—'} />}
+            </dl>
+          </section>
+          {/* CADASTRO — dado administrativo de consulta, no mesmo contexto fixo
+              (antes era uma faixa horizontal no topo do workspace). */}
+          {!clinicalView && (
+            <section className="entity-rail__section" aria-labelledby="entity-rail-cadastro">
+              <h2 id="entity-rail-cadastro" className="entity-rail__heading">Cadastro</h2>
+              <dl className="entity-rail__data" aria-label="Dados administrativos">
+                <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
+                <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
+                <Data label="Origem" value={person.source || '—'} />
+                <Data label="Total de atendimentos" value={String(person.bookings.length)} />
+              </dl>
+            </section>
+          )}
         </aside>
         <div className="entity-main">
-          {/* Dados administrativos saem do rail e ficam no workspace: não são
-              contexto persistente da sessão, são leitura de cadastro. */}
-          {!clinicalView && (
-            <dl className="entity-main__admin" aria-label="Dados administrativos">
-              <Data label="CPF" value={profile.cpf ? formatCpf(profile.cpf) : '—'} />
-              <Data label="Cliente desde" value={person.customerSince ? person.customerSince.slice(0, 10).split('-').reverse().join('/') : '—'} />
-              <Data label="Origem" value={person.source || '—'} />
-              <Data label="Atendimentos" value={String(person.bookings.length)} />
-              <Data label="Identificação interna" value={person.contactId ? person.contactId.slice(0, 8) : '—'} mono />
-            </dl>
-          )}
+          {/* Cabeçalho do workspace: ações da ficha, sem sticky (o contexto
+              persistente é o rail; nada cobre a identidade). */}
+          <header className="entity-main__header">
+            <p className="entity-main__title">Visão do cliente</p>
+            <div className="entity-main__actions">{pageActions}</div>
+          </header>
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
         {person.contactId && (
           <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
@@ -890,17 +894,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
-      <div className="px-4 pb-6">
+      <div className="entity-main__history">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
-        <div ref={tabsViewportRef} className="client360-tabs-wrap" data-overflow-right={tabsOverflowRight || undefined}>
-          <Tabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
-        </div>
+        {/* Abas principais visíveis; o excedente vai para "Mais" (menu
+            canônico). Sem scroll horizontal escondido. */}
+        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
           {tab === 'overview' && (
             <div className="p-5 space-y-5">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="client360-overview-grid">
                 <div className="rounded-lg border border-[var(--border)] p-4">
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo agendamento</h3>
                   {nextBooking ? (
@@ -930,9 +934,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     </>
                   ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem retorno estruturado registrado.</p>}
                 </div>
-              </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
                 {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-4">
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação importante</h3>
                   {lastNote ? (
@@ -1254,11 +1256,10 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
 }) {
   if (variant === 'page') {
     return (
+      // Entrega 2 — sem barra sticky por cima do rail: "Voltar para clientes"
+      // abre o rail de contexto e as ações vivem no cabeçalho do workspace
+      // (`footer` já entra lá via `pageActions`). Nada cobre a identidade.
       <div className="client-profile-page min-w-0 pb-6">
-        <header className="gd-context-header client-profile-page__toolbar flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-          <PageBackAction href={backHref} label="Voltar para clientes" />
-          <div className="client-profile-page__actions ml-auto flex flex-wrap items-center gap-2">{footer}</div>
-        </header>
         <div className="ws-panel entity-panel">{children}</div>
       </div>
     );

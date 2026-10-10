@@ -5,7 +5,7 @@ import { roleLabel } from '../role-labels';
 import { canShowPublicPageLink } from '../product';
 
 const read = (file: string) => readFileSync(file, 'utf8');
-const validPageTypes = ['workspace', 'record', 'detail', 'form', 'hub'];
+const validPageTypes = ['workspace', 'context', 'record', 'detail', 'form', 'hub'];
 
 describe('Page Architecture contract', () => {
   it('every authenticated DashboardShell route has a valid archetype and a page file', () => {
@@ -13,7 +13,7 @@ describe('Page Architecture contract', () => {
       expect(validPageTypes, `${route.href} has no valid pageType`).toContain(route.pageType);
       expect(existsSync(`src/app/(dashboard)${route.href}/page.tsx`), route.href).toBe(true);
     }
-    expect(pageTypeForPath('/clientes/abc123')).toBe('detail');
+    expect(pageTypeForPath('/clientes/abc123')).toBe('context');
     expect(pageTypeForPath('/clientes')).toBe('workspace');
     for (const route of AUTHENTICATED_AUXILIARY_ROUTES) {
       expect(validPageTypes, `${route.href} has no valid pageType`).toContain(route.pageType);
@@ -22,7 +22,7 @@ describe('Page Architecture contract', () => {
     }
   });
 
-  it('workspace routes stay full width; forms center; Atendimento remains a record', () => {
+  it('workspace routes stay full width; forms center; Cliente 360/Atendimento use the context shell at operational width', () => {
     const css = read('src/app/globals.css');
     const shell = read('src/components/DashboardShell.tsx');
     expect(FULL_WIDTH_PATHS).toContain('/agenda');
@@ -34,7 +34,9 @@ describe('Page Architecture contract', () => {
     expect(css).toContain('margin-inline:auto');
     expect(shell).toContain('type={pageType}');
     expect(shell).not.toMatch(/activeRoute\?\.width/);
-    expect(pageTypeForPath('/atendimento')).toBe('record');
+    expect(pageTypeForPath('/atendimento')).toBe('context');
+    expect(pageTypeForPath('/atendimento/e1/registro')).toBe('context');
+    expect(css).toContain('.gd-page-frame--context { max-width:none; }');
     expect(css).toContain('.il-page-frame--record,');
   });
 });
