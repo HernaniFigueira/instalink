@@ -230,6 +230,7 @@
   --gd-control-h-sm: 34px;
   --gd-control-h-xs: 28px;
   --gd-control-h-touch: 44px;
+  --gd-textarea-min-h: 96px;     /* contrato Blueprint §14: Textarea min 96px (token único) */
   --gd-control-h-icon: var(--gd-control-h);
 
   /* ── SETS DE INTERAÇÃO (o que NÃO pode ser inventado por página) ───────
@@ -243,6 +244,10 @@
   /* Detail side modal (DS 1.1): entra/sai na janela 160–200ms do contrato. */
   --gd-motion-side-modal: 190ms;
   --gd-motion-side-modal-out: 170ms;
+  --gd-motion-dialog: 180ms;     /* Dialog: entrada opacity + Y 8px / scale .985 (janela 160–200) */
+  --gd-motion-dialog-out: 150ms; /* Dialog: saída simétrica, sempre mais curta que a entrada */
+  --gd-motion-sheet: 200ms;      /* ws-sheet (painel lateral de workspace): entrada/redimensionamento */
+  --gd-motion-sheet-out: 170ms;  /* ws-sheet: saída sempre mais curta */
   --gd-nav-panel-attach: 0px;    /* o painel de grupo nasce COLADO no rail */
 
   /* ── LAYOUT DO APP SHELL ──────────────────────────────────────────────── */
@@ -349,7 +354,10 @@
   border: 0; border-radius: 0; background-color: transparent; box-shadow: none;
 }
 .gd-field--multiline .gd-field__box { align-items: flex-start; }
-.gd-field__box > textarea { min-height: 76px; padding: var(--gd-space-2) 0; resize: vertical; }
+/* Textarea: altura mínima é do token (96px). O seletor com `.il-field-control`
+   vence a régua genérica do controle (38px) que antes engolia esta regra. */
+.gd-field__box > textarea.il-field-control { min-height: var(--gd-textarea-min-h); padding: var(--gd-space-2) 0; resize: vertical; }
+textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 /* A seta do Select é única e fica à direita, sem tilhar pela largura. */
 .gd-field__box > select.il-field-control,
 .gd-field__box > select {
@@ -423,6 +431,10 @@
     --gd-motion-fast: 0ms;
     --gd-motion-base: 0ms;
     --gd-motion-slow: 0ms;
+    --gd-motion-dialog: 0ms;
+    --gd-motion-dialog-out: 0ms;
+    --gd-motion-side-modal: 0ms;
+    --gd-motion-side-modal-out: 0ms;
   }
 }
 
@@ -568,6 +580,9 @@
 .gd-menu__item:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 .gd-menu__item[disabled] { color: var(--gd-text-disabled); cursor: not-allowed; background: transparent; }
 .gd-menu__item--danger { color: var(--gd-danger-fg); }
+/* CP1 · Combobox/Listbox: selecionado (valor) ≠ ativo (teclado/hover). */
+.gd-menu__item[data-selected='true'] { color: var(--gd-accent-fg); font-weight: var(--gd-weight-semibold); }
+.gd-menu__item[data-selected='true'][data-active='true'] { background: var(--gd-accent-soft); }
 .gd-menu__separator { height: 1px; margin: var(--gd-space-1) 0; background: var(--gd-border-soft); }
 /* MENU DE CONTEXTO (rodada 2 · auditoria da Agenda): mesmo painel do menu do
    sistema, com um CABEÇALHO de uma linha que diz SOBRE O QUE se está agindo —
@@ -604,7 +619,9 @@
   animation: gd-fade-in var(--gd-motion-base) var(--gd-ease);
 }
 @keyframes gd-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gd-fade-out { to { opacity: 0; } }
 .gd-dialog {
+  animation: gd-dialog-in var(--gd-motion-dialog) var(--gd-ease);
   /* A faixa do Dialog é ajustável por instância (`--gd-dialog-w`) sem criar
      classe por tela: confirmação simples fica curta, revisão clínica abre mais
      larga. O default mantém 520px. */
@@ -615,6 +632,12 @@
   border-radius: var(--gd-radius-lg);
   box-shadow: var(--gd-shadow-overlay);
 }
+/* Entrada/saída simétricas do Dialog: a saída é o reverso da entrada (sem corte
+   seco). O componente segura a desmontagem por `--gd-motion-dialog-out`. */
+@keyframes gd-dialog-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes gd-dialog-out { to { opacity: 0; transform: translateY(8px) scale(.985); } }
+.gd-dialog-backdrop[data-closing] { animation: gd-fade-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.gd-dialog[data-closing] { animation: gd-dialog-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 .gd-dialog__header, .gd-dialog__footer {
   display: flex; align-items: center; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;
@@ -708,6 +731,13 @@
 .gd-icon-control:focus-visible, .gd-icon-control--sm:focus-visible, .gd-icon-control--xs:focus-visible {
   background: var(--gd-bg-hover);
 }
+.gd-icon-control:active, .gd-icon-control--sm:active, .gd-icon-control--xs:active {
+  background: var(--gd-bg-subtle);
+}
+/* CP1 · IconButton como toggle real (aria-pressed): superfície suave + cor de acento. */
+.gd-icon-control[aria-pressed='true'], .gd-icon-control--sm[aria-pressed='true'], .gd-icon-control--xs[aria-pressed='true'] {
+  background: var(--gd-accent-soft); color: var(--gd-accent-fg);
+}
 @media (pointer: coarse), (max-width: 767px) {
   .gd-icon-control, .gd-icon-control--sm, .gd-icon-control--xs {
     width: var(--gd-control-h-touch); height: var(--gd-control-h-touch); min-width: var(--gd-control-h-touch);
@@ -740,6 +770,8 @@
    margem no desktop. O painel flutuante insetado de 16px (DS 1.0) NÃO é mais o
    comportamento final: ele lia como card solto, não como detalhe do registro. */
 .gd-detail::backdrop { background: var(--gd-overlay-strong); animation: gd-fade-in var(--gd-motion-base) var(--gd-ease); }
+/* Saída do detail: o backdrop esmaece junto com o painel (antes sumia de corte). */
+.gd-detail[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 .gd-detail__panel {
   position: absolute;
   top: 0; right: 0; bottom: 0;
@@ -756,10 +788,19 @@
 }
 .gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-side-modal) var(--gd-ease); }
 .gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* CP1 · Drawer genérico: entra pela direita (24px→0) e sai simétrico (0→24px),
+   com opacidade pareada. A saída roda com o painel MONTADO (data-closing). */
+@keyframes gd-drawer-strip-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes gd-drawer-strip-out { from { transform: none; opacity: 1; } to { transform: translateX(24px); opacity: 0; } }
+.il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
+.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.il-drawer[data-closing]::backdrop { animation: none; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:
    é uma folha presa à lateral, não um card que aparece. */
+/* Contrato único de folha lateral: ENTRA da borda direita (direita → esquerda)
+   e SAI pela mesma borda (esquerda → direita), com opacidade estável. */
 @keyframes gd-detail-in { from { transform: translateX(100%); } to { transform: none; } }
-@keyframes gd-detail-out { to { transform: translateX(100%); } }
+@keyframes gd-detail-out { from { transform: none; } to { transform: translateX(100%); } }
 .gd-detail__header {
   display: flex; align-items: flex-start; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;
@@ -814,6 +855,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .gd-detail[open] .gd-detail__panel, .gd-detail[data-closing] .gd-detail__panel { animation: none; }
+  .il-drawer__strip, .il-drawer[data-closing] .il-drawer__strip { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -860,5 +902,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gd-layer, .gd-tooltip, .gd-dialog-backdrop, .gd-toast { animation: none; }
+  .gd-layer, .gd-tooltip, .gd-dialog-backdrop, .gd-dialog, .gd-toast { animation: none; }
+  .gd-detail[data-closing]::backdrop, .gd-detail::backdrop { animation: none; }
+  /* Painéis de workspace (ws-sheet, drawer lateral) seguem o mesmo contrato. */
+  dialog.ws-sheet, dialog.ws-sheet[open], dialog.ws-sheet[data-closing],
+  .il-drawer__panel--side, .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side { animation: none !important; transition: none !important; }
 }

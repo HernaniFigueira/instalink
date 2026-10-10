@@ -444,3 +444,28 @@ página (`amber-*`/`zinc-*`) para os tokens do DS.
    salvo) fica **no fluxo** onde a ação aconteceu; toast é para o que acontece
    fora do contexto da tela (403 global). Material permite ambos; a escolha é
    pela distância entre a ação e o olhar de quem opera.
+
+## 10. Overlays compactos e foco de erro (Bloco 1 — regras definitivas)
+
+Validado em renderização real (1440, 1366, 1024, 768; smoke 390).
+
+- **Família `gd-ovl`** (`src/app/globals.css`): painel flutuante de contexto (Filtros da Agenda, resumo de hover) usa borda `--gd-border-soft`, raio `--gd-radius-md`, sombra `--gd-shadow-md`, fundo `--gd-bg-surface`. Subelementos: `gd-ovl__head`, `gd-ovl__title` (14px semibold), `gd-ovl__label` (13px medium, muted), `gd-ovl__body`, `gd-ovl__foot` (rodapé com régua superior). Nenhum valor literal de cor, raio ou sombra.
+- **Motion:** entrada própria só em `gd-ovl--enter` (painel montado diretamente). Popover e HoverCard animam pela camada do DS (`gd-layer-in`); não duplicar. `prefers-reduced-motion` desliga.
+- **DetailSideModal:** mantém a geometria de borda (sem raio, sem sombra, `--gd-detail-w`) conforme §9.4. Tokens de borda, fundo, espaçamento e motion já são os da família `gd-ovl`. Não é exceção de cor ou tipografia.
+- **Título do HoverCard** (nome da entidade) permanece no tamanho de seção (`--gd-type-section-size`); títulos de painéis compactos usam `gd-ovl__title`.
+- **Bloqueio:** subtítulo do Drawer é uma frase curta (cabe em uma linha a 480px). Não repetir a explicação no corpo.
+- **Foco no primeiro erro:** em validação local de formulário, o foco vai para o **campo inválido** (por `id`) e o bloco de erro segue com `role="alert"`. Sem campo mapeado, o foco cai no bloco de erro.
+- **Campo somente leitura de valor fixo** (ex.: Conselho = CRMV): `Input readOnly` dentro de `Field`, com a mesma altura de controle (40px). Não usar `div` com estilo próprio.
+- **Toolbar da Agenda (desktop ≥1024):** linha de controles sem moldura, separada da grade por régua de 1px; sem caixa dentro de caixa.
+
+## 11. Sessão clínica do Atendimento (Bloco 2)
+
+Escopo: workspace canônico `/atendimento/[encounterId]`. Sem família visual nova: reutiliza `Button`, `StatusBadge`, `Dialog`, `Notice`, `ActionSection`, `ClinicalRecordSection` e os tokens do DS.
+
+- **Cabeçalho:** paciente (pet) como protagonista; espécie, raça, idade e sexo só do cadastro; tutor com telefone; serviço, profissional e agendamento em fatos curtos. Estado clínico (badge textual) e status do agendamento são eixos separados.
+- **Navegação contextual agrupada:** grupos "Atendimento" (Atendimento, Anamnese, Avaliação) e "Plano clínico" (Problemas, Conduta, Procedimentos). Só seções reais; sem item morto. Grupo sem item não aparece.
+- **Blocos abaixo do conteúdo:** "Histórico e arquivos" (somente leitura; upload fica no registro completo) e "Fechamento" (painel existente).
+- **Rodapé persistente (sticky):** esquerda = timer e estado real de gravação; direita = "Registro completo" (secundário, pela guarda de saída) e CTA "Finalizar atendimento" (primário em repouso; abre a mesma revisão). Leitura e finalizado não exibem CTA.
+- **Timer:** somente a partir de `startedAt` persistido. Início de outro dia não conta ao vivo. Sem timestamp válido, não aparece. Nenhum início é criado no cliente.
+- **Revisão de finalização:** hierarquia Avaliação e plano → Retorno e pendências → Autoria → Demais dados. Pendências são os blocos realmente vazios. Danger sólido apenas dentro da confirmação.
+- **Pendências registradas (não implementadas):** PENDÊNCIA CLÍNICA — TIMER PERSISTIDO (fuso do timer usa o padrão do produto; o Encounter não carrega o fuso do negócio); PENDÊNCIA DE PRODUTO — PRÉ-ATENDIMENTO; transcrição/IA fora de escopo.

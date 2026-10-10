@@ -263,15 +263,36 @@ async function clickEmptyCell(professionalId: string, time: string, opts: { full
   const col = gridColumn(`[data-agenda-column-professional="${professionalId}"]`);
   fireEvent.click(col, { clientX: 120, clientY: clientYFor(time) });
   await waitFor(() => expect(hasQuick()).toBe(true), { timeout: 5000 });
-  if (opts.serviceId) fireEvent.change(within(quick()).getByLabelText(/^Serviço/), { target: { value: opts.serviceId } });
+  // DS · Serviço do Quick é Combobox: escolhe-se pela UI (clique + opção), sem select nativo.
+  if (opts.serviceId) {
+    await userEvent.click(within(quick()).getByLabelText(/^Serviço/));
+    const opt = await waitFor(() => {
+      const o = document.querySelector<HTMLElement>(`[role="option"][data-value="${opts.serviceId}"]`);
+      if (!o) throw new Error(`opção ausente: ${opts.serviceId}`);
+      return o;
+    });
+    await userEvent.click(opt);
+  }
   if (opts.full !== false) await moreOptions();
   return start;
 }
 
 const sheet = () => document.querySelector<HTMLElement>('dialog.il-drawer')!;
 const dateInput = () => within(sheet()).getByLabelText(/^3\. Data/) as HTMLInputElement;
-const serviceSelect = () => within(sheet()).getByLabelText(/^2\. Serviço/) as HTMLSelectElement;
-const proSelect = () => within(sheet()).queryByLabelText(/^Profissional/) as HTMLSelectElement | null;
+// CP3 · Serviço/Profissional são Combobox do DS e a data é DatePicker: o valor
+// técnico fica em data-value (automação), e a escolha é feita pela UI real.
+const serviceSelect = () => within(sheet()).getByLabelText(/^2\. Serviço/) as HTMLElement;
+const proSelect = () => within(sheet()).queryByLabelText(/^Profissional/) as HTMLElement | null;
+const val = (el: HTMLElement | null) => el?.getAttribute('data-value') ?? '';
+async function pickCombo(el: HTMLElement, id: string) {
+  await userEvent.click(el);
+  const opt = await waitFor(() => {
+    const o = document.querySelector<HTMLElement>(`[role="option"][data-value="${id}"]`);
+    if (!o) throw new Error(`opção ausente: ${id}`);
+    return o;
+  });
+  await userEvent.click(opt);
+}
 const slotButton = (time: string) =>
   (Array.from(sheet().querySelectorAll('button'))
     .find((b) => b.textContent?.trim() === time && b.className.includes('il-option-choice')) as HTMLElement) || null;
@@ -291,7 +312,7 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
       professionalId: HERNANI,
     });
     // E o campo de data reflete a data da coluna.
-    expect(dateInput().value).toBe(DATE);
+    expect(val(dateInput())).toBe(DATE);
   });
 
   it('o horário vem da posição vertical (snap de 15 min, medido na grade real)', async () => {
@@ -335,7 +356,7 @@ describe('A1 · handoff do Quick Create sem serviço escolhido', () => {
       date: DATE, time: '10:00', professionalId: HERNANI,
       serviceId: '', allowSingleEligibleServicePrefill: false,
     });
-    expect(serviceSelect().value).toBe('');
+    expect(val(serviceSelect())).toBe('');
     expect(slotsApi.calls.some((url) => url.includes(`serviceId=${SVC_CARDIO}`))).toBe(false);
   });
 
@@ -351,7 +372,7 @@ describe('A1 · handoff do Quick Create sem serviço escolhido', () => {
       onCreated={vi.fn()}
     />);
     await waitFor(() => expect(screen.getByLabelText(/^2\. Serviço/)).toBeTruthy());
-    expect((screen.getByLabelText(/^2\. Serviço/) as HTMLSelectElement).value).toBe(SVC_CARDIO);
+    expect(val(screen.getByLabelText(/^2\. Serviço/))).toBe(SVC_CARDIO);
   });
 });
 
@@ -362,20 +383,20 @@ describe('2–3 · a intenção explícita é preservada: serviço, profissional
     await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
 
     // Serviço escolhido no Quick: svc-cardio é o único de Hernani (o inativo não conta).
-    expect(serviceSelect().value).toBe(SVC_CARDIO);
+    expect(val(serviceSelect())).toBe(SVC_CARDIO);
     // Com serviço escolhido o bloco de horários existe e a intenção aparece.
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     expect(slotButton('10:00')!.getAttribute('aria-pressed')).toBe('true');
     // A disponibilidade é consultada para o profissional da coluna.
     expect(slotsApi.calls.some((u) => u.includes(`serviceId=${SVC_CARDIO}`) && u.includes(`professionalId=${HERNANI}`))).toBe(true);
-    expect(dateInput().value).toBe(DATE);
+    expect(val(dateInput())).toBe(DATE);
     expect(slotsApi.posts).toBe(0);
   });
 
   it('Orlando mantém o serviço que foi escolhido no Quick e a hora já visível', async () => {
     await renderAgenda();
     await clickEmptyCell(ORLANDO, '09:30', { serviceId: SVC_ODONTO });
-    expect(serviceSelect().value).toBe(SVC_ODONTO);
+    expect(val(serviceSelect())).toBe(SVC_ODONTO);
     await waitFor(() => expect(slotButton('09:30')).toBeTruthy());
     expect(slotButton('09:30')!.getAttribute('aria-pressed')).toBe('true');
   });
@@ -397,23 +418,25 @@ describe('4 · o serviço só é levado ao fluxo completo por intenção explíc
     await clickEmptyCell(MICHELLE, '11:00');
 
     expect(seed().initial.professionalId).toBe(MICHELLE);
-    expect(serviceSelect().value).toBe('');
+    expect(val(serviceSelect())).toBe('');
     // Sem serviço, o bloco de horários ainda não aparece (comportamento atual).
     expect(screen.queryByText(/Carregando horários/)).toBeNull();
 
     // Escolhendo um serviço elegível, profissional E horário permanecem.
-    await userEvent.selectOptions(serviceSelect(), SVC_ESTETICA);
+    await pickCombo(serviceSelect(), SVC_ESTETICA);
     await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
     expect(slotsApi.calls.some((u) => u.includes(`serviceId=${SVC_ESTETICA}`) && u.includes(`professionalId=${MICHELLE}`))).toBe(true);
-    expect(dateInput().value).toBe(DATE);
+    expect(val(dateInput())).toBe(DATE);
     expect(slotsApi.posts).toBe(0);
   });
 
   it('serviço inativo/desativado NÃO é considerado elegível', async () => {
     await renderAgenda();
     await clickEmptyCell(MICHELLE, '11:00');
-    const options = Array.from(serviceSelect().options).map((o) => o.value);
+    await userEvent.click(serviceSelect());
+    const options = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).map((o) => o.getAttribute('data-value') ?? '');
+    await userEvent.keyboard('{Escape}');
     // svc-inativo existe no catálogo mas não é agendável: não conta como
     // elegível (senão Michelle teria 3 e, se contasse, poderia ser escolhido).
     expect(options).not.toContain(SVC_INATIVO);
@@ -430,7 +453,7 @@ describe('4 · o serviço só é levado ao fluxo completo por intenção explíc
     ];
     await renderAgenda();
     await clickEmptyCell(HERNANI, '10:00', { serviceId: 'svc-unico' });
-    expect(serviceSelect().value).toBe('svc-unico');
+    expect(val(serviceSelect())).toBe('svc-unico');
     await waitFor(() => expect(slotButton('10:00')).toBeTruthy());
     expect(slotButton('10:00')!.getAttribute('aria-pressed')).toBe('true');
   });
@@ -442,16 +465,16 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
     await renderAgenda();
     await clickEmptyCell(MICHELLE, '11:00');
     // svc-cardio é só do Hernani.
-    await userEvent.selectOptions(serviceSelect(), SVC_CARDIO);
+    await pickCombo(serviceSelect(), SVC_CARDIO);
 
     expect(await screen.findByText(/Michelle não realiza este serviço/)).toBeTruthy();
-    expect(proSelect()!.value).toBe(MICHELLE);
+    expect(val(proSelect()!)).toBe(MICHELLE);
     expect(slotsApi.calls.some((u) => u.includes(SVC_CARDIO) && u.includes(`professionalId=${MICHELLE}`))).toBe(false);
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('11:00');
-    await userEvent.selectOptions(proSelect()!, HERNANI);
+    await pickCombo(proSelect()!, HERNANI);
     await waitFor(() => expect(slotButton('11:00')).toBeTruthy());
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
-    expect(dateInput().value).toBe(DATE);
+    expect(val(dateInput())).toBe(DATE);
     expect(slotsApi.posts).toBe(0);
   });
 
@@ -494,7 +517,7 @@ describe('5 · Semana: coluna é dia — não inventa profissional', () => {
     expect(seed().initial.time).toBe('10:30');
     expect(seed().initial.professionalId).toBe('');
     // Sem profissional, não há pré-seleção de serviço.
-    expect(serviceSelect().value).toBe('');
+    expect(val(serviceSelect())).toBe('');
   });
 });
 
@@ -547,10 +570,10 @@ describe('Clinical UX Closure — range and block mode', () => {
     await renderAgenda();
     fireEvent.click(screen.getByRole('button', { name: 'Bloquear horário' }));
     pointerRange(ORLANDO, '09:00', '13:00');
-    await screen.findByText('Indisponibilidade temporária');
+    await screen.findByText('Período indisponível. Não conta como atendimento.');
     expect((screen.getByLabelText('Início') as HTMLInputElement).value).toBe('09:00');
     expect((screen.getByLabelText('Fim') as HTMLInputElement).value).toBe('13:00');
-    expect((screen.getByLabelText('Profissional') as HTMLSelectElement).value).toBe(ORLANDO);
+    expect(val(screen.getByLabelText('Profissional'))).toBe(ORLANDO); // bloqueio: Combobox do DS
     expect(screen.getByTestId('agenda-selected-range').textContent).toBe('09:00–13:00');
     fireEvent.click(within(sheet()).getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect(screen.queryByTestId('agenda-selected-range')).toBeNull());
@@ -561,11 +584,11 @@ describe('Clinical UX Closure — range and block mode', () => {
 describe('Final pré-F1 intent preservation', () => {
   it('switching between two eligible services keeps Michelle and 11:00',async()=>{
     await renderAgenda(); await clickEmptyCell(MICHELLE,'11:00');
-    await userEvent.selectOptions(serviceSelect(),SVC_ESTETICA);
+    await pickCombo(serviceSelect(), SVC_ESTETICA);
     await waitFor(()=>expect(slotButton('11:00')).toBeTruthy());
-    await userEvent.selectOptions(serviceSelect(),SVC_LIMPEZA);
+    await pickCombo(serviceSelect(), SVC_LIMPEZA);
     await waitFor(()=>expect(slotsApi.calls.some(u=>u.includes(SVC_LIMPEZA)&&u.includes(MICHELLE))).toBe(true));
-    expect(proSelect()!.value).toBe(MICHELLE);
+    expect(val(proSelect()!)).toBe(MICHELLE);
     expect(slotButton('11:00')!.getAttribute('aria-pressed')).toBe('true');
   });
   it('past intent stays visible and explains the interval has passed',async()=>{
@@ -582,14 +605,16 @@ describe('P2 — canonical eligibility and preventive validation', () => {
     Object.assign(service, { professionalMode: 'selected', professionalIds: [] });
     await renderAgenda();
     await clickEmptyCell(HERNANI, '10:00');
-    fireEvent.change(serviceSelect(), { target: { value: SVC_CARDIO } });
+    await pickCombo(serviceSelect(), SVC_CARDIO);
     await waitFor(() => expect(screen.getAllByText('Nenhum profissional está habilitado para este serviço.')).toHaveLength(1));
     expect(screen.queryByText(/Fechado neste dia/)).toBeNull();
     const save = within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    expect(serviceSelect().selectedOptions[0].textContent).toContain('Sem profissional habilitado');
-    fireEvent.change(serviceSelect(), { target: { value: SVC_ESTETICA } });
-    fireEvent.change(proSelect()!, { target: { value: MICHELLE } });
+    await userEvent.click(serviceSelect());
+    expect(document.querySelector<HTMLElement>(`[role="option"][data-value="${SVC_CARDIO}"]`)?.textContent).toContain('Sem profissional habilitado');
+    await userEvent.keyboard('{Escape}');
+    await pickCombo(serviceSelect(), SVC_ESTETICA);
+    await pickCombo(proSelect()!, MICHELLE);
     await waitFor(() => expect(save.disabled).toBe(false));
     expect(screen.queryByText('Nenhum profissional está habilitado para este serviço.')).toBeNull();
   });

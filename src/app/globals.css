@@ -410,6 +410,8 @@ body {
   border-color: var(--brand);
   color: #fff;
 }
+/* CP3 · filtros: foco por teclado com anel do DS (antes sem foco visível). */
+.il-chip:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 
 /* Tooltip simples (sidebar recolhida, ícones sem rótulo). */
 .il-tip { position: relative; }
@@ -1032,7 +1034,7 @@ input[type='color'] { @apply cursor-pointer; }
    regra é do controle — não de um `h-[38px]` de página. */
 .il-field-control { min-height: var(--control-h); }
 .il-platform .il-field-control { min-height: var(--control-h); }
-.il-platform textarea.il-field-control { min-height: 76px; }
+.il-platform textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 /* Tabs: o nível vem do tamanho pedido (md = régua de ação, sm = régua densa).
    O `scale-95` que existia no `il-tabbar--sm` saiu: escalar controle é
    métrica falsa (34px × 0.95 = 32,3px) e borra tipografia. */
@@ -1147,7 +1149,7 @@ dialog.il-drawer .il-actionbar {
   transform: translateX(-8px);
   filter: saturate(.85);
 }
-.il-drawer__panel--side { animation: il-drawer-side-in 200ms var(--ease-standard); }
+.il-drawer__panel--side { animation: il-drawer-side-in var(--gd-motion-side-modal) var(--gd-ease); }
 @keyframes il-drawer-side-in {
   from { opacity: 0; transform: translateX(24px); }
   to { opacity: 1; transform: none; }
@@ -1176,7 +1178,7 @@ dialog.il-drawer .il-actionbar {
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--recessed { display: none; }
   .il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {
     width: 100% !important; max-width: none !important; border-left: 0 !important;
-    animation: il-drawer-side-in-mobile 200ms var(--ease-standard);
+    animation: il-drawer-side-in-mobile var(--gd-motion-side-modal) var(--gd-ease);
   }
   @keyframes il-drawer-side-in-mobile {
     from { opacity: 0; transform: translateX(100%); }
@@ -1860,6 +1862,18 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
 
 /* Rodapé fixo: ajuda e suporte — discreto, sempre no mesmo lugar. */
 .workspace-foot { border-top: 1px solid var(--il-nav-border); padding: 8px; }
+/* DS 2.0 · CP2 — rail recolhido (60px): alvo 44×44 centrado no eixo da rail
+   (Blueprint: item 44×44, radius 10, padding 8), sem traços entre grupos nem
+   borda no rodapé. Agrupamento vem do espaçamento. O rail expandido não muda. */
+.workspace-sidebar:not(.is-expanded) .workspace-link {
+  width: 44px; height: 44px; min-height: 44px; margin: 0 auto;
+  padding: 0; justify-content: center; gap: 0;
+}
+.workspace-sidebar:not(.is-expanded) .workspace-section__rule { display: none; }
+/* Blueprint · rail recolhida: espaçamento de 4px entre itens do mesmo grupo
+   (o expandido mantém 2px). Agrupamento segue por espaço, sem separadores. */
+.workspace-sidebar:not(.is-expanded) .workspace-section { gap: 4px; }
+.workspace-sidebar:not(.is-expanded) .workspace-foot { border-top: 0; }
 .workspace-foot__item {
   /* MISSÃO UX CLOSURE · item 6 — o rodapé do rail é feito de CONTROLES
      (ícone + rótulo). Antes tinham 36px, um nível que não existe na escala do
@@ -2031,30 +2045,23 @@ button.ws-bell__item:hover { background: var(--surface-hover); }
   .ws-topbar { gap: 6px; padding: 0 8px; }
   .ws-topbar__right { gap: 4px; }
   .il-platform .ws-topbar [data-topbar-secondary] { display: none; }
-  /* Identidade RÍGIDA (o nome completo da clínica manda) e busca ELÁSTICA:
-     em telas estreitas a busca recolhe para o ícone e volta à largura total
-     quando tem foco. */
-  .il-platform .ws-topbar__left { flex: 0 1 auto; min-width: 50%; }
-  /* DS 1.1 — no estreito a logo encolhe um degrau (32px) mas continua SOLTA e
-     proporcional; o NOME não é cortado: a busca é quem cede. */
-  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
-  /* §5 — em tela estreita a IDENTIDADE não encolhe: logo no tamanho do token e
-     nome COMPLETO (pode quebrar em duas linhas, nunca virar "Andri…"). Quem
-     cede espaço é a busca, que recolhe para o ícone. */
-  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .il-platform .global-search { width: var(--control-h); max-width: none; flex: 0 0 auto; }
-  .il-platform .global-search__field { padding: 0; gap: 0; justify-content: center; cursor: pointer; }
-  .il-platform .global-search__input { width: 0; flex: 0 0 auto; padding: 0; }
-  .il-platform .global-search__clear,
-  .il-platform .global-search__kbd { display: none; }
-  /* Com foco, a busca ocupa a linha inteira da topbar (por cima dos vizinhos,
-     sem mexer no layout do rail nem no conteúdo). */
-  .il-platform .global-search:focus-within {
-    position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; width: auto;
-    display: flex; align-items: center; z-index: 60;
+  /* REFINAMENTO RESPONSIVO (CP3 · Shell 390): a topbar vira DUAS linhas.
+     Linha 1 = navegação + identidade completa (logo + nome, que pode quebrar em
+     duas linhas — Blueprint §6: nome prioritário, nunca “Andri…”) + ações.
+     Linha 2 = busca em LARGURA TOTAL, com campo visível e legível (não mais
+     recolhida para um ícone espremido). Regra genérica por largura, não por nome. */
+  .ws-topbar {
+    height: auto; min-height: var(--topbar-h);
+    flex-wrap: wrap; align-content: center; row-gap: 8px;
+    padding-top: 8px; padding-bottom: 8px;
   }
-  .il-platform .global-search:focus-within .global-search__field { padding: 0 6px 0 11px; gap: 8px; justify-content: flex-start; }
-  .il-platform .global-search:focus-within .global-search__input { width: auto; flex: 1 1 auto; }
+  .il-platform .ws-topbar__left { flex: 1 1 0; min-width: 0; }
+  .ws-clinic { max-width: none; flex: 1 1 auto; min-width: 0; gap: 8px; }
+  .ws-clinic__name { min-width: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+  .ws-topbar__center { order: 3; flex: 0 0 100%; width: 100%; justify-content: stretch; }
+  .il-platform .global-search { width: 100%; max-width: none; flex: 1 1 auto; }
+  .il-platform .global-search__field { padding: 0 10px; gap: 8px; }
+  .il-platform .global-search__input { width: auto; flex: 1 1 auto; min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-skeleton-line, .il-skeleton { animation: none; background: var(--skeleton-base); }
@@ -2616,7 +2623,7 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
      precisa viver nele (não apenas no filho), senão o max-width genérico de
      320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
-  width: 360px; max-width: min(360px, calc(100vw - 24px)); padding: 0;
+  width: 340px; max-width: min(340px, calc(100vw - 24px)); padding: 0;
   border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
   background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
 }
@@ -2626,12 +2633,15 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
   width: 100%; max-width: 100%; padding: var(--gd-space-4);
   display: flex; flex-direction: column; gap: var(--gd-space-2);
 }
+/* Hierarquia da prévia: horário é a informação principal (semibold, ink);
+   paciente/serviço/profissional vêm em pares rótulo→valor; "Ver detalhes" é a
+   única ação primária, "Editar" fica secundário e nunca compete com ela. */
 .ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
 .ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
-.ag-hover__date { margin: 0; color: var(--gd-text-secondary); font-size: var(--gd-type-label-size); line-height: var(--gd-type-label-line); font-weight: var(--gd-type-label-weight); }
+.ag-hover__date { margin: 0; color: var(--gd-text); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); }
 .ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
 .ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
-.ag-hover__rows dt { flex: 0 0 80px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
+.ag-hover__rows dt { flex: 0 0 76px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
 .ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
 .ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
@@ -2760,20 +2770,28 @@ dialog.ws-sheet {
   color: var(--text);
   overflow: hidden;
   box-shadow: 0 32px 64px -24px rgba(15, 23, 42, .38), 0 8px 24px -12px rgba(15, 23, 42, .16);
-  transition: width .2s cubic-bezier(.32,.72,.28,1), height .2s cubic-bezier(.32,.72,.28,1),
-    top .2s cubic-bezier(.32,.72,.28,1), bottom .2s cubic-bezier(.32,.72,.28,1),
-    border-radius .2s ease;
+  transition: width var(--gd-motion-sheet) var(--gd-ease), height var(--gd-motion-sheet) var(--gd-ease),
+    top var(--gd-motion-sheet) var(--gd-ease), bottom var(--gd-motion-sheet) var(--gd-ease),
+    border-radius var(--gd-motion-sheet) var(--gd-ease);
 }
 dialog.ws-sheet:not([open]) { display: none; }
 dialog.ws-sheet::backdrop { background: var(--overlay); }
-dialog.ws-sheet[open] { animation: ws-sheet-in 200ms cubic-bezier(.32,.72,.28,1); }
-dialog.ws-sheet[data-closing] { animation: ws-sheet-out 200ms ease-in forwards; }
+/* MOVIMENTO DO SHEET (contrato único com o DetailSideModal): a folha nasce
+   FORA da borda direita e desliza para dentro (direita → esquerda) e sai pela
+   MESMA borda, deslizando para a direita (esquerda → direita). Sem scale — o
+   scale fazia a folha parecer surgir do centro. O backdrop acompanha a folha
+   (fade de entrada e de saída), sem véu que sobra depois que a folha saiu. */
+dialog.ws-sheet[open] { animation: ws-sheet-in var(--gd-motion-sheet) var(--gd-ease); }
+dialog.ws-sheet[data-closing] { animation: ws-sheet-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+dialog.ws-sheet[open]::backdrop { animation: gd-fade-in var(--gd-motion-sheet) var(--gd-ease); }
+dialog.ws-sheet[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-sheet-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes ws-sheet-in {
-  from { opacity: 0; transform: translateX(40px) scale(.985); }
+  from { opacity: 0; transform: translateX(calc(100% + var(--sheet-gap, 14px))); }
   to { opacity: 1; transform: none; }
 }
 @keyframes ws-sheet-out {
-  to { opacity: 0; transform: translateX(40px) scale(.985); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(calc(100% + var(--sheet-gap, 14px))); }
 }
 
 .ws-sheet__inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -3145,7 +3163,10 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
    (F1A tem uma). Nada de aba desabilitada nem módulo decorativo. */
 .encounter-workspace__nav {
   display: flex;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 22px;
+  overflow-x: auto;
+  scrollbar-width: thin;
   padding: 0 var(--encounter-page-gutter);
   border-bottom: 1px solid var(--border-soft, #eef2ef);
   background: var(--surface, #fff);
@@ -3683,3 +3704,449 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
    horários alinhada igual à fonte anterior. */
 .il-platform .ag-event, .il-platform .ag-time, .il-platform .ag-list__time { font-variant-numeric: tabular-nums; }
 .il-platform table th { font-size: var(--type-label); font-weight: var(--gd-type-label-weight); text-transform: none; letter-spacing: normal; }
+
+/* Agenda · toolbar responsiva (CP3 homologação). Até 639px a barra vira duas
+   linhas intencionais: navegação de data em largura total; segmentado Dia/
+   Semana/Lista em largura total; "Bloquear horário" e "Novo agendamento"
+   divididos em duas colunas. Alvos de toque de 44px. A partir de 640px volta
+   ao layout horizontal (sem breakpoint frágil: nada depende de largura fixa). */
+@media (max-width: 639px) {
+  .ag-page .ag-toolbar-nav { flex-wrap: nowrap; gap: 6px; }
+  .ag-page .ag-toolbar-nav button,
+  .ag-page .ag-toolbar-nav .il-field-control { min-height: 44px; height: 44px; }
+  .ag-page .ag-toolbar-nav button[aria-label] { min-width: 44px; }
+  /* Uma linha só: [Dia|Semana|Lista] · [bloquear] · [novo], todos com 44px.
+     Rótulos das ações somem visualmente (aria-label permanece). */
+  .ag-page .ag-toolbar-actions { grid-template-columns: minmax(0, 1fr) 44px 44px; gap: 6px; }
+  .ag-page .ag-toolbar-actions > .il-segmented { grid-column: auto; display: flex; width: 100%; min-width: 0; }
+  .ag-page .ag-toolbar-actions > .il-segmented .il-segmented__item { flex: 1 1 0; justify-content: center; height: 44px; min-height: 44px; padding-inline: 4px; }
+  .ag-page .ag-toolbar-actions > button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  .ag-page .ag-toolbar-actions > button .ag-toolbar__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ag-page .ag-toolbar-actions > button { position: relative; }
+}
+
+/* ── AGENDA · COMPOSIÇÃO CONTÍNUA (desktop ≥1024) ─────────────────────────
+   Antes: título, painel de toolbar, faixa de bloqueio e cabeçalho da grade
+   eram quatro caixas empilhadas e a grade começava ~250px abaixo do topo.
+   Agora: o título fica em linha livre (sem caixa), a toolbar é a única
+   moldura de controles e a faixa de bloqueio encosta nela como linha de
+   apoio. A grade ganha altura sem perder nenhum controle ou aviso. */
+@media (min-width: 1024px) {
+  .ag-page > header.gd-toolbar { margin-bottom: 4px; padding: 0 2px; min-height: 40px; }
+  .ag-page > header.gd-toolbar h1 { font-size: 18px; }
+  .ag-page > header.gd-toolbar span[data-agenda-title-icon] { width: 32px; height: 32px; }
+  .ag-page .relative.z-40.ws-panel { margin-bottom: 0; }
+  .ag-page .relative.z-40.ws-panel > .gd-toolbar { padding-top: 8px; padding-bottom: 8px; }
+  /* Aviso de bloqueio: indicador inline na linha do título (sem caixa). */
+  .ag-page header.gd-toolbar { flex-wrap: nowrap; }
+  .ag-page header.gd-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .ag-page .ag-blocks-bar { min-width: 0; overflow: hidden; }
+  .ag-page .ag-blocks-bar__hint { white-space: nowrap; }
+  @media (max-width: 1279px) { .ag-page .ag-blocks-bar__hint, .ag-page .ag-blocks-bar__scope { display: none; } }
+  .ag-page .ag-blocks-bar {
+    margin: 0 0 0 4px; border: 0; border-radius: 0; background: transparent;
+    padding: 0; min-height: 0; flex-wrap: nowrap; gap: 8px;
+  }
+  .ag-page .ag-blocks-bar__items { margin-left: 0; }
+}
+
+/* Tablet (640–1023): cabeçalho da Agenda em UMA linha — título + aviso de
+   bloqueio à esquerda (o aviso corta, nunca quebra), Filtros/Fila/ajuda à
+   direita. Antes o aviso quebrava em duas linhas e Filtros caía para uma
+   terceira faixa. */
+@media (min-width: 640px) {
+  .ag-page > header.gd-toolbar { flex-wrap: nowrap; }
+  .ag-page > header.gd-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .ag-page > header.gd-toolbar > div:last-child { flex: 0 0 auto; }
+  .ag-page .ag-blocks-bar { min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+  .ag-page .ag-blocks-bar__items { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+  .ag-page .ag-blocks-bar__items > button { flex: 0 0 auto; }
+  .ag-page .ag-blocks-bar__label, .ag-page .ag-blocks-bar__hint { flex: 0 0 auto; white-space: nowrap; }
+}
+
+/* ── AGENDA · COMPOSIÇÃO FINAL (desktop ≥1024) ────────────────────────────
+   Decisão de composição: título + aviso de bloqueio + Filtros/Fila formam a
+   linha 1; a toolbar (Hoje ‹ data ›, Dia|Semana|Lista, Bloquear, Novo) é uma
+   linha de controles SEM moldura, separada da grade por uma régua de 1px. A
+   grade começa logo abaixo, sem caixas sucessivas. (Uma linha única com
+   rótulos não cabe em 1024 sem perder controles — por isso duas linhas.) */
+@media (min-width: 1024px) {
+  .ag-page .relative.z-40.ws-panel {
+    background: transparent; border: 0; border-radius: 0; box-shadow: none;
+    border-bottom: 1px solid var(--gd-border-soft);
+  }
+  .ag-page .relative.z-40.ws-panel > .gd-toolbar { padding: 6px 0 8px; }
+}
+
+/* ── OVERLAYS · LINGUAGEM ÚNICA GODOUTOR ─────────────────────────────────
+   Padrão compartilhado para painéis flutuantes de contexto (Filtros, resumo
+   de hover, criação rápida). Mesmo raio, borda, sombra, cabeçalho, rótulos e
+   rodapé — funções diferentes, mesma gramática. */
+.gd-ovl {
+  background: var(--gd-bg-surface);
+  border: 1px solid var(--gd-border-soft);
+  border-radius: var(--gd-radius-md);
+  box-shadow: var(--gd-shadow-md);
+}
+/* Entrada própria só para painéis montados diretamente (Filtros). HoverCard e
+   Popover já animam pela camada do DS (gd-layer-in): não duplicar a motion. */
+.gd-ovl--enter { animation: gd-ovl-in var(--gd-motion-fast) var(--gd-ease) both; }
+.gd-ovl__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); padding: 12px 14px 4px; }
+.gd-ovl__title { margin: 0; font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
+.gd-ovl__label { margin: 0 0 6px; font-size: var(--gd-font-size-secondary); line-height: var(--gd-leading-normal); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
+.gd-ovl__body { display: flex; flex-direction: column; gap: var(--gd-space-3); padding: var(--gd-space-2) 14px 12px; }
+.gd-ovl__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); padding: 10px 12px; border-top: 1px solid var(--gd-border-soft); }
+@keyframes gd-ovl-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-ovl--enter { animation: none; } }
+
+/* ── F1 · SESSÃO CLÍNICA (workspace canônico) ─────────────────────────────
+   Composição: identidade do paciente em destaque, contexto em fatos curtos,
+   estado à direita; navegação agrupada por intenção clínica; blocos com
+   respiro (sem caixa dentro de caixa); rodapé persistente com estado real,
+   tempo do atendimento e ações. Tokens e primitivas do DS (sem família nova). */
+.encounter-workspace__status {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+.encounter-workspace__booking-status { font-size: 12px; color: var(--text-muted, #66736c); }
+.encounter-workspace__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 6px 0 0;
+}
+.encounter-workspace__facts > div { min-width: 0; }
+.encounter-workspace__facts dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint, #8b9a92);
+}
+.encounter-workspace__facts dd { margin: 1px 0 0; font-size: 13px; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-workspace__nav-group { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.encounter-workspace__nav-label {
+  padding: 10px 12px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint, #8b9a92);
+  white-space: nowrap;
+}
+.encounter-workspace__nav-items { display: flex; gap: 2px; flex-wrap: nowrap; }
+.encounter-workspace__nav-items .encounter-workspace__nav-item { white-space: nowrap; }
+
+.encounter-workspace__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft, #eef2ef);
+  max-width: 76ch;
+}
+.encounter-workspace__block-title { margin: 0; font-size: var(--gd-font-size-section, 15px); font-weight: 700; color: var(--text, #1c2822); }
+.encounter-workspace__block-hint, .encounter-workspace__block-empty { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-muted, #66736c); }
+.encounter-workspace__files { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.encounter-workspace__file { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.encounter-workspace__file-name { min-width: 0; font-size: 13px; font-weight: 600; color: var(--brand-fg, #276347); overflow-wrap: anywhere; }
+.encounter-workspace__file-meta { font-size: 12px; color: var(--text-muted, #66736c); }
+
+.encounter-workspace__closing { margin-top: 8px; scroll-margin-top: 140px; }
+.encounter-workspace__closing > section { margin-top: 0; }
+
+/* Rodapé persistente: sticky no fim da sessão, nunca cobre o conteúdo final. */
+.encounter-workspace__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: auto;
+  padding: 12px var(--encounter-page-gutter) max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border, #e3e9e5);
+  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+.encounter-workspace__footer-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; }
+.encounter-workspace__timer { font-size: 12.5px; font-weight: 600; color: var(--text-muted, #66736c); }
+.encounter-workspace__footer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.encounter-workspace__footer .encounter-page__save-state { font-size: 12px; }
+
+/* Revisão de finalização: hierarquia por grupos, sem caixa dentro de caixa. */
+.encounter-review { display: flex; flex-direction: column; gap: 14px; }
+.encounter-review__group { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-soft, #eef2ef); }
+.encounter-review__group:first-child { padding-top: 0; border-top: 0; }
+.encounter-review__group-title { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted, #66736c); }
+.encounter-review__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px 18px; }
+.encounter-review__label { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint, #8b9a92); }
+.encounter-review__value { margin: 4px 0 0; font-size: var(--gd-font-size-body, 14px); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text, #1c2822); }
+.encounter-review__pending { margin: 4px 0 0; padding-left: 18px; font-size: var(--gd-font-size-body, 14px); color: var(--warning-fg, #8a5b00); }
+
+@media (max-width: 1024px) {
+  .encounter-workspace__heading { flex-wrap: wrap; }
+  .encounter-workspace__status { align-items: flex-start; text-align: left; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .encounter-workspace__footer { flex-wrap: wrap; }
+}
+@media (max-width: 767px) {
+  .encounter-workspace__facts { flex-direction: column; gap: 6px; }
+  .encounter-workspace__nav { gap: 12px; }
+  .encounter-workspace__nav-label { padding-top: 8px; }
+  .encounter-workspace__footer { flex-direction: column; align-items: stretch; gap: 8px; padding-inline: 16px; }
+  .encounter-workspace__footer-actions { justify-content: stretch; }
+  .encounter-workspace__footer-actions > * { flex: 1 1 auto; min-height: 40px; }
+  .encounter-workspace__block { margin-top: 22px; }
+}
+
+/* ── CONVERGÊNCIA ESTRUTURAL (Cliente · Atendimento · Registro) ───────────
+   Princípio do MASTER: rail global → contexto da entidade/sessão → workspace
+   → drawers pela direita. O contexto persiste à ESQUERDA (260–300px no
+   desktop/tablet); o trabalho rola à direita; navegação fica acessível no
+   scroll. Em largura estreita o rail vira faixa de topo (sem sticky). */
+
+/* Cliente / Paciente — Entity Context Rail */
+.entity-panel { overflow: clip; }
+.entity-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+}
+.entity-rail {
+  position: sticky;
+  top: calc(var(--topbar-h, 64px) + 12px);
+  max-height: calc(100dvh - var(--topbar-h, 64px) - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 20px;
+  border-right: 1px solid var(--border-soft, #eef2ef);
+  background: var(--surface, #fff);
+  scrollbar-width: thin;
+}
+.entity-rail__name { margin: 12px 0 0; font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.entity-rail__age { margin: 4px 0 0; font-size: 13px; color: var(--text-muted, #66736c); }
+.entity-rail__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.entity-rail__data { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.entity-rail__data > div { min-width: 0; }
+.entity-main { min-width: 0; padding: 24px 28px; }
+
+/* Atendimento / Registro — Session Context Rail + workspace */
+.encounter-session {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+  margin: -1px 0 0;
+}
+.encounter-session__main { min-width: 0; display: flex; flex-direction: column; }
+.encounter-session > .encounter-rail {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  height: calc(100dvh - var(--topbar-h, 64px));
+  overflow-y: auto;
+  padding: 24px 20px;
+  gap: 18px;
+  border-right: 1px solid var(--border, #e3e9e5);
+  background: var(--surface, #fff);
+  scrollbar-width: thin;
+}
+.encounter-rail__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.encounter-rail__back { flex: none; }
+.encounter-rail__identity { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.encounter-rail__eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--text-faint, #8b9a92); }
+.encounter-rail__patient { margin: 2px 0 0; font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-rail__line { margin: 0; font-size: 14px; font-weight: 600; color: var(--text, #1c2822); }
+.encounter-rail__tutor { margin: 0; font-size: 13px; color: var(--text-muted, #66736c); overflow-wrap: anywhere; }
+.encounter-rail__facts { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+.encounter-rail__facts > div { min-width: 0; }
+.encounter-rail__facts dt { font-size: 12px; color: var(--text-faint, #8b9a92); }
+.encounter-rail__facts dd { margin: 2px 0 0; font-size: 14px; color: var(--text, #1c2822); overflow-wrap: anywhere; }
+.encounter-rail__booking { margin: 0; font-size: 12.5px; color: var(--text-muted, #66736c); }
+.encounter-rail__nav { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; border-top: 1px solid var(--border-soft, #eef2ef); }
+.encounter-rail__nav-item {
+  text-align: left; min-height: 36px; padding: 6px 10px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: var(--text-muted, #66736c); background: transparent; border: 0; cursor: pointer;
+}
+.encounter-rail__nav-item:hover { background: var(--surface-hover, #f4f6f5); color: var(--text, #1c2822); }
+.encounter-rail__nav-item[data-active='true'] { background: var(--surface-hover, #f4f6f5); color: var(--text, #1c2822); font-weight: 600; }
+.encounter-rail__nav-item:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+/* Navegação clínica permanece visível durante o scroll do workspace. */
+.encounter-session__main > .encounter-workspace__nav {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 25;
+}
+
+/* Tablet e largura estreita: rail vira faixa de topo, sem sticky. */
+@media (max-width: 1023px) {
+  .entity-shell { grid-template-columns: minmax(0, 1fr); }
+  .entity-rail {
+    position: static; max-height: none; overflow: visible;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px;
+    border-right: 0; border-bottom: 1px solid var(--border-soft, #eef2ef);
+  }
+  .entity-rail__identity { grid-column: 1 / -1; }
+  .entity-main { padding: 20px 20px; }
+  .encounter-session { grid-template-columns: minmax(0, 1fr); }
+  .encounter-session > .encounter-rail {
+    position: static; height: auto; overflow: visible;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px;
+    border-right: 0; border-bottom: 1px solid var(--border, #e3e9e5); padding: 18px 20px;
+  }
+  .encounter-session > .encounter-rail .encounter-rail__top,
+  .encounter-session > .encounter-rail .encounter-rail__identity,
+  .encounter-session > .encounter-rail .encounter-rail__nav { grid-column: 1 / -1; }
+  .encounter-rail__nav { flex-direction: row; flex-wrap: wrap; padding-top: 0; border-top: 0; }
+  .encounter-session__main > .encounter-workspace__nav { top: var(--topbar-h, 64px); }
+}
+@media (max-width: 640px) {
+  .entity-rail { grid-template-columns: minmax(0, 1fr); }
+  .entity-main { padding: 16px; }
+  .encounter-session > .encounter-rail { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encounter-rail__nav-item { transition: none; }
+}
+
+/* Cliente — dados administrativos no topo do workspace (fora do rail). */
+.entity-main__admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px 24px;
+  margin: 0 0 24px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--border-soft, #eef2ef);
+}
+
+/* ── Atendimento / Registro · workspace com largura útil ───────────────
+   Leitura clínica limitada a ~1120px, centralizada na área do workspace (não
+   um documento de 600px flutuando num desktop largo). Títulos de seção e
+   divisores compartilham a MESMA margem interna — nada encosta na borda. */
+.encounter-session__main .encounter-workspace__content,
+.encounter-session__main .encounter-page__content {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px clamp(24px, 3vw, 40px) 40px;
+  box-sizing: border-box;
+}
+.encounter-session__main .encounter-workspace__block {
+  max-width: none;
+  width: 100%;
+  margin-top: 32px;
+  padding: 20px 0 0;
+  box-sizing: border-box;
+}
+.encounter-session__main .encounter-workspace__closing {
+  width: 100%;
+  max-width: 1120px;
+  margin: 24px auto 0;
+  padding: 0 clamp(24px, 3vw, 40px);
+  box-sizing: border-box;
+}
+.encounter-session__main .encounter-workspace__hint {
+  width: auto;
+  max-width: 1120px;
+  margin: 0 auto 24px;
+  padding: 0 clamp(24px, 3vw, 40px);
+  box-sizing: border-box;
+}
+
+/* Recuo lateral único para blocos do workspace (mesmo gutter do conteúdo). */
+.encounter-session__main .encounter-workspace__block {
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(24px, 3vw, 40px);
+  padding-right: clamp(24px, 3vw, 40px);
+}
+.encounter-session__main .encounter-workspace__block > * { max-width: 100%; }
+
+/* Tablet (768–1023): o rail vira faixa FIXA compacta (contexto na rolagem). */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .encounter-session > .encounter-rail {
+    position: sticky;
+    top: var(--topbar-h, 64px);
+    z-index: 30;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 16px;
+    height: auto;
+    max-height: none;
+    padding: 10px 20px;
+    background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 1px 0 var(--border, #e3e9e5);
+    overflow: visible;
+  }
+  .encounter-session > .encounter-rail .encounter-rail__top { grid-column: 2; grid-row: 1; }
+  .encounter-session > .encounter-rail .encounter-rail__identity { grid-column: 1; grid-row: 1; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+  .encounter-session > .encounter-rail .encounter-rail__eyebrow,
+  .encounter-session > .encounter-rail .encounter-rail__tutor { display: none; }
+  .encounter-session > .encounter-rail .encounter-rail__patient { font-size: 18px; margin: 0; }
+  .encounter-session > .encounter-rail .encounter-rail__line { font-size: 13px; }
+  .encounter-session > .encounter-rail .encounter-rail__facts {
+    grid-column: 1 / -1; grid-row: 2; flex-direction: row; flex-wrap: wrap; gap: 4px 18px;
+  }
+  .encounter-session > .encounter-rail .encounter-rail__facts > div { display: flex; gap: 6px; align-items: baseline; }
+  .encounter-session > .encounter-rail .encounter-rail__facts dt { font-size: 11.5px; }
+  .encounter-session > .encounter-rail .encounter-rail__facts dd { margin: 0; font-size: 13px; }
+  .encounter-session > .encounter-rail .encounter-rail__booking { grid-column: 1 / -1; grid-row: 3; }
+  .encounter-session > .encounter-rail .encounter-rail__nav { grid-column: 1 / -1; grid-row: 4; flex-direction: row; flex-wrap: wrap; padding-top: 6px; border-top: 0; }
+}
+/* Smoke 390: sem faixa fixa (ocuparia a tela inteira); rail volta ao fluxo. */
+@media (max-width: 639px) {
+  .encounter-session > .encounter-rail { position: static; }
+}
+
+/* ── Fechamento finalizado: três faixas (Registro clínico / Revisão / Pós) ── */
+.encounter-final { display: grid; gap: 12px; }
+.encounter-final__band { padding: 16px 0 0; border-top: 1px solid var(--gd-border, #e3e9e5); }
+.encounter-final__band:first-child { border-top: 0; padding-top: 0; }
+.encounter-final__band-title { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--gd-text-muted, #5b6b66); margin: 0 0 6px; text-transform: uppercase; }
+.encounter-final__band-text { font-size: 14px; color: var(--gd-text, #1f2d2a); margin: 0; line-height: 1.5; }
+.encounter-final__label { color: var(--gd-text-muted, #5b6b66); }
+.encounter-final__sub { font-size: 14px; font-weight: 600; margin: 0; color: var(--gd-text, #1f2d2a); }
+.encounter-final__hint { font-size: 12.5px; color: var(--gd-text-muted, #5b6b66); margin: 2px 0 10px; }
+.encounter-final__addendum { display: grid; gap: 4px; max-width: 640px; }
+.encounter-final__actions { display: flex; justify-content: flex-start; margin-top: 8px; }
+.encounter-final__reopen { display: grid; gap: 4px; max-width: 520px; padding-top: 8px; }
+.encounter-final__timeline { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; font-size: 13px; }
+.encounter-final__event { border-left: 2px solid var(--gd-border, #e3e9e5); padding-left: 12px; }
+.encounter-final__event--reopen { border-color: var(--gd-warning, #c98a1b); }
+.encounter-final__event--addendum { border-color: var(--gd-info, #3b7ddd); }
+.encounter-final__band--after { display: grid; gap: 12px; }
+.encounter-final__band-text .encounter-final__label + .tabular-nums { color: var(--gd-text, #1f2d2a); }
+
+/* G09 — identidade de página ÚNICA no Registro completo. Em desktop/tablet o
+   rail já é a identidade (paciente, serviço, profissional, status) e a aba
+   atual nomeia a página; o cabeçalho repetido vira só texto para leitor de
+   tela. Em 390 (rail sem fixação) o cabeçalho continua visível. */
+@media (min-width: 640px) {
+  .encounter-session__main > .encounter-page__header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* Rodapé legado do Registro: o disclosure de reabertura não quebra o rótulo. */
+.encounter-page__footer .gd-disclosure__trigger { white-space: nowrap; }
+/* Abaixo de 1200px o hint secundário da reabertura sai (evita overflow no rodapé). */
+@media (max-width: 1199px) {
+  .encounter-page__footer .gd-disclosure__hint { display: none; }
+}

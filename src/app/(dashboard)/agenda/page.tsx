@@ -35,7 +35,7 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
+import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
@@ -79,6 +79,14 @@ const HEADER_H = 48;
 // Passo do clique-em-área-vazia (o horário só é aceito se a grade real o
 // confirmar — caso contrário o sheet abre sem horário escolhido).
 const CLICK_SNAP_MIN = 15;
+/** Horários do bloqueio no DS (Combobox): passos de 15 min, sempre com o valor
+ *  atual presente. O valor enviado continua `HH:MM` — mesmo contrato da API. */
+function blockTimeOptions(current: string) {
+  const out: { value: string; label: string }[] = [];
+  for (let m = 0; m < 24 * 60; m += 15) out.push({ value: minToTime(m), label: minToTime(m) });
+  if (current && !out.some((o) => o.value === current)) { out.push({ value: current, label: current }); out.sort((x, y) => x.value.localeCompare(y.value)); }
+  return out;
+}
 /** Folga mínima entre o fim da grade e o fim da tela (não é a causa do
  *  scroll, só respiro visual — a página continua rolando normalmente). */
 const VIEWPORT_BOTTOM_PAD = 16;
@@ -238,11 +246,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
     // border-box: larguras inteiras determinísticas — nenhuma divergência
     // de subpixel contra o minWidth calculado em JS, nenhum resíduo que
     // fabrique overflow nas bordas.
-    <div className="relative shrink-0 border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
+    <div className="relative shrink-0 select-none border-r border-b border-zinc-100 last:border-r-0 bg-[var(--agenda-unavailable)]"
       style={{ minWidth: COL_MIN, width: `${basisPct}%`, height: gridHeight }}
       data-agenda-column={column.key}
       data-agenda-column-date={column.date}
       data-agenda-column-professional={column.professionalId || ''}
+      // Sem arraste nativo: após Escape o navegador podia iniciar drag do
+      // espaço livre e cancelar o pointer, impedindo o próximo intervalo.
+      onDragStart={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
         const origin = snapY(e);
@@ -533,7 +544,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">
                   {b.editable && <Button variant="secondary" onClick={() => onBlockEdit(b.id, eventRefs.current.get(b.id) ?? null)}>Editar</Button>}
-                  <Button variant="ghost" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
+                  <Button variant="primary" onClick={() => onBlockClick(b.id, eventRefs.current.get(b.id) ?? null)}>Ver detalhes</Button>
                 </div>
               </div>
             }
@@ -606,6 +617,8 @@ export default function AgendaPage() {
   const [blockMode, setBlockMode] = useState(false);
   const [selectedRange, setSelectedRange] = useState<{ columnKey: string; time: string; durationMin: number } | null>(null);
   const [editingBlock, setEditingBlock] = useState<ScheduleBlock | null>(null);
+  /** CP3 · exclusão de bloqueio exige confirmação destrutiva explícita (segunda etapa). */
+  const [blockDeleteConfirm, setBlockDeleteConfirm] = useState(false);
   const [blockForm, setBlockForm] = useState(false);
   const [blockDate, setBlockDate] = useState('');
   const [blockStart, setBlockStart] = useState('');
@@ -1329,14 +1342,14 @@ export default function AgendaPage() {
   }, [blockMode]);
 
   function openBlock(seed: { date: string; time: string; professionalId: string; selectedDurationMin?: number }, existing?: ScheduleBlock) {
-    setEditingBlock(existing || null);
+    setEditingBlock(existing || null); setBlockDeleteConfirm(false);
     setBlockDate(seed.date); setBlockStart(seed.time || '09:00');
     setBlockEnd(seed.time ? minToTime(Math.min(1439, timeToMin(seed.time) + (seed.selectedDurationMin ?? 60))) : '10:00');
     setBlockScope(existing?.resourceId ? 'resource' : existing?.professionalId || seed.professionalId ? 'professional' : 'business');
     setBlockPro(existing?.professionalId || seed.professionalId || ''); setBlockResource(existing?.resourceId || '');
     setBlockReason(existing?.reason || ''); setBlockNote(existing?.note || ''); setBlockError(''); setBlockForm(true);
   }
-  function closeBlock() { setBlockForm(false); setBlockMode(false); setSelectedRange(null); }
+  function closeBlock() { setBlockForm(false); setBlockMode(false); setSelectedRange(null); setBlockDeleteConfirm(false); }
   async function saveBlock(remove = false) {
     if (blockBusy) return;
     setBlockError('');
@@ -1385,7 +1398,16 @@ export default function AgendaPage() {
     lastGridPressAt = Date.now();
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const booking = bookingsRef.current.get(id);
-    if (!booking || rescheduleDecision(booking.status).kind === 'recreate' || saving || dropChecking) return;
+    if (!booking || saving || dropChecking) return;
+    // CP3 · clique simples abre o detalhe em QUALQUER status (inclusive
+    // concluído, falta e cancelado). Arrastar esses status continua vedado:
+    // o movimento é ignorado em onPressMove, então o pressionamento vira clique.
+    if (rescheduleDecision(booking.status).kind === 'recreate') {
+      interactionRef.current = reduceInteraction(interactionRef.current, {
+        type: 'down', id, at: { x: e.clientX, y: e.clientY },
+      }).state;
+      return;
+    }
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
@@ -1397,6 +1419,10 @@ export default function AgendaPage() {
   const onPressMove = useCallback((id: string, e: React.PointerEvent) => {
     const state = interactionRef.current;
     if (state.phase === 'idle' || state.id !== id) return;
+    // Status que só recria (recreate) não arrasta: ignora o movimento e mantém
+    // o pressionamento como clique simples (detalhe).
+    const movedBooking = bookingsRef.current.get(id);
+    if (movedBooking && rescheduleDecision(movedBooking.status).kind === 'recreate') return;
     const at: Point = { x: e.clientX, y: e.clientY };
     const wasDragging = state.phase === 'dragging';
     const step = reduceInteraction(state, { type: 'move', at });
@@ -1791,6 +1817,32 @@ export default function AgendaPage() {
             <Icon n="calendar" size={19} />
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
+          {/* Composição contínua (A1): o aviso de bloqueio fica na mesma linha
+              do título, em vez de uma faixa própria abaixo da toolbar. */}
+          {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+            de horário/escopo. A explicação vira a dica curta de uma linha, e o
+            clique continua abrindo o MESMO formulário do bloqueio. */}
+        <span className="ag-blocks-bar__label">
+          <Icon n="lock" size={13} aria-hidden="true" />
+          {blockCountLabel}
+        </span>
+        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
+        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+          }}>
+            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+            <span>{block.reason || block.note || 'Operacional'}</span>
+            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+          </button>
+        ))}</div>
+      </section>}
         </div>
         <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -1805,78 +1857,86 @@ export default function AgendaPage() {
             </Button>
 
             {filterOpen && (
-              <div role="dialog" aria-label="Filtros da agenda"
-                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[310px] max-w-[calc(100vw-1.25rem)] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-lg text-left">
-                <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Filtros</p>
+              <div role="dialog" aria-label="Filtros da agenda" data-agenda-filters="compact"
+                className="gd-ovl gd-ovl--enter absolute right-0 top-[calc(100%+6px)] z-50 w-[288px] max-w-[calc(100vw-1.25rem)] text-left">
+                {/* Cabeçalho: título + contagem aplicada + limpar (ghost). Sem caixa-alta. */}
+                <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-2">
+                  <p className="gd-ovl__title flex items-center gap-1.5">
+                    Filtros
+                    {activeFilterCount > 0 && (
+                      <span className="rounded-full bg-[var(--gd-bg-subtle)] px-1.5 text-[11px] font-semibold tabular-nums text-[var(--gd-text-secondary)]">{activeFilterCount}</span>
+                    )}
+                  </p>
                   {activeFilterCount > 0 && (
-                    <button type="button" onClick={clearFilters}
-                      className="text-[12px] font-semibold text-[var(--danger-fg)] hover:underline">
-                      Limpar filtros
-                    </button>
+                    <Button variant="ghost" className="h-7 px-2 text-[12px]" onClick={clearFilters}>Limpar</Button>
                   )}
                 </div>
 
-                <div className="px-3 pb-2.5">
-                  <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Status</p>
-                  <div className="flex flex-wrap gap-1">
-                    <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
-                    {statusOptions.map((st) => (
-                      <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
-                        {BOOKING_STATUS[st].panel}
-                      </FilterChip>
-                    ))}
-                  </div>
-                </div>
-
-                {specialties.length > 0 && (
-                  <div className="px-3 pb-2.5 border-t border-[var(--border-soft)] pt-2.5">
-                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Serviços</p>
+                <div className="space-y-3 px-3 pb-3">
+                  {/* Status: chips compactos, sem título redundante. */}
+                  <div>
+                    <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Status</p>
                     <div className="flex flex-wrap gap-1">
-                      <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
-                      {specialties.map((r) => (
-                        <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
-                          {r}
+                      <FilterChip active={!statusFilter} onClick={() => setStatusFilter('')}>Todos</FilterChip>
+                      {statusOptions.map((st) => (
+                        <FilterChip key={st} active={statusFilter === st} onClick={() => setStatusFilter(statusFilter === st ? '' : st)}>
+                          {BOOKING_STATUS[st].panel}
                         </FilterChip>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {activePros.length > 0 && (
-                  <div className="px-3 pb-3 border-t border-[var(--border-soft)] pt-2.5">
-                    <p className="text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">Profissional</p>
-                    <div className="relative">
-                      <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
-                        placeholder="Pesquisar profissional…" aria-label="Pesquisar profissional"
-                        className="w-full text-[12.5px] bg-[var(--surface-subtle)] border border-[var(--border)] rounded-[var(--radius-sm)] pl-8 pr-2 py-1.5 focus:outline-none focus:border-[var(--brand)] focus:bg-white" />
+                  {specialties.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Serviços</p>
+                      <div className="flex flex-wrap gap-1">
+                        <FilterChip active={!specFilter} onClick={() => pickSpec('')}>Todos</FilterChip>
+                        {specialties.map((r) => (
+                          <FilterChip key={r} active={specFilter === r} onClick={() => pickSpec(specFilter === r ? '' : r)}>
+                            {r}
+                          </FilterChip>
+                        ))}
+                      </div>
                     </div>
-                    <div className="mt-1.5 max-h-44 overflow-y-auto ws-scroll space-y-0.5">
-                      <button type="button" onClick={() => pickPro('')}
-                        className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px] font-medium',
-                          !proFilter ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
-                        <span className="flex-1">Todos</span>
-                        {!proFilter && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
-                      </button>
-                      {prosInFilter.map((p) => (
-                        <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)}
-                          className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-[12.5px]',
-                            proFilter === p.id ? 'bg-[var(--surface-hover)]' : 'hover:bg-[var(--surface-subtle)]')}>
-                          <Avatar name={p.name} src={p.photo} size={20} />
-                          <span className="flex-1 min-w-0 truncate">
-                            <span className="font-semibold text-[var(--text-primary)]">{p.name}</span>
-                            {p.role && <span className="text-[var(--text-muted)]"> · {p.role}</span>}
-                          </span>
-                          {proFilter === p.id && <Icon n="check" size={13} className="text-[var(--success-fg)] shrink-0" />}
-                        </button>
-                      ))}
-                      {prosInFilter.length === 0 && (
-                        <p className="text-[12.5px] text-[var(--text-muted)] px-2 py-1.5">Nenhum profissional encontrado.</p>
+                  )}
+
+                  {activePros.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">Profissional</p>
+                      {activePros.length > 5 && (
+                        <div className="relative mb-1.5">
+                          <Icon n="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--gd-text-muted)]" />
+                          <input value={proSearch} onChange={(e) => setProSearch(e.target.value)}
+                            placeholder="Buscar profissional" aria-label="Pesquisar profissional"
+                            className="h-8 w-full rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface)] pl-8 pr-2 text-[12.5px] focus:outline-none focus:shadow-[var(--gd-focus-ring)]" />
+                        </div>
                       )}
+                      <div className="max-h-36 space-y-px overflow-y-auto ws-scroll">
+                        <button type="button" onClick={() => pickPro('')} aria-pressed={!proFilter}
+                          className={cn('flex h-8 w-full items-center gap-2 rounded-[var(--gd-radius-sm)] px-2 text-left text-[12.5px] font-medium',
+                            !proFilter ? 'bg-[var(--gd-nav-hover)] text-[var(--gd-text)]' : 'text-[var(--gd-text-secondary)] hover:bg-[var(--gd-nav-hover)]')}>
+                          <span className="flex-1">Todos</span>
+                          {!proFilter && <Icon n="check" size={13} className="shrink-0 text-[var(--gd-success-fg)]" />}
+                        </button>
+                        {prosInFilter.map((p) => (
+                          <button key={p.id} type="button" onClick={() => pickPro(proFilter === p.id ? '' : p.id)} aria-pressed={proFilter === p.id}
+                            className={cn('flex h-8 w-full items-center gap-2 rounded-[var(--gd-radius-sm)] px-2 text-left text-[12.5px]',
+                              proFilter === p.id ? 'bg-[var(--gd-nav-hover)] text-[var(--gd-text)]' : 'text-[var(--gd-text-secondary)] hover:bg-[var(--gd-nav-hover)]')}>
+                            <Avatar name={p.name} src={p.photo} size={18} />
+                            <span className="flex-1 min-w-0 truncate">
+                              <span className="font-semibold text-[var(--gd-text)]">{p.name}</span>
+                              {p.role && <span className="text-[var(--gd-text-muted)]"> · {p.role}</span>}
+                            </span>
+                            {proFilter === p.id && <Icon n="check" size={13} className="shrink-0 text-[var(--gd-success-fg)]" />}
+                          </button>
+                        ))}
+                        {prosInFilter.length === 0 && (
+                          <p className="px-2 py-1.5 text-[12.5px] text-[var(--gd-text-muted)]">Nenhum profissional encontrado.</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2008,9 +2068,10 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="gd-toolbar min-w-0">
+          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto">
             <Button
               variant="secondary"
+              className="min-h-11 sm:min-h-0"
               onClick={() => setFocus(today)}
               aria-pressed={focus === today}
               title={focus === today ? 'Você já está em hoje' : 'Ir para hoje'}
@@ -2024,16 +2085,16 @@ export default function AgendaPage() {
               label={`Escolher data (${focusRange})`}
               formatValue={() => focusLabel}
               max="2100-12-31"
-              className="min-w-0 max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
+              className="min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
             />
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
-          <div className="sm:ml-auto min-w-0 max-w-full gd-toolbar justify-end">
+          <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
             {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
                 saiu da UI — a lógica do modo mês segue intacta para links
                 diretos com view=month; nada foi destruído). */}
-            <Segmented
+                        <Segmented
               items={[
                 { id: 'day' as View, label: 'Dia', icon: 'calendar' },
                 { id: 'week' as View, label: 'Semana', icon: 'grid' },
@@ -2045,9 +2106,13 @@ export default function AgendaPage() {
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
-            <Button variant="secondary" aria-pressed={blockMode} onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>Bloquear horário</Button>
-            <Button variant="primary" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
-              <Icon n="calendarPlus" size={15} /> Novo agendamento
+            {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
+                segmentado. Desktop mantém o rótulo visível. */}
+            <Button variant="secondary" className="ag-toolbar__block w-full sm:w-auto" aria-label="Bloquear horário" aria-pressed={blockMode} title="Bloquear horário" onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>
+              <Icon n="lock" size={15} /><span className="ag-toolbar__label">Bloquear horário</span>
+            </Button>
+            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
+              <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>
           </div>
         </div>
@@ -2096,30 +2161,7 @@ export default function AgendaPage() {
       </div>
 
       {blockMode && <div role="status" className="mb-3 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] p-3 flex items-center justify-between text-sm">Selecione o intervalo que deseja bloquear<Button variant="ghost" size="sm" onClick={closeBlock}>Cancelar</Button></div>}
-      {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
-        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
-            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
-            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
-            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
-            de horário/escopo. A explicação vira a dica curta de uma linha, e o
-            clique continua abrindo o MESMO formulário do bloqueio. */}
-        <span className="ag-blocks-bar__label">
-          <Icon n="lock" size={13} aria-hidden="true" />
-          {blockCountLabel}
-        </span>
-        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
-        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
-          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
-            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
-            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
-            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-          }}>
-            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
-            <span>{block.reason || block.note || 'Operacional'}</span>
-            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
-          </button>
-        ))}</div>
-      </section>}
+
       {denied ? <AccessDenied area="Agenda" /> : failed ? <AreaLoadError area="Agenda" message={failed} onRetry={load}/> : !loaded ? <AgendaSkeleton /> : view === 'list' ? (
         <section className="ag-mode-scroll ag-list" aria-label="Lista de atendimentos do dia">
           <p className="ag-list__hint">{formatDateBR(focus)} · Toque para abrir o atendimento. Horários livres e intervalos estão na visualização Dia.</p>
@@ -2418,64 +2460,78 @@ export default function AgendaPage() {
           overlay system (Drawer), geometria de MODAL CENTRAL — a faixa lateral
           fica reservada para superfícies de trabalho longas. Nada de regra de
           agenda muda aqui: mesmos campos, mesma validação, mesma API. */}
-      {blockForm && <Drawer open variant="dialog" dialogWidth="560px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} width="max-w-md">
+      <Drawer open={blockForm} variant="dialog" dialogWidth="480px" onClose={() => !blockBusy && closeBlock()} title={editingBlock ? 'Editar bloqueio' : 'Bloquear horário'} subtitle="Período indisponível. Não conta como atendimento." width="max-w-md">
         {/* DS 1.0 · §4/§5 — o formulário do bloqueio usa os CONTROLES
             canônicos (Field/Input/Select/DatePicker): mesma altura, raio, borda,
             foco e dropdown do resto do sistema. O `<select>` cru e o
             `<input type="date">` saíram daqui — nenhuma tela desenha controle
             próprio. Regras de negócio intactas: mesmos campos, mesma validação,
             mesma chamada de API. */}
-        <div className="p-4 space-y-4">
-          <div>
-            <h3 className="text-[var(--gd-font-size-section)] font-semibold text-[var(--gd-text)]">Indisponibilidade temporária</h3>
-            <p className="mt-1 text-[var(--gd-font-size-body)] text-[var(--gd-text-muted)]">Use para períodos em que normalmente haveria atendimento, mas a clínica, um profissional ou um recurso ficará indisponível.</p>
-          </div>
-          <DatePicker value={blockDate} onChange={setBlockDate} label="Data do bloqueio" max="2100-12-31" />
+        <div className="p-4 space-y-4" data-block-form="compact">
+          {/* DS · data e horas do bloqueio: DatePicker e Combobox canônicos (sem
+              <input type="date|time">). O valor enviado segue HH:MM / ISO. */}
+          <Field label="Data">
+            <DatePicker value={blockDate} onChange={setBlockDate} label="Data do bloqueio" max="2100-12-31" />
+          </Field>
           <div className="flex gap-2">
             <div className="flex-1"><Field label="Início">
-              <Input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)} />
+              <Combobox label="Início" value={blockStart} disabled={blockBusy} placeholder="Horário"
+                onChange={(v) => setBlockStart(String(v))} options={blockTimeOptions(blockStart)} />
             </Field></div>
             <div className="flex-1"><Field label="Fim">
-              <Input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)} />
+              <Combobox label="Fim" value={blockEnd} disabled={blockBusy} placeholder="Horário"
+                onChange={(v) => setBlockEnd(String(v))} options={blockTimeOptions(blockEnd)} />
             </Field></div>
           </div>
           <Field label="Escopo" hint={blockScope === 'business' ? 'Impede novos agendamentos para toda a clínica neste período.' : blockScope === 'professional' ? 'Bloqueia apenas a agenda do profissional selecionado.' : 'Impede que esse recurso seja reservado por outro atendimento.'}>
-            <Select value={blockScope} onChange={e => setBlockScope(e.target.value as typeof blockScope)}>
-              <option value="business">Clínica</option>
-              <option value="professional">Profissional</option>
-              <option value="resource">Sala ou equipamento</option>
-            </Select>
+            {/* CP3 · Combobox do DS (mode select) no lugar do select nativo. */}
+            <Combobox label="Escopo" value={blockScope} disabled={blockBusy}
+              onChange={(v) => setBlockScope(String(v) as typeof blockScope)}
+              options={[
+                { value: 'business', label: 'Clínica' },
+                { value: 'professional', label: 'Profissional' },
+                { value: 'resource', label: 'Sala ou equipamento' },
+              ]} />
           </Field>
           {blockScope === 'professional' && (
             <Field label="Profissional">
-              <Select value={blockPro} onChange={e => setBlockPro(e.target.value)}>
-                <option value="">Selecione</option>
-                {pros.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox label="Profissional" value={blockPro} disabled={blockBusy} placeholder="Buscar profissional…"
+                onChange={(v) => setBlockPro(String(v))}
+                options={[{ value: '', label: 'Selecione' }, ...pros.map(p => ({ value: p.id, label: p.name }))]} />
             </Field>
           )}
           {blockScope === 'resource' && (
             <Field label="Recurso">
-              <Select value={blockResource} onChange={e => setBlockResource(e.target.value)}>
-                <option value="">Selecione</option>
-                {scheduleResources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </Select>
+              <Combobox label="Recurso" value={blockResource} disabled={blockBusy} placeholder="Buscar recurso…"
+                onChange={(v) => setBlockResource(String(v))}
+                options={[{ value: '', label: 'Selecione' }, ...scheduleResources.map(r => ({ value: r.id, label: r.name }))]} />
             </Field>
           )}
           <Field label="Motivo" hint="Opcional · aparece na grade e no histórico">
             <Input value={blockReason} onChange={e => setBlockReason(e.target.value)} placeholder="Ex.: manutenção, reunião" />
           </Field>
           <Field label="Observação">
-            <Input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Ex.: manutenção, reunião" />
+            <Input value={blockNote} onChange={e => setBlockNote(e.target.value)} placeholder="Detalhes internos (opcional)" />
           </Field>
           {blockError && <Notice tone="error" title="Não foi possível salvar">{blockError}</Notice>}
-          <PageActionBar hint="O bloqueio não cria atendimento — só reserva o período.">
-            <Button variant="ghost" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button>
-            {editingBlock && <Button variant="secondary" disabled={blockBusy} onClick={() => void saveBlock(true)}>Excluir bloqueio</Button>}
-            <Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
-          </PageActionBar>
+          {blockDeleteConfirm && editingBlock ? (
+            <div role="alertdialog" aria-labelledby="block-delete-title" className="rounded-[var(--gd-radius-sm)] border border-[var(--gd-danger)] bg-[var(--gd-bg-surface)] p-3 space-y-3">
+              <p id="block-delete-title" className="text-[var(--gd-font-size-body)] font-semibold text-[var(--gd-text)]">Excluir este bloqueio?</p>
+              <p className="text-[var(--gd-font-size-secondary)] text-[var(--gd-text-muted)]">O período volta a aceitar agendamentos. Esta ação não pode ser desfeita.</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" disabled={blockBusy} onClick={() => setBlockDeleteConfirm(false)}>Voltar</Button>
+                <Button variant="destructive" disabled={blockBusy} onClick={() => void saveBlock(true)}>{blockBusy ? 'Excluindo…' : 'Confirmar exclusão'}</Button>
+              </div>
+            </div>
+          ) : (
+            <PageActionBar hint="O bloqueio não cria atendimento — só reserva o período.">
+              <Button variant="ghost" disabled={blockBusy} onClick={closeBlock}>Cancelar</Button>
+              {editingBlock && <Button variant="destructive-soft" disabled={blockBusy} onClick={() => setBlockDeleteConfirm(true)}>Excluir bloqueio</Button>}
+              <Button disabled={blockBusy} onClick={() => void saveBlock()}>{blockBusy ? (editingBlock ? 'Salvando…' : 'Criando…') : editingBlock ? 'Salvar alterações' : 'Criar bloqueio'}</Button>
+            </PageActionBar>
+          )}
         </div>
-      </Drawer>}
+      </Drawer>
       {quickCreate && (
         <QuickBookingPopover
           anchor={quickCreate}

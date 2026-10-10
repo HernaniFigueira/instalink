@@ -78,7 +78,7 @@ export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize =
     'gd-control il-control inline-flex items-center justify-center font-medium rounded-sm whitespace-nowrap',
     `gd-control--${size}`,
     `il-control--${size}`,
-    'transition-[background-color,border-color,color] duration-150',
+    'transition-[background-color,border-color,color] duration-[var(--gd-motion-fast)]',
     'focus-visible:outline-none focus-visible:shadow-focus',
     'disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none',
     BTN_SIZE_CLS[size],
@@ -86,9 +86,21 @@ export function buttonCls(variant: ButtonVariant = 'primary', size: ButtonSize =
   );
 }
 
-export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
-  const { variant = 'primary', size = 'md', className, ...rest } = props;
-  return <button className={cn(buttonCls(variant, size), className)} {...rest} />;
+export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; loading?: boolean }) {
+  const { variant = 'primary', size = 'md', className, loading = false, disabled, children, ...rest } = props;
+  // Loading: o botão fica inerte e anuncia ocupado (aria-busy) sem trocar o
+  // rótulo — a largura da ação não pode pular durante a espera.
+  return (
+    <button
+      className={cn(buttonCls(variant, size), loading && 'cursor-progress', className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      data-loading={loading || undefined}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function A(props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
@@ -243,7 +255,7 @@ export function ActionBar({ className, children, ...rest }: React.HTMLAttributes
 // ── Formulários ────────────────────────────────────────────────
 const FIELD_CLS =
   'il-field-control w-full rounded-sm border border-[var(--border-strong)] bg-white px-3 py-2 text-sm text-[var(--text)] ' +
-  'placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] ' +
+  'placeholder:text-[var(--text-faint)] transition-[border-color,box-shadow] duration-[var(--gd-motion-fast)] ' +
   'focus:outline-none focus:shadow-focus focus:border-[var(--accent)] ' +
   'disabled:bg-[var(--surface-3)] disabled:text-[var(--text-muted)] disabled:cursor-not-allowed';
 
@@ -291,7 +303,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const { className, ...rest } = useFieldControl(props);
-  return <textarea className={cn(FIELD_CLS, 'min-h-[72px]', className)} {...rest} />;
+  return <textarea className={cn(FIELD_CLS, className)} {...rest} />;
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
@@ -482,11 +494,12 @@ export function Checkbox({ label, hint, checked, onChange, disabled }: {
         <span
           aria-hidden="true"
           className={cn(
-            'w-[18px] h-[18px] rounded-[6px] border flex items-center justify-center transition-colors',
+            'w-[18px] h-[18px] rounded-[6px] border flex items-center justify-center transition-[background-color,border-color,box-shadow] duration-[var(--gd-motion-fast)]',
             checked
               ? 'bg-[var(--brand)] border-[var(--brand)] text-white'
-              : 'bg-white border-[var(--border-strong)] text-transparent',
-            'peer-focus-visible:shadow-focus',
+              : 'bg-white border-[var(--border-strong)] text-transparent hover:border-[var(--gd-text-faint)]',
+            'peer-focus-visible:shadow-[var(--gd-focus-ring)]',
+            disabled && 'bg-[var(--surface-3)]',
           )}
         >
           <Icon n="check" size={12} strokeWidth={3} />
@@ -513,7 +526,7 @@ export function Switch({ checked, onChange, label, disabled }: {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-200',
+        'relative inline-flex items-center h-6 w-11 shrink-0 rounded-pill border transition-colors duration-[var(--gd-motion-base)]',
         'focus-visible:outline-none focus-visible:shadow-focus',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         checked ? 'bg-[var(--accent)] border-[var(--accent)]' : 'bg-[var(--surface-3)] border-[var(--border-strong)]',
@@ -521,7 +534,7 @@ export function Switch({ checked, onChange, label, disabled }: {
     >
       <span
         className={cn(
-          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200',
+          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-[var(--gd-motion-base)]',
           checked && 'translate-x-5',
         )}
       />
@@ -924,12 +937,31 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
   const expanded = !!side;
+  /* CP1 · motion: a superfície permanece MONTADA durante a saída (token
+     --gd-motion-sheet-out) e só desmonta quando a transição termina. Sem isto a
+     saída era um corte: o nó sumia no primeiro quadro (Blueprint §23). */
+  const [present, setPresent] = useState(open);
+  const [closing, setClosing] = useState(false);
   const dismiss = useOverlayDismissGuard();
-  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, onClose);
+  const requestClose = (reason: DismissReason) => {
+    if (closing) return;
+    dismiss.requestClose(reason, dismissGuard, onClose);
+  };
   const requestSideClose = (reason: DismissReason) => dismiss.requestClose(reason, sideDismissGuard, onSideClose || onClose);
+  // Presença: abre já; ao fechar, mantém a superfície por `closing` até o fim da saída.
+  useEffect(() => {
+    if (open) { setPresent(true); setClosing(false); return; }
+    if (!present) return;
+    const ms = overlayMotionMs('--gd-motion-sheet-out', 170);
+    if (ms === 0) { setPresent(false); return; }
+    setClosing(true);
+    const t = window.setTimeout(() => { setClosing(false); setPresent(false); }, ms);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!present || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll(dialog);
     if (modal) dialog.showModal(); else dialog.show();
@@ -940,11 +972,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open, modal]);
+  }, [present, modal]);
 
-  if (!open) return null;
+  if (!present) return null;
   return (
     <dialog ref={dialogRef}
+      data-closing={closing ? 'true' : undefined}
       className={cn("il-drawer fixed inset-0 z-50", variant === 'dialog' && 'il-drawer--dialog', dialogClassName)}
       style={variant === 'dialog' ? ({ '--il-dialog-w': dialogWidth } as React.CSSProperties) : undefined}
       aria-modal={modal || undefined}
@@ -1325,6 +1358,15 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
       // próprio elemento posicionado. Sem isso, a única forma de conferir a
       // geometria num teste é re-medir por fora — que foi justamente como o
       // defeito do flip/stale passou. Não muda layout: é atributo de dado.
+      // Camada dentro de um <dialog> modal (top layer, com transform): o
+      // `position:fixed` é relativo ao dialog — o offset do próprio dialog sai
+      // das coordenadas da viewport. Sem transform, nada muda.
+      const hostEl = layerRef?.current?.closest('dialog[open]') as HTMLElement | null | undefined;
+      if (hostEl && getComputedStyle(hostEl).transform !== 'none') {
+        const hr = hostEl.getBoundingClientRect();
+        top -= hr.top + hostEl.clientTop;
+        left -= hr.left + hostEl.clientLeft;
+      }
       const posNode = layerRef?.current;
       if (posNode) posNode.dataset.place = `l${Math.round(left)},t${Math.round(top)},w${Math.round(w)},h${Math.round(h)}`;
       setStyle({ top, left });
@@ -1367,6 +1409,10 @@ function LayerPortal({ children, style, className, role, label, id, positionRef 
   positionRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   if (typeof document === 'undefined') return null;
+  // Dialog modal aberto (showModal = top layer) cobre qualquer coisa no body:
+  // a camada de Combobox/DatePicker/Popover monta DENTRO do dialog mais recente.
+  const dialogs = document.querySelectorAll('dialog[open]');
+  const host = (dialogs.length ? dialogs[dialogs.length - 1] : document.body) as HTMLElement;
   return createPortal(
     <div
       id={id}
@@ -1383,7 +1429,7 @@ function LayerPortal({ children, style, className, role, label, id, positionRef 
     >
       {children}
     </div>,
-    document.body,
+    host,
   );
 }
 
@@ -1837,6 +1883,26 @@ export function ContextMenu({ open, onClose, point, items, label = 'Ações', he
 // por cima (ex.: cadastro de paciente) fecha sozinho, sem derrubar o de baixo.
 
 /** Dialog: overlay central com foco preso, Escape e devolução de foco. */
+/**
+ * Duração de um motion TOKEN do DS (`--gd-motion-*`, em ms). Fonte única: o JS
+ * não repete o número do CSS — o timer de desmontagem da saída usa o MESMO valor
+ * da animação de saída. `prefers-reduced-motion` ⇒ 0 (desmonta já, sem espera).
+ * Sem stylesheet carregado (jsdom/SSR) cai no `fallback`.
+ */
+export function overlayMotionMs(token: string, fallback: number): number {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return 0;
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    if (!raw) return fallback;
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return raw.endsWith('ms') ? n : n * 1000;
+  } catch {
+    return fallback;
+  }
+}
+
 export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
@@ -1855,9 +1921,29 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
   // Dialog do DS não pode ser a porta de fuga de um formulário sujo.
   const guard = useOverlayDismissGuard();
   const token = useRef({});
-  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, onClose);
+  // SAÍDA ANIMADA (contrato único de overlay): o dialog fica montado com
+  // `data-closing` durante `--gd-motion-dialog-out` e só então avisa o pai.
+  // Sem isso a saída era um corte seco (CE/GD: "nada pode simplesmente sumir").
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const animatedClose = () => {
+    if (closeTimer.current) return;
+    const ms = overlayMotionMs('--gd-motion-dialog-out', 150);
+    if (ms === 0) { onClose(); return; }
+    setClosing(true);
+    closeTimer.current = setTimeout(() => { closeTimer.current = undefined; setClosing(false); onClose(); }, ms);
+  };
+  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, animatedClose);
+  // Escape/teclado leem SEMPRE o requestClose da renderização atual (o efeito
+  // de abertura roda uma vez por `open`; sem ref, lia um onClose/guard antigos).
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
   useEffect(() => {
     if (!open) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = undefined;
+    setClosing(false);
     const prev = document.activeElement as HTMLElement | null;
     lockBodyScroll(token.current);
     const node = ref.current;
@@ -1867,7 +1953,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
     (first || headingRef.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
       // Só o overlay do TOPO responde ao Escape (o de baixo continua aberto).
-      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestClose('escape'); }
+      if (e.key === 'Escape' && isTopOverlay(entry)) { e.preventDefault(); requestCloseRef.current('escape'); }
       if (e.key === 'Tab' && node && isTopOverlay(entry)) wrapDialogFocus(e, node, headingRef.current);
     };
     window.addEventListener('keydown', onKey, true);
@@ -1884,6 +1970,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
   return createPortal(
     <div
       className="gd-dialog-backdrop"
+      data-closing={closing || undefined}
       onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
     >
       <div
@@ -1891,6 +1978,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
         role="dialog"
         aria-modal="true"
         aria-label={label || title}
+        data-closing={closing || undefined}
         className="gd-dialog"
         style={width ? ({ '--gd-dialog-w': width } as React.CSSProperties) : undefined}
       >
@@ -1979,13 +2067,12 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
-  const motion = () => {
-    try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 170; } catch { return 170; }
-  };
   function closeNow() {
     if (closing) return;
+    const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
+    if (ms === 0) { onClose(); return; }
     setClosing(true);
-    timer.current = setTimeout(() => { setClosing(false); onClose(); }, motion());
+    timer.current = setTimeout(() => { setClosing(false); onClose(); }, ms);
   }
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -2072,7 +2159,7 @@ export function Radio({ label, hint, name, value, checked, onChange, disabled }:
         checked={checked}
         disabled={disabled}
         onChange={() => onChange(value || '')}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--gd-accent)] focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)]"
+        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--gd-accent)] transition-shadow duration-[var(--gd-motion-fast)] focus-visible:outline-none focus-visible:shadow-[var(--gd-focus-ring)] disabled:cursor-not-allowed"
       />
       <span className="min-w-0">
         <span className="il-type-body block font-medium text-[var(--gd-text)]">{label}</span>
@@ -2303,6 +2390,7 @@ export function DatePicker({ value, onChange, label = 'Data', placeholder = 'Sel
         <button
           id={field?.controlId}
           type="button"
+          data-value={value}
           disabled={disabled}
           aria-label={field?.inShell ? undefined : label}
           aria-labelledby={field?.labelId}
@@ -2422,6 +2510,7 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         {...repoProps}
         type="text"
         role="combobox"
+        data-value={multi ? selected.join(',') : (selected[0] ?? '')}
         aria-label={inShell ? undefined : label}
         aria-expanded={open}
         aria-controls={listId}
@@ -2431,10 +2520,15 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         value={displayLabel}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
           else if (e.key === 'Enter' && open && filtered[active]) { e.preventDefault(); pick(filtered[active]); }
+          // Escape com a lista aberta fecha SÓ a lista (ver abaixo).
+          // stopPropagation: a tecla não chega ao Popover/Drawer que contém o
+          // campo (nem ao listener de window deles). Fecha SÓ a lista.
+          else if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
           else if (e.key === 'Backspace' && multi && !query && selected.length) {
             onChange(selected.slice(0, -1));
           }
@@ -2451,9 +2545,12 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
                 key={o.value}
                 type="button"
                 role="option"
-                aria-selected={idx === active}
+                data-value={o.value}
+                /* ativo (teclado/hover) ≠ selecionado (valor): aria-selected é o valor. */
+                aria-selected={selected.includes(o.value)}
                 disabled={o.disabled}
                 data-active={idx === active}
+                data-selected={selected.includes(o.value) || undefined}
                 onMouseEnter={() => setActive(idx)}
                 onClick={() => pick(o)}
                 className="gd-menu__item"

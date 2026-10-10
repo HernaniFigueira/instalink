@@ -34,10 +34,11 @@ describe('Auditoria visual V01–V10 · correções reproduzidas', () => {
   });
 
   it('V03 reserva largura de identidade no mobile e deixa contato/data legíveis', () => {
-    expect(client360).toContain('client360-idcard__identity');
-    expect(client360).toContain('client360-idcard__data');
-    expect(css).toContain('grid-template-columns: 64px minmax(0, 1fr)');
-    expect(css).toContain('.client360-idcard__data { grid-template-columns: minmax(0, 1fr); }');
+    // Convergência estrutural: a identidade é o Entity Context Rail (lateral; faixa de topo no mobile).
+    expect(client360).toContain('entity-rail__identity');
+    expect(client360).toContain('entity-rail__data');
+    expect(css).toContain('.entity-rail');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr)');
     expect(css).toContain('overflow-wrap: anywhere;');
   });
 

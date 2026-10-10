@@ -101,8 +101,9 @@ describe('missão 5 · 3 — tutor NEUTRO, pet protagonista (hierarquia vet)', (
   });
 
   it('a ficha do tutor é discreta (borda neutra, sem efeitos)', () => {
-    expect(drawer).toMatch(/il-idcard rounded-2xl border border-\[var\(--border\)\] shadow-sm/);
-    expect(drawer).not.toMatch(/il-idcard[^"]*shadow-md/);
+    // Convergência estrutural: a identidade do tutor vive no rail lateral (sem card).
+    expect(drawer).toContain('entity-rail');
+    expect(drawer).not.toMatch(/entity-rail[^"]*shadow-md/);
   });
 
   it('o bloco do PET usa superfície neutra (identidade não significa warning)', () => {

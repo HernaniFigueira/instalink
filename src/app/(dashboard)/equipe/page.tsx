@@ -317,9 +317,11 @@ export default function EquipePage() {
   }
 
   // Scroll + foco no bloco de erro a cada falha (mesmo texto repetido → tick novo).
+  // Foco no PRIMEIRO erro: o campo inválido (por id) recebe o foco; sem campo mapeado, cai no bloco de erro.
   useEffect(() => {
     if (!fError) return;
-    const el = fErrorRef.current;
+    const field = fErrorField ? document.getElementById(fErrorField) : null;
+    const el = (field as HTMLElement | null) ?? fErrorRef.current;
     if (!el) return;
     if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.focus({ preventScroll: true });
@@ -479,33 +481,33 @@ export default function EquipePage() {
           return followsBusinessHours(pro, rules) ? 'Segue a clínica' : 'Horário próprio';
         };
         return (
-          <div className="bg-white border border-zinc-200">
-            <div className="px-4 py-2.5 border-b border-zinc-200 flex items-center justify-between">
-              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Pessoas da clínica · {unified.length}</p>
-              <span className="text-xs text-zinc-400 hidden sm:inline">Uma lista — sem duplicar quem tem acesso e quem atende</span>
+          <div className="bg-white border border-[var(--gd-border-soft)]">
+            <div className="px-4 py-2.5 border-b border-[var(--gd-border-soft)] flex items-center justify-between">
+              <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)]">Pessoas da clínica · {unified.length}</p>
+              <span className="text-xs text-[var(--gd-text-faint)] hidden sm:inline">Uma lista — sem duplicar quem tem acesso e quem atende</span>
             </div>
             {/* Header desktop */}
-            <div className="hidden sm:grid grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 px-4 py-2 border-b border-zinc-100 bg-zinc-50 text-[11px] font-semibold tracking-wide uppercase text-zinc-500">
-              <span>Pessoa</span><span>Função / Papel</span><span>Atendimento</span><span>Agenda</span><span>Acesso</span><span className="text-right">Ações</span>
+            <div className="hidden sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 px-4 py-2 border-b border-[var(--gd-border-soft)] bg-[var(--gd-bg-subtle)] text-[11px] font-semibold tracking-wide uppercase text-[var(--gd-text-muted)]">
+              <span>Pessoa</span><span>Função / Papel</span><span className="hidden lg:block">Atendimento</span><span className="hidden lg:block">Agenda</span><span>Acesso</span><span className="text-right">Ações</span>
             </div>
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-[var(--gd-border-soft)]">
               {unified.map((entry) => {
                 if (entry.kind === 'owner') {
                   const op = entry.professional;
                   const ownerRoleLabel = entry.professional ? (entry.professional.role || roleLabel(entry.role)) : roleLabel(entry.role);
                   return (
-                    <div key="owner" className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center bg-zinc-50/50">
+                    <div key="owner" className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center bg-[var(--gd-bg-subtle)]/50">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Avatar name={entry.name} src={op?.photo || undefined} size={32} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{entry.name} <Badge tone="blue" className="ml-1">Proprietário</Badge>{op && <span className="ml-1 text-[11px] font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded">Atende</span>}</p>
-                          <p className="text-xs text-zinc-500 truncate">{entry.email}</p>
-                          {op && <p className="text-[11px] text-zinc-500 truncate sm:hidden">{op.role || 'Clínico Geral'} · {followsBusinessHours(op, rules) ? 'Segue a clínica' : 'Horário próprio'}</p>}
+                          <p className="text-xs text-[var(--gd-text-muted)] truncate">{entry.email}</p>
+                          {op && <p className="text-[11px] text-[var(--gd-text-muted)] truncate sm:hidden">{op.role || 'Clínico Geral'} · {followsBusinessHours(op, rules) ? 'Segue a clínica' : 'Horário próprio'}</p>}
                         </div>
                       </div>
-                      <span className="hidden sm:block text-sm text-zinc-700 truncate">{op?.role || roleLabel(entry.role)}</span>
-                      <span className="hidden sm:block">{op ? (atende(op) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Não atende</span>) : <span className="text-xs text-zinc-500">—</span>}</span>
-                      <span className="hidden sm:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-zinc-600 hover:text-zinc-900 underline">{agendaLabel(op)}</Link> : '—'}</span>
+                      <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{op?.role || roleLabel(entry.role)}</span>
+                      <span className="hidden lg:block">{op ? (atende(op) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>) : <span className="text-xs text-[var(--gd-text-muted)]">—</span>}</span>
+                      <span className="hidden lg:block text-xs">{op ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${op.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(op)}</Link> : '—'}</span>
                       <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span></span>
                       <span className="hidden sm:block text-right flex items-center justify-end gap-1.5">
                         <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
@@ -522,23 +524,23 @@ export default function EquipePage() {
                   const pro = entry.professional;
                   const role = roleLabel(m.role);
                   return (
-                    <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-zinc-50">
+                    <div key={m.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Avatar name={m.name} src={m.professionalPhoto || (pro?.photo as string) || undefined} size={32} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{m.name}</p>
-                          <p className="text-xs text-zinc-500 truncate">{m.email}</p>
+                          <p className="text-xs text-[var(--gd-text-muted)] truncate">{m.email}</p>
                           <div className="sm:hidden flex gap-1.5 mt-1 flex-wrap">
-                            <span className="text-xs bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded">{role}</span>
-                            <span className={atende(pro) ? 'text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded' : 'text-xs bg-zinc-100 border border-zinc-200 text-zinc-500 px-1.5 py-0.5 rounded'}>{atende(pro) ? 'Atende' : 'Não atende'}</span>
+                            <span className="text-xs bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] px-1.5 py-0.5 rounded">{role}</span>
+                            <span className={atende(pro) ? 'text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded' : 'text-xs bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-1.5 py-0.5 rounded'}>{atende(pro) ? 'Atende' : 'Não atende'}</span>
                             {!m.active && <span className="text-xs bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded">Inativo</span>}
                           </div>
                         </div>
                       </div>
-                      <span className="hidden sm:block text-sm text-zinc-700 truncate">{pro?.role || role}</span>
-                      <span className="hidden sm:block">{atende(pro) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Não atende</span>}</span>
-                      <span className="hidden sm:block text-xs">{pro ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${pro.id}`} className="text-zinc-600 hover:text-zinc-900 underline">{agendaLabel(pro)}</Link> : <span className="text-zinc-500">—</span>}</span>
-                      <span className="hidden sm:block">{m.active ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span> : <span className="text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Inativo</span>}</span>
+                      <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{pro?.role || role}</span>
+                      <span className="hidden lg:block">{atende(pro) ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Não atende</span>}</span>
+                      <span className="hidden lg:block text-xs">{pro ? <Link href={`/disponibilidade?b=${businessId}&professionalId=${pro.id}`} className="text-[var(--gd-text-secondary)] hover:text-[var(--gd-text)] underline">{agendaLabel(pro)}</Link> : <span className="text-[var(--gd-text-muted)]">—</span>}</span>
+                      <span className="hidden sm:block">{m.active ? <span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span> : <span className="text-xs font-medium bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Inativo</span>}</span>
                       <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
                         <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
                       </div>
@@ -551,22 +553,22 @@ export default function EquipePage() {
                 // professional solo sem acesso
                 const p = entry.professional;
                 return (
-                  <div key={p.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-zinc-50">
+                  <div key={p.id} className="px-4 py-3 flex sm:grid sm:grid-cols-[minmax(0,1.6fr)_120px_90px_170px] lg:grid-cols-[minmax(0,1.4fr)_120px_100px_130px_90px_170px] gap-2 items-center hover:bg-[var(--gd-bg-subtle)]">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <Avatar name={p.name} src={p.photo || undefined} size={32} />
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{p.name}</p>
-                        <p className="text-xs text-zinc-500 truncate">{p.role || 'Profissional'}</p>
+                        <p className="text-xs text-[var(--gd-text-muted)] truncate">{p.role || 'Profissional'}</p>
                         <div className="sm:hidden flex gap-1.5 mt-1">
                           <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded">Atende</span>
-                          <span className={followsBusinessHours(p, rules) ? 'text-xs bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 rounded' : 'text-xs bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded'}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</span>
+                          <span className={followsBusinessHours(p, rules) ? 'text-xs bg-[var(--gd-bg-surface-2)] border border-[var(--gd-border-soft)] px-1.5 py-0.5 rounded' : 'text-xs bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded'}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</span>
                         </div>
                       </div>
                     </div>
-                    <span className="hidden sm:block text-sm text-zinc-700 truncate">{p.role || 'Profissional'}</span>
-                    <span className="hidden sm:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span></span>
-                    <span className="hidden sm:block text-xs"><Link href={`/disponibilidade?b=${businessId}&professionalId=${p.id}`} className={cn('px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'bg-zinc-100 border-zinc-200 text-zinc-600' : 'bg-blue-50 border-blue-200 text-blue-700')}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</Link></span>
-                    <span className="hidden sm:block"><span className="text-xs font-medium bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">Sem acesso</span></span>
+                    <span className="hidden sm:block text-sm text-[var(--gd-text-secondary)] truncate">{p.role || 'Profissional'}</span>
+                    <span className="hidden lg:block"><span className="text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Atende</span></span>
+                    <span className="hidden lg:block text-xs"><Link href={`/disponibilidade?b=${businessId}&professionalId=${p.id}`} className={cn('px-2 py-0.5 rounded-full border', followsBusinessHours(p, rules) ? 'bg-[var(--gd-bg-surface-2)] border-[var(--gd-border-soft)] text-[var(--gd-text-secondary)]' : 'bg-blue-50 border-blue-200 text-blue-700')}>{followsBusinessHours(p, rules) ? 'Segue a clínica' : 'Horário próprio'}</Link></span>
+                    <span className="hidden sm:block"><span className="text-xs font-medium bg-white border border-[var(--gd-border-soft)] text-[var(--gd-text-muted)] px-2 py-0.5 rounded-full">Sem acesso</span></span>
                     <div className="hidden sm:flex items-center gap-1 justify-end shrink-0">
                       <button onClick={() => openEdit(entry)} className={buttonCls('secondary', 'xs')}>GERENCIAR</button>
                     </div>
@@ -596,13 +598,21 @@ export default function EquipePage() {
           title={editEntry ? 'Gerenciar pessoa' : 'Adicionar pessoa'}
           subtitle={editEntry ? 'Edite os dados desta pessoa — o mesmo painel cria e gerencia.' : 'Identificação + acesso (opcional) + atuação clínica (opcional).'}
           width={WORKSPACE_SHEET_SIZES.clinical}
+          /* Rodapé FIXO do drawer (fora do corpo rolável): Cancelar à esquerda,
+             ação principal à direita — sempre localizável em desktop e tablet. */
+          footer={fSuccessProfessionalId ? undefined : (
+            <div className="flex w-full items-center justify-between gap-2" data-person-footer="true">
+              <Button variant="ghost" onClick={() => cancelGuard.requestClose('close-button', personGuard, closePerson)}>Cancelar</Button>
+              <Button variant="primary" onClick={handleAddSave} disabled={fSaving}>{fSaving ? 'Salvando…' : editEntry ? 'Salvar alterações' : 'Adicionar pessoa'}</Button>
+            </div>
+          )}
         >
           {fSuccessProfessionalId ? (
               <div className="p-4 space-y-5">
                 <div className="space-y-4 py-6 text-center">
                   <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center"><Icon n="check" size={20} /></div>
                   <h3 className="text-base font-semibold">{editEntry ? 'Pessoa atualizada com sucesso.' : 'Pessoa adicionada com sucesso.'}</h3>
-                  <p className="text-sm text-zinc-500">Horário próprio ainda não configurado. Configure os horários desta pessoa para que ela apareça livre na agenda — ou feche e faça depois.</p>
+                  <p className="text-sm text-[var(--gd-text-muted)]">Horário próprio ainda não configurado. Configure os horários desta pessoa para que ela apareça livre na agenda — ou feche e faça depois.</p>
                   <div className="flex justify-center gap-2 pt-2">
                     <Link href={`/disponibilidade?b=${businessId}&professionalId=${fSuccessProfessionalId}`} className={buttonCls('primary','sm')}>Configurar horários</Link>
                     <Button variant="ghost" size="sm" onClick={()=> { setShowAdd(false); resetAddForm(); }}>Fechar</Button>
@@ -618,18 +628,18 @@ export default function EquipePage() {
                 )}
                 {/* IDENTIFICAÇÃO */}
             <div>
-              <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Identificação</p>
+              <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Perfil</p>
               {editEntry?.kind === 'owner' ? (
                 <div className="space-y-3">
-                  <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-2">
-                    <div className="flex justify-between"><span className="text-xs text-zinc-500">Nome</span><span className="text-sm font-medium">{fName}</span></div>
-                    <div className="flex justify-between"><span className="text-xs text-zinc-500">E-mail</span><span className="text-sm">{fEmail}</span></div>
-                    <div className="flex justify-between"><span className="text-xs text-zinc-500">Telefone</span><span className="text-sm">{fPhone || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-xs text-zinc-500">CPF</span><span className="text-sm">{fCpf || '—'}</span></div>
+                  <div className="rounded-md border border-[var(--gd-border-soft)] bg-[var(--gd-bg-subtle)] p-3 space-y-2">
+                    <div className="flex justify-between"><span className="text-xs text-[var(--gd-text-muted)]">Nome</span><span className="text-sm font-medium">{fName}</span></div>
+                    <div className="flex justify-between"><span className="text-xs text-[var(--gd-text-muted)]">E-mail</span><span className="text-sm">{fEmail}</span></div>
+                    <div className="flex justify-between"><span className="text-xs text-[var(--gd-text-muted)]">Telefone</span><span className="text-sm">{fPhone || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-xs text-[var(--gd-text-muted)]">CPF</span><span className="text-sm">{fCpf || '—'}</span></div>
                     <Link href={`/perfil?b=${businessId}`} className={buttonCls('secondary', 'sm')}>Editar no meu perfil <Icon n="arrowRight" size={12} /></Link>
                   </div>
 
-                  <p className="text-[11px] text-zinc-400">Os campos são formatados automaticamente durante a digitação.</p>
+                  <p className="text-[11px] text-[var(--gd-text-faint)]">Os campos são formatados automaticamente durante a digitação.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -647,7 +657,7 @@ export default function EquipePage() {
                       <Input id="pessoa-cpf" value={fCpf} onChange={(e)=> setFCpf(maskCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" aria-invalid={fErrorField === 'pessoa-cpf' || undefined} />
                     </Field>
                   </div>
-                  <p className="text-[11px] text-zinc-400">Os campos são formatados automaticamente durante a digitação.</p>
+                  <p className="text-[11px] text-[var(--gd-text-faint)]">Os campos são formatados automaticamente durante a digitação.</p>
                 </div>
               )}
             </div>
@@ -660,61 +670,61 @@ export default function EquipePage() {
               const isNew = !editEntry;
               if (isOwner) {
                 return (
-                  <div className="flex flex-wrap gap-4 py-2 border-y border-zinc-100">
+                  <div className="flex flex-wrap gap-4 py-2 border-y border-[var(--gd-border-soft)]">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">Acesso ao sistema: </span><span className="text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo (permanente)</span>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer select-none ml-auto">
-                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                       <span className="text-sm font-medium">Realiza atendimentos</span>
-                      <span className="text-xs text-zinc-500">aparece na agenda</span>
+                      <span className="text-xs text-[var(--gd-text-muted)]">aparece na agenda</span>
                     </label>
                   </div>
                 );
               }
               if (isMember) {
                 return (
-                  <div className="space-y-2 py-2 border-y border-zinc-100">
+                  <div className="space-y-2 py-2 border-y border-[var(--gd-border-soft)]">
                     <div className="flex items-center justify-between">
                       <span className="text-sm">Acesso ao sistema: <span className="text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Ativo</span></span>
                       <button type="button" onClick={() => setShowRemoveConfirm(true)} className="text-xs font-semibold text-red-600 border border-red-200 bg-red-50 px-2.5 py-1 rounded-md hover:bg-red-100">Remover acesso</button>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                       <span className="text-sm font-medium">Realiza atendimentos</span>
-                      <span className="text-xs text-zinc-500">aparece na agenda</span>
+                      <span className="text-xs text-[var(--gd-text-muted)]">aparece na agenda</span>
                     </label>
                   </div>
                 );
               }
               if (isProfessionalSolo) {
                 return (
-                  <div className="flex flex-wrap gap-4 py-2 border-y border-zinc-100">
+                  <div className="flex flex-wrap gap-4 py-2 border-y border-[var(--gd-border-soft)]">
                     <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input type="checkbox" checked={fHasAccess} onChange={(e)=> setFHasAccess(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                      <input type="checkbox" checked={fHasAccess} onChange={(e)=> setFHasAccess(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                       <span className="text-sm font-medium">Conceder acesso</span>
-                      <span className="text-xs text-zinc-500">criar login para esta pessoa</span>
+                      <span className="text-xs text-[var(--gd-text-muted)]">criar login para esta pessoa</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                      <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                       <span className="text-sm font-medium">Realiza atendimentos</span>
-                      <span className="text-xs text-zinc-500">aparece na agenda</span>
+                      <span className="text-xs text-[var(--gd-text-muted)]">aparece na agenda</span>
                     </label>
                   </div>
                 );
               }
               // novo cadastro
               return (
-                <div className="flex flex-wrap gap-4 py-2 border-y border-zinc-100">
+                <div className="flex flex-wrap gap-4 py-2 border-y border-[var(--gd-border-soft)]">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={fHasAccess} onChange={(e)=> setFHasAccess(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                    <input type="checkbox" checked={fHasAccess} onChange={(e)=> setFHasAccess(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                     <span className="text-sm font-medium">Tem acesso</span>
-                    <span className="text-xs text-zinc-500">pode entrar no sistema</span>
+                    <span className="text-xs text-[var(--gd-text-muted)]">pode entrar no sistema</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-zinc-900" />
+                    <input type="checkbox" checked={fHasClinical} onChange={(e)=> setFHasClinical(e.target.checked)} className="w-4 h-4 accent-[var(--accent)]" />
                     <span className="text-sm font-medium">Realiza atendimentos</span>
-                    <span className="text-xs text-zinc-500">aparece na agenda</span>
+                    <span className="text-xs text-[var(--gd-text-muted)]">aparece na agenda</span>
                   </label>
                 </div>
               );
@@ -722,15 +732,15 @@ export default function EquipePage() {
 
             {/* ACESSO expandido */}
             {fHasAccess && editEntry?.kind === 'owner' && (
-              <div className="space-y-2 bg-zinc-50 border border-zinc-200 rounded-md p-3" data-testid="owner-access-summary">
-                <p className="text-xs font-semibold tracking-wide uppercase text-zinc-600">Acesso ao sistema</p>
+              <div className="space-y-2 bg-[var(--gd-bg-subtle)] border border-[var(--gd-border-soft)] rounded-md p-3" data-testid="owner-access-summary">
+                <p className="text-xs font-semibold tracking-wide uppercase text-[var(--gd-text-secondary)]">Acesso ao sistema</p>
                 <p className="text-sm font-semibold text-[var(--text)]">Proprietário · acesso total</p>
-                <p className="text-xs text-zinc-500">O proprietário sempre tem acesso a tudo. O papel e as permissões dele não são editáveis e ele não pode ser rebaixado por aqui.</p>
+                <p className="text-xs text-[var(--gd-text-muted)]">O proprietário sempre tem acesso a tudo. O papel e as permissões dele não são editáveis e ele não pode ser rebaixado por aqui.</p>
               </div>
             )}
             {fHasAccess && editEntry?.kind !== 'owner' && (
-              <div className="space-y-4 bg-zinc-50 border border-zinc-200 rounded-md p-3">
-                <p className="text-xs font-semibold tracking-wide uppercase text-zinc-600">Acesso ao sistema</p>
+              <div className="space-y-4 bg-[var(--gd-bg-subtle)] border border-[var(--gd-border-soft)] rounded-md p-3">
+                <p className="text-xs font-semibold tracking-wide uppercase text-[var(--gd-text-secondary)]">Acesso ao sistema</p>
                 <Field label="E-mail de acesso" required hint="O mesmo da identificação — confirmado aqui para acesso.">
                   <Input id="pessoa-email-acesso" type="email" value={fEmail} onChange={(e)=> setFEmail(e.target.value)} placeholder="ana@clinica.com.br" autoComplete="email" aria-invalid={fErrorField === 'pessoa-email' || undefined} />
                 </Field>
@@ -745,10 +755,10 @@ export default function EquipePage() {
                     const effective = typeof override === 'boolean' ? override : base;
                     const isOverridden = typeof override === 'boolean' && override !== base; // `ajuste` = diferença REAL do preset
                     return (
-                      <label key={perm.id} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-md border cursor-pointer', effective ? 'bg-white border-zinc-300' : 'bg-zinc-50 border-zinc-200', isOverridden && 'ring-1 ring-amber-200')}>
+                      <label key={perm.id} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-md border cursor-pointer', effective ? 'bg-white border-[var(--gd-border)]' : 'bg-[var(--gd-bg-subtle)] border-[var(--gd-border-soft)]', isOverridden && 'ring-1 ring-amber-200')}>
                         <span>
                           <span className="block text-sm font-medium">{perm.label} {isOverridden && <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded ml-1">ajuste</span>}</span>
-                          <span className="block text-xs text-zinc-500">{perm.hint}</span>
+                          <span className="block text-xs text-[var(--gd-text-muted)]">{perm.hint}</span>
                         </span>
                         <input type="checkbox" checked={effective} onChange={(e)=> {
                           const desired = e.target.checked;
@@ -758,33 +768,33 @@ export default function EquipePage() {
                             else next[perm.id as PermissionId] = desired;
                             return next;
                           });
-                        }} className="w-4 h-4 accent-zinc-900" />
+                        }} className="w-4 h-4 accent-[var(--accent)]" />
                       </label>
                     );
                   };
                   return (
                     <>
                       <div>
-                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Papel</p>
+                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Papel de acesso</p>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5" role="group" aria-label="Papel de acesso">
                           {primary.map((r)=> (
                             <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
                               <span className="flex flex-col items-start gap-0.5 py-1.5 text-left">
                                 <span className="block text-sm font-medium">{r.label}</span>
-                                <span className="block text-xs font-normal text-zinc-500">{r.hint}</span>
+                                <span className="block text-xs font-normal text-[var(--gd-text-muted)]">{r.hint}</span>
                               </span>
                             </button>
                           ))}
                         </div>
                         {other.length > 0 && (
                           <details className="mt-2" open={openOther}>
-                            <summary className="text-xs font-semibold text-zinc-500 cursor-pointer select-none">Outros papéis / avançado</summary>
+                            <summary className="text-xs font-semibold text-[var(--gd-text-muted)] cursor-pointer select-none">Outros papéis / avançado</summary>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 mt-2" role="group" aria-label="Outros papéis">
                               {other.map((r)=> (
                                 <button type="button" key={r.id} aria-pressed={fRole === r.id} onClick={()=> requestRoleChange(r.id)} className="il-option-choice il-option-choice--compact text-left">
                                   <span className="flex flex-col items-start gap-0.5 py-1.5 text-left">
                                     <span className="block text-sm font-medium">{r.label}</span>
-                                    <span className="block text-xs font-normal text-zinc-500">{r.hint}</span>
+                                    <span className="block text-xs font-normal text-[var(--gd-text-muted)]">{r.hint}</span>
                                   </span>
                                 </button>
                               ))}
@@ -802,7 +812,7 @@ export default function EquipePage() {
                         </Notice>
                       )}
                       <div data-testid="preset-summary">
-                        <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-1">Acesso padrão do papel</p>
+                        <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-1">Permissões do papel</p>
                         <p className="text-sm text-[var(--text)]">{summary.length ? summary.join(' · ') : 'Somente leitura do resumo'}</p>
                         <div className="mt-2 flex items-center gap-2">
                           <button type="button" aria-expanded={fCustomize} aria-controls="personalizar-acesso" onClick={()=> setFCustomize((v)=> !v)} className={buttonCls('secondary', 'sm')}>
@@ -813,7 +823,7 @@ export default function EquipePage() {
                       </div>
                       {fCustomize && (
                         <div id="personalizar-acesso" className="space-y-3" data-testid="personalizar-acesso">
-                          <p className="text-[11px] text-zinc-500">Ajustes individuais sobre o acesso padrão de {roleLabel(fRole)}. Marque ou desmarque só o que for realmente diferente; trocar de papel volta ao padrão.</p>
+                          <p className="text-[11px] text-[var(--gd-text-muted)]">Ajustes individuais sobre o acesso padrão de {roleLabel(fRole)}. Marque ou desmarque só o que for realmente diferente; trocar de papel volta ao padrão.</p>
                           <div className="space-y-1.5">{eds.core.map((perm)=> renderPerm(perm as PermDef))}</div>
                           {eds.advanced.length > 0 && (
                             <details className="group" open={eds.advanced.some((perm)=> typeof fPermissions[perm.id as PermissionId] === 'boolean')}>
@@ -830,7 +840,7 @@ export default function EquipePage() {
                   <Field label="Senha inicial" required hint="Necessária somente se este e-mail ainda não possuir uma conta GoDoutor.">
                     <div className="relative">
                       <Input id="pessoa-senha" type={fShowPass ? 'text' : 'password'} value={fPassword} onChange={(e)=> setFPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" aria-invalid={fErrorField === 'pessoa-senha' || undefined} />
-                      <button type="button" onClick={()=> setFShowPass(s=>!s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-600 px-2 py-1 hover:bg-zinc-100 rounded" aria-label={fShowPass ? 'Ocultar senha' : 'Mostrar senha'}>
+                      <button type="button" onClick={()=> setFShowPass(s=>!s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-[var(--gd-text-secondary)] px-2 py-1 hover:bg-[var(--gd-bg-surface-2)] rounded" aria-label={fShowPass ? 'Ocultar senha' : 'Mostrar senha'}>
                         {fShowPass ? 'Ocultar' : 'Mostrar'}
                       </button>
                     </div>
@@ -841,17 +851,17 @@ export default function EquipePage() {
 
             {/* ATENDIMENTO expandido */}
             {fHasClinical && (
-              <div className="space-y-4 bg-white border border-zinc-200 rounded-md p-3">
-                <p className="text-xs font-semibold tracking-wide uppercase text-zinc-600">Atuação clínica</p>
+              <div className="space-y-4 bg-white border border-[var(--gd-border-soft)] rounded-md p-3">
+                <p className="text-xs font-semibold tracking-wide uppercase text-[var(--gd-text-secondary)]">Atuação clínica</p>
                 <ImageUpload label="Foto profissional" value={fPhoto} onChange={setFPhoto} businessId={businessId} circle previewH="h-20" />
                 <Field label="Função / Especialidade" hint="Ex.: Clínico Geral, Cardiologia, Cirurgia.">
                   <Input value={fFuncao} onChange={(e)=> setFFuncao(e.target.value)} placeholder="Clínico Geral" />
                 </Field>
                 <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Registro profissional</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Vínculo clínico</p>
                   <div className="grid grid-cols-[110px_90px_1fr] gap-2">
                     <Field label="Conselho">
-                      <div className="h-[38px] flex items-center px-3 rounded-sm border border-[var(--border-strong)] bg-[var(--surface-3)] text-sm font-medium text-[var(--text)]">CRMV</div>
+                      <Input value="CRMV" readOnly aria-readonly="true" />
                     </Field>
                     <Field label="UF">
                       <Select value={fUf} onChange={(e)=> setFUf(e.target.value)}>
@@ -863,23 +873,23 @@ export default function EquipePage() {
                       <Input value={fCrmvNum} onChange={(e)=> setFCrmvNum(e.target.value.replace(/\D/g,''))} placeholder="12345" inputMode="numeric" />
                     </Field>
                   </div>
-                  {(fUf || fCrmvNum) && <p className="text-xs text-zinc-500 mt-1">{formatCrmvDisplay(fUf, fCrmvNum) || `${fConselho}${fUf?`-${fUf}`:''} ${fCrmvNum?`nº ${fCrmvNum}`:''}` } — exibição padrão</p>}
-                  <p className="text-[11px] text-zinc-400 mt-1">CPF ≠ CRMV. Não exigimos CRMV para equipe não-veterinária.</p>
+                  {(fUf || fCrmvNum) && <p className="text-xs text-[var(--gd-text-muted)] mt-1">{formatCrmvDisplay(fUf, fCrmvNum) || `${fConselho}${fUf?`-${fUf}`:''} ${fCrmvNum?`nº ${fCrmvNum}`:''}` } — exibição padrão</p>}
+                  <p className="text-[11px] text-[var(--gd-text-faint)] mt-1">CPF ≠ CRMV. Não exigimos CRMV para equipe não-veterinária.</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Atendimentos e procedimentos habilitados</p>
-                  {fServiceIds.length === 0 && fPendingServices.length === 0 && <Notice tone="warning">Este profissional será criado sem procedimentos habilitados e não receberá agendamentos até que um serviço seja vinculado.</Notice>}<p className="text-xs text-zinc-500 mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Atuação e serviços</p>
+                  {fServiceIds.length === 0 && fPendingServices.length === 0 && <Notice tone="warning">Este profissional será criado sem procedimentos habilitados e não receberá agendamentos até que um serviço seja vinculado.</Notice>}<p className="text-xs text-[var(--gd-text-muted)] mb-2">Define quais procedimentos podem ser agendados com este profissional.</p>
                   <div className="flex gap-2">
                     <Input value={fServiceQuery} onChange={(e)=> { setFServiceQuery(e.target.value); setFShowServiceCreate(false); }} placeholder="Buscar serviço (ex.: Consulta, Vacinação)" className="flex-1" />
                   </div>
-                  <div className="mt-2 max-h-40 overflow-y-auto border border-zinc-200 rounded-md divide-y divide-zinc-100 bg-white">
+                  <div className="mt-2 max-h-40 overflow-y-auto border border-[var(--gd-border-soft)] rounded-md divide-y divide-[var(--gd-border-soft)] bg-[var(--gd-bg-surface)]">
                     {(services.filter(s=> !fServiceQuery || s.name.toLowerCase().includes(fServiceQuery.toLowerCase())).slice(0,20)).map((svc)=> {
                       const checked = fServiceIds.includes(svc.id);
                       return (
-                        <label key={svc.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-50 cursor-pointer">
-                          <input type="checkbox" checked={checked} onChange={(e)=> {  setFServiceIds((prev)=> e.target.checked ? [...prev, svc.id] : prev.filter(id=> id!==svc.id)); }} className="w-4 h-4 accent-zinc-900" />
+                        <label key={svc.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-[var(--gd-bg-subtle)] cursor-pointer">
+                          <input type="checkbox" checked={checked} onChange={(e)=> {  setFServiceIds((prev)=> e.target.checked ? [...prev, svc.id] : prev.filter(id=> id!==svc.id)); }} className="w-4 h-4 accent-[var(--accent)]" />
                           <span className="text-sm flex-1">{svc.name}</span>
-                          <span className="text-xs text-zinc-500">{cats.find(c=> c.id===svc.categoryId)?.name || ''}</span>
+                          <span className="text-xs text-[var(--gd-text-muted)]">{cats.find(c=> c.id===svc.categoryId)?.name || ''}</span>
                         </label>
                       );
                     })}
@@ -891,7 +901,7 @@ export default function EquipePage() {
                   </div>
                   {fPendingServices.length>0 && (
                     <div className="mt-2 space-y-1">
-                      <p className="text-[11px] font-semibold text-zinc-500 uppercase">Novos serviços (pendentes — serão criados ao salvar)</p>
+                      <p className="text-[11px] font-semibold text-[var(--gd-text-muted)] uppercase">Novos serviços (pendentes — serão criados ao salvar)</p>
                       {fPendingServices.map(ps=> (
                         <div key={ps.tempId} className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-sm">
                           <span className="flex-1 truncate">{ps.name} · {ps.suggestedGroupName || cats.find(c=>c.id===ps.groupId)?.name || 'Sem grupo'} · {durationLabel(ps.durationMin)} {ps.price?`· R$ ${ps.price}`:''}</span>
@@ -908,12 +918,12 @@ export default function EquipePage() {
                     if (!sug.length) return null;
                     return (
                       <div className="mt-2 space-y-1">
-                        <p className="text-[11px] font-semibold text-zinc-500 uppercase">Sugestões da biblioteca (ainda não existem na clínica)</p>
+                        <p className="text-[11px] font-semibold text-[var(--gd-text-muted)] uppercase">Sugestões da biblioteca (ainda não existem na clínica)</p>
                         {sug.map((s)=> {
                           const existingCat = cats.find(c => c.name.toLowerCase().trim() === s.grupo.toLowerCase().trim() && c.kind === 'service');
                           return (
-                            <button key={s.name} type="button" onClick={()=> { setFNewSvcName(s.name); if (existingCat) { setFNewSvcGrupo(existingCat.id); setFSuggestedGroupName(''); } else { setFNewSvcGrupo(''); setFSuggestedGroupName(s.grupo); } setFNewSvcDur(s.duracaoMin ? String(s.duracaoMin) : ''); setFNewSvcDurSuggested(s.duracaoMin || 0); setFShowServiceCreate(true); setFServiceQuery(s.name); }} className="block w-full text-left text-xs bg-zinc-50 border border-zinc-200 rounded px-2 py-1.5 hover:bg-white">
-                              <span className="font-medium">{s.name}</span> <span className="text-zinc-500">· {s.grupo} · {durationSuggestionLabel(s.duracaoMin)}</span>
+                            <button key={s.name} type="button" onClick={()=> { setFNewSvcName(s.name); if (existingCat) { setFNewSvcGrupo(existingCat.id); setFSuggestedGroupName(''); } else { setFNewSvcGrupo(''); setFSuggestedGroupName(s.grupo); } setFNewSvcDur(s.duracaoMin ? String(s.duracaoMin) : ''); setFNewSvcDurSuggested(s.duracaoMin || 0); setFShowServiceCreate(true); setFServiceQuery(s.name); }} className="block w-full text-left text-xs bg-[var(--gd-bg-subtle)] border border-[var(--gd-border-soft)] rounded px-2 py-1.5 hover:bg-[var(--gd-bg-surface)]">
+                              <span className="font-medium">{s.name}</span> <span className="text-[var(--gd-text-muted)]">· {s.grupo} · {durationSuggestionLabel(s.duracaoMin)}</span>
                             </button>
                           );
                         })}
@@ -921,7 +931,7 @@ export default function EquipePage() {
                     );
                   })()}
                   {fShowServiceCreate && (
-                    <div className="mt-3 p-3 border border-zinc-200 rounded-md bg-zinc-50 space-y-2">
+                    <div className="mt-3 p-3 border border-[var(--gd-border-soft)] rounded-md bg-[var(--gd-bg-subtle)] space-y-2">
                       <p className="text-xs font-semibold">Criar serviço &quot;{fNewSvcName}&quot;</p>
                       <Field label="Nome" required><Input value={fNewSvcName} onChange={(e)=> setFNewSvcName(e.target.value)} placeholder="Nome do serviço" /></Field>
                       <Field label="Grupo"><Select value={fNewSvcGrupo} onChange={(e)=> { setFNewSvcGrupo(e.target.value); setFSuggestedGroupName(''); }}><option value="">Selecione</option>{cats.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
@@ -947,14 +957,14 @@ export default function EquipePage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500 mb-2">Disponibilidade</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--gd-text-secondary)] mb-2">Disponibilidade</p>
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="disp" checked={fDispMode==='follow'} onChange={()=> setFDispMode('follow')} className="accent-zinc-900" />
+                      <input type="radio" name="disp" checked={fDispMode==='follow'} onChange={()=> setFDispMode('follow')} className="accent-[var(--accent)]" />
                       <span className="text-sm">Seguir horário da clínica</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="disp" checked={fDispMode==='own'} onChange={()=> setFDispMode('own')} className="accent-zinc-900" />
+                      <input type="radio" name="disp" checked={fDispMode==='own'} onChange={()=> setFDispMode('own')} className="accent-[var(--accent)]" />
                       <span className="text-sm">Usar horário próprio</span>
                     </label>
                   </div>
@@ -979,7 +989,7 @@ export default function EquipePage() {
                       }
                       return (
                         <div className="mt-2" data-testid="own-hours-configured">
-                          <p className="text-xs text-zinc-500">Horário próprio configurado ({ownCount} {ownCount === 1 ? 'janela' : 'janelas'} por dia da semana).</p>
+                          <p className="text-xs text-[var(--gd-text-muted)]">Horário próprio configurado ({ownCount} {ownCount === 1 ? 'janela' : 'janelas'} por dia da semana).</p>
                           <Link href={deepLink} className={buttonCls('secondary', 'sm')}>
                             Configurar horários <Icon n="arrowRight" size={12} />
                           </Link>
@@ -988,7 +998,7 @@ export default function EquipePage() {
                     }
                     return (
                       <div className="mt-2">
-                        {!isNew && ownCount > 0 && <p className="text-xs text-zinc-500" data-testid="own-hours-preserved">O horário próprio já configurado fica guardado e volta a valer se você escolher “Usar horário próprio”.</p>}
+                        {!isNew && ownCount > 0 && <p className="text-xs text-[var(--gd-text-muted)]" data-testid="own-hours-preserved">O horário próprio já configurado fica guardado e volta a valer se você escolher “Usar horário próprio”.</p>}
                         {!isNew && <Link href={deepLink} className={buttonCls('secondary', 'sm')}>
                           Configurar horários <Icon n="arrowRight" size={12} />
                         </Link>}
@@ -1002,7 +1012,7 @@ export default function EquipePage() {
             {showRemoveConfirm && editEntry?.kind === 'member' && (
               <Drawer open onClose={()=> setShowRemoveConfirm(false)} title={`Remover acesso de ${editEntry.member?.name || fName}?`} width="max-w-md">
                 <div className="p-5 space-y-4">
-                  <p className="text-sm text-zinc-600">Esta pessoa não poderá entrar no sistema. Se realiza atendimentos, o perfil profissional, serviços e disponibilidade serão preservados.</p>
+                  <p className="text-sm text-[var(--gd-text-secondary)]">Esta pessoa não poderá entrar no sistema. Se realiza atendimentos, o perfil profissional, serviços e disponibilidade serão preservados.</p>
                   <div className="flex justify-end gap-2 pt-2">
                     <Button variant="ghost" onClick={()=> setShowRemoveConfirm(false)}>Cancelar</Button>
                     <Button variant="destructive" onClick={async () => {
@@ -1017,10 +1027,6 @@ export default function EquipePage() {
                 </div>
               </Drawer>
             )}
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-200">
-              <Button variant="ghost" size="sm" onClick={() => cancelGuard.requestClose('close-button', personGuard, closePerson)}>Cancelar</Button>
-              <Button variant="primary" size="sm" onClick={handleAddSave} disabled={fSaving}>{fSaving ? 'Salvando…' : editEntry ? 'Salvar alterações' : 'Adicionar pessoa'}</Button>
-            </div>
           </div>
             )}
           {cancelGuard.dialog}

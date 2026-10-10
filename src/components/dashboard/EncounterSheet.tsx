@@ -33,6 +33,9 @@ import { persistenceState, useOverlayDismissGuard, useUnsavedChangesGuard, type 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { Badge, Button, Disclosure, Field, Input, Notice, PageBackAction, ReadOnlyField, Textarea } from '@/components/ui';
+import { EncounterSessionRail } from './EncounterSessionRail';
+import { BOOKING_STATUS } from '@/lib/status';
+import type { BookingStatus } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import {
   ENCOUNTER_AUTOSAVE_LABELS, ENCOUNTER_AUTOSAVE_MS, ENCOUNTER_LABELS, ENCOUNTER_STATUS,
@@ -74,6 +77,10 @@ export interface FollowUpSeed {
 }
 
 interface Props {
+  /** Rota do workspace da MESMA sessão (aba "Atendimento" do rail). */
+  workspaceHref?: string;
+  /** Navegação para o workspace; passa pela guarda de saída do registro. */
+  onOpenWorkspace?: (href: string) => void;
   businessId: string;
   /** Agendamento de origem (o registro é 1:1 com ele). */
   bookingId?: string;
@@ -123,6 +130,7 @@ const fileUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? cryp
 
 export function EncounterSheet({
   businessId, bookingId, seed, existing, queueId, canReopen = false, onScheduleReturn, onClose, onSaved, onChanged, layout = 'page',
+  workspaceHref, onOpenWorkspace,
 }: Props) {
   const [row, setRow] = useState<EncounterRow | null>(existing || null);
   const [compactHeader, setCompactHeader] = useState(false);
@@ -568,12 +576,18 @@ export function EncounterSheet({
             </Button>
           )}
           {row && !isDraft && canReopen && (
-            <div className="w-full sm:w-auto">
-              <label className="mb-1 block text-xs text-[var(--text-muted)]" htmlFor="legacy-reopen-reason">Motivo da reabertura</label>
-              <Textarea id="legacy-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} disabled={!!busy} className="mb-2 min-h-16" />
-              <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy || reopenReason.trim().length < 3} className="w-full sm:w-auto">
-                {busy === 'reopen' ? 'Reabrindo…' : 'Reabrir para editar'}
-              </Button>
+            /* Reabertura é ação rara: fica recolhida (disclosure fechado) para não
+               competir com a leitura do documento finalizado. Mesma ação. */
+            <div className="w-full sm:w-auto sm:min-w-[260px]">
+              <Disclosure label="Reabrir para editar" hint="Ação rara · registra motivo na auditoria">
+                <div className="pt-2">
+                  <label className="mb-1 block text-xs text-[var(--text-muted)]" htmlFor="legacy-reopen-reason">Motivo da reabertura</label>
+                  <Textarea id="legacy-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} disabled={!!busy} className="mb-2 min-h-16" />
+                  <Button variant="warning" size="sm" onClick={() => { void transition('reopen'); }} disabled={!!busy || reopenReason.trim().length < 3} className="w-full sm:w-auto">
+                    {busy === 'reopen' ? 'Reabrindo…' : 'Confirmar reabertura'}
+                  </Button>
+                </div>
+              </Disclosure>
             </div>
           )}
         </>
@@ -685,7 +699,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.complaint}>
                 <Textarea value={form.complaint} maxLength={600}
-                  onChange={(e) => updateForm({ ...form, complaint: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, complaint: e.target.value })}
                   placeholder="Descreva o motivo do atendimento" />
               </Field>
             ) : (
@@ -694,7 +708,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.evolution} hint="O que foi feito neste atendimento — é o coração do registro.">
                 <Textarea value={form.evolution} maxLength={4000}
-                  onChange={(e) => updateForm({ ...form, evolution: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, evolution: e.target.value })}
                   placeholder="Registre o que foi realizado neste atendimento" />
               </Field>
             ) : (
@@ -705,7 +719,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.guidance} hint="Sai na via impressa que o cliente leva.">
                 <Textarea value={form.guidance} maxLength={2000}
-                  onChange={(e) => updateForm({ ...form, guidance: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, guidance: e.target.value })}
                   placeholder="Registre as orientações fornecidas" />
               </Field>
             ) : (
@@ -738,13 +752,13 @@ export function EncounterSheet({
               {form.followUpMode === 'date' && (
                 <div className="mt-2">
                   <Input type="date" aria-label="Data do retorno" value={form.followUpDate}
-                    onChange={(e) => updateForm({ ...form, followUpDate: e.target.value })} className="max-w-[200px]" />
+                    onChange={(e) => updateForm({ ...latest.current.form, followUpDate: e.target.value })} className="max-w-[200px]" />
                 </div>
               )}
               {form.followUpMode === 'interval' && (
                 <div className="mt-2 flex items-center gap-2">
                   <Input type="number" aria-label="Intervalo em dias" min={1} max={730} value={form.followUpDays || ''}
-                    onChange={(e) => updateForm({ ...form, followUpDays: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateForm({ ...latest.current.form, followUpDays: Number(e.target.value) || 0 })}
                     className="max-w-[110px]" />
                   <span className="text-xs text-[var(--text-muted)]">dias após o atendimento</span>
                 </div>
@@ -752,11 +766,11 @@ export function EncounterSheet({
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={ENCOUNTER_LABELS.followUp} hint="Texto livre que sai na via do cliente.">
                   <Input value={form.followUp} maxLength={200}
-                    onChange={(e) => updateForm({ ...form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
+                    onChange={(e) => updateForm({ ...latest.current.form, followUp: e.target.value })} placeholder="Ex: retorno em 30 dias" />
                 </Field>
                 <Field label="Etiquetas" hint="Separe por vírgula (procedimento, material, região…).">
                   <Input value={form.tags}
-                    onChange={(e) => updateForm({ ...form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
+                    onChange={(e) => updateForm({ ...latest.current.form, tags: e.target.value })} placeholder="Ex.: procedimentos, materiais" />
                 </Field>
               </div>
             </Field>
@@ -764,7 +778,7 @@ export function EncounterSheet({
             {editable ? (
               <Field label={ENCOUNTER_LABELS.internalNote} hint="Fica só na unidade — não entra na via do cliente.">
                 <Textarea value={form.internalNote} maxLength={2000}
-                  onChange={(e) => updateForm({ ...form, internalNote: e.target.value })}
+                  onChange={(e) => updateForm({ ...latest.current.form, internalNote: e.target.value })}
                   placeholder="Ex: cliente relatou sensibilidade; acompanhar no próximo retorno" />
               </Field>
             ) : (
@@ -928,18 +942,43 @@ export function EncounterSheet({
     : 'Registro clínico do atendimento';
 
   return layout === 'page' ? (
-    <main className="encounter-page" data-persistence-state={persistence}>
+    <main className="encounter-page encounter-session" data-persistence-state={persistence}>
+      {/* Mesmo rail do workspace (/atendimento/[id]): contexto do paciente
+          fica à esquerda durante todo o registro. Só dados reais da linha. */}
+      {row && (
+        <EncounterSessionRail
+          onBack={() => { void requestClose('navigation'); }}
+          eyebrow={row.bookingId ? 'Atendimento' : 'Atendimento do balcão'}
+          headline={row.petName || row.customerName || 'Paciente'}
+          tutor={row.petName ? row.customerName : ''}
+          tutorPhone={row.customerPhone || ''}
+          facts={[
+            { label: 'Serviço', value: row.serviceName || '' },
+            { label: 'Profissional', value: row.professionalName || '' },
+            { label: 'Agendado', value: `${formatDateBR(row.date)}${row.time ? ` · ${row.time}` : ''}` },
+          ]}
+          statusLabel={statusDef!.label.toUpperCase()}
+          statusTone={statusDef!.tone === 'green' ? 'emerald' : 'amber'}
+          bookingLabel={row.bookingStatus && BOOKING_STATUS[row.bookingStatus as BookingStatus] ? BOOKING_STATUS[row.bookingStatus as BookingStatus].panel : ''}
+          nav={[
+            ...(workspaceHref && onOpenWorkspace ? [{
+              key: 'atendimento', label: 'Atendimento', current: false,
+              onSelect: () => { void requestClose('navigation', () => onOpenWorkspace(workspaceHref)); },
+            }] : []),
+            { key: 'registro', label: 'Registro completo', current: true, onSelect: () => {} },
+          ]}
+        />
+      )}
+      <div className="encounter-session__main">
       <span ref={compactSentinel} className="encounter-page__sticky-sentinel" aria-hidden="true" />
       <header className="encounter-page__header" data-compact={compactHeader || undefined}>
-        <PageBackAction className="encounter-page__back" onClick={() => { void requestClose('navigation'); }} label="Voltar" />
+        {/* Voltar único: fica no rail (contexto). Sem segundo botão de saída no cabeçalho. */}
         <div className="encounter-page__heading">
           <div className="encounter-page__heading-copy">
-            <h1>Atendimento</h1>
-            <p className="encounter-page__patient">{patientContext}</p>
+            <h2 className="encounter-page__title">Registro completo</h2>
             <p className="encounter-page__meta encounter-page__meta--normal">{encounterMeta}</p>
             <p className="encounter-page__meta encounter-page__meta--compact">{compactEncounterMeta}</p>
           </div>
-          {row && <Badge tone={statusDef!.tone}>{statusDef!.label}</Badge>}
         </div>
       </header>
       <section className="encounter-page__content">{encounterContent}</section>
@@ -955,6 +994,7 @@ export function EncounterSheet({
         )}
         {encounterFooter}
       </footer>
+      </div>
       {routeDismiss.dialog}
       {closeDismiss.dialog}
     </main>

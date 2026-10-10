@@ -59,6 +59,11 @@ interface Props {
   businessId: string;
   /** Registro canônico (já lido pelo id — o workspace nunca cria por aqui). */
   encounter: EncounterCoreRow;
+  /**
+   * Muda quando a pessoa escolheu "Recarregar versão atual": só essa escolha
+   * explícita adota o servidor por cima de um rascunho com edição pendente.
+   */
+  adoptToken?: number;
   /** Sincronização silenciosa depois de um save (o pai NÃO desmonta nada). */
   onSaved?: () => void;
   /**
@@ -153,7 +158,7 @@ interface SaveOutcome {
 const SAVED: SaveOutcome = { ok: true, conflict: false, message: '' };
 
 export function EncounterCoreSection({
-  businessId, encounter, onSaved, registerLeave, authority, canEdit, readOnlyHint,
+  businessId, encounter, onSaved, registerLeave, authority, canEdit, readOnlyHint, adoptToken = 0,
 }: Props) {
   const [row, setRow] = useState<EncounterCoreRow>(encounter);
   const [form, setForm] = useState<CoreForm>(() => formOf(encounter));
@@ -178,8 +183,33 @@ export function EncounterCoreSection({
     setPendingLeaveState(value);
   }, []);
 
-  // O registro mudou (outra retomada, outro F5): a tela acompanha o servidor.
+  // O registro mudou por FORA desta seção (outra retomada, outro F5, outra
+  // seção gravou). A autoridade publica uma linha nova a CADA save — inclusive
+  // o eco do nosso próprio save. Este efeito NUNCA pode reidratar o rascunho
+  // com um snapshot mais velho que a digitação de agora (P0 · perda de texto):
+  //   • mesmo registro e mesma versão → eco do nosso save: nada a fazer;
+  //   • mesmo registro, versão nova e rascunho com edição pendente → só
+  //     atualiza a linha/versão-base; o texto local é a autoridade;
+  //   • registro diferente (ou rascunho limpo) → adota o servidor.
+  const adoptRef = useRef(adoptToken);
   useEffect(() => {
+    const local = latest.current;
+    const forced = adoptRef.current !== adoptToken;
+    adoptRef.current = adoptToken;
+    if (!forced && local.row.id === encounter.id && local.row.version === encounter.version) {
+      if (local.row !== encounter) { latest.current = { ...local, row: encounter }; setRow(encounter); }
+      return;
+    }
+    const sameRecord = local.row.id === encounter.id;
+    // Linha ATRASADA (versão menor que a que esta tela já confirmou): nunca
+    // volta o formulário no tempo. Só a escolha explícita (forced) adota.
+    if (!forced && sameRecord && encounter.version < local.row.version) return;
+    const pending = !forced && sameRecord && keyOf(local.form) !== lastSaved.current;
+    if (pending) {
+      latest.current = { ...local, row: encounter };
+      setRow(encounter);
+      return;
+    }
     const next = formOf(encounter);
     latest.current = { row: encounter, form: next };
     setRow(encounter);
@@ -191,12 +221,18 @@ export function EncounterCoreSection({
     setError('');
     setLeaveBlocked(false);
     setPendingLeave(null);
-  }, [encounter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encounter, adoptToken]);
 
   const updateForm = useCallback((next: CoreForm) => {
     latest.current.form = next;
     setForm(next);
   }, []);
+
+  /** Edita UM campo a partir do espelho síncrono: nunca a partir do render. */
+  const setField = useCallback((key: string, value: string) => {
+    updateForm({ ...latest.current.form, [key]: value });
+  }, [updateForm]);
 
   const keyOf = (f: CoreForm) => encounterDraftKey({ ...f, followUpMode: '', followUpDate: '', followUpDays: 0 });
 
@@ -520,7 +556,7 @@ export function EncounterCoreSection({
                 value={(form as Record<string, string>)[f.capability]}
                 disabled={!editable}
                 maxLength={f.maxLength}
-                onChange={(e) => updateForm({ ...form, [f.capability]: e.target.value })}
+                onChange={(e) => setField(f.capability, e.target.value)}
                 placeholder={f.placeholder}
               />
             ) : (
@@ -528,7 +564,7 @@ export function EncounterCoreSection({
                 value={(form as Record<string, string>)[f.capability]}
                 disabled={!editable}
                 maxLength={f.maxLength}
-                onChange={(e) => updateForm({ ...form, [f.capability]: e.target.value })}
+                onChange={(e) => setField(f.capability, e.target.value)}
                 placeholder={f.placeholder}
               />
             )}

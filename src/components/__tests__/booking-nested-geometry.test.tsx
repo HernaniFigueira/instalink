@@ -174,10 +174,12 @@ describe('6 · viewport estreita: cadastro assume a faixa e o agendamento volta 
 
     // Estado inicial do prefill.
     const sheet = () => within(dialog());
-    expect((sheet().getByLabelText(/^3\. Data/) as HTMLInputElement).value).toBe('2026-10-01');
-    await user.selectOptions(sheet().getByLabelText(/^2\. Serviço/), 'svc-1');
+    expect(sheet().getByLabelText(/^3\. Data/).getAttribute('data-value')).toBe('2026-10-01');
+    // CP3 · Serviço é Combobox do DS: escolha pela UI (input → opção).
+    await user.click(sheet().getByLabelText(/^2\. Serviço/));
+    await user.click(await waitFor(() => { const o = document.querySelector<HTMLElement>('[role="option"][data-value="svc-1"]'); if (!o) throw new Error('svc-1'); return o; }));
     await waitFor(() => expect(sheet().queryByLabelText(/^Profissional/)).toBeTruthy());
-    expect((sheet().getByLabelText(/^Profissional/) as HTMLSelectElement).value).toBe('pro-a');
+    expect(sheet().getByLabelText(/^Profissional/).getAttribute('data-value')).toBe('pro-a');
     await waitFor(() => expect(within(dialog()).getAllByRole('button').some((b) => b.textContent?.trim() === '09:30')).toBe(true));
 
     // Abre o cadastro DENTRO do mesmo overlay.
@@ -192,9 +194,9 @@ describe('6 · viewport estreita: cadastro assume a faixa e o agendamento volta 
     await user.click(within(dialog()).getByRole('button', { name: 'Voltar' }));
 
     await waitFor(() => expect(sidePanel()).toBeNull());
-    expect((sheet().getByLabelText(/^3\. Data/) as HTMLInputElement).value).toBe('2026-10-01');
-    expect((sheet().getByLabelText(/^2\. Serviço/) as HTMLSelectElement).value).toBe('svc-1');
-    expect((sheet().getByLabelText(/^Profissional/) as HTMLSelectElement).value).toBe('pro-a');
+    expect(sheet().getByLabelText(/^3\. Data/).getAttribute('data-value')).toBe('2026-10-01');
+    expect(sheet().getByLabelText(/^2\. Serviço/).getAttribute('data-value')).toBe('svc-1');
+    expect(sheet().getByLabelText(/^Profissional/).getAttribute('data-value')).toBe('pro-a');
     await waitFor(() => expect(within(dialog()).getAllByRole('button').some((b) => b.textContent?.trim() === '09:30')).toBe(true));
     expect(slotsApi.posts).toBe(0);
   });

@@ -14,7 +14,8 @@
 // `DatePicker`, `Button`, `Notice`, `StatusBadge`). Nenhum controle desenhado
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, DatePicker, Field, IconButton, Input, Notice, Popover, Select } from '@/components/ui';
+import { Button, Combobox, DatePicker, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
+import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
 import { nowHM, todayISO } from '@/lib/tz';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
@@ -74,6 +75,8 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
   const [date, setDate] = useState(anchor.date);
   const [time, setTime] = useState(anchor.time);
   const [durationMin, setDurationMin] = useState<number | undefined>(anchor.durationMin);
+  // Data/duração recolhidos por padrão; abrem sozinhos quando o gesto já trouxe duração.
+  const [moreTime, setMoreTime] = useState<boolean>(anchor.durationMin != null);
   const [contactId, setContactId] = useState('');
   // O contato escolhido é guardado por INTEIRO (a lista de resultados é
   // limpa ao escolher) — o nome/telefone vão no payload, como no fluxo completo.
@@ -192,131 +195,151 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
       anchorStyle={{ position: 'fixed', left: anchor.x, top: anchor.y, width: 0, height: 0 }}
       trigger={<span aria-hidden="true" />}
     >
-      <div className="w-[312px] space-y-2.5 p-1">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[13.5px] font-semibold text-[var(--gd-text)]">Novo agendamento</p>
-            <p className="text-[12px] text-[var(--gd-text-muted)] tabular-nums">
-              {date} · {time || 'escolha o horário'}
+      <div className="w-[344px] p-1" data-quick-create="compact">
+        {/* CABEÇALHO DE CONTEXTO — data, hora e profissional do gesto aparecem
+            como LEITURA (já escolhidos pelo slot), não como campos a preencher. */}
+        <div className="flex items-start justify-between gap-2 pb-2.5">
+          <div className="min-w-0">
+            <p className="gd-ovl__title">Novo agendamento</p>
+            <p className="mt-0.5 truncate text-[12px] tabular-nums text-[var(--gd-text-muted)]">
+              {formatDayLabel(date)} · {time || 'escolha o horário'}{professionalId ? ` · ${pros.find((p) => p.id === professionalId)?.name ?? ''}` : ''}
             </p>
           </div>
           <IconButton type="button" icon="x" label="Fechar criação rápida" onClick={onClose} />
         </div>
 
-        <Field label="Paciente" required hint="Nome ou WhatsApp — o cadastro abre no fluxo completo">
-          <Input
-            value={query}
-            autoFocus
-            placeholder="Buscar no cadastro"
-            onChange={(e) => { setQuery(e.target.value); setContactId(''); setPicked(null); }}
-          />
-        </Field>
-        {contactId && picked && (
-          <p className="text-[12px] font-medium text-[var(--gd-text-muted)]">
-            Selecionado: {picked.name || picked.phone}
-          </p>
-        )}
-        {!contactId && (searching || results.length > 0) && (
-          <ul className="max-h-32 overflow-y-auto rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface)]">
-            {searching && results.length === 0 && (
-              <li className="px-2 py-1.5 text-[12px] text-[var(--gd-text-muted)]">Buscando…</li>
-            )}
-            {results.map((c) => (
-              <li key={c.id}>
-                <button type="button" onClick={() => pick(c)}
-                  className="flex w-full flex-col items-start px-2 py-1.5 text-left hover:bg-[var(--gd-nav-hover)]">
-                  <span className="text-[13px] font-medium text-[var(--gd-text)]">{c.name || '(sem nome)'}</span>
-                  <span className="text-[11.5px] tabular-nums text-[var(--gd-text-muted)]">{c.phone}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {noContactFound && (
-          <div className="rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface-2)] p-2" data-quick-create-empty-search="true">
-            <p className="text-[12px] text-[var(--gd-text-muted)]">
-              Nenhum {vetMode ? 'tutor ou paciente' : 'paciente'} encontrado para “{query.trim()}”.
+        {/* ESSENCIAIS — paciente, serviço, profissional e hora, nesta ordem. */}
+        <div className="space-y-2.5">
+          <Field label="Paciente" required hint="Nome ou WhatsApp — o cadastro abre no fluxo completo">
+            <Input
+              value={query}
+              autoFocus
+              placeholder="Buscar no cadastro"
+              onChange={(e) => { setQuery(e.target.value); setContactId(''); setPicked(null); }}
+            />
+          </Field>
+          {contactId && picked && (
+            <p className="-mt-1.5 text-[12px] font-medium text-[var(--gd-text-muted)]">
+              Selecionado: {picked.name || picked.phone}
             </p>
-            <Button type="button" variant="secondary" className="mt-2 w-full justify-start"
-              onClick={() => onMore(seedIntent({ openRegistration: true }))}>
-              {vetMode ? '+ Cadastrar tutor e pet' : '+ Cadastrar paciente'}
-            </Button>
-          </div>
-        )}
-
-        <Field label="Serviço" required>
-          <Select value={serviceId} disabled={saving} onChange={(e) => { setServiceId(e.target.value); setTime(anchor.time); }}>
-            <option value="">Selecione…</option>
-            {bookable.map((s) => (
-              <option key={s.id} value={s.id}>{s.name} · {durationLabel(s.durationMin)}</option>
-            ))}
-          </Select>
-        </Field>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Profissional">
-            <Select value={professionalId} disabled={saving} onChange={(e) => setProfessionalId(e.target.value)}>
-              <option value="">Automático</option>
-              {pros.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Duração">
-            <Select value={durationMin ?? ''} disabled={saving}
-              onChange={(e) => setDurationMin(e.target.value === '' ? undefined : Number(e.target.value))}>
-              <option value="">Padrão do serviço</option>
-              {DURATIONS.map((d) => <option key={d} value={d}>{durationLabel(d)}</option>)}
-            </Select>
-          </Field>
-        </div>
-
-        {/* Os SEIS campos existem desde a abertura (§5) — o campo de hora não
-            aparece/some conforme o serviço, ele explica o estado. Data e Hora
-            dividem a linha: o popover é de criação rápida, não um formulário. */}
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Data">
-            <DatePicker value={date} onChange={setDate} min={today} label="Data do agendamento" className="w-full" />
-          </Field>
-          <Field
-            label="Hora"
-            hint={!serviceId ? 'Escolha o serviço' : slots.empty ? 'Nenhum horário livre' : undefined}
-          >
-            <Select
-              value={time}
-              disabled={saving || !serviceId || slots.loading || slots.times.length === 0}
-              onChange={(e) => setTime(e.target.value)}
-            >
-              {/* O horário do gesto (clique/arraste) continua visível mesmo fora
-                  da lista: o servidor decide se ele vale como encaixe. */}
-              {time && (!serviceId || !slots.times.includes(time)) && (
-                <option value={time}>{time} · na grade</option>
+          )}
+          {!contactId && (searching || results.length > 0) && (
+            <ul className="max-h-32 overflow-y-auto rounded-[var(--gd-radius-sm)] border border-[var(--gd-border)] bg-[var(--gd-bg-surface)]">
+              {searching && results.length === 0 && (
+                <li className="px-2 py-1.5 text-[12px] text-[var(--gd-text-muted)]">Buscando…</li>
               )}
-              {slots.loading && <option value="">Carregando…</option>}
-              {!slots.loading && serviceId && slots.times.length === 0 && <option value="">Sem horários</option>}
-              {slots.times.map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
+              {results.map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => pick(c)}
+                    className="flex w-full flex-col items-start px-2 py-1.5 text-left hover:bg-[var(--gd-nav-hover)]">
+                    <span className="text-[13px] font-medium text-[var(--gd-text)]">{c.name || '(sem nome)'}</span>
+                    <span className="text-[11.5px] tabular-nums text-[var(--gd-text-muted)]">{c.phone}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {noContactFound && (
+            <div className="rounded-[var(--gd-radius-sm)] bg-[var(--gd-bg-surface-2)] p-2" data-quick-create-empty-search="true">
+              <p className="text-[12px] text-[var(--gd-text-muted)]">
+                Nenhum {vetMode ? 'tutor ou paciente' : 'paciente'} encontrado para “{query.trim()}”.
+              </p>
+              <Button type="button" variant="secondary" className="mt-2 w-full justify-start"
+                onClick={() => onMore(seedIntent({ openRegistration: true }))}>
+                {vetMode ? '+ Cadastrar tutor e pet' : '+ Cadastrar paciente'}
+              </Button>
+            </div>
+          )}
+
+          <Field label="Serviço" required>
+            {/* DS · Combobox canônico (lista do DS, não o select nativo do navegador). */}
+            <Combobox label="Serviço" value={serviceId} disabled={saving} placeholder="Selecione…"
+              onChange={(v) => { setServiceId(String(v)); setTime(anchor.time); }}
+              options={[{ value: '', label: 'Selecione…' }, ...bookable.map((s) => ({ value: s.id, label: `${s.name} · ${durationLabel(s.durationMin)}` }))]} />
           </Field>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <Field label="Profissional">
+              <Combobox label="Profissional" value={professionalId} disabled={saving} placeholder="Automático"
+                onChange={(v) => setProfessionalId(String(v))}
+                options={[{ value: '', label: 'Automático' }, ...pros.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name }))]} />
+            </Field>
+            {/* Os campos de hora explicam o estado; o horário do gesto continua
+                visível mesmo fora da lista (o servidor decide o encaixe). */}
+            <Field
+              label="Hora"
+              hint={!serviceId ? 'Escolha o serviço' : slots.empty ? 'Nenhum horário livre' : undefined}
+            >
+              <Combobox label="Hora" value={time}
+                disabled={saving || !serviceId || slots.loading || slots.times.length === 0}
+                onChange={(v) => setTime(String(v))}
+                options={[
+                  ...(time && (!serviceId || !slots.times.includes(time)) ? [{ value: time, label: time, hint: 'na grade' }] : []),
+                  ...(slots.loading ? [{ value: '', label: 'Carregando…' }] : []),
+                  ...(!slots.loading && serviceId && slots.times.length === 0 ? [{ value: '', label: 'Sem horários' }] : []),
+                  ...slots.times.map((t) => ({ value: t, label: t })),
+                ]} />
+            </Field>
+          </div>
         </div>
 
-        {slots.error && <Notice tone="warning" title="Horários">{slots.error}</Notice>}
-        {pastIssue && <Notice tone="warning" title="Horário indisponível">{pastIssue}</Notice>}
-        {error && error !== pastIssue && <Notice tone="error" title="Não foi possível criar">{error}</Notice>}
+        {/* PROGRESSIVE DISCLOSURE — data e duração só ocupam espaço quando a
+            pessoa quer ajustá-los. O resumo fica visível: nada se esconde. */}
+        <div className="mt-2.5 border-t border-[var(--gd-border-soft)] pt-2">
+          <button type="button" aria-expanded={moreTime} aria-controls="qc-time-adjust"
+            onClick={() => setMoreTime((o) => !o)}
+            className="flex w-full items-center justify-between gap-2 rounded-[var(--gd-radius-sm)] px-1 py-1 text-left text-[12.5px] hover:bg-[var(--gd-nav-hover)]">
+            <span className="font-medium text-[var(--gd-text-secondary)]">Data e duração</span>
+            <span className="flex items-center gap-1.5 truncate tabular-nums text-[var(--gd-text-muted)]">
+              {formatDayLabel(date)} · {durationMin ? durationLabel(durationMin) : 'padrão do serviço'}
+              <Icon n="chevD" size={12} className={moreTime ? 'rotate-180 transition-transform' : 'transition-transform'} />
+            </span>
+          </button>
+          {moreTime && (
+            <div id="qc-time-adjust" className="mt-2 grid grid-cols-2 gap-2.5">
+              <Field label="Data">
+                <DatePicker value={date} onChange={setDate} min={today} label="Data do agendamento" className="w-full" />
+              </Field>
+              <Field label="Duração">
+                <Combobox label="Duração" value={durationMin != null ? String(durationMin) : ''} disabled={saving}
+                  onChange={(v) => { const x = String(v); setDurationMin(x === '' ? undefined : Number(x)); }}
+                  options={[{ value: '', label: 'Padrão do serviço' }, ...DURATIONS.map((d) => ({ value: String(d), label: durationLabel(d) }))]} />
+              </Field>
+            </div>
+          )}
+        </div>
 
-        {/* Texto à esquerda, ações à direita — o mesmo contrato do PageActionBar. */}
-        <div className="flex items-center justify-end gap-2 border-t border-[var(--gd-border-soft)] pt-2.5">
+        <div className="mt-2 space-y-2">
+          {slots.error && <Notice tone="warning" title="Horários">{slots.error}</Notice>}
+          {pastIssue && <Notice tone="warning" title="Horário indisponível">{pastIssue}</Notice>}
+          {error && error !== pastIssue && <Notice tone="error" title="Não foi possível criar">{error}</Notice>}
+        </div>
+
+        {/* RODAPÉ — uma ação primária; "Mais opções" é o caminho secundário. */}
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--gd-border-soft)] pt-2.5">
           <Button variant="ghost" disabled={saving} onClick={() => onMore(seedIntent())}>Mais opções</Button>
           <Button disabled={saving || !!pastIssue} onClick={() => void create()}>
             {saving ? 'Criando…' : 'Criar agendamento'}
           </Button>
         </div>
         {time && (
-          <p className="text-[11px] tabular-nums text-[var(--gd-text-faint)]">
+          <p className="mt-1.5 text-right text-[11px] tabular-nums text-[var(--gd-text-faint)]">
             Faixa do atendimento: {time}–{endLabel(time, durationMin || 30)}
           </p>
         )}
       </div>
     </Popover>
   );
+}
+
+/** Rótulo curto da data no fuso do negócio: "Sáb 10/10". Sem Date local. */
+function formatDayLabel(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12));
+  const wd = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][dt.getUTCDay()];
+  return `${wd} ${m[3]}/${m[2]}`;
 }
 
 function endLabel(time: string, durationMin: number): string {

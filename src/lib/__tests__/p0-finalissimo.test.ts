@@ -71,8 +71,7 @@ describe('P0 FINALISSIMO - Integridade PR #46', () => {
   it('7. CRMV simplificado - apenas CRMV fixo', () => {
     const equipe = read('src/app/(dashboard)/equipe/page.tsx');
     expect(equipe).not.toContain('CRMV-SP');
-    expect(equipe).toContain('<div className="h-[38px] flex items-center px-3 rounded-sm border border-[var(--border-strong)] bg-[var(--surface-3)]');
-    expect(equipe).toContain('>CRMV</div>');
+    expect(equipe).toContain('<Input value="CRMV" readOnly');
     expect(equipe).toContain('formatCrmvDisplay(fUf, fCrmvNum)');
   });
 
