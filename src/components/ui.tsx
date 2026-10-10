@@ -732,8 +732,8 @@ function TabInner<T extends string>({ item, selected }: { item: TabItem<T>; sele
  *   • teclado: setas/Home/End entre as abas visíveis (Tabs), Tab chega ao
  *     "Mais", Enter/↓ abre o menu.
  */
-export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais', wrap = false }: {
-  items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; className?: string; moreLabel?: string;
+export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais', wrap = false, size = 'md' }: {
+  items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; className?: string; moreLabel?: string; size?: 'sm' | 'md';
   /** Quando a seção precisa ficar sempre visível (ex.: Cliente 360): as abas quebram em linhas e nada vai para "Mais". */
   wrap?: boolean;
 }) {
@@ -786,7 +786,7 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
   return (
     <div ref={hostRef} className={cn('gd-overflow-tabs', wrap && 'gd-overflow-tabs--wrap', className)} data-overflow-count={overflow.length || undefined}>
       <div className="gd-overflow-tabs__row">
-        <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} className="gd-overflow-tabs__list" />
+        <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} size={size} className="gd-overflow-tabs__list" />
         {overflow.length > 0 && !wrap && (
           <DropdownMenu
             label={`${moreLabel}: outras seções`}
@@ -806,7 +806,7 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
           />
         )}
       </div>
-      <div ref={rulerRef} className="gd-overflow-tabs__ruler" aria-hidden="true">
+      <div ref={rulerRef} className={cn('gd-overflow-tabs__ruler', size === 'sm' && 'il-tabbar--sm')} aria-hidden="true">
         {items.map((item) => (
           <span key={item.id} data-ruler-tab className="il-tab"><TabInner item={item} selected={item.id === value} /></span>
         ))}
@@ -2546,12 +2546,14 @@ export interface ComboOption { value: string; label: string; hint?: string; disa
  *   • `autocomplete`— texto livre + sugestões;
  *   • `multiple`    — várias opções, com chips e remoção por teclado.
  */
-export function Combobox({ options, value, onChange, mode = 'select', label = 'Selecionar', placeholder = 'Buscar…', emptyLabel = 'Nenhum resultado', disabled, className }: {
+export function Combobox({ options, value, onChange, mode = 'select', label = 'Selecionar', placeholder = 'Buscar…', emptyLabel = 'Nenhum resultado', disabled, className, openOnFocus = true }: {
   options: ComboOption[];
   value: string | string[];
   onChange: (v: string | string[]) => void;
   mode?: 'select' | 'autocomplete' | 'multiple';
   label?: string; placeholder?: string; emptyLabel?: string; disabled?: boolean; className?: string;
+  /** Abrir a lista ao receber foco (padrão). Erro de campo desliga, para não cobrir a mensagem. */
+  openOnFocus?: boolean;
 }) {
   const listId = useId();
   const field = useContext(FieldContext);
@@ -2636,7 +2638,7 @@ export function Combobox({ options, value, onChange, mode = 'select', label = 'S
         placeholder={placeholder}
         value={displayLabel}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (openOnFocus) setOpen(true); }}
         onClick={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }

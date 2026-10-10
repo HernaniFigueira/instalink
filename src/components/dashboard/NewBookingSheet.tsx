@@ -16,6 +16,15 @@ import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
 
 type ErrorField = 'client' | 'pet' | 'service' | 'date' | 'time' | '';
+/** Causa do erro do servidor → campo que deve receber o foco. Sem causa clara, fica no aviso geral. */
+function fieldForServerError(message: string): ErrorField {
+  if (/\bpet\b|paciente/i.test(message)) return 'pet';
+  if (/servi[çc]o/i.test(message)) return 'service';
+  if (/data|passad/i.test(message)) return 'date';
+  if (/hor[áa]rio|interval|conflit|encaixe/i.test(message)) return 'time';
+  if (/cliente|tutor|whatsapp|telefone/i.test(message)) return 'client';
+  return '';
+}
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { cn, minToTime, onlyDigits, timeToMin } from '@/lib/utils';
@@ -392,15 +401,17 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (saving || reviewing) return;
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
-    if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { return; }
+    setErrorField('');
+    // Bloqueios com mensagem junto da causa e foco no campo (antes voltavam em silêncio).
+    if (proIssue) { fail(proIssue, 'service'); return; }
+    if (pastIssue) { fail(pastIssue, 'time'); return; }
+    if (!opts.fitIn && slotIssue) { fail(slotIssue, 'time'); return; }
     // Campos obrigatórios ANTES da conferência de intervalo: formulário vazio
     // deve dizer o que falta (cliente/serviço), não "aguarde o intervalo".
     if (!picked || !name.trim()) { fail('Busque o cliente ou cadastre um novo para usar neste agendamento.', 'client'); return; }
     if (!contactId) { fail('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).', 'client'); return; }
-    if (!serviceId || !date) { fail('Escolha serviço, data e horário.', !serviceId ? 'service' : !date ? 'date' : 'time'); return; }
+    if (!serviceId || !date) { fail(!serviceId ? 'Escolha o serviço deste atendimento.' : 'Escolha a data deste atendimento.', !serviceId ? 'service' : 'date'); return; }
     if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { fail(slotsError || 'Aguarde a conferência do intervalo.', 'time'); return; }
-    if (!picked || !name.trim()) { fail('Busque o cliente ou cadastre um novo para usar neste agendamento.', 'client'); return; }
-    if (!contactId) { fail('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).', 'client'); return; }
     // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
     if (isVet && contactId && pets.length > 0 && !petId) {
       fail('Em clínica veterinária, escolha o pet (paciente) deste agendamento.', 'pet');
@@ -408,7 +419,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     }
     if (onlyDigits(phone).length < 10) { fail('Informe um WhatsApp válido.', 'client'); return; }
     const when = opts.timeOverride || time;
-    if (!serviceId || !date || !when) { fail('Escolha serviço, data e horário.', !serviceId ? 'service' : !date ? 'date' : 'time'); return; }
+    if (!serviceId || !date || !when) { fail('Escolha o horário deste atendimento.', 'time'); return; }
     // Encaixe em horário que já passou: recusado AQUI, sem chamar o servidor
     // (que recusaria do mesmo jeito — a frase é a mesma).
     if (opts.fitIn) {
@@ -451,7 +462,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         fitIn: opts.fitIn === true,
       });
     } catch (e: any) {
-      setError(e.message || 'Não foi possível criar o agendamento.');
+      const message = e.message || 'Não foi possível criar o agendamento.';
+      fail(message, fieldForServerError(message));
     } finally {
       setSaving(false);
     }
@@ -530,6 +542,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           <div data-field="client">
             <span className="mb-1.5 flex items-center gap-1.5">
               <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+              {errorField === 'client' && error && <span role="alert" className="ml-auto text-xs font-medium text-[var(--danger)]">{error}</span>}
               {!picked && (
                 <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
                   <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
@@ -602,7 +615,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {/* FASE 2 · P6 — veterinária: o PET é o paciente (obrigatório quando
               o tutor já tem pet; sem pet, use o cadastro unificado). */}
           {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
-            <div data-field="pet"><Field label="Pet (paciente)" required
+            <div data-field="pet"><Field label="Pet (paciente)" required error={errorField === 'pet' ? error : undefined}
               hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
               <SelectMenu value={petId} disabled={saving || reviewing} onChange={(v) => setPetId(v)} placeholder="Selecione o pet…"
                 options={pets.map((p) => ({ value: p.id, label: p.name, hint: p.breed || undefined }))} />
@@ -615,7 +628,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </div>
           )}
 
-          <div data-field="service"><Field label="2. Serviço" required>
+          <div data-field="service"><Field label="2. Serviço" required error={errorField === 'service' ? error : undefined}>
             {/* CP3 · Combobox do DS (busca + teclado), no lugar do select nativo. */}
             <Combobox
               label="Serviço"
@@ -623,6 +636,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               emptyLabel="Nenhum serviço encontrado"
               disabled={saving || reviewing}
               value={serviceId}
+              openOnFocus={errorField !== 'service'}
               onChange={(v) => setServiceId(String(v))}
               options={[{ value: '', label: 'Selecione…' }, ...orderedServices.map((s) => ({
                 value: s.id,
@@ -652,16 +666,17 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </Field>
           )}
 
-          {proIssue && <Notice tone="warning">{proIssue}</Notice>}
-          <div data-field="date"><Field label="3. Data" required>
+          {proIssue && error !== proIssue && <Notice tone="warning">{proIssue}</Notice>}
+          <div data-field="date"><Field label="3. Data" required error={errorField === 'date' ? error : undefined}>
             {/* CP3 · DatePicker do DS: o input date nativo não é mais usado no produto. */}
             <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => setDate(iso)} />
           </Field></div>
 
-          {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
+          {slotIssue && error !== slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
           {date && serviceId && !proIssue && (!rangeIntent || editingTime) && (
             <div data-field="time">
               <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
+              {errorField === 'time' && error && <p role="alert" className="-mt-1 mb-1.5 text-xs font-medium text-[var(--danger)]">{error}</p>}
               {loadingSlots ? (
                 <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
                   <span className="w-3 h-3 border-2 border-[var(--border-strong)] border-t-[var(--brand)] rounded-full animate-spin" /> Carregando horários…
@@ -789,7 +804,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
           {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
             <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
           </section>}
-          {error && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
+          {error && !errorField && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
           <Button type="button" variant="primary" size="lg" onClick={() => save()}
             disabled={saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
             className="w-full">

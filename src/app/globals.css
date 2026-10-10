@@ -2984,8 +2984,12 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   padding: 24px;
   background: var(--overlay-scrim, rgba(15, 23, 42, 0.42));
   pointer-events: auto;
+  /* Entrada do dialog: fade do backdrop (mesma régua do gd-dialog). Antes o
+     cartão aparecia sem transição — salto comprovado na medição de motion. */
+  animation: gd-fade-in var(--gd-motion-fast) linear both;
 }
 .overlay-confirm {
+  animation: gd-dialog-in var(--gd-motion-dialog) var(--gd-ease) both;
   display: flex;
   flex-direction: column;
   align-items: center;

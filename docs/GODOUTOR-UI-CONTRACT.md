@@ -131,4 +131,9 @@ O estado, a matriz de rotas, os artefatos e as pendências ficam em [`GODOUTOR-U
 - **Gatilho de SelectMenu:** `gd-select-trigger` mantém contorno em repouso (`:not(.gd-select-trigger)` nas regras de toolbar).
 - **Trabalho clínico prolongado** vai para o workspace do atendimento (ex.: Anamnese via `?secao=anamnese`), não para sheet.
 
-Manifesto de divergências restantes: `docs/GODOUTOR-UI-CONVERGENCE-MANIFEST.md`.
+- **Dialog central (confirmação, lab, resize):** entra com `gd-dialog-in` (fade + translateY 8px + scale .985) e sai em fade. Nunca desliza da borda; a faixa `translateX` é exclusiva do drawer lateral.
+- **Formulário com erro (Novo agendamento):** cada bloqueio chama `fail(mensagem, campo)`: o foco vai ao primeiro campo com erro, o campo recebe `data-invalid` e a mensagem aparece junto da causa. Não há bloqueio silencioso. Mensagens específicas: "Escolha o serviço deste atendimento.", "Escolha a data deste atendimento.", "Escolha o horário deste atendimento.", "Em clínica veterinária, escolha o pet (paciente) deste agendamento."
+- **Duração:** a escolha vai de 15 a 720 min (`DURATIONS`). Valor fora da lista (vindo do serviço ou do agendamento) é preservado, não truncado.
+- **Reduced motion:** `prefers-reduced-motion` desliga todas as animações de overlay (medido: zero animações em todos os fluxos).
+
+Manifesto de divergências restantes: `docs/GODOUTOR-UI-CONVERGENCE-MANIFEST.md`. Tokens, escala tipográfica, comparação de fontes e motion: `docs/GODOUTOR-DESIGN-SYSTEM.md` §14.

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, DetailSideModal, ListSkeleton, Notice, Tabs } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge, petLabel } from '@/lib/pets';
@@ -185,7 +185,8 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
 
         {error && <Notice tone="error">{error}</Notice>}
 
-        <Tabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" size="sm" />
+        {/* Canônico: as que cabem ficam visíveis; o excedente vai para 'Mais N' (sem rolagem escondida). */}
+        <OverflowTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" className="pet360-tabs" />
 
         {!loaded ? <ListSkeleton rows={4} /> : (
           <div className="ws-panel">

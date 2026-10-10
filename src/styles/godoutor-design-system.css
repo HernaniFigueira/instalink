@@ -794,8 +794,12 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
    painel (entrada e saída). A saída roda com o painel MONTADO (data-closing). */
 @keyframes gd-drawer-strip-in { from { transform: translateX(100%); } to { transform: none; } }
 @keyframes gd-drawer-strip-out { from { transform: none; } to { transform: translateX(100%); } }
-.il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
-.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.il-drawer:not(.il-drawer--dialog) .il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
+.il-drawer:not(.il-drawer--dialog)[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Dialog CENTRAL não é folha lateral: entra com o contrato de dialog (fade +
+   translateY 8px + scale .985) e sai em fade. Nunca desliza da borda direita. */
+.il-drawer--dialog .il-drawer__strip:not([data-expanded]) { animation: gd-dialog-in var(--gd-motion-dialog) var(--gd-ease) both; }
+.il-drawer--dialog[data-closing] .il-drawer__strip { animation: gd-fade-out var(--gd-motion-fast) cubic-bezier(.4, 0, 1, 1) forwards; }
 .il-drawer::backdrop { animation: gd-fade-in var(--gd-motion-side-modal) var(--gd-ease); }
 .il-drawer[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:

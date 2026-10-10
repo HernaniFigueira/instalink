@@ -139,7 +139,10 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
     // Pré-F1: preserve the column/slot, but refuse saving incompatible intent.
     expect(sheet).toContain('const activeProId = proId');
     expect(sheet).toContain('incompatiblePro');
-    expect(sheet).toContain('if (pastIssue || proIssue || (!opts.fitIn && slotIssue))');
+    // Bloqueios de horário/profissional agora dizem a causa e levam o foco ao campo.
+    expect(sheet).toContain("if (proIssue) { fail(proIssue, 'service'); return; }");
+    expect(sheet).toContain("if (pastIssue) { fail(pastIssue, 'time'); return; }");
+    expect(sheet).toContain("if (!opts.fitIn && slotIssue) { fail(slotIssue, 'time'); return; }");
     expect(sheet).not.toContain("setProId(''); setTime('')");
 
   });
