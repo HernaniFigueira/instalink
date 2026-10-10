@@ -29,7 +29,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, Select, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, Tabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -795,11 +795,9 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 </label>
                 <label className="block sm:col-span-2">
                   <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Estado</span>
-                  <Select value={draft.address.state}
-                    onChange={(e) => setDraft((d) => ({ ...d, address: { ...d.address, state: e.target.value } }))}>
-                    <option value="">—</option>
-                    {BRAZILIAN_STATES.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-                  </Select>
+                  <SelectMenu id="client-address-state" aria-label="Estado" value={draft.address.state}
+                    onChange={(v) => setDraft((d) => ({ ...d, address: { ...d.address, state: v } }))}
+                    options={[{ value: '', label: '—' }, ...BRAZILIAN_STATES.map((uf) => ({ value: uf, label: uf }))]} />
                 </label>
               </div>
             </fieldset>

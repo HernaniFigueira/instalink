@@ -177,6 +177,13 @@ const db = {
   pipelines: [], tasks: [], automations: [], automationRuns: [], queue: [],
   conversations: [{
     // FIXTURE truncamento da prévia: mensagem longa → corte de 3 linhas + CTA "Ler conversa completa".
+    // Conversa ANTIGA e inserida ANTES da recente: se a rota não ordenar por atividade, a prévia mostra esta.
+    id: 'conv-qa-antiga', businessId: A, channel: 'whatsapp', channelUserId: '5511988880098', channelAccountId: 'qa-acc',
+    status: 'closed', contactId: 'ct-isabelle', customerId: '', phone: '11988880098', name: 'Isabelle Tutora QA',
+    lastMessageAt: '2001-01-01T00:00:00.000Z', lastMessagePreview: 'Conversa antiga de QA (não deve aparecer na prévia).',
+    unread: 0, createdAt: '2001-01-01T00:00:00.000Z', updatedAt: '2001-01-01T00:00:00.000Z',
+  },
+  {
     id: 'conv-qa-longa', businessId: A, channel: 'whatsapp', channelUserId: '5511988880099', channelAccountId: 'qa-acc',
     status: 'open', contactId: 'ct-isabelle', customerId: '', phone: '11988880099', name: 'Isabelle Tutora QA',
     lastMessageAt: '2099-01-01T00:00:00.000Z', lastMessagePreview: 'Oi! Desde ontem a Mel está coçando muito as orelhas, principalmente à noite, e ontem ela sacudiu a cabeça e ficou com um cheiro forte. Consigo trazer ela antes da consulta de amanhã? Obrigada.',
