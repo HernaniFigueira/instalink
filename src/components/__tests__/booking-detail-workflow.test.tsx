@@ -55,7 +55,7 @@ describe('BookingDetailSheet — status e workflow', () => {
     );
 
     const modal = screen.getByTestId('detail-modal');
-    expect(within(modal).getByText('Agendamento').parentElement?.textContent).toContain('Confirmado');
+    expect(modal.querySelector('[data-booking-status]')?.textContent).toContain('Confirmado');
     expect(within(modal).getByText('Etapa operacional').parentElement?.textContent).toContain('Chegou');
     expect(modal.querySelector('[data-workflow-state]')?.getAttribute('data-workflow-state')).toBe('arrived');
     expect(within(modal).getByText(/Próxima ação elegível/).textContent).toContain('Iniciar atendimento');

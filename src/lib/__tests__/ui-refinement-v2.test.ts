@@ -23,11 +23,14 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(clients).not.toMatch(/Abrir WhatsApp[\s\S]{0,250}success-bg/);
   });
 
-  it('Client 360 reserves primary for booking; edit/note soft, WhatsApp green', () => {
+  it('Client 360 reserves primary for booking; note secondary, edit/WhatsApp tertiary (ghost)', () => {
     const profile = read('src/components/dashboard/ClientProfileDrawer.tsx');
     expect(profile).toMatch(/variant="primary" size="sm" onClick=\{\(\) => onNewBooking\(person\)\}/);
     expect(profile).toMatch(/variant="secondary" size="sm" onClick=\{\(\) => \{ setTab\('notes'\)/);
-    expect(profile).toMatch(/variant="secondary" size="sm" onClick=\{\(\) => \{\s*const opening = !editing/);
+    // Hierarquia de ações do cabeçalho (shadcn): editar e WhatsApp são tertiary
+    // (ghost); a nota é secondary com contorno; o primary fica sozinho à direita.
+    expect(profile).toMatch(/variant="ghost" size="sm" onClick=\{\(\) => \{\s*const opening = !editing/);
+    expect(profile).toContain("className={buttonCls('ghost', 'sm')}");
     const whatsapp = profile.slice(profile.indexOf('function A2'), profile.indexOf('function Empty', profile.indexOf('function A2')));
     expect(whatsapp).toContain("className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}");
     expect(whatsapp).not.toContain('hover:text-[var(--brand-fg)]');

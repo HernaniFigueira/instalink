@@ -290,7 +290,10 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
   /* Zona de ações fixa no rodapé do painel (padrão CE): principal preenchida,
      secundárias com contorno, destrutiva isolada. Mesmos handlers/permissões. */
   const actionFooter = rescheduling ? undefined : (
-    <div className="px-5 py-3 space-y-3 bg-[var(--surface-2)] border-t border-[var(--gd-border-soft)]" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
+    // O rodapé do DetailSideModal já traz padding, borda e fundo: aqui fica só o
+    // conteúdo, sem caixa aninhada. Zona principal (primary + secondary + ghost)
+    // e zona de perigo isolada, como na régua do shadcn.
+    <div className="flex w-full flex-col gap-3" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
                 {nextActionLabel && (
                   <p className="mb-2 text-xs text-[var(--text-muted)]" data-workflow-next-action>
                     Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
@@ -348,7 +351,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                     </Button>
                   )}
                   {can('reschedule') && (
-                    <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
+                    <Button size="sm" variant="ghost" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
                       <Icon n="calendar" size={16} /> Reagendar
                     </Button>
                   )}
@@ -360,7 +363,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   )}
                 </div>
                 {can('cancel') && (
-                  <div className="mt-3 border-t border-[var(--gd-border-soft)] pt-3 flex justify-start" data-action-zone="perigo">
+                  <div className="border-t border-[var(--gd-border-soft)] pt-3 flex justify-start" data-action-zone="perigo">
                     <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
                       {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
                     </Button>
@@ -396,7 +399,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-[16px] font-semibold leading-6 text-[var(--gd-text-strong)]">Agendamento</h3>
+              <h3 className="min-w-0 truncate text-[16px] font-semibold leading-6 text-[var(--gd-text-strong)]" data-entity-title>{service?.name || 'Serviço'}</h3>
               {/* Status persistido do agendamento e etapa operacional são
                   informações diferentes. "Chegou" é workflow/check-in, nunca
                   um novo BookingStatus. */}
@@ -414,7 +417,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             <p className="mt-1 text-[13px] font-medium tabular-nums text-[var(--gd-text)]">
               {humanDay(booking.date, today)} · {booking.time}–{endHM} <span className="text-[var(--gd-text-muted)]">· {durationLabel(dur)}</span>
             </p>
-            <p className="mt-2 text-sm font-semibold text-[var(--gd-text-strong)] leading-snug truncate" data-entity-title>{service?.name || 'Serviço'}</p>
           </div>
         </header>
 

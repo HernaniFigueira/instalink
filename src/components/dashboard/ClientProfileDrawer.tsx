@@ -504,9 +504,16 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const pageBack = pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`;
   // Ações da ficha em PÁGINA: no cabeçalho do workspace (não sticky), uma
   // única primária (Novo agendamento).
+  // HIERARQUIA DE AÇÕES DO CABEÇALHO (shadcn): tertiary (ghost) à esquerda,
+  // secondary (contorno) no meio e UM primary sólido à direita. O divisor
+  // separa o grupo de leitura/edição do grupo de ação principal.
   const pageActions = (
     <>
-      {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
+      {person.phone && canWhats && (
+        <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className={buttonCls('ghost', 'sm')}>
+          <Icon n="whatsapp" size={16} /> WhatsApp
+        </a>
+      )}
       {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
       {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
           textarea e o foca com highlight sutil (sem modal novo). */}
@@ -523,7 +530,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         </Button>
       )}
       {!clinicalView && (
-        <Button variant="secondary" size="sm" onClick={() => {
+        <Button variant="ghost" size="sm" onClick={() => {
           const opening = !editing;
           if (editing) requestCloseEdit(); else setEditing(true);
           // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
@@ -533,6 +540,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <Icon n={editing ? 'x' : 'pencil'} size={16} /> {editing ? 'Fechar edição' : 'Editar dados'}
         </Button>
       )}
+      <span className="entity-main__sep" aria-hidden="true" />
       <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
         <Icon n="calendarPlus" size={16} /> Novo agendamento
       </Button>
@@ -626,7 +634,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           {/* Cabeçalho do workspace: ações da ficha, sem sticky (o contexto
               persistente é o rail; nada cobre a identidade). */}
           <header className="entity-main__header">
-            <p className="entity-main__title">Visão do cliente</p>
+            <h2 className="entity-main__title">Visão do cliente</h2>
             <div className="entity-main__actions">{pageActions}</div>
           </header>
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
@@ -904,7 +912,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
         {/* Abas principais visíveis; o excedente vai para "Mais" (menu
             canônico). Sem scroll horizontal escondido. */}
-        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
+        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" variant="line" />
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}

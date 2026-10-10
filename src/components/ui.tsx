@@ -652,9 +652,11 @@ export interface TabItem<T extends string = string> {
 }
 
 /** Abas/pills de navegação interna. `role="tablist"` + setas do teclado. */
-export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md', idPrefix, className }: {
+export function Tabs<T extends string = string>({ items, value, onChange, ariaLabel, size = 'md', idPrefix, className, variant = 'segmented' }: {
   items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; size?: 'sm' | 'md';
   idPrefix?: string; className?: string;
+  /** `segmented` (padrão do produto) ou `line` (abas com indicador inferior, estilo shadcn). */
+  variant?: 'segmented' | 'line';
 }) {
   const generatedId = useId();
   const prefix = idPrefix || generatedId;
@@ -678,7 +680,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
   }
   return (
     <div role="tablist" aria-label={ariaLabel}
-      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm', className)}>
+      className={cn('il-tabbar max-w-full overflow-x-auto no-scrollbar', size === 'sm' && 'il-tabbar--sm', variant === 'line' && 'il-tabbar--line', className)}>
       {items.map((item) => (
         <button key={item.id} type="button" role="tab"
           ref={(node) => { if (node) buttons.current.set(item.id, node); else buttons.current.delete(item.id); }}
@@ -692,7 +694,7 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
           onKeyDown={(event) => move(event, item.id)}
           onClick={() => onChange(item.id)}
           className="il-tab">
-          {item.icon && <Icon n={item.icon} size={14} />}
+          {item.icon && <Icon n={item.icon} size={variant === 'line' ? 16 : 14} />}
           {item.label}
           {typeof item.count === 'number' && (
             <span className={cn(
@@ -706,10 +708,10 @@ export function Tabs<T extends string = string>({ items, value, onChange, ariaLa
   );
 }
 
-function TabInner<T extends string>({ item, selected }: { item: TabItem<T>; selected: boolean }) {
+function TabInner<T extends string>({ item, selected, iconSize = 14 }: { item: TabItem<T>; selected: boolean; iconSize?: number }) {
   return (
     <>
-      {item.icon && <Icon n={item.icon} size={14} />}
+      {item.icon && <Icon n={item.icon} size={iconSize} />}
       {item.label}
       {typeof item.count === 'number' && (
         <span className={cn(
@@ -733,8 +735,10 @@ function TabInner<T extends string>({ item, selected }: { item: TabItem<T>; sele
  *   • teclado: setas/Home/End entre as abas visíveis (Tabs), Tab chega ao
  *     "Mais", Enter/↓ abre o menu.
  */
-export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais', wrap = false, size = 'md' }: {
+export function OverflowTabs<T extends string = string>({ items, value, onChange, ariaLabel, className, moreLabel = 'Mais', wrap = false, size = 'md', variant = 'segmented' }: {
   items: TabItem<T>[]; value: T; onChange: (id: T) => void; ariaLabel: string; className?: string; moreLabel?: string; size?: 'sm' | 'md';
+  /** `line`: mesma régua do shadcn (indicador inferior); o "Mais" vira ação de texto da mesma linha. */
+  variant?: 'segmented' | 'line';
   /** Quando a seção precisa ficar sempre visível (ex.: Cliente 360): as abas quebram em linhas e nada vai para "Mais". */
   wrap?: boolean;
 }) {
@@ -753,8 +757,8 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
       const more = ruler.querySelector<HTMLElement>('[data-ruler-more]');
       const available = host.clientWidth;
       if (!available || tabs.length !== items.length) return;
-      const gap = 2;
-      const chrome = 8; // padding + borda da barra
+      const gap = variant === 'line' ? 20 : 2;
+      const chrome = variant === 'line' ? 0 : 8; // padding + borda da barra
       const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
       const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1) + chrome;
       if (total <= available) { setShown(null); return; }
@@ -778,16 +782,16 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, value, wrap]);
+  }, [signature, value, wrap, variant]);
 
   const visible = shown ? items.filter((item) => shown.includes(item.id)) : items;
   const visibleIds = new Set(visible.map((item) => item.id));
   const overflow = items.filter((item) => !visibleIds.has(item.id));
 
   return (
-    <div ref={hostRef} className={cn('gd-overflow-tabs', wrap && 'gd-overflow-tabs--wrap', className)} data-overflow-count={overflow.length || undefined}>
+    <div ref={hostRef} className={cn('gd-overflow-tabs', wrap && 'gd-overflow-tabs--wrap', variant === 'line' && 'gd-overflow-tabs--line', className)} data-overflow-count={overflow.length || undefined}>
       <div className="gd-overflow-tabs__row">
-        <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} size={size} className="gd-overflow-tabs__list" />
+        <Tabs items={visible} value={value} onChange={onChange} ariaLabel={ariaLabel} size={size} variant={variant} className="gd-overflow-tabs__list" />
         {overflow.length > 0 && !wrap && (
           <DropdownMenu
             label={`${moreLabel}: outras seções`}
@@ -800,18 +804,18 @@ export function OverflowTabs<T extends string = string>({ items, value, onChange
               onSelect: () => onChange(item.id),
             }))}
             trigger={(
-              <button type="button" className="il-tab gd-overflow-tabs__more" aria-label={`${moreLabel} — ${overflow.length} ${overflow.length === 1 ? 'seção' : 'seções'}`}>
-                {moreLabel} <span className="gd-overflow-tabs__more-count">{overflow.length}</span> <Icon n="chevD" size={13} />
+              <button type="button" className={cn('il-tab gd-overflow-tabs__more', variant === 'line' && 'gd-overflow-tabs__more--line')} aria-label={`${moreLabel} — ${overflow.length} ${overflow.length === 1 ? 'seção' : 'seções'}`}>
+                {moreLabel} <span className="gd-overflow-tabs__more-count">{overflow.length}</span> <Icon n="chevD" size={variant === 'line' ? 16 : 13} />
               </button>
             )}
           />
         )}
       </div>
-      <div ref={rulerRef} className={cn('gd-overflow-tabs__ruler', size === 'sm' && 'il-tabbar--sm')} aria-hidden="true">
+      <div ref={rulerRef} className={cn('gd-overflow-tabs__ruler', size === 'sm' && 'il-tabbar--sm', variant === 'line' && 'il-tabbar--line')} aria-hidden="true">
         {items.map((item) => (
-          <span key={item.id} data-ruler-tab className="il-tab"><TabInner item={item} selected={item.id === value} /></span>
+          <span key={item.id} data-ruler-tab className="il-tab"><TabInner item={item} selected={item.id === value} iconSize={variant === 'line' ? 16 : 14} /></span>
         ))}
-        <span data-ruler-more className="il-tab gd-overflow-tabs__more">{moreLabel} <span className="gd-overflow-tabs__more-count">{items.length}</span> <Icon n="chevD" size={13} /></span>
+        <span data-ruler-more className={cn('il-tab gd-overflow-tabs__more', variant === 'line' && 'gd-overflow-tabs__more--line')}>{moreLabel} <span className="gd-overflow-tabs__more-count">{items.length}</span> <Icon n="chevD" size={variant === 'line' ? 16 : 13} /></span>
       </div>
     </div>
   );
