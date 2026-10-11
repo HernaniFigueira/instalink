@@ -149,8 +149,8 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
 
   it('a agenda passa o pré-preenchimento ao abrir pelo clique', () => {
     const agenda = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
-    expect(agenda).toContain('date: creating.date || focus');
-    expect(agenda).toContain('time: creating.time');
-    expect(agenda).toContain('professionalId: creating.professionalId');
+    expect(agenda).toContain('date: sheetCtx.date || focus');
+    expect(agenda).toContain('time: sheetCtx.time');
+    expect(agenda).toContain('professionalId: sheetCtx.professionalId');
   });
 });

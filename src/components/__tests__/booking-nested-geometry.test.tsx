@@ -134,9 +134,10 @@ describe('5 · composição aninhada usa o preset compartilhado 50/50', () => {
     expect(screen.getByRole('heading', { name: 'Cadastrar novo paciente' })).toBeTruthy();
   });
 
-  it('o formulário padrão preserva a largura; criação rápida usa o preset compacto', () => {
+  it('criação completa é modal central com largura do token; criação rápida usa o popover', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(booking).toContain('width={WORKSPACE_SHEET_SIZES.booking}');
+    expect(booking).toContain('variant="dialog"');
+    expect(booking).toContain('dialogWidth="var(--gd-booking-modal-w)"');
     expect(booking).not.toContain('width={WORKSPACE_SHEET_SIZES.wide}');
     // Preset existe na fonte única do Design System.
     const sizes = read('src/lib/workspace-sheet-sizes.ts');

@@ -681,6 +681,11 @@ export default function AgendaPage() {
     /** Duplicação copia só os campos operacionais autorizados; nunca histórico clínico/pagamentos. */
     petId?: string; note?: string;
   } | null>(null);
+  // Último contexto de criação não nulo: o Novo agendamento sai animado com o
+  // conteúdo congelado (o pai zera `creating` ao fechar, a superfície ainda existe).
+  const lastCreatingRef = useRef(creating);
+  if (creating) lastCreatingRef.current = creating;
+  const sheetCtx = creating ?? lastCreatingRef.current;
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
   // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
   const [novoHandled, setNovoHandled] = useState(false);
@@ -2717,27 +2722,28 @@ export default function AgendaPage() {
         />
       )}
 
-      {creating && (
+      {sheetCtx && (
         <NewBookingSheet
+          open={!!creating}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={horizonDays}
           timezone={bizTz}
-          quick={creating.quick}
+          quick={sheetCtx.quick}
           initial={{
-            name: creating.name || '', phone: creating.phone || '',
-            contactId: creating.contactId, serviceId: creating.serviceId,
-            searchQuery: creating.searchQuery,
-            openRegistration: creating.openRegistration,
-            vetMode: creating.vetMode,
-            allowSingleEligibleServicePrefill: creating.allowSingleEligibleServicePrefill,
-            date: creating.date || focus,
-            time: creating.time,
-            professionalId: creating.professionalId,
-            selectedDurationMin: creating.selectedDurationMin,
-            petId: creating.petId,
-            note: creating.note,
+            name: sheetCtx.name || '', phone: sheetCtx.phone || '',
+            contactId: sheetCtx.contactId, serviceId: sheetCtx.serviceId,
+            searchQuery: sheetCtx.searchQuery,
+            openRegistration: sheetCtx.openRegistration,
+            vetMode: sheetCtx.vetMode,
+            allowSingleEligibleServicePrefill: sheetCtx.allowSingleEligibleServicePrefill,
+            date: sheetCtx.date || focus,
+            time: sheetCtx.time,
+            professionalId: sheetCtx.professionalId,
+            selectedDurationMin: sheetCtx.selectedDurationMin,
+            petId: sheetCtx.petId,
+            note: sheetCtx.note,
           }}
           onClose={() => { setCreating(null); setSelectedRange(null); }}
           onCreated={() => { setSelectedRange(null); void load(); }}

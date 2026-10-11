@@ -170,10 +170,13 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
 describe('3C · criar/editar agendamento é MODAL CENTRAL', () => {
   it('o formulário de criação usa o mesmo overlay system com geometria central', () => {
     const sheet = read('src/components/dashboard/NewBookingSheet.tsx');
-    // Atualizado (fechamento visual): criação COMPLETA é painel lateral canônico;
-    // o Quick Create é o popover ancorado ao slot. Nunca diálogo central.
-    expect(sheet).not.toMatch(/variant="dialog"/);
-    expect(sheet).toMatch(/width=\{WORKSPACE_SHEET_SIZES\.booking\}/);
+    // CONTRATO DEFINITIVO (PR #69, correção de superfícies): criação COMPLETA do
+    // Novo agendamento = MODAL CENTRAL (variant="dialog"), largura pelo token do DS.
+    // O Quick Create continua sendo o popover ancorado ao slot. Regressão: se a
+    // criação voltar à faixa lateral, este teste falha.
+    expect(sheet).toMatch(/variant="dialog"/);
+    expect(sheet).toMatch(/dialogWidth="var\(--gd-booking-modal-w\)"/);
+    expect(sheet).not.toMatch(/width=\{WORKSPACE_SHEET_SIZES\.booking\}/);
     // Faixa central = token do DS (uma fonte), com fallback no componente.
     expect(dsCss).toContain('--gd-booking-modal-w: 672px');
     expect(css).toMatch(/dialog\.il-drawer--dialog \{[\s\S]*?transform: translate\(-50%, -50%\)/);

@@ -13,8 +13,6 @@ export const WORKSPACE_SHEET_SIZES = {
    */
   expanded: 'max-w-[1280px]',
   nestedForm: 'max-w-lg',
-  /** Novo agendamento completo: drawer lateral 520–560 px (régua do Sheet shadcn), sem largura de diálogo. */
-  booking: 'max-w-[560px]',
 } as const;
 
 /**

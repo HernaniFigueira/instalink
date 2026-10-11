@@ -94,14 +94,11 @@ describe('homologação manual — Novo agendamento mantém o guard dirty e a fa
     const onClose = vi.fn();
     render(<NewBookingSheet businessId="biz-1" services={[]} pros={[]} horizonDays={30} onClose={onClose} onCreated={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Novo agendamento' });
-    // MISSÃO UX CLOSURE · item 3C — a criação de agendamento é MODAL CENTRAL
-    // (mesmo overlay system do Drawer, geometria no centro da tela). A largura
-    // passa a ser o token do dialog (`--gd-booking-modal-w` / --il-dialog-w),
-    // não mais o preset de faixa lateral; a faixa continua existindo para
-    // superfícies de trabalho longas.
-    expect(dialog.className).not.toContain('il-drawer--dialog'); // painel lateral canônico
-    expect(dialog.getAttribute('style') || '').not.toContain('--il-dialog-w'); // sem geometria de diálogo central
-    expect(document.querySelector('.il-drawer__strip')?.className).toContain('w-full');
+    // CONTRATO DEFINITIVO (PR #69): a criação completa é MODAL CENTRAL do DS
+    // (variant="dialog", mesmo overlay system do Drawer), largura = token
+    // --gd-booking-modal-w via --il-dialog-w. Faixa lateral só para trabalho longo.
+    expect(dialog.className).toContain('il-drawer--dialog');
+    expect(dialog.getAttribute('style') || '').toContain('--il-dialog-w: var(--gd-booking-modal-w)');
     // A reserva de largura do modal está declarada como token no DS (uma fonte).
     const dsTokens = readFileSync(path.join(process.cwd(), 'src/styles/godoutor-design-system.css'), 'utf8');
     expect(dsTokens).toContain('--gd-booking-modal-w: 672px');

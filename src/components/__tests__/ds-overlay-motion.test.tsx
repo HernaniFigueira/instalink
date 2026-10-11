@@ -105,7 +105,14 @@ describe('DetailSideModal · saída sem efeito fantasma', () => {
     const dialog = document.querySelector('dialog.gd-detail') as HTMLElement;
     expect(dialog.getAttribute('data-closing')).not.toBeNull();
     expect(onClose).not.toHaveBeenCalled();
+    // A saída termina no animationend REAL do painel. Aos 170 ms (duração do token) a
+    // animação ainda não terminou; um timer de 170 ms cortava o deslocamento no meio.
     act(() => { vi.advanceTimersByTime(170); });
+    expect(onClose).not.toHaveBeenCalled();
+    const panel = document.querySelector('aside.gd-detail__panel') as HTMLElement;
+    const ev = new Event('animationend', { bubbles: true });
+    Object.defineProperty(ev, 'animationName', { value: 'gd-detail-out' });
+    act(() => { panel.dispatchEvent(ev); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,7 +16,7 @@
 // pacientes do tenant (nome, telefone do tutor, carteirinha e agendamentos)
 // SEM histórico comercial (conversas, oportunidades, gasto/pedidos e dados de
 // conta). Não existe segunda tela: mesma rota, mesma ficha, outro recorte.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BookingConfig, BusinessPipeline } from '@/lib/types';
@@ -90,6 +90,10 @@ export default function ClientesPage() {
   };
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
+  // Último cliente de agendamento não nulo: a superfície sai animada com o conteúdo congelado.
+  const lastBookingRef = useRef(bookingFor);
+  if (bookingFor) lastBookingRef.current = bookingFor;
+  const bookingCtx = bookingFor ?? lastBookingRef.current;
   const [newClientOpen, setNewClientOpen] = useState(false);
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre a criação de paciente.
   const [novoHandled, setNovoHandled] = useState(false);
@@ -291,6 +295,12 @@ export default function ClientesPage() {
   useEffect(() => { setPage(1); }, [filter]);
 
   const opened = people.find((p) => p.key === openKey) || null;
+  // Último cliente da prévia não nulo: a prévia sai animada com o mesmo cliente.
+  const lastOpenedRef = useRef(opened);
+  if (opened) lastOpenedRef.current = opened;
+  const openedCtx = opened ?? lastOpenedRef.current;
+  // "Agendar atendimento" na prévia: o agendamento só abre DEPOIS que a prévia terminou de sair.
+  const [pendingBooking, setPendingBooking] = useState<Person360 | null>(null);
 
   const tabItems: TabItem<ListFilter>[] = [
     { id: 'all', label: 'Todos', icon: 'users' },
@@ -465,15 +475,17 @@ export default function ClientesPage() {
         </>
       )}
 
-      {opened && (
+      {openedCtx && (
         <ClientProfileDrawer
-          person={opened}
+          open={!!opened}
+          person={openedCtx}
           businessId={businessId}
           pipeline={pipeline}
           canFunil={canFunil}
           onClose={() => setOpenKey(null)}
           onChanged={load}
-          onNewBooking={(p) => { setOpenKey(null); openBooking(p); }}
+          onNewBooking={(p) => { setPendingBooking(p); setOpenKey(null); }}
+          onExited={() => { if (pendingBooking) { const p = pendingBooking; setPendingBooking(null); openBooking(p); } }}
         />
       )}
 
@@ -501,14 +513,15 @@ export default function ClientesPage() {
         />
       )}
 
-      {bookingFor && (
+      {bookingCtx && (
         <NewBookingSheet
+          open={!!bookingFor}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={effectiveHorizonDays(bookingCfg)}
           timezone={bizTz}
-          initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
+          initial={{ contactId: bookingCtx.contactId, name: bookingCtx.name, phone: bookingCtx.phone, email: bookingCtx.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}
         />

@@ -1127,7 +1127,8 @@ dialog.il-drawer::backdrop { background: var(--overlay); }
 
 .il-drawer__strip {
   border: 1px solid var(--border);
-  border-radius: 20px;
+  /* Contrato de drawer/dialog do DS: raio 12px (token --gd-radius-lg), não 20px. */
+  border-radius: var(--gd-radius-lg);
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 32px 64px -24px rgba(15, 23, 42, .38), 0 8px 24px -12px rgba(15, 23, 42, .16);
@@ -1220,6 +1221,8 @@ dialog.il-drawer--dialog {
   top: 50%; left: 50%; right: auto; bottom: auto;
   transform: translate(-50%, -50%);
   width: min(var(--il-dialog-w, 672px), calc(100vw - 2 * var(--gd-space-4)));
+  /* Expandir/recolher o cadastro aninhado anima a largura (token; 0 ms em reduce). */
+  transition: width var(--gd-motion-side-modal) var(--gd-ease);
   height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
   max-height: calc(100dvh - 2 * var(--gd-space-4));
 }
@@ -3727,11 +3730,6 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
      sistema), não a largura inteira de um painel colado à direita. */
   .ag-mode-panel[data-range-focus] { margin-right: calc(min(var(--gd-booking-modal-w), 92vw) / 2 + 14px); }
   .ag-mode-panel[data-range-focus] [data-agenda-column] { min-width: 0 !important; }
-  /* Legado preservado: se algum fluxo ainda usar a FAIXA lateral para o
-     agendamento, a largura dela continua a mesma de antes. */
-  dialog.gd-booking-range-drawer:not(.il-drawer--dialog):not([data-expanded]) .il-drawer__strip {
-    width: min(46vw, 560px); max-width: min(46vw, 560px);
-  }
 }
 /* Curated workspace type scale — DS 1.1: os papéis APONTAM para a escala
  * canônica (`--gd-type-*`), então trocar a escala (ou a família) muda o produto

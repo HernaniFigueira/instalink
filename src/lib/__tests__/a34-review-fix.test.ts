@@ -135,8 +135,8 @@ describe('A3.4 fix · fila → atendimento (sem agendamento)', () => {
     expect(AGENDA).toMatch(/onFitIn=\{\(row\) => setCreating\(\{/);
     expect(AGENDA).toMatch(/contactId: row\.contactId, name: row\.customerName, phone: row\.customerPhone, serviceId: row\.serviceId/);
     // Quem cria é o formulário (NewBookingSheet), com confirmação humana.
-    expect(AGENDA).toMatch(/initial=\{\{\s*name: creating\.name/);
-    expect(AGENDA).toMatch(/contactId: creating\.contactId, serviceId: creating\.serviceId/);
+    expect(AGENDA).toMatch(/initial=\{\{\s*name: sheetCtx\.name/);
+    expect(AGENDA).toMatch(/contactId: sheetCtx\.contactId, serviceId: sheetCtx\.serviceId/);
   });
 
   it('ações secundárias da linha existem: abrir cliente, encaixar, ver horário', () => {

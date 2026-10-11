@@ -10,7 +10,7 @@
 //
 // A gaveta continua existindo como PASSAGEM rápida na lista, com a ação
 // "Ver perfil completo" apontando para cá.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BusinessPipeline } from '@/lib/types';
@@ -80,6 +80,10 @@ export default function ClientePerfilPage() {
   const [pros, setPros] = useState<any[]>([]);
   const [booking, setBooking] = useState<{ cfg: any; tz: string } | null>(null);
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
+  // Último cliente de agendamento não nulo: a superfície sai animada com o conteúdo congelado.
+  const lastBookingRef = useRef(bookingFor);
+  if (bookingFor) lastBookingRef.current = bookingFor;
+  const bookingCtx = bookingFor ?? lastBookingRef.current;
 
   async function openBooking(p: Person360) {
     setBookingFor(p);
@@ -149,14 +153,15 @@ export default function ClientePerfilPage() {
         onNewBooking={(p) => openBooking(p)}
       />
 
-      {bookingFor && (
+      {bookingCtx && (
         <NewBookingSheet
+          open={!!bookingFor}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={effectiveHorizonDays(booking?.cfg)}
           timezone={booking?.tz || ''}
-          initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
+          initial={{ contactId: bookingCtx.contactId, name: bookingCtx.name, phone: bookingCtx.phone, email: bookingCtx.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}
         />

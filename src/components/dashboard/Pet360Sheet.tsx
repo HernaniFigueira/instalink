@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs } from '@/components/ui';
+import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
@@ -26,8 +26,22 @@ function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemp
   return Object.entries(response.answers || {}).map(([id, value]) => ({ id, label: id, type: '', value }));
 }
 
-export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName, tutorPhone, onOpenEncounter }: {
+type Pet360SheetProps = { open?: boolean; onExited?: () => void } & Omit<Parameters<typeof Pet360SheetSurface>[0], 'open' | 'onExited'>;
+/**
+ * Pet 360 — contrato público de PRESENÇA: `open` controlado pelo pai. A ficha
+ * sai animada antes de desmontar (ver useOverlayPresence). `onExited` roda depois da saída
+ * (ex.: abrir o atendimento só depois que o Pet 360 saiu da tela).
+ */
+export function Pet360Sheet({ open = true, onExited, ...rest }: Pet360SheetProps) {
+  const { mounted, session, handleExited } = useOverlayPresence(open, onExited);
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  return <Pet360SheetSurface key={session} {...frozen} open={open} onExited={handleExited} />;
+}
+
+function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName, tutorPhone, onOpenEncounter, onExited }: {
   open: boolean;
+  onExited?: () => void;
   onClose: () => void;
   businessId: string;
   /**
@@ -147,6 +161,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
   return (
     <DetailSideModal
       open={open}
+      onExited={onExited}
       onClose={onClose}
       title={pet.name}
       subtitle={speciesBreed ? `Pet 360 · ${speciesBreed}` : 'Pet 360'}

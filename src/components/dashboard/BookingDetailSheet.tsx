@@ -424,7 +424,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           </div>
         </header>
 
-        {pet360Open && booking.petId && booking.petName && (
+        {booking.petId && booking.petName && (
           <Pet360Sheet
             open={pet360Open}
             onClose={() => setPet360Open(false)}

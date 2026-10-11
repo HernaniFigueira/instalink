@@ -29,7 +29,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, DetailSideModal, DropdownMenu, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, buttonCls, PageBackAction, type MenuItem, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, DropdownMenu, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, useOverlayPresence, useFrozenWhileClosed, buttonCls, PageBackAction, type MenuItem, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -109,7 +109,30 @@ type HistoryTab =
  * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
  * (a gaveta não dispara atendimentos/financeiro à toa).
  */
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref }: {
+/**
+ * Ficha/prévia do cliente — contrato público de PRESENÇA.
+ *
+ * `open` é controlado pelo pai (ex.: `open={!!opened}`). Assim a saída é animada:
+ * a superfície fica montada até o fim do DetailSideModal (`onExited`) e só então
+ * desmonta. Antes, a página montava com `{opened && <ClientProfileDrawer/>}` e a
+ * prévia sumia no mesmo quadro (ex.: "Agendar atendimento" trocava de superfície
+ * sem saída). Enquanto fecha, o conteúdo fica congelado no último cliente aberto.
+ */
+type ClientProfileDrawerProps = Omit<Parameters<typeof ClientProfileDrawerSurface>[0], 'open' | 'onExited'> & {
+  open?: boolean;
+  /** Chamado depois que a saída termina e a superfície já saiu da tela. */
+  onExited?: () => void;
+};
+export function ClientProfileDrawer({ open = true, onExited, ...rest }: ClientProfileDrawerProps) {
+  const { mounted, session, handleExited } = useOverlayPresence(open, onExited);
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  return <ClientProfileDrawerSurface key={session} {...frozen} open={open} onExited={handleExited} />;
+}
+
+function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref, open, onExited }: {
+  open: boolean;
+  onExited: () => void;
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -153,6 +176,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
+  // Último Pet 360 não nulo: a ficha sai animada com o mesmo pet.
+  const lastPet360Ref = useRef<Pet | null>(null);
+  if (pet360) lastPet360Ref.current = pet360;
+  const pet360Ctx = pet360 ?? lastPet360Ref.current;
+  // "Abrir atendimento" a partir do Pet 360: o atendimento só abre depois que a ficha saiu.
+  const [pendingEncounterId, setPendingEncounterId] = useState<string | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -556,6 +585,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     <>
     <ProfileShell
       variant={variant}
+      open={open}
+      onExited={onExited}
       onClose={onClose}
       dismissGuard={editState}
       title={person.name || 'Cliente'}
@@ -901,15 +932,16 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           </div>
         )}
 
-      {pet360 && (
+      {pet360Ctx && (
         <Pet360Sheet
           open={!!pet360}
           onClose={() => setPet360(null)}
           businessId={businessId}
-          pet={pet360}
+          pet={pet360Ctx}
           tutorName={person.name}
           tutorPhone={person.phone}
-          onOpenEncounter={(row) => { setPet360(null); openEncounter({ id: row.id }); }}
+          onOpenEncounter={(row) => { setPendingEncounterId(row.id); setPet360(null); }}
+          onExited={() => { if (pendingEncounterId) { const id = pendingEncounterId; setPendingEncounterId(null); openEncounter({ id }); } }}
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
@@ -1282,8 +1314,11 @@ function OverviewCard({ title, children }: { title: string; children: React.Reac
   );
 }
 
-function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
+function ProfileShell({ variant, open = true, onExited, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
   variant: 'preview' | 'page';
+  /** Preview: controlado pelo pai (saída animada). Página: sempre aberto. */
+  open?: boolean;
+  onExited?: () => void;
   onClose: () => void;
   title: string;
   subtitle: string;
@@ -1311,7 +1346,8 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   // já tem o próprio `p-4`.
   return (
     <DetailSideModal
-      open
+      open={open}
+      onExited={onExited}
       onClose={onClose}
       dismissGuard={dismissGuard}
       title={title}

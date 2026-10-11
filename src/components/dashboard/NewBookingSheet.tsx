@@ -32,7 +32,7 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip, SelectMenu } from '@/components/ui';
+import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip, SelectMenu, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
 import { automaticProfessionalDisplay, eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
@@ -47,7 +47,12 @@ interface Contact {
   registered?: boolean;
 }
 
-export function NewBookingSheet({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated }: {
+/* Superfície interna. NÃO é exportada: o contrato público é `NewBookingSheet`
+   (abaixo), que cuida da presença (saída animada antes de desmontar). */
+function NewBookingSheetSurface({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated, open, onExited }: {
+  open: boolean;
+  /** Chamado quando a saída termina; o wrapper desmonta a superfície aqui. */
+  onExited: () => void;
   businessId: string;
   services: Service[];
   pros: Professional[];
@@ -489,24 +494,21 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   return (
     <Drawer
-      open
-      /* MISSÃO UX CLOSURE · item 3C — NOVO/EDITAR AGENDAMENTO = MODAL CENTRAL.
-         Antes: faixa lateral de até 95% da viewport (um formulário curto
-         esticado contra a borda direita). Agora: modal central do DS, largura
-         confortável (672px; criação rápida vinda do slot fica mais compacta) e
-         o par 50/50 preservado quando o cadastro de paciente abre no MESMO
-         overlay. Regras de agenda, guardas de descarte e presets: intactos. */
-      /* Contrato de superfície: criação COMPLETA = painel lateral canônico
-         (variant padrão "side"). O Quick Create é o popover ancorado ao slot;
-         "Mais opções" leva o mesmo contexto para cá, sem recomeçar o fluxo. */
-      dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
+      open={open}
+      onExited={onExited}
+      /* CONTRATO ÚNICO do Novo agendamento (criação completa, em qualquer entrada):
+         MODAL CENTRAL do DS, largura pelo token --gd-booking-modal-w (672px).
+         O Quick Create é o popover ancorado ao slot; "Mais opções" abre esta
+         mesma superfície central com o contexto da célula. Cadastro de paciente
+         aninhado = mesmo overlay, expandido (ver Drawer, variant="dialog"). */
+      variant="dialog"
+      dialogWidth="var(--gd-booking-modal-w)"
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
       sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
       title="Novo agendamento"
       subtitle={registerOpen ? undefined : ctxSubtitle}
       footer={registerOpen ? undefined : footerActions}
-      width={WORKSPACE_SHEET_SIZES.booking}
       /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
          viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
       side={registerOpen ? (
@@ -833,4 +835,26 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         </div>
     </Drawer>
   );
+}
+
+type NewBookingSheetProps = Omit<Parameters<typeof NewBookingSheetSurface>[0], 'open' | 'onExited'>;
+
+/**
+ * Novo agendamento — contrato público de PRESENÇA.
+ *
+ * Os pais controlam `open` (ex.: `open={!!creating}`) em vez de montar/desmontar
+ * o componente. Assim a saída é animada: a superfície permanece montada até o
+ * `onExited` do Drawer (fim da animação), e só então é desmontada.
+ *
+ * - Enquanto fecha, o conteúdo fica CONGELADO no último estado aberto: o pai
+ *   pode limpar o próprio estado sem que o título/formulário mudem por trás da animação.
+ * - Cada abertura cria uma nova `session` (remount da superfície): reabrir ou
+ *   trocar de contexto nunca reaproveita rascunho de sessão anterior. Reabrir
+ *   DURANTE a saída também remonta (o descarte já foi confirmado pelo guard).
+ */
+export function NewBookingSheet({ open = true, ...rest }: NewBookingSheetProps & { open?: boolean }) {
+  const { mounted, session, handleExited } = useOverlayPresence(open);
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  return <NewBookingSheetSurface key={session} {...frozen} open={open} onExited={handleExited} />;
 }

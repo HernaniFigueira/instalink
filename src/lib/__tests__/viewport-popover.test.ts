@@ -96,7 +96,7 @@ describe('ViewportPopover · alinhamento compartilhado', () => {
     const sheet = read('src/components/dashboard/WorkspaceSheet.tsx');
     const ui = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.booking');
+    expect(booking).toContain('variant="dialog"');
     expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(sheet).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(ui).toContain('WORKSPACE_NESTED_PANEL');

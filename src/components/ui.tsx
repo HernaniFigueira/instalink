@@ -1024,6 +1024,47 @@ export function Notice({ tone = 'info', children, title, className, icon, onDism
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
+/**
+ * Presença de overlay CONTROLADA PELO PAI (`open`). Use em wrappers que
+ * substituem a montagem condicional (`{x && <Overlay/>}`), que desmontava a
+ * superfície no mesmo quadro em que o pai fechava — sem saída animada.
+ *
+ * - `mounted`: a superfície continua montada durante a saída; `handleExited`
+ *   (ligado ao `onExited` do Drawer/DetailSideModal) a desmonta só ao fim.
+ * - `session`: muda a cada ABERTURA. Use como `key`: reabrir nunca reaproveita
+ *   rascunho ou estado de uma sessão anterior (inclusive reabrir durante a saída,
+ *   quando o descarte já foi confirmado pelo guard).
+ * - `open` congelado: enquanto fecha, quem renderiza deve usar o último contexto
+ *   aberto (ver `useFrozenWhileClosed`), para título e conteúdo não mudarem por trás da animação.
+ */
+export function useOverlayPresence(open: boolean, onExited?: () => void) {
+  const [mounted, setMounted] = useState(open);
+  const [session, setSession] = useState(0);
+  const [prevOpen, setPrevOpen] = useState(open);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const exitedRef = useRef(onExited);
+  exitedRef.current = onExited;
+  // Ajuste de estado durante o render (padrão React para derivar estado de props).
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) { setMounted(true); setSession((n) => n + 1); }
+  }
+  const handleExited = useCallback(() => {
+    if (openRef.current) return; // reaberto durante a saída: continua montado
+    setMounted(false);
+    exitedRef.current?.();
+  }, []);
+  return { mounted, session, handleExited };
+}
+
+/** Último valor de `value` enquanto `open` era verdadeiro (congela o conteúdo durante a saída). */
+export function useFrozenWhileClosed<T>(open: boolean, value: T): T {
+  const ref = useRef(value);
+  if (open) ref.current = value;
+  return ref.current;
+}
+
 export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true, variant = 'side', dialogWidth = '672px', onExited }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   /**
@@ -1158,7 +1199,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             ? (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : 'w-full')
             : (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`),
         )} data-expanded={expanded ? 'true' : undefined}
-          onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-drawer-strip-out') runExit(); }}>
+          onAnimationEnd={(e) => {
+            // Saída da faixa: lateral = gd-drawer-strip-out; modal central = gd-fade-out (única
+            // animação de saída da faixa do dialog). O filtro de alvo impede eventos de filhos.
+            if (e.target === e.currentTarget && (e.animationName === 'gd-drawer-strip-out' || (variant === 'dialog' && e.animationName === 'gd-fade-out'))) runExit();
+          }}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre.
                 No par, usa o MESMO preset do secundário — 50/50 exato. */}
