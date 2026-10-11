@@ -61,3 +61,83 @@ a consolidação fica para a onda 3, sem migrar nesta PR.
 - Demais drawers/sheets de workspace (ex.: sheets legados fora das quatro superfícies ouro): fora do escopo; ficam para a onda 2/3.
 - Resize: gesto de alça medido (abre a confirmação de duração); animação de resize do próprio evento não existe no contrato.
 - Referências aprovadas (`screenshots/referencias`): não há arquivos de referência no workspace desta sessão; a pasta do Drive traz as capturas atuais como baseline.
+
+## Homologação de overlays e motion (rodada da PR #69)
+
+Escopo: todos os overlays autenticados (51 usos mapeados por `grep` em `src/`:
+Drawer 24 — 21 incondicionais e 3 condicionais; Dialog 12; WorkspaceSheet 8;
+DetailSideModal 5; ConfirmDialog 2). Inventário completo com arquivo, linha,
+componente, montagem e variante no pacote de homologação do Drive (`01-inventario-overlays.tsv`).
+
+### Contrato consolidado (fonte: `ui.tsx` e `godoutor-design-system.css`)
+
+| Papel | Contexto | Modalidade | Motion |
+|---|---|---|---|
+| Popover / HoverCard | ancorado, pequeno | sem backdrop | `gd-layer-in` |
+| Dialog / AlertDialog | central | modal, backdrop | fade + translateY curto (`gd-dialog-in`) |
+| DetailSideModal | lateral direita, leitura de detalhe | modal | sai da borda direita, entra; sai pela direita (`gd-detail-in/out`), sem scale |
+| Drawer / Sheet lateral | edição delimitada | modal (padrão de `Drawer`) | `translateX(100%)` ↔ `none` (`gd-drawer-strip-in/out`), sem scale |
+| Nonmodal Drawer | exige motivo funcional documentado | nenhuma no código atual | — |
+| Workspace / Page | trabalho clínico prolongado | permanece em workspace | — |
+
+### Causas-raiz e correções
+
+| # | Desvio | Sev. | Alcance | Causa | Correção nesta rodada |
+|---|---|---|---|---|---|
+| 1 | Equipe → Gerenciar/Adicionar pessoa sem backdrop, com fundo interativo e sem contenção de foco | P1 | 1 tela | `Drawer modal={false}` + `dialog.show()` | Modal (padrão). Decisão: GERENCIAR sobrescreve o formulário sem checar alterações; com nonmodal o rascunho se perdia em silêncio. Backdrop bloqueia a sidebar e a saída passa pelo guard |
+| 2 | Equipe: painel desmonta na hora (sem saída) | P1 | 1 tela | `{showAdd && …}` desmontava o Drawer no mesmo render | Drawer sempre montado com `open={showAdd}`; saída animada; formulário limpo só em `onExited` (salvar normal não reseta no mesmo lote, senão apaga o formulário durante a saída) |
+| 3 | Equipe: `gd-team-editor` com dimensionamento próprio fora do contrato | P2 | 1 tela | override de tamanho em `globals.css` | Regra e comentário "nonmodal" removidos; largura pelo `WORKSPACE_SHEET_SIZES.clinical` |
+| 4 | DetailSideModal: com `open=false` retornava `null`; saída só pelo `closeNow()` interno, sem cobrir fechamento externo | P1 | primitive (`ui.tsx`), 5 usos | presença não controlada por `open` | Presença controlada por `open`, ref `exiting`, `onExited`; `showModal` depende de `present`. Consumidores por flag (`ConversationsView.tsx:685`, `ClientProfileDrawer.tsx:1313`) herdam a saída sem mudança de código |
+| 5 | Drawer não expõe fim de saída | P1 | primitive (`ui.tsx`), 24 usos | ausência de `onExited` | `Drawer.onExited` adicionado (aditivo; sem efeito para quem não passa a prop) |
+| 6 | Ajuste de teste legado | — | `tests/pre-f1-final/qa.mjs:42` | seletor de backdrop | Seletor atualizado; asserções intactas |
+
+Teste novo: `src/components/__tests__/overlay-exit-presence.test.tsx` (6 testes).
+Verificação negativa: com `ui.tsx` de `709bcd3`, 2 falham.
+
+### Motion medido no Chromium real (build de produção, login real em tenant de QA descartável)
+
+Método: `getAnimations()` ao vivo (nome, duração, keyframes), `Animation.setPlaybackRate(0.1)`
+via CDP para quadros intermediários, e timestamps do DOM (`data-closing`, remoção do nó).
+
+| Superfície | Entrada | Saída | Desmonte |
+|---|---|---|---|
+| Agenda · detalhe (1440) | `gd-detail-in` 190 ms, `tx` 460→0 monotônico; slowmo 0,1×: 1440→980 | `gd-detail-out` 170 ms, `tx` 0→460 | nó removido em `ct` ≈ 167–170 de 170 (≈ 173 ms após fechar) |
+| Equipe · Adicionar/Gerenciar (1440) | `gd-drawer-strip-in` 190 ms; slowmo 0,1×: 1426→764 monotônico | `gd-drawer-strip-out` 170 ms | ~205 ms após `data-closing` (duas rodadas), depois do fim da animação |
+| Agenda · detalhe (1024/768) | `tx` 460→0 (frames por rAF, cadência ruidosa) | `tx` 0→445, monotônico | medido por frames |
+| Agenda · detalhe (390) | sheet de largura total: `tx` 390→0 | `tx` 0→~378 | medido por frames; sem regressão de direção |
+| Equipe · 390 px | `strip-in` 190 ms + transição CSS de 140 ms no strip | — | **P2 residual, não corrigido** (ver exceções) |
+| `prefers-reduced-motion: reduce` | sem animação (`getAnimations()` vazio) | sem animação | medido em 1440 |
+| `no-preference` | com animação | com animação | não tratado como reduced |
+
+Observação de método: `getBoundingClientRect().left` não acompanhou de forma confiável o
+transform animado nesta cadência, então a posição é reportada por `tx` (matriz computada)
+somado à posição de repouso. A matriz de frames por rAF (`frames-final-*.json`) tem cadência ruidosa e não
+serve como prova isolada de posição; a prova de quadros é a do slowmo.
+
+### Verificações
+
+- Vitest focado (8 arquivos, incluindo overlays, motion e Equipe): 122/122.
+- Vitest completo: 6 falhas idênticas à baseline (`a34-instagram` 3, `automation-audit-p4` 1, `convergence-wave2` 1, `pipeline` 1). Nenhuma falha nova.
+- tsc: 3 erros idênticos à baseline (`production-db-routing.test.ts`). Nenhum novo.
+- `git diff --check`: limpo.
+- E2E Entrega 3 em banco limpo e re-semeado: 15/15.
+- Equipe, editar membro (Maria Recepção QA, dados descartáveis): "Pessoa atualizada.", persistida na API, conteúdo mantido durante a saída.
+- Equipe, pessoa nova sem acesso/clínico: "Pessoa adicionada.", formulário limpo ao reabrir. Não aparece em `/api/team` (regra do domínio).
+- Guard de descarte: "Continuar editando" mantém o rascunho; Escape fecha pelo guard.
+- Tab/Shift+Tab ficam dentro do dialog; foco volta ao botão de origem.
+- Agenda: `body` com overflow hidden enquanto aberto; restaurado ao fechar.
+
+### Exceções registradas
+
+- Duração de saída de 170 ms (entrada de 190 ms). Contrato pede ~180–200 ms. Mantida: não alterar a duração aprovada sem necessidade.
+- Desmonte por timer fixo (170 ms, `overlayMotionMs`) e não por `animationend`. Medido no 1440 com margem de ~30 ms. Em main thread ocupada, o desmonte pode ficar mais perto do fim da animação. P2 de robustez, para a próxima rodada.
+- Equipe em 390 px: transição CSS de 140 ms no strip (inset 35→8 px) além do `strip-in`. P2, não corrigido.
+- Trocas de overlay na Agenda (`setDetail(null)` durante a navegação entre detalhes) são substituição de overlay, não saída. Tratadas como fora do contrato de saída.
+
+### Pendências (não feitas nesta rodada)
+
+- Consumidores por flag (`ConversationsView.tsx:685`, `ClientProfileDrawer.tsx:1313`) e desmonte externo de `DetailSideModal`: sem medição em browser.
+- `Pet360Sheet`, `BookingDetailSheet` e `ClientProfileDrawer`: leitura de código indica que nenhum consome `onClose` sem mudar `open` ou desmontar. Sem teste de browser.
+- Papel Profissional em Agenda e Equipe: não testado nesta rodada. Recepção e Owner foram testados.
+- Análise de conflitos entre os sete sistemas de animação: inventariada (ver lista acima), consolidação para a onda 3.
+- Baselines "before" de 1024/768/390 não existem e não foram recriados. Before medido só para a Agenda (`709bcd3`). Before da Equipe é de leitura de código.

@@ -3730,11 +3730,6 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
     width: min(46vw, 560px); max-width: min(46vw, 560px);
   }
 }
-/* A team editor is a nonmodal workspace surface: sidebar links remain real
-   links, and useUnsavedChangesGuard pauses them before any draft is lost. */
-dialog.gd-team-editor { z-index: 50; }
-dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }
-
 /* Curated workspace type scale — DS 1.1: os papéis APONTAM para a escala
  * canônica (`--gd-type-*`), então trocar a escala (ou a família) muda o produto
  * inteiro de uma vez. Barlow é a identidade; a escala é a mesma em toda tela.

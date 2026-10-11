@@ -1024,7 +1024,7 @@ export function Notice({ tone = 'info', children, title, className, icon, onDism
 // browser responsibilities, including nested dialogs. Kept in its DOM parent
 // (no portal) so platform/public CSS scopes are never copied or leaked.
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true, variant = 'side', dialogWidth = '672px' }: {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = 'max-w-[720px]', side, sideTitle, sideSubtitle, sideWidth = 'max-w-[520px]', onSideClose, dismissGuard, sideDismissGuard, dialogClassName, modal = true, variant = 'side', dialogWidth = '672px', onExited }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   /**
    * `side` (padrão) = faixa lateral; `dialog` = MODAL CENTRAL.
@@ -1069,6 +1069,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   sideWidth?: string;
   /** Fecha só o painel lateral (voltar ao base). Padrão: fecha o overlay. */
   onSideClose?: () => void;
+  /**
+   * Chamado quando a SAÍDA termina e a superfície já saiu da tela. Use para
+   * limpar rascunhos: limpar no `onClose` apaga o conteúdo durante a animação.
+   * Só dispara após um fechamento animado (`open` → false), nunca na montagem.
+   */
+  onExited?: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -1079,6 +1085,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
      saída era um corte: o nó sumia no primeiro quadro (Blueprint §23). */
   const [present, setPresent] = useState(open);
   const [closing, setClosing] = useState(false);
+  const onExitedRef = useRef(onExited);
+  onExitedRef.current = onExited;
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => {
     if (closing) return;
@@ -1090,9 +1098,9 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     if (open) { setPresent(true); setClosing(false); return; }
     if (!present) return;
     const ms = overlayMotionMs('--gd-motion-sheet-out', 170);
-    if (ms === 0) { setPresent(false); return; }
+    if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
     setClosing(true);
-    const t = window.setTimeout(() => { setClosing(false); setPresent(false); }, ms);
+    const t = window.setTimeout(() => { setClosing(false); setPresent(false); onExitedRef.current?.(); }, ms);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -2161,7 +2169,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
  * devolvido ao gatilho. Base comportamental: Material 3 modal side sheet +
  * `dialog` nativo (focus trap e ::backdrop do próprio browser).
  */
-export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage }: {
+export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage, onExited }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
   /**
@@ -2196,24 +2204,54 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
    * mesma família visual, não um segundo padrão (a régua interna segue 16px).
    */
   flush?: boolean;
+  /** Chamado quando a saída animada termina (superfície já fora da tela). */
+  onExited?: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
+  /* Presença (mesmo contrato do Drawer): ao `open` virar false a superfície
+     MANTÉM-SE montada até a saída terminar; só então desmonta. Antes, `!open`
+     retornava null no mesmo quadro e o painel sumia sem animação. */
+  const [present, setPresent] = useState(open);
   const [closing, setClosing] = useState(false);
+  // Saída em curso: true desde o início da animação até a finalização pelo `open`.
+  const exiting = useRef(false);
+  const onExitedRef = useRef(onExited);
+  onExitedRef.current = onExited;
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
   function closeNow() {
-    if (closing) return;
+    if (exiting.current) return;
     const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
     if (ms === 0) { onClose(); return; }
+    // A animação de saída roda com o painel montado; só então o pai é avisado.
+    // Quando o pai desmonta o componente (detalhe com `open` fixo), a finalização
+    // é o próprio desmonte; quando troca `open` para false, o efeito abaixo finaliza.
+    exiting.current = true;
     setClosing(true);
-    timer.current = setTimeout(() => { setClosing(false); onClose(); }, ms);
+    timer.current = setTimeout(() => onClose(), ms);
   }
+  // Presença controlada pela prop `open`.
+  useEffect(() => {
+    if (open) { exiting.current = false; setPresent(true); setClosing(false); return; }
+    if (!present) return;
+    if (exiting.current) {
+      // Fechamento iniciado pelo usuário: a animação já rodou; finaliza agora.
+      exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.();
+      return;
+    }
+    const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
+    if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
+    exiting.current = true; setClosing(true);
+    const t = setTimeout(() => { exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.(); }, ms);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!open || !dialog) return;
+    if (!present || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll(dialog);
     dialog.showModal();
@@ -2230,8 +2268,9 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
       if (previous?.isConnected) previous.focus({ preventScroll: true });
       else if (fallback?.isConnected) fallback.focus({ preventScroll: true });
     };
-  }, [open]);
-  if (!open) return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [present]);
+  if (!present) return null;
   return (
     <dialog
       ref={dialogRef}
