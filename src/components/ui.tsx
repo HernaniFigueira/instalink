@@ -2324,7 +2324,8 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!present || !dialog) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // BODY não é gatilho: aberto por hover (sem foco), o foco volta ao evento dono (fallback).
+    const previous = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     lockBodyScroll(dialog);
     dialog.showModal();
     pushOverlay(dialog);

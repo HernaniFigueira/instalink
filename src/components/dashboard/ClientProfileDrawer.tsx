@@ -595,7 +595,8 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
         : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
       backHref={variant === 'page' ? pageBack : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? null : (
-        <>
+        // Quebra de linha no rodapé: em 390 px os três botões não cabem em uma linha e o rodapé (justify-end, sem wrap) jogava o WhatsApp para fora da tela.
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
           {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
             <Icon n="calendarPlus" size={16} /> Novo agendamento
@@ -604,7 +605,7 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
           <Link href={profileHref(`?b=${encodeURIComponent(businessId)}`)} className={buttonCls('primary', 'sm')}>
             Ver perfil completo <Icon n="chevR" size={16} />
           </Link>
-        </>
+        </div>
       )}
     >
       {routeDismiss.dialog}
