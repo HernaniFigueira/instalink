@@ -1183,7 +1183,10 @@ dialog.il-drawer .il-actionbar {
   /* Tokens de largura em vw (ex.: WORKSPACE_SHEET_SIZES.clinical = 46vw) deixam a
      faixa com ~180px em celular. Abaixo de 768px a faixa ocupa a largura útil do
      dialog (já com 8px de respiro): título legível, footer e campos cabem. */
-  dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important; }
+  /* Sem transição de largura/max-width no celular: o movimento canônico é só o
+     translate da entrada/saída; uma transição de layout em paralelo (200ms)
+     deslocava a faixa por ~140ms além do translate (residual medido em 390px). */
+  dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important; transition: none; }
 }
 @media (max-width: 1359px) {
   .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }

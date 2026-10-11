@@ -7,6 +7,15 @@
 //  - Limpeza de rascunho em `onExited` (não em `onClose`) preserva o conteúdo durante a saída.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
+
+// Termina a animação de saída do elemento (o navegador dispara animationend ao fim do keyframe).
+// jsdom não roda CSS animations: o evento é disparado explicitamente com o nome da animação.
+function endExitAnimation(el: Element | null, animationName: string) {
+  if (!el) throw new Error('superfície de saída ausente');
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: animationName });
+  act(() => { el.dispatchEvent(ev); });
+}
 import { useState } from 'react';
 import { Drawer, DetailSideModal } from '../../components/ui';
 
@@ -57,7 +66,11 @@ describe('DetailSideModal · saída pela prop open', () => {
     expect(dialog).not.toBeNull();
     expect(dialog?.getAttribute('data-closing')).toBe('true');
     expect(onExited).not.toHaveBeenCalled();
+    // Antes do fim da animação o painel NÃO pode sair (regressão: timer de 170 ms cortava a saída no meio).
     act(() => { vi.advanceTimersByTime(200); });
+    expect(container.querySelector('dialog.gd-detail')).not.toBeNull();
+    expect(onExited).not.toHaveBeenCalled();
+    endExitAnimation(container.querySelector('.gd-detail__panel'), 'gd-detail-out');
     expect(container.querySelector('dialog.gd-detail')).toBeNull();
     expect(onExited).toHaveBeenCalledTimes(1);
   });
@@ -71,9 +84,34 @@ describe('DetailSideModal · saída pela prop open', () => {
     expect(dialog?.getAttribute('data-closing')).toBe('true');
     expect(onExited).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(170); });
+    expect(container.querySelector('dialog.gd-detail')).not.toBeNull();
+    endExitAnimation(container.querySelector('.gd-detail__panel'), 'gd-detail-out');
     expect(container.querySelector('dialog.gd-detail')).toBeNull();
     act(() => { vi.advanceTimersByTime(500); });
     expect(onExited).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem animationend, o timer de segurança (duração + 120 ms) finaliza a saída uma única vez', () => {
+    vi.useFakeTimers();
+    const onExited = vi.fn();
+    const { container } = render(<ButtonCloseHarness onExited={onExited} />);
+    act(() => { screen.getByRole('button', { name: 'Fechar Detalhe X' }).click(); });
+    act(() => { vi.advanceTimersByTime(289); });
+    expect(container.querySelector('dialog.gd-detail')).not.toBeNull();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(container.querySelector('dialog.gd-detail')).toBeNull();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onExited).toHaveBeenCalledTimes(1);
+  });
+
+  it('animationend de outra animação (não a de saída) não finaliza a saída', () => {
+    vi.useFakeTimers();
+    const onExited = vi.fn();
+    const { container } = render(<ButtonCloseHarness onExited={onExited} />);
+    act(() => { screen.getByRole('button', { name: 'Fechar Detalhe X' }).click(); });
+    endExitAnimation(container.querySelector('.gd-detail__panel'), 'gd-detail-in');
+    expect(container.querySelector('dialog.gd-detail')).not.toBeNull();
+    expect(onExited).not.toHaveBeenCalled();
   });
 
   it('reabrir durante a saída cancela o fechamento e não chama onExited', () => {
@@ -128,6 +166,9 @@ describe('Drawer · onExited e conteúdo durante a saída', () => {
     expect(container.querySelector('dialog.il-drawer')?.getAttribute('data-closing')).toBe('true');
     expect(onExited).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(200); });
+    expect(container.querySelector('dialog.il-drawer')).not.toBeNull();
+    expect(onExited).not.toHaveBeenCalled();
+    endExitAnimation(container.querySelector('dialog.il-drawer .il-drawer__strip'), 'gd-drawer-strip-out');
     expect(container.querySelector('dialog.il-drawer')).toBeNull();
     expect(onExited).toHaveBeenCalledTimes(1);
     expect(onFormReset).toHaveBeenCalledTimes(1);

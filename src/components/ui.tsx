@@ -1087,6 +1087,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   const [closing, setClosing] = useState(false);
   const onExitedRef = useRef(onExited);
   onExitedRef.current = onExited;
+  // Saída concluída pelo `animationend` da faixa (ver DetailSideModal); timer = rede de segurança.
+  const exitFinish = useRef<(() => void) | null>(null);
+  const exitTimer = useRef<number>();
+  const runExit = () => { const f = exitFinish.current; exitFinish.current = null; if (f) { window.clearTimeout(exitTimer.current); f(); } };
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => {
     if (closing) return;
@@ -1100,8 +1104,9 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     const ms = overlayMotionMs('--gd-motion-sheet-out', 170);
     if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
     setClosing(true);
-    const t = window.setTimeout(() => { setClosing(false); setPresent(false); onExitedRef.current?.(); }, ms);
-    return () => window.clearTimeout(t);
+    exitFinish.current = () => { setClosing(false); setPresent(false); onExitedRef.current?.(); };
+    exitTimer.current = window.setTimeout(runExit, ms + EXIT_FALLBACK_MS);
+    return () => { window.clearTimeout(exitTimer.current); exitFinish.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   useEffect(() => {
@@ -1152,7 +1157,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           variant === 'dialog'
             ? (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : 'w-full')
             : (expanded ? `w-full ${WORKSPACE_SHEET_SIZES.expanded}` : `w-full ${width}`),
-        )} data-expanded={expanded ? 'true' : undefined}>
+        )} data-expanded={expanded ? 'true' : undefined}
+          onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-drawer-strip-out') runExit(); }}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre.
                 No par, usa o MESMO preset do secundário — 50/50 exato. */}
@@ -2034,6 +2040,9 @@ export function ContextMenu({ open, onClose, point, items, label = 'Ações', he
  * da animação de saída. `prefers-reduced-motion` ⇒ 0 (desmonta já, sem espera).
  * Sem stylesheet carregado (jsdom/SSR) cai no `fallback`.
  */
+/** Folga do timer de segurança da saída (só dispara se o `animationend` não chegar). */
+export const EXIT_FALLBACK_MS = 120;
+
 export function overlayMotionMs(token: string, fallback: number): number {
   try {
     if (typeof window === 'undefined') return fallback;
@@ -2220,6 +2229,11 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   const onExitedRef = useRef(onExited);
   onExitedRef.current = onExited;
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  // Conclusão da SAÍDA: roda no `animationend` do próprio painel (a animação é o relógio real);
+  // o timer só é rede de segurança. Antes, um timer de 170 ms desmontava o painel no meio do
+  // deslocamento (≈44% do curso, medido em quadros a 30 fps).
+  const exitFinish = useRef<(() => void) | null>(null);
+  const runExit = () => { const f = exitFinish.current; exitFinish.current = null; if (f) { clearTimeout(timer.current); f(); } };
   const dismiss = useOverlayDismissGuard();
   const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
   function closeNow() {
@@ -2231,7 +2245,8 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
     // é o próprio desmonte; quando troca `open` para false, o efeito abaixo finaliza.
     exiting.current = true;
     setClosing(true);
-    timer.current = setTimeout(() => onClose(), ms);
+    exitFinish.current = () => onClose();
+    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
   }
   // Presença controlada pela prop `open`.
   useEffect(() => {
@@ -2245,8 +2260,9 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
     const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
     if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
     exiting.current = true; setClosing(true);
-    const t = setTimeout(() => { exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.(); }, ms);
-    return () => clearTimeout(t);
+    exitFinish.current = () => { exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.(); };
+    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
+    return () => { clearTimeout(timer.current); exitFinish.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   useEffect(() => {
@@ -2285,7 +2301,8 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose('escape'); }
       }}
     >
-      <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}>
+      <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}
+        onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-detail-out') runExit(); }}>
         <header className="gd-detail__header">
           {icon && (
             <span className="gd-detail__icon" aria-hidden="true"><Icon n={icon} size={17} /></span>
