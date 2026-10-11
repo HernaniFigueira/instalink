@@ -674,7 +674,7 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
 
           {/* Contexto compacto: profissional e data lado a lado (sem três campos
               burocráticos empilhados). */}
-          <div className={(eligiblePros.length > 0 || incompatiblePro) ? 'grid grid-cols-2 items-start gap-3' : undefined}>
+          <div className={(eligiblePros.length > 0 || incompatiblePro) ? 'grid grid-cols-1 items-start gap-3 sm:grid-cols-2' : undefined}>
           {(eligiblePros.length > 0 || incompatiblePro) && (
             <Field label="Profissional" hint={autoPro.count >= 2 ? 'Em branco: a agenda equilibra a equipe' : undefined}>
               <Combobox
