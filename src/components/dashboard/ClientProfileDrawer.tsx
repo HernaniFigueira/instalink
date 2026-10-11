@@ -1341,9 +1341,10 @@ function ProfileShell({ variant, open = true, onExited, onClose, title, subtitle
   // flutuante (`.ws-sheet`, com gap nas extremidades e raio de card) sai das
   // superfícies de PRÉVIA/FICHA: perfil de cliente, Pet 360 e contexto de
   // conversa usam o `DetailSideModal` — preso à borda direita, altura cheia do
-  // viewport, sem raio e sem sombra. A largura vem do token do DS (560px para
-  // a ficha) e o corpo não soma recuo (`flush`): quem recua é o conteúdo, que
-  // já tem o próprio `p-4`.
+  // viewport, sem raio e sem sombra. A largura vem do token do DS
+  // (`--gd-detail-w`, 460px; janela 420–480) — sem override de largura aqui
+  // (R6: o 560px fixo estava fora do contrato). O corpo não soma recuo
+  // (`flush`): quem recua é o conteúdo, que já tem o próprio `p-4`.
   return (
     <DetailSideModal
       open={open}
@@ -1353,7 +1354,6 @@ function ProfileShell({ variant, open = true, onExited, onClose, title, subtitle
       title={title}
       subtitle={subtitle}
       icon="users"
-      width="560px"
       flush
       fullPage={{ href: backHref, label: 'Ver perfil completo' }}
       footer={footer}
