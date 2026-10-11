@@ -101,7 +101,7 @@ via CDP para quadros intermediários, e timestamps do DOM (`data-closing`, remo�
 
 | Superfície | Entrada | Saída | Desmonte |
 |---|---|---|---|
-| Agenda · detalhe (1440) | `gd-detail-in` 190 ms, `tx` 460→0 monotônico; slowmo 0,1×: 1440→980 | `gd-detail-out` 170 ms, `tx` 0→460 | nó removido em `ct` ≈ 167–170 de 170 (≈ 173 ms após fechar) |
+| Agenda · detalhe (1440) | `gd-detail-in` 190 ms, `tx` 460→0 monotônico; slowmo 0,1×: 1440→980 | `gd-detail-out` 170 ms, `tx` 0→460 | nó removido ≈180 ms após `data-closing`, ~10 ms depois do fim nominal de 170 ms (1 rodada, DOM) |
 | Equipe · Adicionar/Gerenciar (1440) | `gd-drawer-strip-in` 190 ms; slowmo 0,1×: 1426→764 monotônico | `gd-drawer-strip-out` 170 ms | ~205 ms após `data-closing` (duas rodadas), depois do fim da animação |
 | Agenda · detalhe (1024/768) | `tx` 460→0 (frames por rAF, cadência ruidosa) | `tx` 0→445, monotônico | medido por frames |
 | Agenda · detalhe (390) | sheet de largura total: `tx` 390→0 | `tx` 0→~378 | medido por frames; sem regressão de direção |
