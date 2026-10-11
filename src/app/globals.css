@@ -1223,7 +1223,9 @@ dialog.il-drawer--dialog {
   width: min(var(--il-dialog-w, 672px), calc(100vw - 2 * var(--gd-space-4)));
   /* Expandir/recolher o cadastro aninhado anima a largura (token; 0 ms em reduce). */
   transition: width var(--gd-motion-side-modal) var(--gd-ease);
-  height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
+  /* Altura ADAPTATIVA ao conteúdo: formulário curto não vira card gigante com
+     área branca; o teto é a viewport e o corpo rola (.ws-sheet__body). */
+  height: auto;
   max-height: calc(100dvh - 2 * var(--gd-space-4));
 }
 /* Com o cadastro aninhado aberto o par 50/50 precisa de faixa: a MESMA regra
@@ -1233,8 +1235,13 @@ dialog.il-drawer--dialog[data-expanded='true'] {
 }
 dialog.il-drawer--dialog .il-drawer__strip {
   width: 100%; max-width: none;
+  /* Faixa com altura do conteúdo, limitada pela viewport; o scroll fica no corpo. */
+  height: auto;
+  max-height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
+  overflow: hidden;
   border-radius: var(--gd-radius-lg);
 }
+dialog.il-drawer--dialog .il-drawer__panels { height: auto; flex: 1 1 auto; }
 /* Bolinha do topo: no modal central a faixa tem raio do DS (8px, não 20px). */
 dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) var(--gd-radius-lg); }
 @media (max-width: 767px) {
@@ -1243,7 +1250,10 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
   dialog.il-drawer--dialog {
     top: 50%; left: 50%; right: auto; bottom: auto;
     width: calc(100vw - 2 * var(--gd-space-3));
-    height: calc(100dvh - 2 * var(--gd-space-3));
+    height: auto;
+    max-height: calc(100dvh - 2 * var(--gd-space-3));
+  }
+  dialog.il-drawer--dialog .il-drawer__strip {
     max-height: calc(100dvh - 2 * var(--gd-space-3));
   }
 }

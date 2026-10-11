@@ -124,6 +124,11 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
   const [advanced, setAdvanced] = useState(false);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
+  // P1 · leitura de pets do tutor com estado explícito: nunca "vazio" por falha.
+  const [petsStatus, setPetsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [petsRetry, setPetsRetry] = useState(0);
+  // `vetResolved`: a unidade já foi classificada por uma resposta OK (ou pela Agenda).
+  const [vetResolved, setVetResolved] = useState(!!initial?.vetMode);
   const [isVet, setIsVet] = useState(!!initial?.vetMode);
   const [petId, setPetId] = useState(initial?.petId || '');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
@@ -263,17 +268,18 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
   // FASE 2 · P6 — tipo da clínica vem do BUSINESS/contexto (nunca de
   // contactId preexistente). Pets do tutor carregam quando há tutor.
   useEffect(() => {
+    // Sem unidade não há leitura válida: não consulta com businessId vazio (400).
+    if (!businessId) return;
     let on = true;
     // Vet mode: flag do negócio (pets?businessId sem tutorId devolve `vet`).
     apiGet<{ vet: boolean }>(
       `/api/pets?businessId=${encodeURIComponent(businessId)}`,
       { scope: 'area', area: 'Agenda' },
-    ).then((r) => { if (on) { setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); } })
-      .catch(() => { if (on) {
-        // Se a leitura auxiliar falhar, preserva a informação já resolvida
-        // pela Agenda; nunca infere veterinária a partir do contato.
-        setVetMode(!!initial?.vetMode); setIsVet(!!initial?.vetMode);
-      } });
+    ).then((r) => {
+      // Falha NÃO é "não veterinária": preserva o que a Agenda já resolveu.
+      if (!on || !r.ok) return;
+      setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); setVetResolved(true);
+    }).catch(() => { /* mantém o estado atual (vindo da Agenda) */ });
     return () => { on = false; };
   }, [businessId]);
 
@@ -285,7 +291,7 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
    */
   const initialPetRef = useRef(initial?.petId || '');
   useEffect(() => {
-    if (contactId || !initialPetRef.current) return;
+    if (contactId || !initialPetRef.current || !businessId) return;
     let on = true;
     apiGet<{ pets: Pet[] }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
       .then((r) => {
@@ -299,22 +305,28 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
 
   useEffect(() => {
     setPetId('');
-    if (!contactId) { setPets([]); return; }
+    setPets([]);
+    if (!contactId || !businessId) { setPetsStatus('idle'); return; }
     let on = true;
+    setPetsStatus('loading');
     apiGet<{ vet: boolean; pets: Pet[] }>(
       `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
       { scope: 'area', area: 'Agenda' },
     ).then((r) => {
       if (!on) return;
-      setIsVet(!!r.data?.vet);
+      // Falha de leitura é ERRO explícito: não vira "sem pets" nem "não veterinária".
+      if (!r.ok) { setPetsStatus('error'); return; }
+      setIsVet(!!r.data?.vet); setVetResolved(true);
       const list = r.data?.pets?.filter((p) => p.active !== false) || [];
       setPets(list);
+      setPetsStatus('ready');
       // Prefill de duplicação: restaura o pet semeado quando ele pertence ao tutor.
+      // Nunca escolhe o primeiro pet automaticamente.
       const seeded = initialPetRef.current;
       if (seeded && list.some((p) => p.id === seeded)) setPetId(seeded);
-    }).catch(() => { if (on) setPets([]); });
+    }).catch(() => { if (on) setPetsStatus('error'); });
     return () => { on = false; };
-  }, [contactId, businessId]);
+  }, [contactId, businessId, petsRetry]);
 
   function pick(c: Contact) {
     setUnlinkedPrefill(false);
@@ -422,6 +434,15 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
     // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
     if (isVet && contactId && pets.length > 0 && !petId) {
       fail('Em clínica veterinária, escolha o pet (paciente) deste agendamento.', 'pet');
+      return;
+    }
+    // P1 · veterinária com leitura pendente ou falha: não envia sem saber os pets.
+    if (picked && contactId && (isVet || vetMode) && petsStatus === 'loading') {
+      fail('Aguarde a leitura dos pets do tutor.', 'pet');
+      return;
+    }
+    if (picked && contactId && (isVet || vetMode) && petsStatus === 'error') {
+      fail('Não foi possível carregar os pets deste tutor. Tente novamente antes de agendar.', 'pet');
       return;
     }
     if (onlyDigits(phone).length < 10) { fail('Informe um WhatsApp válido.', 'client'); return; }
@@ -638,14 +659,24 @@ function NewBookingSheetSurface({ businessId, services, pros, timezone, initial,
 
           {/* FASE 2 · P6 — veterinária: o PET é o paciente (obrigatório quando
               o tutor já tem pet; sem pet, use o cadastro unificado). */}
-          {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'loading' && (
+            <div data-pets-state="loading" role="status" className="text-xs text-[var(--text-muted)]">Carregando pets do tutor…</div>
+          )}
+          {picked && contactId && petsStatus === 'error' && (isVet || vetMode || !vetResolved) && (
+            <div data-pets-state="error" role="alert" className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3">
+              <p className="text-xs font-semibold text-[var(--text)]">Não foi possível carregar os pets deste tutor.</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">A leitura falhou; isto não significa que o tutor não tem pet.</p>
+              <button type="button" className="mt-2 text-xs font-semibold text-[var(--brand)] underline" onClick={() => setPetsRetry((n) => n + 1)}>Tentar novamente</button>
+            </div>
+          )}
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'ready' && pets.length > 0 && (
             <div data-field="pet"><Field label="Pet (paciente)" required error={errorField === 'pet' ? error : undefined}
               hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
               <SelectMenu value={petId} disabled={saving || reviewing} onChange={(v) => setPetId(v)} placeholder="Selecione o pet…"
                 options={pets.map((p) => ({ value: p.id, label: p.name, hint: p.breed || undefined }))} />
             </Field></div>
           )}
-          {picked && contactId && (isVet || vetMode) && pets.length === 0 && (
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'ready' && pets.length === 0 && (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
               <p className="text-xs font-semibold text-[var(--text)]">Este tutor ainda não tem pet cadastrado.</p>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">Cadastre pelo fluxo “+ Cadastrar paciente” — o pet nasce junto com o tutor no CRM.</p>
