@@ -137,7 +137,11 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
   const lastResponse = responses[0] || null;
   const templateName = (id: string) => templates.find((t) => t.id === id)?.name || 'Ficha';
 
-  if (!open || !pet) return null;
+  // Presença: NÃO desmontar com `open=false`. A saída animada pertence ao
+  // DetailSideModal (que avisa `onExited` ao terminar); se esta superfície
+  // retornasse null aqui, a ficha sumia sem animação, `onExited` nunca rodava
+  // e o atendimento escolhido na aba Atendimentos nunca abria.
+  if (!pet) return null;
 
   // Identidade (uma só): o título já é o nome do pet; o subtítulo traz só
   // espécie e raça ("Roedor (Ratazana)"). Nome não se repete no corpo.

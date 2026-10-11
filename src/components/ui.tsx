@@ -2227,7 +2227,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
  * devolvido ao gatilho. Base comportamental: Material 3 modal side sheet +
  * `dialog` nativo (focus trap e ::backdrop do próprio browser).
  */
-export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage, onExited }: {
+export function DetailSideModal({ open, onClose, title, subtitle, children, footer, dismissGuard, width, label, flush = false, returnFocus, icon, fullPage, onExited, instant = false }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState;
   /**
@@ -2264,6 +2264,13 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   flush?: boolean;
   /** Chamado quando a saída animada termina (superfície já fora da tela). */
   onExited?: () => void;
+  /**
+   * Abre e fecha SEM animação de painel/backdrop. Fallback escopado (homologação
+   * PR #69 · R7): no Chromium real a entrada do painel de detalhe do agendamento
+   * não era pintada (o transform animava no DOM, o quadro não mudava). Só o
+   * detalhe da Agenda usa; os demais DetailSideModal mantêm o contrato de 190/170 ms.
+   */
+  instant?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -2287,7 +2294,7 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
   function closeNow() {
     if (exiting.current) return;
-    const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
+    const ms = instant ? 0 : overlayMotionMs('--gd-motion-side-modal-out', 170);
     if (ms === 0) { onClose(); return; }
     // A animação de saída roda com o painel montado; só então o pai é avisado.
     // Quando o pai desmonta o componente (detalhe com `open` fixo), a finalização
@@ -2306,7 +2313,7 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
       exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.();
       return;
     }
-    const ms = overlayMotionMs('--gd-motion-side-modal-out', 170);
+    const ms = instant ? 0 : overlayMotionMs('--gd-motion-side-modal-out', 170);
     if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
     exiting.current = true; setClosing(true);
     exitFinish.current = () => { exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.(); };
@@ -2341,6 +2348,7 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
       ref={dialogRef}
       className="gd-detail"
       data-closing={closing || undefined}
+      data-instant={instant || undefined}
       aria-labelledby={titleId}
       aria-label={label}
       onCancel={(e) => { e.preventDefault(); requestClose('escape'); }}

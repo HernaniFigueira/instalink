@@ -387,6 +387,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
   return (
     <DetailSideModal
       open
+      instant
       onClose={onClose}
       returnFocus={returnFocus}
       dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}

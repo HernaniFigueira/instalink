@@ -788,6 +788,9 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 }
 .gd-detail[open] .gd-detail__panel { animation: gd-detail-in var(--gd-motion-side-modal) var(--gd-ease); }
 .gd-detail[data-closing] .gd-detail__panel { animation: gd-detail-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Variante INSTANTÂNEA (DetailSideModal `instant`): abre e fecha sem animação,
+   só neste consumidor (detalhe do agendamento da Agenda). */
+.gd-detail[data-instant]::backdrop, .gd-detail[data-instant] .gd-detail__panel { animation: none; }
 /* CP1 · Drawer genérico: ENTRA da borda direita (translateX 100% → 0) e SAI
    pela mesma borda (0 → 100%). Sem scale, sem fade no painel e sem deslocamento
    simbólico: é uma folha presa à lateral. O backdrop segue a MESMA duração do
