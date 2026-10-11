@@ -162,7 +162,7 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it('4. “Novo agendamento” está na Linha 2, imediatamente ao lado do seletor', async () => {
+  it('4. “Novo agendamento” está na Linha 2, à direita do seletor (cadeado à esquerda)', async () => {
     await renderAgenda();
     const header = screen.getByRole('heading', { level: 1, name: 'Agenda' }).closest('header')!;
     const cta = screen.getByRole('button', { name: 'Novo agendamento' });
@@ -172,7 +172,9 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
     const trigger = screen.getByRole('combobox', { name: 'Visualização da agenda' });
     const row = trigger.closest('.ag-toolbar-actions') as HTMLElement;
     const kids = Array.from(row.children);
-    expect(kids[0].contains(trigger)).toBe(true);
+    // Ordem homologada: Bloquear horário (cadeado) | seletor de visualização | Novo agendamento.
+    expect(kids[0].getAttribute('aria-label')).toBe('Bloquear horário');
+    expect(kids[1].contains(trigger)).toBe(true);
     expect(kids[kids.length - 1]).toBe(cta);
     // E tudo vive na Linha 2 (toolbar da agenda).
     expect(cta.closest('[data-agenda-main]')).toBeTruthy();
@@ -207,11 +209,12 @@ describe('quick create “+” — ação global premium no topo (missão 6)', (
     expect(labels.join('|')).not.toContain('Novo tutor e pet');
   });
 
-  it('6. os demais itens da topbar permanecem (busca · sino · ajuda · conta)', () => {
+  it('6. os demais itens da topbar permanecem (busca · sino · conta); o “?” duplicado saiu', () => {
     render(<WorkspaceTopbar {...topbarProps()} />);
     expect(document.querySelector('.global-search')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Notifica/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ajuda e suporte' })).toBeTruthy();
+    // Ajuda e suporte vive na navegação/menu da conta, não mais como “?” na topbar.
+    expect(screen.queryByRole('button', { name: 'Ajuda e suporte' })).toBeNull();
     expect(screen.getByRole('button', { name: /Dona Unidade/ })).toBeTruthy();
   });
 });

@@ -573,6 +573,21 @@ export function Badge({ tone = 'zinc', children, icon, className, title }: { ton
 // Selo de ESTADO (cor = estado): usa a fonte única de cores (lib/status.ts).
 // Para etiquetas neutras, usar Badge. O estado nunca depende só da cor — o
 // texto do selo é sempre o rótulo do status.
+/** Separator (régua shadcn): linha de 1px na cor de borda suave. Usado para
+ *  separar ZONAS de ação (principal × terciária × perigo) sem caixa extra. */
+export function Separator({ orientation = 'horizontal', className, ...rest }: React.HTMLAttributes<HTMLDivElement> & {
+  orientation?: 'horizontal' | 'vertical';
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation={orientation}
+      className={cn('shrink-0 bg-[var(--gd-border-soft)]', orientation === 'horizontal' ? 'h-px w-full' : 'w-px self-stretch', className)}
+      {...rest}
+    />
+  );
+}
+
 export function StatusBadge({ tone = 'zinc', className, children }: { tone?: Tone; className?: string; children: React.ReactNode }) {
   return (
     <span className={cn('inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold leading-tight border shadow-xs', toneCls(tone), className)}>

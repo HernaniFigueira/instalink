@@ -8,10 +8,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs } from '@/components/ui';
+import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
 import { apiGet } from '@/lib/api-client';
-import { PET_SPECIES_LABELS, petAge, petLabel } from '@/lib/pets';
+import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
 import { formatDateBR } from '@/lib/tz';
 import { followUpDueDate } from '@/lib/encounters';
 import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/types';
@@ -125,6 +125,13 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
 
   if (!open || !pet) return null;
 
+  // Identidade (uma só): o título já é o nome do pet; o subtítulo traz só
+  // espécie e raça ("Roedor (Ratazana)"). Nome não se repete no corpo.
+  const speciesLabel = PET_SPECIES_LABELS[pet.species] || pet.species || '';
+  const breedLabel = (pet.breed || '').trim();
+  const speciesBreed = speciesLabel && breedLabel ? `${speciesLabel} (${breedLabel})` : (speciesLabel || breedLabel);
+  const sexLabel = pet.sex === 'M' ? 'Macho' : pet.sex === 'F' ? 'Fêmea' : '';
+
   const tabs = [
     { id: 'resumo' as const, label: 'Resumo', icon: 'userCircle' },
     { id: 'encounters' as const, label: 'Atendimentos', icon: 'fileText', count: encounters.length },
@@ -142,7 +149,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
       open={open}
       onClose={onClose}
       title={pet.name}
-      subtitle={`Pet 360 — ${petLabel(pet)}`}
+      subtitle={speciesBreed ? `Pet 360 · ${speciesBreed}` : 'Pet 360'}
       icon="paw"
       width="640px"
       flush
@@ -151,19 +158,16 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
       }
     >
       <div className="p-4 space-y-4" data-pet360="true">
-        {/* Cabeçalho do paciente — missão 5: bloco creme (o PET é o paciente),
-            nome grande + chips claros (espécie · raça · idade · peso) e o tutor
-            como contexto discreto. */}
+        {/* Bloco de identidade: o nome é o título do painel (não se repete aqui).
+            Chips com idade, peso e sexo; o tutor como contexto discreto. */}
         <div className="flex items-center gap-3.5 rounded-md border border-[var(--border)] bg-[var(--surface)] p-3.5">
           <Avatar name={pet.name} src={pet.photo || undefined} size={64} />
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{pet.name}</p>
-            <p className="mt-1 flex flex-wrap items-center gap-1">
+            <p className="flex flex-wrap items-center gap-1">
               {[
-                PET_SPECIES_LABELS[pet.species] || pet.species,
-                pet.breed,
                 age !== null ? `${age} ano(s)` : '',
                 pet.weightKg ? `${pet.weightKg} kg` : '',
+                sexLabel,
               ].filter(Boolean).map((chip) => (
                 <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
                   {chip}
@@ -180,13 +184,12 @@ export function Pet360Sheet({ open, onClose, businessId, pet: petProp, tutorName
               </p>
             )}
           </div>
-          {pet.sex && <Badge tone="zinc">{pet.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
         </div>
 
         {error && <Notice tone="error">{error}</Notice>}
 
         {/* Canônico: as que cabem ficam visíveis; o excedente vai para 'Mais N' (sem rolagem escondida). */}
-        <OverflowTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" className="pet360-tabs" />
+        <OverflowTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" className="pet360-tabs" variant="line" />
 
         {!loaded ? <ListSkeleton rows={4} /> : (
           <div className="ws-panel">

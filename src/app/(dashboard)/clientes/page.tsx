@@ -24,7 +24,7 @@ import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
 import { SearchListSkeleton,
-  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, buttonCls, type TabItem,
+  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Segmented, buttonCls, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
@@ -350,7 +350,9 @@ export default function ClientesPage() {
         <>
           {/* Busca + filtros: o filtro é aplicado NO SERVIDOR antes da
               paginação, então o total sempre reflete o que está na tela. */}
-          <div className="ws-panel p-3 mb-3 space-y-2.5">
+          <div className="ws-panel p-3 mb-3">
+            {/* Uma linha só: a busca ocupa a largura útil; o filtro (Segmented, primitive
+                canônico de filtro — não é tab de workspace) e a contagem ficam à direita. */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[220px]">
                 <Icon n="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -359,14 +361,14 @@ export default function ClientesPage() {
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={clinicalView ? 'Buscar por nome ou telefone…' : 'Buscar por nome, telefone, e-mail ou CPF…'}
                   aria-label={clinicalView ? 'Buscar paciente' : 'Buscar cliente'}
-                  className="il-field-control bg-[var(--surface-3)] pl-9 pr-3 focus:bg-white"
+                  className="il-field-control w-full bg-[var(--surface-3)] pl-9 pr-3 focus:bg-white"
                 />
               </div>
-              <span className="text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">
+              <Segmented items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
+              <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">
                 {total} {total === 1 ? (clinicalView ? 'paciente' : 'pessoa') : (clinicalView ? 'pacientes' : 'pessoas')} · pág {page}/{pages}
               </span>
             </div>
-            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
           </div>
 
           {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (

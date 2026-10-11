@@ -116,7 +116,10 @@
   --attention-fg: var(--gd-warning-fg);
   --attention-mark: var(--gd-warning);
   /* Texto sobre a marca âmbar: escuro o bastante para contraste AA. */
-  --attention-mark-fg: var(--gd-warning-fg);
+  /* Glyph do marcador de atenção (bolinha ! e ícone da faixa). Era --gd-warning-fg
+     (#92400e) sobre --attention-mark (#b45309): contraste ~1.5:1. Branco sobre o
+     âmbar atinge ~5:1 (AA). A cor semântica do fundo não muda. */
+  --attention-mark-fg: #ffffff;
 
   /* ── Destrutivo ─────────────────────────────────────────────── */
   --danger: var(--gd-danger);
@@ -858,7 +861,10 @@ input[type='color'] { @apply cursor-pointer; }
   --attention-border: var(--gd-warning-border);
   --attention-fg: var(--gd-warning-fg);
   --attention-mark: var(--gd-warning);
-  --attention-mark-fg: var(--gd-warning-fg);
+  /* Glyph do marcador de atenção (bolinha ! e ícone da faixa). Era --gd-warning-fg
+     (#92400e) sobre --attention-mark (#b45309): contraste ~1.5:1. Branco sobre o
+     âmbar atinge ~5:1 (AA). A cor semântica do fundo não muda. */
+  --attention-mark-fg: #ffffff;
   /* Laranja com contraste ≥ 3:1 sobre branco: é o tom usado em ÍCONE/rail de
      "atenção" (Tarefas). O `--warning` puro continua sendo a cor de estado. */
   --orange-deep: #b45309;

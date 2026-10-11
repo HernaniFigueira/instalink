@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, Avatar, buttonCls } from '@/components/ui';
+import { StatusBadge, Button, Avatar, Separator, buttonCls } from '@/components/ui';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { BOOKING_STATUS, FIT_IN_MARK_CLS } from '@/lib/status';
@@ -276,11 +276,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   // O DetailSideModal recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
 
-  function showHistory() {
-    setHistoryOpen(true);
-    requestAnimationFrame(() => historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
-  }
-
   const hasHistory = (booking.history || []).length > 0;
   const checkedInHM = booking.checkedInAt
     ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: timezone || undefined })
@@ -350,24 +345,33 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                       {booking.status === 'no_show' ? 'Reativar' : 'Reabrir'}
                     </Button>
                   )}
-                  {can('reschedule') && (
-                    <Button size="sm" variant="ghost" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
-                      <Icon n="calendar" size={16} /> Reagendar
-                    </Button>
-                  )}
-                  {can('check_in_undo') && (
-                    <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
-                      title="Desfazer o check-in deste atendimento">
-                      <Icon n="check" size={16} /> Chegou às {checkedInHM}
-                    </Button>
-                  )}
                 </div>
-                {can('cancel') && (
-                  <div className="border-t border-[var(--gd-border-soft)] pt-3 flex justify-start" data-action-zone="perigo">
-                    <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
-                      {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
-                    </Button>
+                {(can('reschedule') || can('check_in_undo')) && (
+                  // Terciária: atalhos de baixa ênfase (ghost), fora da zona principal.
+                  <div className="flex flex-wrap items-center gap-x-1 gap-y-1" data-action-zone="terciaria">
+                    {can('reschedule') && (
+                      <Button size="sm" variant="ghost" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
+                        <Icon n="calendar" size={16} /> Reagendar
+                      </Button>
+                    )}
+                    {can('check_in_undo') && (
+                      <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
+                        title="Desfazer o check-in deste atendimento">
+                        <Icon n="check" size={16} /> Chegou às {checkedInHM}
+                      </Button>
+                    )}
                   </div>
+                )}
+                {can('cancel') && (
+                  // Perigo: isolado por separador próprio e alinhado à esquerda, nunca junto da principal.
+                  <>
+                    <Separator />
+                    <div className="flex justify-start" data-action-zone="perigo">
+                      <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
+                        {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
+                      </Button>
+                    </div>
+                  </>
                 )}
                 {wf.allowed.length === 0 && (
                   <p className="text-[11px] text-[var(--text-muted)]">Nenhuma ação disponível para o seu perfil nesta etapa.</p>
@@ -527,13 +531,10 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                   <Icon n="whatsapp" size={16} className="text-emerald-600" /> WhatsApp
                 </a>
               )}
-              {hasHistory && (
-                <Button size="sm" variant="ghost" onClick={showHistory}>
-                  <Icon n="clock" size={16} /> Ver histórico
-                </Button>
-              )}
-              {!booking.customerPhone && !hasHistory && (
-                <span className="text-xs text-zinc-400">Sem telefone nem histórico registrado.</span>
+              {/* Só atalhos com destino real. O histórico já está aberto logo abaixo
+                  neste painel: um botão "Ver histórico" aqui era redundante. */}
+              {!booking.customerPhone && (
+                <span className="text-xs text-zinc-400">Sem telefone registrado.</span>
               )}
             </div>
           </div>

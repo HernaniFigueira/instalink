@@ -15,7 +15,7 @@
 // na mão, nenhum X decorativo, nenhuma sombra pesada.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api-client';
-import { professionalServesService } from '@/lib/booking';
+import { automaticProfessionalDisplay, professionalServesService } from '@/lib/booking';
 import { Button, Combobox, Field, IconButton, Input, Notice, Popover } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { durationLabel } from '@/lib/duration-label';
@@ -248,7 +248,7 @@ export function QuickBookingPopover({ anchor, businessId, services, pros, timezo
                 <Icon n="clock" size={16} className="text-[var(--gd-text-muted)]" />{time || 'horário'}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--gd-bg-surface-2)] px-2 py-1 text-[13px] font-medium text-[var(--gd-text)]">
-                <Icon n="userCircle" size={16} className="text-[var(--gd-text-muted)]" />{professionalId ? (pros.find((p) => p.id === professionalId)?.name ?? 'Profissional') : 'Automático'}
+                <Icon n="userCircle" size={16} className="text-[var(--gd-text-muted)]" />{professionalId ? (pros.find((p) => p.id === professionalId)?.name ?? 'Profissional') : automaticProfessionalDisplay(serviceById(serviceId) ?? null, pros).label}
               </span>
             </div>
           </div>

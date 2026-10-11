@@ -35,7 +35,7 @@ import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '
 import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip, SelectMenu } from '@/components/ui';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
-import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
+import { automaticProfessionalDisplay, eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
 import { NewClientForm } from '@/components/dashboard/NewClientSheet';
 
 interface Contact {
@@ -192,6 +192,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const incompatiblePro = !!proId && !!service && !professionalServesService(service as any, proId, pros);
   const activeProId = proId;
   const noEligiblePro = !!service && eligibleProfessionalIds(service as any, pros).length === 0;
+  // Sem profissional explícita: nome real se só existe UMA possível; "Automático · N" se há 2+.
+  const autoPro = automaticProfessionalDisplay(service as any, pros);
   const proIssue = noEligiblePro ? 'Nenhum profissional está habilitado para este serviço.' : incompatiblePro ? `${pros.find(p => p.id === proId)?.name || 'Este profissional'} não realiza este serviço. Escolha outro profissional habilitado.` : '';
   const orderedServices = [...bookable].sort((a, b) => Number(!!proId && professionalServesService(b as any, proId, pros)) - Number(!!proId && professionalServesService(a as any, proId, pros)));
   const slotKey = `${serviceId}|${date}|${proId}|${staffDuration}`;
@@ -672,7 +674,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               burocráticos empilhados). */}
           <div className={(eligiblePros.length > 0 || incompatiblePro) ? 'grid grid-cols-2 items-start gap-3' : undefined}>
           {(eligiblePros.length > 0 || incompatiblePro) && (
-            <Field label="Profissional" hint="Em branco: a agenda equilibra a equipe">
+            <Field label="Profissional" hint={autoPro.count >= 2 ? 'Em branco: a agenda equilibra a equipe' : undefined}>
               <Combobox
                 label="Profissional"
                 placeholder="Buscar profissional…"
@@ -681,7 +683,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                 value={activeProId}
                 onChange={(v) => setProId(String(v))}
                 options={[
-                  { value: '', label: 'Automático (equilibrar equipe)' },
+                  { value: '', label: autoPro.label },
                   ...(incompatiblePro ? [{ value: proId, label: `${pros.find(p => p.id === proId)?.name} — não realiza este serviço` }] : []),
                   ...eligiblePros.map((p) => ({ value: p.id, label: p.name })),
                 ]}

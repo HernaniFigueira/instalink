@@ -121,3 +121,25 @@ export function resolveProfessional(opts: {
   if (opts.allowRequested && opts.requested && eligible.has(opts.requested)) return opts.requested;
   return opts.assign[opts.time] || '';
 }
+
+/**
+ * RÓTULO DO PROFISSIONAL QUANDO NÃO HÁ PROFISSIONAL EXPLÍCITA (homologação).
+ *
+ * Não muda a política de distribuição: o backend continua decidindo quem atende.
+ * Só evita mostrar "Automático" quando, na prática, existe UMA profissional
+ * possível para o serviço — nesse caso a UI mostra o nome real. Com 2+ mostra
+ * "Automático · N profissionais". Sem serviço escolhido, conta a equipe ativa.
+ */
+export function automaticProfessionalDisplay(
+  service: Pick<Service, 'professionalMode' | 'professionalIds'> | null | undefined,
+  professionals: Professional[],
+): { count: number; name: string | null; label: string } {
+  const ids = service ? eligibleProfessionalIds(service as Service, professionals) : professionals.filter((p) => p.active !== false).map((p) => p.id);
+  const count = ids.length;
+  if (count === 1) {
+    const name = professionals.find((p) => p.id === ids[0])?.name || 'Profissional';
+    return { count, name, label: name };
+  }
+  if (count >= 2) return { count, name: null, label: `Automático · ${count} profissionais` };
+  return { count, name: null, label: service ? 'Sem profissional habilitado' : 'Automático' };
+}

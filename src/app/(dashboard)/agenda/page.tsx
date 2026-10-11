@@ -297,8 +297,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes), { x: e.clientX, y: e.clientY });
       }}>
-      <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
-      {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
+      {/* Arraste de CRIAÇÃO ainda não salvo: borda tracejada (agendamento persistido segue sólido). */}
+      <div ref={overlay} aria-hidden="true" data-draft-selection="drag" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
+      {selectedRange && <div data-testid="agenda-selected-range" data-draft-selection="range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -2081,7 +2082,7 @@ export default function AgendaPage() {
         <main data-agenda-main="true" className="flex-1 min-w-0">
       {/* LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL.
           Esquerda: [◀][▶] + data selecionada (fuso/regras preservados).
-          Direita: [Dia | Semana | Lista] + CTA "Novo agendamento".
+          Direita: [Bloquear horário] [Dia | Semana | Mês | Lista] [Novo agendamento].
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
@@ -2124,6 +2125,17 @@ export default function AgendaPage() {
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
           <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
+            {/* E3 · Bloquear horário vira ÍCONE (cadeado) com tooltip e nome
+                acessível — o rótulo longo saiu da toolbar. */}
+            <IconButton
+              icon="lock"
+              label="Bloquear horário"
+              tip="Bloquear horário"
+              variant="secondary"
+              aria-pressed={blockMode}
+              className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
+              onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
+            />
             {/* E3 · UM seletor de visualização (Dia · Semana · Mês · Lista) no
                 SelectMenu canônico — listbox não nativo, teclado completo
                 (↑/↓, Home/End, Enter, Escape devolve o foco ao gatilho). */}
@@ -2138,17 +2150,6 @@ export default function AgendaPage() {
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
             {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
                 segmentado. Desktop mantém o rótulo visível. */}
-            {/* E3 · Bloquear horário vira ÍCONE (cadeado) com tooltip e nome
-                acessível — o rótulo longo saiu da toolbar. */}
-            <IconButton
-              icon="lock"
-              label="Bloquear horário"
-              tip="Bloquear horário"
-              variant="secondary"
-              aria-pressed={blockMode}
-              className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
-              onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
-            />
             <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: proFilter })}>
               <Icon n="calendarPlus" size={16} /><span className="ag-toolbar__label">Novo agendamento</span>
             </Button>

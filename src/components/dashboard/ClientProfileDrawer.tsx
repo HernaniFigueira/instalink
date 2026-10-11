@@ -29,7 +29,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, DropdownMenu, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, buttonCls, PageBackAction, type MenuItem, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -507,20 +507,29 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // HIERARQUIA DE AÇÕES DO CABEÇALHO (shadcn): tertiary (ghost) à esquerda,
   // secondary (contorno) no meio e UM primary sólido à direita. O divisor
   // separa o grupo de leitura/edição do grupo de ação principal.
+  // Edição: abrir faz scroll + foco no primeiro campo; fechar pede o guard.
+  const toggleEdit = () => {
+    const opening = !editing;
+    if (editing) requestCloseEdit(); else setEditing(true);
+    // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+    // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+    if (opening) focusFieldSoon('client-edit-name');
+  };
+  // Cabeçalho com UMA primária (Novo agendamento) e no máximo um secundário
+  // visível. Nota e edição, que são ações de ficha e não de agenda, moram no
+  // menu "Mais" canônico (DropdownMenu): a barra deixa de parecer cheia.
+  const moreItems: MenuItem[] = [
+    ...(!clinicalView ? [
+      { id: 'note', label: 'Registrar nota', icon: 'pencil', onSelect: () => { setTab('notes'); focusFieldSoon('client-note-draft'); } },
+      { id: 'edit', label: editing ? 'Fechar edição' : 'Editar dados', icon: editing ? 'x' : 'pencil', onSelect: toggleEdit },
+    ] : []),
+  ];
   const pageActions = (
     <>
       {person.phone && canWhats && (
         <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className={buttonCls('ghost', 'sm')}>
           <Icon n="whatsapp" size={16} /> WhatsApp
         </a>
-      )}
-      {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
-      {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
-          textarea e o foca com highlight sutil (sem modal novo). */}
-      {!clinicalView && (
-        <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
-          <Icon n="pencil" size={16} /> Registrar nota
-        </Button>
       )}
       {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
           registro; antes disso a chegada é registrada na Agenda. */}
@@ -529,16 +538,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <Icon n="fileText" size={16} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
         </Button>
       )}
-      {!clinicalView && (
-        <Button variant="ghost" size="sm" onClick={() => {
-          const opening = !editing;
-          if (editing) requestCloseEdit(); else setEditing(true);
-          // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
-          // campo + highlight sutil (1–2s). Fechar não mexe no foco.
-          if (opening) focusFieldSoon('client-edit-name');
-        }}>
-          <Icon n={editing ? 'x' : 'pencil'} size={16} /> {editing ? 'Fechar edição' : 'Editar dados'}
-        </Button>
+      {moreItems.length > 0 && (
+        <DropdownMenu
+          label="Mais ações da ficha"
+          items={moreItems}
+          trigger={<Button variant="ghost" size="sm">Mais <Icon n="chevD" size={16} /></Button>}
+        />
       )}
       <span className="entity-main__sep" aria-hidden="true" />
       <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
