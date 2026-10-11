@@ -1175,6 +1175,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-description` : undefined}
       data-expanded={expanded ? 'true' : undefined}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); requestClose('escape'); }}
+      // Clique fora da caixa do dialog (::backdrop nativo) tem o próprio <dialog>
+      // como alvo: sem este handler o backdrop não fechava nada. mousedown (não
+      // click) evita fechar quando a seleção de texto sai do formulário.
+      onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose('backdrop'); }}
       onKeyDown={(event) => {
         // Native modal inertness prevents focus in the page, but some browsers
         // Tab from the final control into browser chrome. Wrap the boundaries
