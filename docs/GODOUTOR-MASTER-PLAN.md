@@ -436,3 +436,15 @@ Matriz (PASS): jornada veterinária completa (tutor, pet, serviço, horário, co
 N/A: Quick Create por célula em 390 px (a Agenda abre em Lista no celular; coberto em 1440 e 1024).
 
 NÃO EXECUTADO nesta rodada: conflito 409 de ponta a ponta no Chromium; recorrência e encaixe no Chromium (cobertos pelos testes da suíte); retorno completo com cliente salvo (salvar um cadastro de teste no QA exige mapear o formulário de paciente; coberto pelos testes de integração do retorno). Pendências herdadas da Missão 02 seguem em aberto.
+
+### Etapa 1 — Cadastro `/clientes/novo` como ficha de admissão (2026-10-12, implementada; E2E Chromium do build de produção registrado; aprovação visual humana pendente)
+
+- Implementada: ficha em três seções visíveis sem expandir (Identificação, Endereço, Informações adicionais), sem "Opcional" nos campos e sem obrigatoriedade artificial. CPF vazio é aceito; CPF preenchido passa pela validação existente e bloqueia o salvamento quando inválido.
+- Campo de data canônico `DateField` (DD/MM/AAAA, máscara, validação real, calendário; valor persistido em ISO) reutilizado no nascimento do tutor e do pet.
+- CEP com 8 dígitos consulta ViaCEP e, em reserva, BrasilAPI; preenche logradouro, bairro, cidade e UF mantendo-os editáveis; resposta antiga não sobrescreve a nova; fallback manual com aviso; sem chamada por tecla.
+- Pet no mesmo cadastro (somente veterinária). O CTA segue o modo: "Salvar tutor e pet" com pet ligado; "Salvar cliente" sem pet.
+- Correção pós-E2E: a linha do pet (sexo, nascimento, peso) empilha em telas estreitas; a data ficava cortada em 390 px.
+- Validação: vitest dos 48 arquivos afetados 633/633; `DateField` isolado 3/3; `tsc` = baseline (3 erros em `production-db-routing.test.ts`). Lint: o repositório não tem script nem configuração de lint (não aplicável).
+- Chromium real, build de produção, banco QA isolado, CEP mockado (sem integração real): 14/14 PASS. Cobre CEP encontrado, não encontrado, indisponível e atrasado; layout 1440/1024/390; CPF inválido; data inexistente; cadastro completo tutor + pet com persistência ISO e Cliente 360; duplo clique com uma gravação; RBAC (Recepção cadastra, Professional não).
+- Limites: integração real com ViaCEP e BrasilAPI não homologada (sem egress). Sem aprovação visual humana.
+- Falhas do harness de QA (não do produto): base em `127.0.0.1` (o cookie `Secure` é descartado em HTTP) e `--single-process` do Chromium, que derrubava sessões entre contextos. Corrigido no roteiro, não no produto.
