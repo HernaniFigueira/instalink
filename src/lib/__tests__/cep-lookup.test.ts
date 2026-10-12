@@ -13,7 +13,7 @@ function fakeFetch(routes: Record<string, Step>) {
     if (step === 'network') throw new TypeError('Failed to fetch');
     if (step === 'hang') {
         // Como o fetch real: sinal já abortado rejeita na hora; senão rejeita no abort.
-      return new Promise((_, reject) => {
+      return new Promise<never>((_, reject) => {
         const sig = init?.signal;
         const fail = () => reject(sig?.reason ?? new DOMException('aborted', 'AbortError'));
         if (sig?.aborted) return fail();

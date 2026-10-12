@@ -488,7 +488,7 @@ export function NewClientForm({
                         {breedSuggestions(pet.species).map((b) => <option key={b} value={b} />)}
                       </datalist></label>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <label className="block"><span className={label}>SEXO</span>
                       <Select value={pet.sex} onChange={(e) => setPet({ ...pet, sex: e.target.value })} aria-label="Sexo do pet">
                         <option value="">—</option><option value="M">Macho</option><option value="F">Fêmea</option>
