@@ -6,7 +6,7 @@
 // negócio é veterinário (clinicType) — os dados, porém, são aditivos e não
 // afetam nenhum outro tipo de clínica (petId continua '').
 // Módulo PURO (sem I/O): validação, rótulos e derivações.
-import type { Pet } from './types';
+import type { Pet, PetAllergy, PetAllergySeverity } from './types';
 
 export const PET_SPECIES = ['cachorro', 'gato', 'ave', 'roedor', 'reptil', 'outro'] as const;
 export type PetSpecies = typeof PET_SPECIES[number] | string;
@@ -134,4 +134,103 @@ export function vetPetRequired(input: {
   hasActivePets: boolean;
 }): boolean {
   return input.clinicType === 'veterinaria' && input.hasActivePets;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ETAPA 2 · ALERGIAS ESTRUTURADAS, TUTOR × PET e HISTÓRICO DE PESO
+// ═══════════════════════════════════════════════════════════════
+// Puro (sem I/O). Quem grava é a API de pets (alergias) e a criação de
+// atendimento (vínculo tutor × pet). Mantido aqui para ser testado sem banco.
+
+export const PET_ALLERGY_SEVERITIES: PetAllergySeverity[] = ['leve', 'moderada', 'grave'];
+export const PET_ALLERGY_SEVERITY_LABELS: Record<string, string> = {
+  leve: 'Leve', moderada: 'Moderada', grave: 'Grave', '': 'Não informada',
+};
+/** Limite de registros por paciente (evita abuso e lista ilegível). */
+export const PET_ALLERGY_MAX = 50;
+
+export interface PetAllergyInput {
+  substance?: unknown; reaction?: unknown; severity?: unknown;
+}
+
+/** Validação com mensagem amigável ('' = ok). */
+export function validatePetAllergy(input: PetAllergyInput): string {
+  const substance = String(input.substance || '').trim();
+  if (!substance) return 'Informe a substância ou alimento da alergia.';
+  if (substance.length > 80) return 'A substância é muito longa (máx. 80 caracteres).';
+  const reaction = String(input.reaction || '').trim();
+  if (reaction.length > 200) return 'A reação é muito longa (máx. 200 caracteres).';
+  const sev = String(input.severity || '');
+  if (sev && !PET_ALLERGY_SEVERITIES.includes(sev as PetAllergySeverity)) return 'Gravidade inválida.';
+  return '';
+}
+
+/** Higieniza para gravação: texto limitado, gravidade do vocabulário fechado. */
+export function sanitizePetAllergy(
+  input: PetAllergyInput,
+  over: { id: string; recordedBy: string; at: string },
+): PetAllergy {
+  const sev = String(input.severity || '');
+  return {
+    id: over.id,
+    substance: String(input.substance || '').trim().slice(0, 80),
+    reaction: String(input.reaction || '').trim().slice(0, 200),
+    severity: PET_ALLERGY_SEVERITIES.includes(sev as PetAllergySeverity) ? (sev as PetAllergySeverity) : '',
+    active: true,
+    recordedAt: over.at,
+    recordedBy: over.recordedBy,
+    inactivatedAt: '',
+  };
+}
+
+/** Alergias que ainda valem, mais recentes primeiro. */
+export function activePetAllergies(pet: Pick<Pet, 'allergies'> | null | undefined): PetAllergy[] {
+  return (pet?.allergies || [])
+    .filter((a) => a.active)
+    .sort((a, b) => (a.recordedAt < b.recordedAt ? 1 : -1));
+}
+
+/**
+ * Vínculo TUTOR × PET de um atendimento. O paciente pertence a UM tutor: quando
+ * o atendimento aponta um pet, o responsável só pode ser o tutor dele.
+ * - sem responsável informado → usa o tutor do pet;
+ * - responsável diferente do tutor do pet → recusado (nunca grava o histórico
+ *   de um pet no registro de outra pessoa);
+ * - pet sem tutor (legado) → mantém o responsável informado.
+ */
+export function resolvePetTutor(
+  pet: Pick<Pet, 'tutorId'> | null | undefined,
+  contactId: string,
+): { contactId: string; error: string } {
+  if (!pet || !pet.tutorId) return { contactId, error: '' };
+  if (!contactId) return { contactId: pet.tutorId, error: '' };
+  if (contactId !== pet.tutorId) {
+    return { contactId, error: 'Este paciente pertence a outro responsável. Escolha o tutor dele.' };
+  }
+  return { contactId, error: '' };
+}
+
+/** Peso medido nas visitas (fonte: avaliação veterinária de cada atendimento). */
+export interface PetWeightPoint { encounterId: string; date: string; weightKg: number; finalized: boolean }
+
+/**
+ * Histórico de peso DO PACIENTE: só atendimentos que o próprio pet (petId)
+ * registrou com peso medido. Mais antigo primeiro. O peso de cadastro NÃO entra
+ * aqui — é contexto, não medição.
+ */
+export function petWeightHistory(
+  encounters: Array<{ id: string; date: string; status: string; petId?: string; clinical?: any }>,
+  petId: string,
+): PetWeightPoint[] {
+  if (!petId) return [];
+  return encounters
+    .filter((e) => e.petId === petId)
+    .map((e) => ({
+      encounterId: e.id,
+      date: String(e.date || ''),
+      finalized: e.status === 'finalized',
+      weightKg: Number(e?.clinical?.assessment?.veterinary?.weightKg),
+    }))
+    .filter((p) => Number.isFinite(p.weightKg) && p.weightKg > 0)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }

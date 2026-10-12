@@ -2188,6 +2188,8 @@ export type AuditAction =
   | 'booking.checkin' | 'booking.checkin_undo'
   // Workflow + Permissões — mudança de etapa do atendimento (sem texto livre/clínico)
   | 'booking.status_changed'
+  // Etapa 2 — alergia estruturada do paciente (sem o texto clínico no log)
+  | 'pet.allergy_changed'
   | 'queue.created' | 'queue.updated' | 'queue.removed' | 'queue.booked'
   // A3.4 · Bloco 5 — registro do atendimento
   | 'encounter.created' | 'encounter.updated' | 'encounter.finalized'
@@ -2261,6 +2263,28 @@ export function isClinicType(v: unknown): v is ClinicType {
 // O tutor é um BusinessCustomer normal (pessoa de contato). O Pet é entidade
 // própria ligada a um tutor; um tutor pode ter vários pets. Essa estrutura NÃO
 // se aplica às outras clínicas (petId fica '' — aditivo e opcional).
+/** Gravidade declarada da alergia (vocabulário fechado; '' = não informada). */
+export type PetAllergySeverity = 'leve' | 'moderada' | 'grave' | '';
+
+/**
+ * Alergia ESTRUTURADA do paciente. Vive dentro do próprio pet: o vínculo com o
+ * `petId` é o registro que a contém (nunca compartilhada entre pets). Não é
+ * apagada — ao deixar de valer, `active` vira false e a data fica registrada,
+ * para o histórico do paciente não perder a informação.
+ */
+export interface PetAllergy {
+  id: ID;
+  /** Substância ou alimento (ex.: "dipirona", "frango"). */
+  substance: string;
+  /** Reação observada (ex.: "vômito", "coceira"). Texto livre curto. */
+  reaction: string;
+  severity: PetAllergySeverity;
+  active: boolean;
+  recordedAt: string;
+  recordedBy: string;
+  inactivatedAt: string;
+}
+
 export interface Pet {
   id: ID;
   businessId: ID;
@@ -2275,6 +2299,8 @@ export interface Pet {
   weightKg: number; // 0 = não informado
   notes: string; // observações (comportamento, alergias, cuidados)
   active: boolean;
+  /** Alergias estruturadas (ausente em registros legados = []). Gravadas só pela API de alergias. */
+  allergies?: PetAllergy[];
   createdAt: string;
   updatedAt: string;
 }

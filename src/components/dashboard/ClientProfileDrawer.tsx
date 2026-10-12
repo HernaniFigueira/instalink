@@ -14,7 +14,7 @@
 //   • consentimento de marketing nunca é presumido;
 //   • criar acesso continua opcional e a senha temporária aparece UMA vez;
 //   • etapa de lead só muda via PipelineStage real (nunca LeadStatus legado).
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { centsToBR, cn, waLink } from '@/lib/utils';
@@ -22,7 +22,7 @@ import { focusFieldSoon } from '@/lib/focus-highlight';
 import { humanDateTime, humanDay, formatDateBR, formatDateTimeBR, todayISO } from '@/lib/tz';
 import { BOOKING_STATUS, LEAD_STATUS, type StatusDef } from '@/lib/status';
 import { leadOriginLabel } from '@/lib/leads';
-import type { BusinessPipeline, ContactProfile, FinanceEntry , Pet } from '@/lib/types';
+import type { BusinessPipeline, ContactProfile, FinanceEntry } from '@/lib/types';
 import { FINANCE_STATUS_LABEL } from '@/lib/finance';
 import { followUpDueDate } from '@/lib/encounters';
 import {
@@ -39,7 +39,6 @@ import { encounterHref, encounterWorkspaceHref } from '@/lib/encounter-workspace
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { PetsSection } from '@/components/dashboard/PetsSection';
-import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { useOverlayDismissGuard, useUnsavedChangesGuard } from './OverlayDismissGuard';
 
 // Observações do cliente (P2): histórico append-only com autor e data.
@@ -174,13 +173,6 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
   const canStartBooking = (b: { professionalId?: string } | null): boolean =>
     !!b && (!clinicalView || (!!professionalId && b.professionalId === professionalId));
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
-  // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
-  const [pet360, setPet360] = useState<Pet | null>(null);
-  // Último Pet 360 não nulo: a ficha sai animada com o mesmo pet.
-  const lastPet360Ref = useRef<Pet | null>(null);
-  if (pet360) lastPet360Ref.current = pet360;
-  const pet360Ctx = pet360 ?? lastPet360Ref.current;
-  // "Abrir atendimento" a partir do Pet 360: o atendimento só abre depois que a ficha saiu.
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -675,7 +667,7 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
           </header>
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
         {person.contactId && (
-          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} onOpenPet={setPet360} />
+          <PetsSection businessId={businessId} tutorId={person.contactId} tutorName={person.name} onChanged={onChanged} />
         )}
 
 
@@ -932,16 +924,6 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
           </div>
         )}
 
-      {pet360Ctx && (
-        <Pet360Sheet
-          open={!!pet360}
-          onClose={() => setPet360(null)}
-          businessId={businessId}
-          pet={pet360Ctx}
-          tutorName={person.name}
-          tutorPhone={person.phone}
-        />
-      )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
       <div className="entity-main__history">
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>

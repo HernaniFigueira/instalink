@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { PetAllergyChips } from '@/components/dashboard/PetAllergies';
 import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
 import { formatDateBR } from '@/lib/tz';
@@ -20,7 +21,7 @@ import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/typ
 
 type PetTab = 'resumo' | 'encounters' | 'agenda' | 'anamnese' | 'files' | 'notes';
 
-function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemplate[]) {
+export function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemplate[]) {
   const template = templates.find((candidate) => candidate.id === response.templateId);
   if (template) return template.fields.filter((field) => field.type !== 'note').map((field) => ({
     id: field.id, label: field.label, type: field.type, value: response.answers?.[field.id],
@@ -85,6 +86,7 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
   // nunca o stub do chamador.
   const pet = canonicalPet && petProp && canonicalPet.id === petProp.id ? canonicalPet : petProp;
 
+  const router = useRouter();
   useEffect(() => {
     if (!open || !petProp?.id) return;
     let on = true;
@@ -108,8 +110,10 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
     setTab('resumo');
     (async () => {
       const [enc, bk, an] = await Promise.all([
+        // ETAPA 2: o histórico é do PACIENTE — filtrado no servidor por petId
+        // (nunca pelo tutor, que pode ter outros pets).
         apiGet<{ encounters?: EncounterRow[] }>(
-          `/api/encounters?businessId=${encodeURIComponent(businessId)}&contactId=${encodeURIComponent(pet.tutorId)}`,
+          `/api/encounters?businessId=${encodeURIComponent(businessId)}&petId=${encodeURIComponent(pet.id)}`,
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
         // CLINICAL ACCESS: a aba Agenda do Pet 360 mostra os agendamentos DO
@@ -120,18 +124,17 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
         apiGet<{ templates?: AnamneseTemplate[]; responses?: AnamneseResponse[] }>(
-          `/api/anamnese?businessId=${encodeURIComponent(businessId)}&responsesFor=${encodeURIComponent(pet.tutorId)}`,
+          `/api/anamnese?businessId=${encodeURIComponent(businessId)}&responsesFor=${encodeURIComponent(pet.tutorId)}&petId=${encodeURIComponent(pet.id)}`,
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
       ]);
       if (!on) return;
       if (!enc.ok && !bk.ok && !an.ok) setError('Não foi possível carregar a ficha do pet.');
-      // Só dados DESTSE pet (petId); tutor sem petId no registro fica de fora
-      // dos atendimentos clínicos específicos — mas bookings com petId filtram.
+      // Só dados DESTSE pet: o servidor já filtra por petId; o cliente confere de novo.
       setEncounters((enc.ok ? (enc.data?.encounters || []) : []).filter((e) => e.petId === pet.id));
       setBookings(bk.ok ? (bk.data?.bookings || []) : []);
       setTemplates(an.ok ? (an.data?.templates || []) : []);
-      setResponses((an.ok ? (an.data?.responses || []) : []).filter((r) => !r.petId || r.petId === pet.id));
+      setResponses((an.ok ? (an.data?.responses || []) : []).filter((r) => r.petId === pet.id));
       setLoaded(true);
     })();
     return () => { on = false; };
@@ -190,7 +193,13 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
       width="640px"
       flush
       footer={
-        <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
+        <div className="flex w-full items-center justify-between gap-2">
+          <Button variant="secondary" size="sm" onClick={() => router.push(`/pets/${encodeURIComponent(pet.id)}?b=${encodeURIComponent(businessId)}`)}
+            data-pet360-full-page>
+            Abrir ficha completa
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
+        </div>
       }
     >
       <div className="p-4 space-y-4" data-pet360="true">
@@ -219,6 +228,7 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
                 Retorno previsto: {formatDateBR(upcomingReturn.due)}
               </p>
             )}
+            <PetAllergyChips pet={pet} max={3} className="mt-2" />
           </div>
         </div>
 
