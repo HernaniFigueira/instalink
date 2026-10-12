@@ -53,6 +53,8 @@ export interface PanelPermissions {
   professionalId: string;
   /** Nome do profissional vinculado na unidade ativa, quando houver. */
   professionalName: string;
+  /** Id da conta autenticada ('' enquanto resolve). Chave de preferências do navegador. */
+  userId: string;
   /**
    * Unidade ativa já validada contra a sessão. Vazio significa que a pessoa
    * ainda precisa escolher uma unidade; nunca é inferida pela ordem da lista.
@@ -75,7 +77,7 @@ export function usePanelPermissions(): PanelPermissions {
   const params = useSearchParams();
   const requested = params?.get('b') || '';
   const [state, setState] = useState<PanelPermissions>({
-    permissions: {}, role: '', ready: false, professionalId: '', professionalName: '', businessId: '',
+    permissions: {}, role: '', ready: false, professionalId: '', professionalName: '', businessId: '', userId: '',
   });
 
   useEffect(() => {
@@ -92,6 +94,7 @@ export function usePanelPermissions(): PanelPermissions {
         professionalId: biz?.professionalId || '',
         professionalName: biz?.professionalName || '',
         businessId: biz?.id || '',
+        userId: d?.user?.id || '',
       });
     });
     return () => { cancelled = true; };

@@ -63,7 +63,8 @@ describe('FASE 2 · P9 — quick create premium (missão 6: o “+” volta)', (
     expect(agenda).toContain('setCreating({ date:');
     const clientes = read('src/app/(dashboard)/clientes/page.tsx');
     expect(clientes).toContain("params.get('novo') !== '1'");
-    expect(clientes).toContain('setNewClientOpen(true)');
+    // Missão 02: ?novo=1 redireciona para a página /clientes/novo (sem painel).
+    expect(clientes).toMatch(/router\.replace\(newClientFromListHref\(businessId\)\)/);
     const fin = read('src/app/(dashboard)/financeiro/page.tsx');
     expect(fin).toContain("params.get('novo') !== '1'");
     expect(fin).toContain('startEditing(blankEntry())');

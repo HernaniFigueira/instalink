@@ -19,6 +19,12 @@ vi.mock('@/lib/api-client', () => ({
 import { NewBookingSheet } from '../dashboard/NewBookingSheet';
 
 // Termina a animação de saída (jsdom não roda CSS animations).
+// Novo agendamento navega para /clientes/novo pelo App Router (Missão 02).
+// Este teste monta o sheet isoladamente: o router é um stub sem efeito.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, prefetch: () => {} }),
+}));
+
 function endExitAnimation(el: Element | null, animationName: string) {
   if (!el) throw new Error('faixa de saída ausente');
   const ev = new Event('animationend', { bubbles: true });
@@ -92,14 +98,16 @@ describe('Novo agendamento · presença (saída animada antes de desmontar)', ()
     expect(document.querySelector('dialog[data-closing]')).toBeTruthy();
   });
 
-  it('Escape passa pelo caminho de fechamento (onClose) e então sai animado', () => {
+  it('Escape anima a saída e só então chama onClose (contrato único)', () => {
     const onZero = vi.fn();
     render(<Parent onZero={onZero} />);
     const dialog = screen.getByRole('dialog', { name: 'Novo agendamento' });
     fireEvent.keyDown(dialog, { key: 'Escape' });
-    expect(onZero).toHaveBeenCalledTimes(1);
+    // Contrato único de saída: o pai só recebe onClose depois da animação.
+    expect(onZero).not.toHaveBeenCalled();
     expect(document.querySelector('dialog[data-closing]')).toBeTruthy();
     endExitAnimation(document.querySelector('.il-drawer__strip'), 'gd-fade-out');
+    expect(onZero).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog', { name: 'Novo agendamento' })).toBeNull();
   });
 

@@ -25,10 +25,11 @@ describe('pós-homologação manual — atendimento, anamnese e proteção de tr
     expect(bookingDetail).toContain('Desfazer o check-in deste atendimento');
   });
 
-  it('Novo Agendamento e cadastro lateral mantêm guards dirty independentes', () => {
+  it('Novo Agendamento mantém guard próprio; o cadastro não é mais painel lateral', () => {
+    // Missão 02: o cadastro saiu do overlay (página própria). Não há mais guard aninhado.
     expect(newBooking).toContain('dismissGuard={overlayGuard}');
-    expect(newBooking).toContain('sideDismissGuard={{ ...clientPersistence, context: \'new-client\' }}');
-    expect(newBooking).toContain('onPersistenceChange={setClientPersistence}');
+    expect(newBooking).not.toContain('sideDismissGuard');
+    expect(newBooking).not.toContain('onPersistenceChange={setClientPersistence}');
   });
 
   it('resposta salva é enviada ao pai com identidade do template e exibida sem recarregar', () => {

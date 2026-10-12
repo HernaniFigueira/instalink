@@ -68,8 +68,15 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus, open = true, onExited }: {
   booking: Booking;
+  /**
+   * Presença controlada pelo PAI (contrato de overlay de leitura): `open` false
+   * dispara a saída animada do painel; `onExited` avisa que ela terminou, e só
+   * então o pai desmonta o agendamento. O pai não desmonta antes disso.
+   */
+  open?: boolean;
+  onExited?: () => void;
   /**
    * MISSÃO UX CLOSURE · item 3A — o resumo do evento pode abrir o detalhe
    * DIRETO no fluxo de reagendamento. O detalhe continua sendo o mesmo; a
@@ -357,7 +364,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                     {can('check_in_undo') && (
                       <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
                         title="Desfazer o check-in deste atendimento">
-                        <Icon n="check" size={16} /> Chegou às {checkedInHM}
+                        Desfazer chegada
                       </Button>
                     )}
                   </div>
@@ -378,7 +385,7 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
                 )}
                 {booking.checkedInAt && wf.state === 'arrived' && (
                   <p className="text-[11px] text-[var(--text-muted)] mt-2">
-                    Check-in registrado{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
+                    Chegada registrada às {checkedInHM}{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
                   </p>
                 )}
               </div>
@@ -386,7 +393,8 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   return (
     <DetailSideModal
-      open
+      open={open}
+      onExited={onExited}
       instant
       onClose={onClose}
       returnFocus={returnFocus}

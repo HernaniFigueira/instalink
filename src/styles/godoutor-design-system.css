@@ -216,6 +216,13 @@
   --gd-shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
   --gd-shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
   --gd-shadow-overlay: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
+  /* DIALOG central (modal do DS: Novo agendamento, confirmações). Sombra externa
+     SUTIL e única: um contato curto + uma queda longa e baixa. Não vale para
+     sheets laterais, popovers nem hovercards (esses mantêm os seus tokens). */
+  --gd-shadow-dialog: 0 1px 2px rgba(15, 23, 42, 0.08), 0 12px 28px -10px rgba(15, 23, 42, 0.22), 0 36px 72px -32px rgba(15, 23, 42, 0.30);
+  /* Véu do Dialog central: um pouco mais denso que o véu de menus/popovers, para o
+     modal se separar da tela de fundo sem depender só da borda. */
+  --gd-overlay-dialog: rgba(13, 18, 32, 0.48);
 
   /* ── CONTROL HEIGHT (uma régua para botão, input, select, chip) ─────────
      REGRA DA CASA (missão UX Closure): controle do MESMO nível tem a MESMA
@@ -615,7 +622,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
   position: fixed; inset: 0; z-index: var(--gd-z-modal);
   display: flex; align-items: center; justify-content: center;
   padding: var(--gd-space-4);
-  background: var(--gd-overlay);
+  background: var(--gd-overlay-dialog);
   animation: gd-fade-in var(--gd-motion-base) var(--gd-ease);
 }
 @keyframes gd-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -630,7 +637,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
   background: var(--gd-bg-surface);
   border: 1px solid var(--gd-border);
   border-radius: var(--gd-radius-lg);
-  box-shadow: var(--gd-shadow-overlay);
+  box-shadow: var(--gd-shadow-dialog);
 }
 /* Entrada/saída simétricas do Dialog: a saída é o reverso da entrada (sem corte
    seco). O componente segura a desmontagem por `--gd-motion-dialog-out`. */
@@ -638,6 +645,8 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 @keyframes gd-dialog-out { to { opacity: 0; transform: translateY(8px) scale(.985); } }
 .gd-dialog-backdrop[data-closing] { animation: gd-fade-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 .gd-dialog[data-closing] { animation: gd-dialog-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Motion · saída inerte: superfície em animação de saída não recebe clique (nenhuma ação dispara durante a saída). */
+.gd-dialog[data-closing], .gd-detail[data-closing], .il-drawer[data-closing] { pointer-events: none; }
 .gd-dialog__header, .gd-dialog__footer {
   display: flex; align-items: center; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;

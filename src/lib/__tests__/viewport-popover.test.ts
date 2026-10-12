@@ -97,7 +97,8 @@ describe('ViewportPopover · alinhamento compartilhado', () => {
     const ui = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
     expect(booking).toContain('variant="dialog"');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
+    // Missão 02: o Novo agendamento não tem painel aninhado; o cadastro é página própria.
+    expect(booking).not.toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(sheet).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
     expect(ui).toContain('WORKSPACE_NESTED_PANEL');
     expect(css).toContain('@media (max-width: 1359px)');

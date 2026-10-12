@@ -1233,8 +1233,11 @@ dialog.il-drawer--dialog {
 dialog.il-drawer--dialog[data-expanded='true'] {
   width: min(1280px, calc(100vw - 2 * var(--gd-space-4)));
 }
+dialog.il-drawer--dialog::backdrop { background: var(--gd-overlay-dialog); }
 dialog.il-drawer--dialog .il-drawer__strip {
   width: 100%; max-width: none;
+  /* Elevação do Dialog vem do token compartilhado do DS (sem sombra por tela). */
+  box-shadow: var(--gd-shadow-dialog);
   /* Faixa com altura do conteúdo, limitada pela viewport; o scroll fica no corpo. */
   height: auto;
   max-height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));

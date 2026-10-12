@@ -1036,26 +1036,94 @@ export function Notice({ tone = 'info', children, title, className, icon, onDism
  *   quando o descarte já foi confirmado pelo guard).
  * - `open` congelado: enquanto fecha, quem renderiza deve usar o último contexto
  *   aberto (ver `useFrozenWhileClosed`), para título e conteúdo não mudarem por trás da animação.
+ * - Com `exit` (Drawer, Dialog, DetailSideModal, WorkspaceSheet): a PRÓPRIA superfície
+ *   anima a saída. O usuário (X, Escape, backdrop, guarda) chama `requestExit`, que anima
+ *   e só então chama `exit.onClose`; o pai põe open=false. Pai que fecha sozinho também
+ *   anima. Desmonte só em `animationend` do elemento de saída (`runExit`), com rede de
+ *   segurança de duração + folga. Reabrir cancela a saída. Não serve a popover, hover-card,
+ *   disclosure ou peek: esses não são modais e não saem por desmonte.
+ * - Sem `exit` (wrappers de consumidor): o desmonte é anunciado pelo filho via `handleExited`.
  */
-export function useOverlayPresence(open: boolean, onExited?: () => void) {
+export interface OverlayExitOptions {
+  /** Duração da saída em ms, lida do token CSS. 0 (prefers-reduced-motion) = desmonte imediato. */
+  exitMs: () => number;
+  /** Chamado quando o USUÁRIO pede fechar (X, Escape, backdrop, guarda confirmada), só após a animação. */
+  onClose: () => void;
+}
+
+export function useOverlayPresence(open: boolean, onExited?: () => void, exit?: OverlayExitOptions) {
   const [mounted, setMounted] = useState(open);
   const [session, setSession] = useState(0);
   const [prevOpen, setPrevOpen] = useState(open);
-  const openRef = useRef(open);
-  openRef.current = open;
-  const exitedRef = useRef(onExited);
-  exitedRef.current = onExited;
-  // Ajuste de estado durante o render (padrão React para derivar estado de props).
+  const [userClosing, setUserClosing] = useState(false);
+  // Reabertura: ajuste de estado durante o render (padrão React). Mostra na mesma
+  // pintura, sem quadro vazio, e cancela qualquer saída em curso.
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) { setMounted(true); setSession((n) => n + 1); }
+    if (open) { setMounted(true); setSession((n) => n + 1); setUserClosing(false); }
   }
+  // Movimento reduzido (duração 0): não há saída a animar, então não entra em estado `closing`.
+  // A superfície é desmontada no commit seguinte, sem quadro de animação.
+  const reducedExit = !open && !!exit && exit.exitMs() === 0;
+  const closing = mounted && !reducedExit && (!open || userClosing);
+  const latest = useRef({ open, onExited, exit });
+  latest.current = { open, onExited, exit };
+  const mountedRef = useRef(mounted);
+  mountedRef.current = mounted;
+  const phase = useRef<'idle' | 'user' | 'awaiting' | 'parent'>('idle');
+  const finish = useRef<(() => void) | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const clearTimer = useCallback(() => { clearTimeout(timer.current); timer.current = undefined; }, []);
+  // Fim da saída: desmonta e avisa `onExited`. Com o pai reaberto, não faz nada.
   const handleExited = useCallback(() => {
-    if (openRef.current) return; // reaberto durante a saída: continua montado
+    if (latest.current.open) return; // reaberto durante a saída: continua montado
+    clearTimer();
+    finish.current = null;
+    phase.current = 'idle';
     setMounted(false);
-    exitedRef.current?.();
-  }, []);
-  return { mounted, session, handleExited };
+    setUserClosing(false);
+    latest.current.onExited?.();
+  }, [clearTimer]);
+  const runExit = useCallback(() => {
+    clearTimer();
+    const f = finish.current;
+    finish.current = null;
+    f?.();
+  }, [clearTimer]);
+  const requestExit = useCallback(() => {
+    const ex = latest.current.exit;
+    if (!ex || !mountedRef.current || !latest.current.open || phase.current !== 'idle') return;
+    const ms = ex.exitMs();
+    if (ms === 0) { ex.onClose(); return; }
+    phase.current = 'user';
+    setUserClosing(true);
+    // Animação do usuário terminou: avisa o pai. A superfície segue `closing` até o pai fechar.
+    finish.current = () => {
+      if (phase.current === 'user') { phase.current = 'awaiting'; latest.current.exit?.onClose(); }
+    };
+    clearTimer();
+    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
+  }, [clearTimer, runExit]);
+  useEffect(() => {
+    if (open) { clearTimer(); finish.current = null; phase.current = 'idle'; return; }
+    if (!mountedRef.current) return;
+    // Saída já animada pelo usuário: o pai acabou de fechar; desmonta ao fim da animação ou agora.
+    if (phase.current === 'user') { finish.current = handleExited; return; }
+    if (phase.current === 'awaiting') { handleExited(); return; }
+    // Sem `exit`, o filho anuncia o fim (handleExited); nada a animar aqui.
+    const ex = latest.current.exit;
+    if (!ex) return;
+    // Fechamento externo (pai põe open=false): anima aqui e desmonta no fim.
+    const ms = ex.exitMs();
+    if (ms === 0) { handleExited(); return; }
+    phase.current = 'parent';
+    finish.current = handleExited;
+    clearTimer();
+    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => clearTimer, [clearTimer]);
+  return { mounted, present: mounted, closing, session, handleExited, requestExit, runExit };
 }
 
 /** Último valor de `value` enquanto `open` era verdadeiro (congela o conteúdo durante a saída). */
@@ -1121,35 +1189,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
   const expanded = !!side;
-  /* CP1 · motion: a superfície permanece MONTADA durante a saída (token
-     --gd-motion-sheet-out) e só desmonta quando a transição termina. Sem isto a
-     saída era um corte: o nó sumia no primeiro quadro (Blueprint §23). */
-  const [present, setPresent] = useState(open);
-  const [closing, setClosing] = useState(false);
-  const onExitedRef = useRef(onExited);
-  onExitedRef.current = onExited;
-  // Saída concluída pelo `animationend` da faixa (ver DetailSideModal); timer = rede de segurança.
-  const exitFinish = useRef<(() => void) | null>(null);
-  const exitTimer = useRef<number>();
-  const runExit = () => { const f = exitFinish.current; exitFinish.current = null; if (f) { window.clearTimeout(exitTimer.current); f(); } };
+  /* Presença e saída: contrato único (useOverlayPresence com exit). Faixa lateral = token side-modal-out (mesmo token da animação CSS gd-drawer-strip-out). */
+  const presence = useOverlayPresence(open, onExited, { exitMs: () => overlayMotionMs('--gd-motion-side-modal-out', 170), onClose });
+  const { present, closing, session } = presence;
   const dismiss = useOverlayDismissGuard();
-  const requestClose = (reason: DismissReason) => {
-    if (closing) return;
-    dismiss.requestClose(reason, dismissGuard, onClose);
-  };
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, presence.requestExit);
   const requestSideClose = (reason: DismissReason) => dismiss.requestClose(reason, sideDismissGuard, onSideClose || onClose);
-  // Presença: abre já; ao fechar, mantém a superfície por `closing` até o fim da saída.
-  useEffect(() => {
-    if (open) { setPresent(true); setClosing(false); return; }
-    if (!present) return;
-    const ms = overlayMotionMs('--gd-motion-sheet-out', 170);
-    if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
-    setClosing(true);
-    exitFinish.current = () => { setClosing(false); setPresent(false); onExitedRef.current?.(); };
-    exitTimer.current = window.setTimeout(runExit, ms + EXIT_FALLBACK_MS);
-    return () => { window.clearTimeout(exitTimer.current); exitFinish.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!present || !dialog) return;
@@ -1163,11 +1208,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       unlockBodyScroll(dialog);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [present, modal]);
+  }, [present, session, modal]);
 
   if (!present) return null;
   return (
-    <dialog ref={dialogRef}
+    <dialog ref={dialogRef} key={session}
       data-closing={closing ? 'true' : undefined}
       className={cn("il-drawer fixed inset-0 z-50", variant === 'dialog' && 'il-drawer--dialog', dialogClassName)}
       style={variant === 'dialog' ? ({ '--il-dialog-w': dialogWidth } as React.CSSProperties) : undefined}
@@ -1196,7 +1241,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         {/* §19–25 — a FAIXA do overlay: um dialog, largura que transiciona
             (entrada 180–220ms). Com `side`, dois painéis lado a lado. */}
         <div className={cn(
-          'il-drawer__strip relative h-full bg-[var(--bg)] shadow-xl flex flex-col',
+          // Dialog central: a elevação é o token `--gd-shadow-dialog` (CSS do DS).
+          // O `shadow-xl` do Tailwind mapeia para `--gd-shadow-lg` e vencia a
+          // sombra da faixa; por isso só as sheets laterais o mantêm.
+          cn('il-drawer__strip relative h-full bg-[var(--bg)] flex flex-col', variant !== 'dialog' && 'shadow-xl'),
           // No modal central a largura vem do token do dialog (CSS); nos
           // demais casos continua sendo o preset pedido pela tela.
           variant === 'dialog'
@@ -1206,7 +1254,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           onAnimationEnd={(e) => {
             // Saída da faixa: lateral = gd-drawer-strip-out; modal central = gd-fade-out (única
             // animação de saída da faixa do dialog). O filtro de alvo impede eventos de filhos.
-            if (e.target === e.currentTarget && (e.animationName === 'gd-drawer-strip-out' || (variant === 'dialog' && e.animationName === 'gd-fade-out'))) runExit();
+            if (e.target === e.currentTarget && (e.animationName === 'gd-drawer-strip-out' || (variant === 'dialog' && e.animationName === 'gd-fade-out'))) presence.runExit();
           }}>
           <div className="il-drawer__panels flex h-full min-h-0">
             {/* Painel base (agendamento): recua/atenua quando o secundário abre.
@@ -1514,8 +1562,17 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
       const w = layerRef?.current?.offsetWidth || 0;
       const h = layerRef?.current?.offsetHeight || 0;
       const margin = 8;
+      // LIMITES VISÍVEIS. A camada é montada no dialog modal aberto mais recente (LayerPortal), e esse
+      // dialog recorta o overflow. Medir flip/clamp contra a JANELA deixava o calendário do DatePicker
+      // dentro de Novo agendamento cortado na borda do dialog. Dentro de dialog, o limite é o do dialog.
+      const hostRect = (layerRef?.current?.closest('dialog[open]') as HTMLElement | null)?.getBoundingClientRect();
+      const vb = hostRect
+        ? { left: hostRect.left, top: hostRect.top, right: hostRect.right, bottom: hostRect.bottom }
+        : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
       let top = a.bottom + offset;
       let left = a.left;
+      // Virou para cima? Então o clamp inferior não pode empurrá-la de volta sobre o gatilho.
+      let flipped = false;
       if (side === 'bottom-end') left = a.right - w;
       if (side === 'top-start') top = a.top - h - offset;
       if (side === 'right-start' || side === 'left-start') {
@@ -1532,8 +1589,8 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
         const gap = offset;
         const toLeft = a.left - gap - w;
         const toRight = a.right + gap;
-        const fitsLeft = toLeft >= margin;
-        const fitsRight = toRight + w <= window.innerWidth - margin;
+        const fitsLeft = toLeft >= vb.left + margin;
+        const fitsRight = toRight + w <= vb.right - margin;
         const preferLeft = side === 'left-start';
         top = a.top;
         if (preferLeft ? fitsLeft : fitsRight) left = preferLeft ? toLeft : toRight;
@@ -1545,15 +1602,19 @@ function useAnchoredLayer(open: boolean, anchorRef: React.RefObject<HTMLElement 
           left = preferLeft ? a.right : a.left;
           const below = a.bottom + gap;
           const above = a.top - h - gap;
-          top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;
+          if (h && below + h > vb.bottom - margin && above >= vb.top) { top = above; flipped = true; } else top = below;
         }
       }
       if (side === 'bottom-start' || side === 'bottom-end') {
         // Sem espaço abaixo (e com espaço acima) → abre para cima.
-        if (h && top + h > window.innerHeight - margin && a.top - h - offset > margin) top = a.top - h - offset;
+        // Cabe acima SEM sobrepor o gatilho (vb.top, não vb.top+margem): a margem interna do dialog é
+        // respiro, não motivo para cobrir o campo. Medido: 1px de diferença deixava o calendário sobre a data.
+        if (h && top + h > vb.bottom - margin && a.top - h - offset >= vb.top) { top = a.top - h - offset; flipped = true; }
       }
-      left = Math.max(margin, Math.min(left, window.innerWidth - Math.max(w, 0) - margin));
-      top = Math.max(margin, Math.min(top, Math.max(margin, window.innerHeight - h - margin)));
+      left = Math.max(vb.left + margin, Math.min(left, vb.right - Math.max(w, 0) - margin));
+      top = flipped
+        ? Math.min(top, Math.max(vb.top, vb.bottom - h - margin))
+        : Math.max(vb.top + margin, Math.min(top, Math.max(vb.top + margin, vb.bottom - h - margin)));
       // GANCHO DE HOMOLOGAÇÃO (leitura apenas): registra a última medição no
       // próprio elemento posicionado. Sem isso, a única forma de conferir a
       // geometria num teste é re-medir por fora — que foi justamente como o
@@ -2106,8 +2167,10 @@ export function overlayMotionMs(token: string, fallback: number): number {
   }
 }
 
-export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus }: {
+export function Dialog({ open, onClose, title, subtitle, children, footer, dismissGuard, label, width = '560px', returnFocus, onExited }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string;
+  /** Chamado quando a saída termina (superfície já fora da tela). Nunca na montagem. */
+  onExited?: () => void;
   children: React.ReactNode; footer?: React.ReactNode; dismissGuard?: DismissGuardState; label?: string;
   /** Event that opened a central modal when its hover action unmounts. */
   returnFocus?: React.RefObject<HTMLElement | null>;
@@ -2124,29 +2187,17 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
   // Dialog do DS não pode ser a porta de fuga de um formulário sujo.
   const guard = useOverlayDismissGuard();
   const token = useRef({});
-  // SAÍDA ANIMADA (contrato único de overlay): o dialog fica montado com
-  // `data-closing` durante `--gd-motion-dialog-out` e só então avisa o pai.
-  // Sem isso a saída era um corte seco (CE/GD: "nada pode simplesmente sumir").
-  const [closing, setClosing] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
-  const animatedClose = () => {
-    if (closeTimer.current) return;
-    const ms = overlayMotionMs('--gd-motion-dialog-out', 150);
-    if (ms === 0) { onClose(); return; }
-    setClosing(true);
-    closeTimer.current = setTimeout(() => { closeTimer.current = undefined; setClosing(false); onClose(); }, ms);
-  };
-  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, animatedClose);
+  // Presença e saída: contrato único (useOverlayPresence com exit). Pai controla `open`;
+  // a saída (X, Escape, backdrop, pai) anima `--gd-motion-dialog-out` antes de sair.
+  const presence = useOverlayPresence(open, onExited, { exitMs: () => overlayMotionMs('--gd-motion-dialog-out', 150), onClose });
+  const { present, closing, session } = presence;
+  const requestClose = (reason: DismissReason) => guard.requestClose(reason, dismissGuard, presence.requestExit);
   // Escape/teclado leem SEMPRE o requestClose da renderização atual (o efeito
-  // de abertura roda uma vez por `open`; sem ref, lia um onClose/guard antigos).
+  // de abertura roda uma vez por sessão; sem ref, leria um guard antigo).
   const requestCloseRef = useRef(requestClose);
   requestCloseRef.current = requestClose;
-  useEffect(() => () => clearTimeout(closeTimer.current), []);
   useEffect(() => {
-    if (!open) return;
-    clearTimeout(closeTimer.current);
-    closeTimer.current = undefined;
-    setClosing(false);
+    if (!present) return;
     const prev = document.activeElement as HTMLElement | null;
     lockBodyScroll(token.current);
     const node = ref.current;
@@ -2168,10 +2219,12 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
       else if (returnFocus?.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  if (!open) return null;
+  }, [present, session]);
+  // Desmonta só depois da saída (present=false), nunca no quadro em que open cai.
+  if (!present) return null;
   return createPortal(
     <div
+      key={session}
       className="gd-dialog-backdrop"
       data-closing={closing || undefined}
       onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose('backdrop'); }}
@@ -2184,6 +2237,7 @@ export function Dialog({ open, onClose, title, subtitle, children, footer, dismi
         data-closing={closing || undefined}
         className="gd-dialog"
         style={width ? ({ '--gd-dialog-w': width } as React.CSSProperties) : undefined}
+        onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-dialog-out') presence.runExit(); }}
       >
         <div className="gd-dialog__header">
           <div className="min-w-0">
@@ -2275,52 +2329,12 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
-  /* Presença (mesmo contrato do Drawer): ao `open` virar false a superfície
-     MANTÉM-SE montada até a saída terminar; só então desmonta. Antes, `!open`
-     retornava null no mesmo quadro e o painel sumia sem animação. */
-  const [present, setPresent] = useState(open);
-  const [closing, setClosing] = useState(false);
-  // Saída em curso: true desde o início da animação até a finalização pelo `open`.
-  const exiting = useRef(false);
-  const onExitedRef = useRef(onExited);
-  onExitedRef.current = onExited;
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  // Conclusão da SAÍDA: roda no `animationend` do próprio painel (a animação é o relógio real);
-  // o timer só é rede de segurança. Antes, um timer de 170 ms desmontava o painel no meio do
-  // deslocamento (≈44% do curso, medido em quadros a 30 fps).
-  const exitFinish = useRef<(() => void) | null>(null);
-  const runExit = () => { const f = exitFinish.current; exitFinish.current = null; if (f) { clearTimeout(timer.current); f(); } };
+  /* Presença e saída: contrato único (useOverlayPresence com exit). Painel = token side-modal-out.
+     `instant` (PR #69 · R7, escopado ao detalhe da Agenda) zera a duração: o hook desmonta sem animação. */
+  const presence = useOverlayPresence(open, onExited, { exitMs: () => (instant ? 0 : overlayMotionMs('--gd-motion-side-modal-out', 170)), onClose });
+  const { present, closing, session } = presence;
   const dismiss = useOverlayDismissGuard();
-  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
-  function closeNow() {
-    if (exiting.current) return;
-    const ms = instant ? 0 : overlayMotionMs('--gd-motion-side-modal-out', 170);
-    if (ms === 0) { onClose(); return; }
-    // A animação de saída roda com o painel montado; só então o pai é avisado.
-    // Quando o pai desmonta o componente (detalhe com `open` fixo), a finalização
-    // é o próprio desmonte; quando troca `open` para false, o efeito abaixo finaliza.
-    exiting.current = true;
-    setClosing(true);
-    exitFinish.current = () => onClose();
-    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
-  }
-  // Presença controlada pela prop `open`.
-  useEffect(() => {
-    if (open) { exiting.current = false; setPresent(true); setClosing(false); return; }
-    if (!present) return;
-    if (exiting.current) {
-      // Fechamento iniciado pelo usuário: a animação já rodou; finaliza agora.
-      exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.();
-      return;
-    }
-    const ms = instant ? 0 : overlayMotionMs('--gd-motion-side-modal-out', 170);
-    if (ms === 0) { setPresent(false); onExitedRef.current?.(); return; }
-    exiting.current = true; setClosing(true);
-    exitFinish.current = () => { exiting.current = false; setClosing(false); setPresent(false); onExitedRef.current?.(); };
-    timer.current = setTimeout(runExit, ms + EXIT_FALLBACK_MS);
-    return () => { clearTimeout(timer.current); exitFinish.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, presence.requestExit);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!present || !dialog) return;
@@ -2331,7 +2345,6 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
     pushOverlay(dialog);
     headingRef.current?.focus({ preventScroll: true });
     return () => {
-      clearTimeout(timer.current);
       popOverlay(dialog);
       dialog.close();
       unlockBodyScroll(dialog);
@@ -2342,11 +2355,12 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
       else if (fallback?.isConnected) fallback.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [present]);
+  }, [present, session]);
   if (!present) return null;
   return (
     <dialog
       ref={dialogRef}
+      key={session}
       className="gd-detail"
       data-closing={closing || undefined}
       data-instant={instant || undefined}
@@ -2360,7 +2374,7 @@ export function DetailSideModal({ open, onClose, title, subtitle, children, foot
       }}
     >
       <aside className="gd-detail__panel" style={width ? ({ '--gd-detail-w': width } as React.CSSProperties) : undefined}
-        onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-detail-out') runExit(); }}>
+        onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'gd-detail-out') presence.runExit(); }}>
         <header className="gd-detail__header">
           {icon && (
             <span className="gd-detail__icon" aria-hidden="true"><Icon n={icon} size={17} /></span>

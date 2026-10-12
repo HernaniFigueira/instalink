@@ -10,7 +10,7 @@ import { money } from '@/lib/utils';
 import type { OrganizationOverview } from '@/lib/organization-overview';
 import type { PeriodSpec, PeriodKey } from '@/lib/periods';
 import { DeleteEntityDialog, type DeleteTarget } from '@/components/dashboard/DeleteEntityDialog';
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Button, Field, Input, Select, useFrozenWhileClosed } from '@/components/ui';
 
 type Response = {organizations:OrganizationOverview[];period:PeriodSpec;referenceTimezone:string};
 export default function OrganizationPage() {
@@ -18,6 +18,7 @@ export default function OrganizationPage() {
   const [data,setData]=useState<Response|null>(null), [error,setError]=useState(''), [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(params.get('add')==='1'), [name,setName]=useState(''), [address,setAddress]=useState(''), [saving,setSaving]=useState(false), [saveError,setSaveError]=useState('');
   const [deleting,setDeleting]=useState<DeleteTarget|null>(null);
+  const deletingFrozen=useFrozenWhileClosed(!!deleting,deleting);
   const generation=useRef(0);
   const requested=params.get('organization');
   const org=requested?data?.organizations.find(o=>o.id===requested):data?.organizations[0];
@@ -70,6 +71,6 @@ export default function OrganizationPage() {
       </article>)}
     </section>
     {org.canDelete&&<section className="border border-[var(--danger-border)] rounded-lg p-4"><h2 className="font-semibold">Excluir organização</h2><p className="mb-3 text-sm">Somente quando não houver filiais ou dependências. Não exclui filiais em cascata.</p><Button variant="destructive-soft" onClick={()=>setDeleting({kind:'organization',id:org.id,organizationId:org.id,name:org.name})}>Verificar exclusão da organização</Button></section>}
-    {deleting&&<DeleteEntityDialog target={deleting} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deleting.kind;setDeleting(null);window.dispatchEvent(new Event('godoutor:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
+    {deletingFrozen&&<DeleteEntityDialog open={!!deleting} target={deletingFrozen} onClose={()=>setDeleting(null)} onDeleted={()=>{const kind=deletingFrozen.kind;setDeleting(null);window.dispatchEvent(new Event('godoutor:business-refresh'));if(kind==='organization')router.replace('/organizacao');else void load();}}/>}
   </div>;
 }

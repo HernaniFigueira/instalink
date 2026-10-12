@@ -256,9 +256,12 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
       searchQuery: 'Pessoa nova', openRegistration: true,
       allowSingleEligibleServicePrefill: false,
     });
-    // O cadastro real já abre no painel aninhado, sem transformar a busca em
-    // um contato sintético no agendamento.
-    expect(screen.getByText('Cadastrar novo paciente')).toBeTruthy();
+    // Missão 02: o cadastro real é a página /clientes/novo. A busca segue no
+    // rascunho da unidade (sessão), sem virar contato sintético no agendamento.
+    const key = Object.keys(sessionStorage).find((k) => k.startsWith('gd.booking-return.'));
+    expect(key).toBeTruthy();
+    expect(JSON.parse(sessionStorage.getItem(key!) || 'null')).toMatchObject({ query: 'Pessoa nova', contactId: '' });
+    sessionStorage.removeItem(key!);
   });
 
   it('2 · abrir o popover NÃO cria agendamento (nenhum POST antes da confirmação)', async () => {

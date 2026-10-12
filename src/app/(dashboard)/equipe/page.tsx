@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useOverlayDismissGuard, useUnsavedChangesGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch } from '@/components/ui';
+import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch, useFrozenWhileClosed } from '@/components/ui';
 import { cn, onlyDigits, parseMoneyToCents } from '@/lib/utils';
 import { permissionsFor } from '@/lib/permissions';
 import { roleLabel } from '@/lib/role-labels';
@@ -75,6 +75,7 @@ export default function EquipePage() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
+  const askDeleteFrozen = useFrozenWhileClosed(!!askDelete, askDelete);
   // Clinical OS — painel único ADICIONAR PESSOA (sem chooser)
   const [showAdd, setShowAdd] = useState(false);
   const [editEntry, setEditEntry] = useState<any>(null);
@@ -1034,11 +1035,12 @@ export default function EquipePage() {
           {navigationGuard.dialog}
       </Drawer>
 
-      {askDelete && (
+      {askDeleteFrozen && (
         <DeleteSheet
-          name={askDelete.name}
+          open={!!askDelete}
+          name={askDeleteFrozen.name}
           kindLabel="profissional"
-          blocked={askDelete.blocked}
+          blocked={askDeleteFrozen.blocked}
           onDeactivate={doDeactivatePro}
           onConfirm={doDeletePro}
           onClose={() => setAskDelete(null)}

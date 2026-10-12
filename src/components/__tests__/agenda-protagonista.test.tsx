@@ -289,7 +289,11 @@ describe('CTA, Filtros e Fila continuam abrindo os fluxos existentes', () => {
     // A sequência continua legível nos rótulos numerados do formulário.
     expect(texto).toContain('Cliente');
     expect(texto).toContain('Serviço');
-    expect(texto).toContain('Data');
+    // Missão 03 (fluxo progressivo): profissional e data só entram depois do
+    // serviço. Antes disso, o cabeçalho mostra a data pré-preenchida e uma dica
+    // diz o próximo passo — o campo Data não aparece vazio nem fora de ordem.
+    expect(texto).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    expect(dialog.querySelector('[data-progressive-hint="service"]')).toBeTruthy();
   });
 
   it('10. Filtros continua abrindo (popover com Status · Serviços · Profissional)', async () => {

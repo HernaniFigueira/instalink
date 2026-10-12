@@ -26,14 +26,14 @@ describe('P0-3 · veterinária exige pet quando o tutor já tem pets', () => {
     expect(api).toContain('!params.petId');
   });
 
-    it('NewBookingSheet: pet obrigatório; cadastro de pet vive no NewClientSheet unificado', () => {
+    it('NewBookingSheet: pet obrigatório; cadastro de pet vive na página de cliente unificada', () => {
     const sheet = read('src/components/dashboard/NewBookingSheet.tsx');
     expect(sheet).toContain('data-vet-pet-empty');
     expect(sheet).toContain('Pet (paciente)');
     expect(sheet).toContain('Selecione o pet…');
     expect(sheet).toContain('escolha o pet (paciente)');
-    // Cadastro unificado tutor+pet (fechamento Fase 2): fora do form temporário.
-    expect(sheet).toContain('NewClientSheet');
+    // Cadastro unificado tutor+pet (Missão 02): a página /clientes/novo, fora do agendamento.
+    expect(sheet).toContain('newClientFromBookingHref');
     const reg = read('src/components/dashboard/NewClientSheet.tsx');
     expect(reg).toContain('Adicionar pet');
     expect(reg).toContain('Salvar tutor e pet');

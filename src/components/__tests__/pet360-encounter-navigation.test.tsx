@@ -23,6 +23,10 @@ import type { EncounterRow } from '@/components/dashboard/EncounterSheet';
 
 const apiGetMock = vi.fn();
 vi.mock('@/lib/api-client', () => ({ apiGet: (...args: unknown[]) => apiGetMock(...args) }));
+// Contrato único (R9): a própria Pet 360 navega ao atendimento depois da saída. O roteador é o único
+// efeito observado — o consumidor não passa mais `onOpenEncounter`/`onExited` (ver Pet360Sheet).
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: pushMock }) }));
 
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 
@@ -53,10 +57,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-/** Replica o padrão real de ClientProfileDrawer: linha → pendência → fecha → navega em onExited. */
-function Harness({ onNavigate }: { onNavigate: (id: string) => void }) {
+/** Consumidor mínimo: só `open`/`onClose`. A navegação é responsabilidade da Pet 360. */
+function Harness() {
   const [open, setOpen] = useState(true);
-  const [pending, setPending] = useState<string | null>(null);
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>reabrir ficha</button>
@@ -66,8 +69,6 @@ function Harness({ onNavigate }: { onNavigate: (id: string) => void }) {
         businessId="biz-1"
         pet={pet}
         tutorName="Bernardo Almeida"
-        onOpenEncounter={(row) => { setPending(row.id); setOpen(false); }}
-        onExited={() => { if (pending) { const id = pending; setPending(null); onNavigate(id); } }}
       />
     </>
   );
@@ -81,22 +82,22 @@ async function openAtendimentos() {
 
 describe('Pet 360 → Atendimento · abertura, fechamento e navegação (A-06)', () => {
   it('abertura: a aba Atendimentos lista o registro do pet', async () => {
-    render(<Harness onNavigate={vi.fn()} />);
+    render(<Harness />);
     expect(await openAtendimentos()).toBeTruthy();
   });
 
   it('navegação: o atendimento abre depois da saída, exatamente uma vez', async () => {
-    const onNavigate = vi.fn();
-    render(<Harness onNavigate={onNavigate} />);
+    pushMock.mockClear();
+    render(<Harness />);
     fireEvent.click(await openAtendimentos());
     // Durante a saída a navegação ainda não aconteceu.
-    expect(onNavigate).not.toHaveBeenCalled();
-    await waitFor(() => expect(onNavigate).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    expect(onNavigate).toHaveBeenCalledWith('enc-thor-1');
+    expect(pushMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(pushMock).toHaveBeenCalledWith(expect.stringContaining('/atendimento/enc-thor-1'));
   });
 
   it('fechamento: a ficha permanece montada durante a saída e sai do DOM ao terminar', async () => {
-    render(<Harness onNavigate={vi.fn()} />);
+    render(<Harness />);
     fireEvent.click(await openAtendimentos());
     // Logo após o pedido de fechamento a superfície ainda existe (animação de saída),
     // em vez de desaparecer no mesmo quadro como antes da correção.
@@ -107,7 +108,7 @@ describe('Pet 360 → Atendimento · abertura, fechamento e navegação (A-06)',
   });
 
   it('retorno: após a saída o overlay não bloqueia a interface', async () => {
-    render(<Harness onNavigate={vi.fn()} />);
+    render(<Harness />);
     fireEvent.click(await openAtendimentos());
     await waitFor(() => expect(document.querySelector('dialog.gd-detail')).toBeNull(), { timeout: 2000 });
     // Nada de backdrop/diálogo residual; o gatilho externo continua acionável.
@@ -116,18 +117,18 @@ describe('Pet 360 → Atendimento · abertura, fechamento e navegação (A-06)',
   });
 
   it('fechamento sem atendimento escolhido: não navega', async () => {
-    const onNavigate = vi.fn();
-    render(<Harness onNavigate={onNavigate} />);
+    pushMock.mockClear();
+    render(<Harness />);
     await screen.findByRole('tab', { name: /Atendimentos/ });
     fireEvent.click(screen.getByRole('button', { name: /Fechar Thor/i }));
     await waitFor(() => expect(document.querySelector('dialog.gd-detail')).toBeNull(), { timeout: 2000 });
     await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
-    expect(onNavigate).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it('reabertura durante a saída mantém a ficha aberta (sem desmontar)', async () => {
-    const onNavigate = vi.fn();
-    render(<Harness onNavigate={onNavigate} />);
+    pushMock.mockClear();
+    render(<Harness />);
     fireEvent.click(await openAtendimentos());
     // Reabre antes da saída terminar: a superfície continua aberta (sem desmontar).
     fireEvent.click(screen.getByRole('button', { name: 'reabrir ficha' }));

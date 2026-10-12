@@ -13,33 +13,17 @@ import { canAccessBooking } from '@/lib/access-core';
 import { canAccessLead, canAccessTask, isLinkedContact, isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { pushAudit } from '@/lib/audit';
 import {
-  createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions, taskDueLabel,
+  createTaskTx, openTasks, setTaskStatusTx, summarizeTasks, taskAssigneeOptions,
 } from '@/lib/automation/tasks';
 import { validateAssignedUser } from '@/lib/pipeline';
 import { todayISO } from '@/lib/tz';
+import { taskView } from '@/lib/task-view';
 import type { Task } from '@/lib/types';
 
+// A montagem da visão (inclui paciente e solicitante, só leitura) vive em
+// src/lib/task-view.ts, testável sem a rota.
 function view(db: any, t: Task) {
-  // Toda referência é lida DENTRO da unidade da tarefa: um vínculo que não é
-  // dali nunca vira nome exibido (defesa em profundidade — a criação já recusa).
-  const lead = t.leadId ? (db.leads || []).find((l: any) => l.id === t.leadId && l.businessId === t.businessId) : null;
-  const booking = t.bookingId ? (db.bookings || []).find((b: any) => b.id === t.bookingId && b.businessId === t.businessId) : null;
-  // A3.4 fix (fechamento do B5): a ficha da pessoa mostra o contato — a view
-  // devolve a quem a tarefa está amarrada para a equipe não ficar adivinhando.
-  const contact = t.customerId
-    ? (db.contacts || []).find((c: any) => (c.id === t.customerId || c.customerId === t.customerId) && c.businessId === t.businessId)
-    : null;
-  const assignee = t.assignedUserId ? (db.users || []).find((u: any) => u.id === t.assignedUserId) : null;
-  return {
-    ...t,
-    dueLabel: taskDueLabel(t.dueAt, todayISO()),
-    leadName: lead?.name || '',
-    bookingLabel: booking ? `${booking.date.split('-').reverse().join('/')} ${booking.time}` : '',
-    contactId: contact?.id || '',
-    contactName: contact?.name || t.customerId && booking?.customerName || '',
-    assigneeName: assignee?.name || '',
-    fromAutomation: t.createdBy === 'automation',
-  };
+  return taskView(db, t, todayISO());
 }
 
 export async function GET(req: NextRequest) {

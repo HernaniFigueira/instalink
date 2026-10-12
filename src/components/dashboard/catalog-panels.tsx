@@ -25,12 +25,14 @@ import { searchVetCatalog, VET_CATALOG, durationSuggestionLabel } from '@/lib/ve
 import { serviceProfessionalMode } from '@/lib/booking';
 
 // ── Confirmação de exclusão (em sheet, nunca confirm() nativo) ──
-export function DeleteSheet({ name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
+export function DeleteSheet({ open = true, name, kindLabel, blocked, onDeactivate, onConfirm, onClose }: {
+  /** Controlado pelo pai: a saída anima antes do desmonte. Omitido = aberto. */
+  open?: boolean;
   name: string; kindLabel: string; blocked: boolean;
   onDeactivate: () => void; onConfirm: () => void; onClose: () => void;
 }) {
   return (
-    <Drawer open onClose={onClose} title={`Excluir ${kindLabel}`} width="max-w-md">
+    <Drawer open={open} onClose={onClose} title={`Excluir ${kindLabel}`} width="max-w-md">
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-xl p-6 space-y-3">
         <h3 className="font-semibold text-lg">Excluir {kindLabel} “{name}”?</h3>
         {blocked ? (

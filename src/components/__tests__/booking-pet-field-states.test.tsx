@@ -18,6 +18,12 @@ import { apiGet } from '@/lib/api-client';
 import { NewBookingSheet } from '../dashboard/NewBookingSheet';
 
 type Resp = { ok: boolean; status: number; data: any };
+// Novo agendamento navega para /clientes/novo pelo App Router (Missão 02).
+// Este teste monta o sheet isoladamente: o router é um stub sem efeito.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, prefetch: () => {} }),
+}));
+
 const ok = (data: any): Resp => ({ ok: true, status: 200, data });
 const fail = (status: number): Resp => ({ ok: false, status, data: { error: 'falha' } });
 

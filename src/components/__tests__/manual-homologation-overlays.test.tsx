@@ -11,6 +11,12 @@ import type { AnamneseResponse, AnamneseTemplate, Pet } from '@/lib/types';
 
 vi.mock('@/lib/api-client', () => ({ apiGet: vi.fn(), apiSend: vi.fn() }));
 
+// Novo agendamento navega para /clientes/novo pelo App Router (Missão 02).
+// Este teste monta o sheet isoladamente: o router é um stub sem efeito.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, prefetch: () => {} }),
+}));
+
 const pet: Pet = {
   id: 'pet-1', businessId: 'biz-1', tutorId: 'contact-1', name: 'Nina', photo: '',
   species: 'gato', breed: '', sex: '', birthDate: '', weightKg: 0, notes: '', active: true,

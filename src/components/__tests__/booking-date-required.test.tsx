@@ -18,6 +18,12 @@ import { NewBookingSheet } from '../dashboard/NewBookingSheet';
 
 vi.mock('@/lib/api-client', () => ({ apiGet: vi.fn(), apiSend: vi.fn() }));
 
+// Novo agendamento navega para /clientes/novo pelo App Router (Missão 02).
+// Este teste monta o sheet isoladamente: o router é um stub sem efeito.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, prefetch: () => {} }),
+}));
+
 const service = {
   id: 'svc-1', businessId: 'biz-1', categoryId: '', name: 'Consulta', description: '', image: '',
   price: 0, durationMin: 30, bookable: true, active: true, professionalIds: ['pro-1'],

@@ -76,15 +76,17 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(css).toContain('height: 100dvh');
   });
 
-  it('booking sheet expands responsively while retaining the shared sheet and side panel', () => {
+  it('booking sheet is a central modal; the shared sheet and side panel primitives remain for other flows', () => {
+    // Missão 02: o cadastro de paciente saiu do Novo agendamento (é a página /clientes/novo).
+    // O modal continua central; a composição lateral segue existindo no primitivo compartilhado.
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
     const drawer = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    // Sozinho: modal central com largura do token. Aninhado: o modal expande.
     expect(booking).toContain('variant="dialog"');
     expect(booking).toContain('var(--gd-booking-modal-w)');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
-    expect(booking).toContain('sideTitle="Cadastrar novo paciente"');
+    expect(booking).not.toContain('WORKSPACE_SHEET_SIZES.nestedForm');
+    expect(booking).not.toContain('sideTitle="Cadastrar novo paciente"');
+    expect(booking).toContain("router.push(newClientFromBookingHref(businessId))");
     expect(css).toContain('@media (max-width: 1359px)');
     // Composição 50/50: os DOIS painéis usam o mesmo preset compartilhado.
     expect(drawer).toContain('WORKSPACE_NESTED_PANEL');

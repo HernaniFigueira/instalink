@@ -181,7 +181,6 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
   if (pet360) lastPet360Ref.current = pet360;
   const pet360Ctx = pet360 ?? lastPet360Ref.current;
   // "Abrir atendimento" a partir do Pet 360: o atendimento só abre depois que a ficha saiu.
-  const [pendingEncounterId, setPendingEncounterId] = useState<string | null>(null);
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -941,8 +940,6 @@ function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, on
           pet={pet360Ctx}
           tutorName={person.name}
           tutorPhone={person.phone}
-          onOpenEncounter={(row) => { setPendingEncounterId(row.id); setPet360(null); }}
-          onExited={() => { if (pendingEncounterId) { const id = pendingEncounterId; setPendingEncounterId(null); openEncounter({ id }); } }}
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}

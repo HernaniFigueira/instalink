@@ -35,7 +35,7 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, DatePicker, Select, SelectMenu, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
+import { Avatar, Badge, Drawer, useFrozenWhileClosed, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, DatePicker, Select, SelectMenu, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
@@ -47,9 +47,11 @@ import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { BookingEditDialog } from '@/components/dashboard/BookingEditDialog';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { clearBookingReturn, readBookingReturn } from '@/lib/booking-return';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { defaultAgendaView, readAgendaViewPreference, writeAgendaViewPreference, type AgendaView } from '@/lib/agenda-view-preference';
 import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
@@ -614,8 +616,13 @@ export default function AgendaPage() {
   const params = useSearchParams();
   const router = useRouter();
   const businessId = params.get('b') || '';
-  const [defaultView, setDefaultView] = useState<View>('day');
-  useEffect(() => { if (window.matchMedia('(max-width: 767px)').matches) setDefaultView('list'); }, []);
+  const { permissions, role, professionalId, userId } = usePanelPermissions();
+  // Escolha salva desta conta (navegador). Sem ela: padrão por papel/dispositivo (ver defaultAgendaView).
+  const [savedView, setSavedView] = useState<AgendaView | ''>('');
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => { setIsMobile(window.matchMedia('(max-width: 767px)').matches); }, []);
+  useEffect(() => { setSavedView(readAgendaViewPreference(userId)); }, [userId]);
+  const defaultView = (savedView || defaultAgendaView({ isMobile, professionalScoped: !!professionalId })) as View;
   const view = (['day','week','month','list'].includes(params.get('view') || '') ? params.get('view') : defaultView) as View;
   const dataParam = params.get('data') || '';
   const focus = /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO();
@@ -630,6 +637,12 @@ export default function AgendaPage() {
     window.history.pushState(null, '', url.pathname + url.search);
   }
   const setView = (value: View) => setPresentation({view:value});
+  /** Escolha EXPLÍCITA do usuário (barra Dia/Semana/Mês/Lista): vira a preferência desta conta. */
+  const chooseView = (value: View) => {
+    writeAgendaViewPreference(userId, value as AgendaView);
+    setSavedView(value as AgendaView);
+    setView(value);
+  };
   const setFocus = (value: string) => setPresentation({data:value});
   const setStatusFilter = (value: string) => setPresentation({status:value});
   const [filterOpen, setFilterOpen] = useState(false);
@@ -662,6 +675,10 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  // Presença do detalhe: o pai controla `open`; o agendamento só sai do DOM em
+  // `onExited` (depois da saída animada). Abrir = agendamento + open.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const openDetail = useCallback((b: Booking) => { setDetail(b); setDetailOpen(true); }, []);
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
   /** true = o detalhe abre com o formulário de reagendamento já aberto
    *  (vem do "Reagendar" do resumo do evento). O clique simples nunca ativa. */
@@ -709,11 +726,29 @@ export default function AgendaPage() {
     setNovoHandled(true);
     setCreating({ date: '', time: '', professionalId: '', name: '', phone: '' });
   }, [novoHandled, businessId, params]);
+  // Missão 02 — volta do cadastro completo (/clientes/novo?from=agenda): reabre o
+  // agendamento em andamento do rascunho da unidade, com o tutor/pet recém-criados.
+  // Nada é criado aqui: a confirmação e a revalidação do horário são do sheet/servidor.
+  const [retomarHandled, setRetomarHandled] = useState(false);
+  const restoredBookingRef = useRef(false);
+  useEffect(() => {
+    if (retomarHandled || !businessId || params.get('retomar') !== 'agendamento') return;
+    setRetomarHandled(true);
+    const draft = readBookingReturn(businessId);
+    if (!draft) return;
+    restoredBookingRef.current = true;
+    setCreating({
+      date: draft.date, time: draft.time, professionalId: draft.professionalId,
+      selectedDurationMin: draft.durationMin || undefined,
+      contactId: draft.contactId, name: draft.name, phone: draft.phone,
+      serviceId: draft.serviceId, searchQuery: draft.contactId ? '' : draft.query,
+      petId: draft.petId, note: draft.note, vetMode: draft.vetMode,
+    });
+  }, [retomarHandled, businessId, params]);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
   // a fila continua operável por quem só faz balcão, sem abrir o conteúdo.
-  const { permissions, role } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // Reabrir é de quem administra — a MESMA régua do servidor (nada de a tela
   // mostrar um botão que o servidor vai recusar). Ter a permissão de
@@ -731,6 +766,10 @@ export default function AgendaPage() {
   const [resizeAsk, setResizeAsk] = useState<{ booking: Booking; end: string } | null>(null);
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
+  // Último valor enquanto a superfície existe: a saída animada continua mostrando o conteúdo.
+  const resizeFrozen = useFrozenWhileClosed(!!resizeAsk, resizeAsk);
+  const dropFrozen = useFrozenWhileClosed(!!dropAsk, dropAsk);
+  const editFrozen = useFrozenWhileClosed(!!editBooking, editBooking);
   const [saving, setSaving] = useState(false);
   const [dropChecking, setDropChecking] = useState(false);
 
@@ -752,6 +791,21 @@ export default function AgendaPage() {
   /** Botão do evento que abriu o detalhe — recebe o foco de volta no fechamento
    *  quando o gatilho do clique foi um CTA do HoverCard (que desmonta junto). */
   const detailTriggerRef = useRef<HTMLElement | null>(null);
+  // Deep-link "Abrir" da Pet 360 (aba Agenda): `?booking=<id>` abre o detalhe DESTE agendamento,
+  // e não só o dia. Abre uma vez por id e tira o parâmetro da URL (um refresh não reabre).
+  const bookingParam = params.get('booking') || '';
+  const openedBookingParamRef = useRef('');
+  useEffect(() => {
+    if (!bookingParam || openedBookingParamRef.current === bookingParam) return;
+    const target = bookings.find((x) => x.id === bookingParam);
+    if (!target) return;
+    openedBookingParamRef.current = bookingParam;
+    detailTriggerRef.current = null;
+    setEditBooking(null); setDetailReschedule(false); openDetail(target);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('booking');
+    window.history.replaceState(null, '', url.pathname + url.search);
+  }, [bookings, bookingParam]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
   // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
@@ -1508,7 +1562,7 @@ export default function AgendaPage() {
     if (step.effect === 'open-detail') {
       // CLIQUE SIMPLES → detalhe. Nunca inicia reagendamento.
       const booking = bookingsRef.current.get(id);
-      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); setDetail(booking); }
+      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); openDetail(booking); }
       return;
     }
     if (step.effect === 'drop') finishDrop(id, { x: e.clientX, y: e.clientY });
@@ -1542,7 +1596,7 @@ export default function AgendaPage() {
     const last = lastPointerUpRef.current;
     if (last.id === id && Date.now() - last.at < 700) return;
     const booking = bookingsRef.current.get(id);
-    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); setDetail(booking); }
+    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); openDetail(booking); }
   }, []);
 
   /**
@@ -1616,7 +1670,7 @@ export default function AgendaPage() {
     const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
     if (!b) return [];
     const items: MenuItem[] = [
-      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); setDetail(b); } },
+      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); openDetail(b); } },
     ];
     if (rescheduleDecision(b.status).kind === 'move') {
       items.push({
@@ -1649,7 +1703,7 @@ export default function AgendaPage() {
     if (rescheduleDecision(b.status).kind === 'move') {
       ops.push({
         id: 'reagendar', label: 'Reagendar', icon: 'sync',
-        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); setDetail(b); },
+        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); openDetail(b); },
       });
     }
     ops.forEach((item, i) => items.push({ ...item, separatorBefore: i === 0 }));
@@ -2053,7 +2107,7 @@ export default function AgendaPage() {
           action={(
             <>
               {pendencies.slice(0, 4).map((b) => (
-                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
+                <button key={b.id} onClick={() => openDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
                   {formatDateBR(b.date)} {b.time} · {b.petName || b.customerName}
                 </button>
               ))}
@@ -2149,7 +2203,7 @@ export default function AgendaPage() {
               className="ag-view-select w-full sm:w-[150px]"
               value={view}
               options={AGENDA_VIEW_OPTIONS}
-              onChange={(v) => { endDrag(); setView(v as View); }}
+              onChange={(v) => { endDrag(); chooseView(v as View); }}
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
@@ -2217,7 +2271,7 @@ export default function AgendaPage() {
               <p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p>
             </div>
           )}
-          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); setDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); openDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
             <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
@@ -2269,7 +2323,7 @@ export default function AgendaPage() {
                       <button
                         key={b.id}
                         type="button"
-                        onClick={(e) => { detailTriggerRef.current = e.currentTarget as HTMLElement; setEditBooking(null); setDetailReschedule(false); setDetail(b); }}
+                        onClick={(e) => { detailTriggerRef.current = e.currentTarget as HTMLElement; setEditBooking(null); setDetailReschedule(false); openDetail(b); }}
                         aria-label={`${b.time} · ${b.customerName} · ${svc}`}
                         title={`${b.time} · ${b.customerName} · ${svc}`}
                         className="flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand-fg)]"
@@ -2446,7 +2500,7 @@ export default function AgendaPage() {
                 /* A regra do serviço (`professionalIds`) vai junto: a fila só
                    oferece quem ATENDE o serviço escolhido. */
                 services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [], professionalMode: (x as any).professionalMode }))}
-                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) openDetail(b); }}
                 onEncounter={(row) => router.push(encounterWorkspaceHref({ businessId, queueId: row.id, returnTo: `${window.location.pathname}${window.location.search}` }))}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
                 onClose={() => setShowQueue(false)}
@@ -2484,24 +2538,24 @@ export default function AgendaPage() {
           registro (o Material chama isso de alert dialog); estava em gaveta
           lateral, que é a geometria de LER o registro. A leitura continua no
           painel preso à direita (`.gd-detail`); a confirmação é central. */}
-      {resizeAsk && <Drawer open variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+      {resizeFrozen && <Drawer open={!!resizeAsk} variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => setResizeAsk(null)} dismissGuard={{ saving }} width="max-w-lg">
         <div className="p-5 space-y-3">
-          <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {durationLabel(timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time))}</p>
+          <p className="font-semibold">{resizeFrozen.booking.time}–{resizeFrozen.end} · {durationLabel(timeToMin(resizeFrozen.end) - timeToMin(resizeFrozen.booking.time))}</p>
           <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
           {dropError && <p role="alert" className="text-red-600 text-sm">{dropError}</p>}
           <div className="flex gap-2">
             <Button disabled={saving} onClick={async () => {
-              if (saving) return;
+              if (!resizeAsk || saving) return;
               setSaving(true); setDropError('');
               const res = await apiRequest<{ booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
                 '/api/bookings',
-                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }) },
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeFrozen.booking.id, resizeEnd: resizeFrozen.end }) },
                 { scope: 'action', area: 'Agenda' },
               );
               setSaving(false);
               if (!res.ok) { setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : res.message); return; }
               setResizeAsk(null);
-              if (res.data?.booking && res.data.booking.id === resizeAsk.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+              if (res.data?.booking && res.data.booking.id === resizeFrozen.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
               else void loadBookingsOnly();
             }}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
             <Button variant="secondary" disabled={saving} onClick={() => setResizeAsk(null)}>Cancelar</Button>
@@ -2510,23 +2564,23 @@ export default function AgendaPage() {
       </Drawer>}
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
-      {dropAsk && (
-        <Drawer open variant="dialog" dialogWidth="520px" onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+      {dropFrozen && (
+        <Drawer open={!!dropAsk} variant="dialog" dialogWidth="520px" onClose={() => setDropAsk(null)} dismissGuard={{ saving }} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
-            <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
-            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
+            <p className="font-semibold">{dropConfirmQuestion(dropFrozen.date, dropFrozen.time)}</p>
+            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropFrozen.booking.petName || dropFrozen.booking.customerName}</strong>{dropFrozen.booking.petName ? ` (tutor: ${dropFrozen.booking.customerName})` : ''} · {serviceName(dropFrozen.booking.serviceId)}</p>
             <p className="text-sm mt-1">
-              {formatDateBR(dropAsk.booking.date)} {dropAsk.booking.time} → <strong>{formatDateBR(dropAsk.date)} {dropAsk.time}</strong>
+              {formatDateBR(dropFrozen.booking.date)} {dropFrozen.booking.time} → <strong>{formatDateBR(dropFrozen.date)} {dropFrozen.time}</strong>
             </p>
             {(() => {
-              const decision = rescheduleDecision(dropAsk.booking.status);
+              const decision = rescheduleDecision(dropFrozen.booking.status);
               return decision.kind === 'recreate' ? (
                 <p className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2 mt-3">
-                  Este atendimento está {dropAsk.booking.status === 'completed' ? 'concluído' : dropAsk.booking.status === 'no_show' ? 'marcado como falta' : 'cancelado'}: o novo horário entra como <strong>novo agendamento pendente</strong>, preservando o histórico.
+                  Este atendimento está {dropFrozen.booking.status === 'completed' ? 'concluído' : dropFrozen.booking.status === 'no_show' ? 'marcado como falta' : 'cancelado'}: o novo horário entra como <strong>novo agendamento pendente</strong>, preservando o histórico.
                 </p>
               ) : (
                 <p className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2 mt-3">
-                  O mesmo atendimento muda de horário e mantém “{dropAsk.booking.status === 'pending' ? 'pendente' : 'confirmado'}”.
+                  O mesmo atendimento muda de horário e mantém “{dropFrozen.booking.status === 'pending' ? 'pendente' : 'confirmado'}”.
                 </p>
               );
             })()}
@@ -2693,7 +2747,10 @@ export default function AgendaPage() {
       )}
       {detail && (
         <BookingDetailSheet
+          key={detail.id}
           booking={detail}
+          open={detailOpen}
+          onExited={() => setDetail(null)}
           returnFocus={detailTriggerRef}
           startRescheduling={detailReschedule}
           timezone={bizTz}
@@ -2701,7 +2758,7 @@ export default function AgendaPage() {
           resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
-          onClose={() => { setDetail(null); setDetailReschedule(false); }}
+          onClose={() => { setDetailOpen(false); setDetailReschedule(false); }}
           /* Mudança estrutural (status/finalizar): atualiza dados, mantém
              sheets abertos — o fechamento é só onClose (ação do usuário). */
           onChanged={() => { void load(); }}
@@ -2709,9 +2766,10 @@ export default function AgendaPage() {
       )}
 
 
-      {editBooking && (
+      {editFrozen && (
         <BookingEditDialog
-          booking={editBooking}
+          open={!!editBooking}
+          booking={editFrozen}
           businessId={businessId}
           services={services}
           pros={pros}
@@ -2745,8 +2803,13 @@ export default function AgendaPage() {
             petId: sheetCtx.petId,
             note: sheetCtx.note,
           }}
-          onClose={() => { setCreating(null); setSelectedRange(null); }}
-          onCreated={() => { setSelectedRange(null); void load(); }}
+          onClose={() => { setCreating(null); setSelectedRange(null); restoredBookingRef.current = false; }}
+          onCreated={() => {
+            setSelectedRange(null);
+            // Só o agendamento que veio do rascunho consome o rascunho.
+            if (restoredBookingRef.current) { clearBookingReturn(businessId); restoredBookingRef.current = false; }
+            void load();
+          }}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { Drawer } from '@/components/ui';
 import { persistenceState } from '@/components/dashboard/OverlayDismissGuard';
@@ -27,11 +27,19 @@ function Harness({ initiallyDirty = false, side = false }: { initiallyDirty?: bo
 
 const backdrop = () => document.querySelector<HTMLElement>('.il-drawer [aria-hidden="true"]')!;
 const closeX = () => screen.getByRole('button', { name: 'Fechar' });
+// O Drawer só avisa o pai (onClose) quando a saída animada termina (animationend).
+function endDrawerExit() {
+  const strip = document.querySelector('.il-drawer__strip') as HTMLElement;
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: 'gd-drawer-strip-out' });
+  act(() => { strip.dispatchEvent(ev); });
+}
 
 describe('central overlay requestClose(reason)', () => {
   it('PRISTINE: backdrop fecha normalmente', () => {
     render(<Harness />);
     fireEvent.click(backdrop());
+    endDrawerExit();
     expect(screen.getByText('closed')).toBeTruthy();
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
@@ -61,6 +69,7 @@ describe('central overlay requestClose(reason)', () => {
     fireEvent.change(screen.getByLabelText('Observação'), { target: { value: 'descartar' } });
     fireEvent.click(closeX());
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    endDrawerExit();
     expect(screen.getByText('closed')).toBeTruthy();
   });
 
@@ -98,6 +107,7 @@ describe('central overlay requestClose(reason)', () => {
     fireEvent.click(backdrop());
     expect(screen.getByText('Descartar alterações não salvas?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    endDrawerExit();
     expect(screen.getByText('parent closed')).toBeTruthy();
   });
 

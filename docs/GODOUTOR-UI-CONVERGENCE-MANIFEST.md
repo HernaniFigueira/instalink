@@ -141,3 +141,49 @@ serve como prova isolada de posição; a prova de quadros é a do slowmo.
 - Papel Profissional em Agenda e Equipe: não testado nesta rodada. Recepção e Owner foram testados.
 - Análise de conflitos entre os sete sistemas de animação: inventariada (ver lista acima), consolidação para a onda 3.
 - Baselines "before" de 1024/768/390 não existem e não foram recriados. Before medido só para a Agenda (`709bcd3`). Before da Equipe é de leitura de código.
+
+## Motion consolidado · inventário verificado e próxima migração (2026-10-12)
+
+HEAD `3693cce` · BUILD_ID `ziqJSJv9c9NTASBI8dnhC` · Chromium real, build de produção, login real no QA isolado.
+
+### Mecanismos de presença e saída encontrados no código
+
+| Superfície | Implementação | Saída animada | Papel semântico proposto |
+|---|---|---|---|
+| `DetailSideModal` (`ui.tsx`) | presença interna (`present`/`closing`), `animationend` + timer de rede | sim (`gd-detail-out`, token 190/170 ms) | leitura, direita (referência) |
+| `Drawer` (`ui.tsx`) | presença interna própria, faixa `gd-drawer-strip-*` e variante `dialog` | sim | leitura/formulário, direita |
+| `Dialog` (`ui.tsx`) | presença interna própria, `gd-dialog-*` | sim | decisão central, modal |
+| `WorkspaceSheet` (`dashboard/WorkspaceSheet.tsx`) | presença própria, `ws-sheet-*` | sim | formulário longo com contexto |
+| `useOverlayPresence(open, onExited)` (`ui.tsx`) | contrato de montagem/sessão por consumidor, sobre `onExited` do `DetailSideModal` | depende do filho | consumidores: `ClientProfileDrawer`, `NewBookingSheet`, `Pet360Sheet` |
+| `Popover`, `HoverCard` | entrada `gd-layer-in`, sem saída animada | não | contextual ancorado |
+| `Disclosure`, peek | entrada apenas | não | auxiliar, não modal |
+
+Achado: **existem duas formas de presença para leitura lateral** (interna do `DetailSideModal` e `useOverlayPresence`) e uma terceira dentro do `Drawer`. Um hook novo de presença foi escrito e **descartado** nesta rodada, porque criaria um terceiro mecanismo. A consolidação deve partir de um único contrato, migrado consumidor por consumidor com regressão.
+
+### Ordem da migração (próxima rodada, sem atalho)
+
+1. Extrair o contrato de saída (presença, `closing`, guarda e desmonte em `onExited`/`animationend`) para um único módulo, mantendo o comportamento medido do `DetailSideModal`.
+2. Migrar `useOverlayPresence` para usar esse contrato, sem mudar a assinatura pública dos três consumidores.
+3. Migrar `Drawer` (Agenda 190 ms, Equipe 170 ms) e `Dialog`, com testes de X, Cancelar, Escape, backdrop, guarda, sucesso, reabertura e troca de contexto.
+4. Só depois alinhar `WorkspaceSheet` ao lateral canônico, e remover CSS legado apenas após validar cada consumidor.
+
+### Regressão do DetailSideModal (13 cenários, `reg-detail`)
+
+| Viewport | Preferência de movimento | Resultado |
+|---|---|---|
+| 1440x900 | no-preference | 13 PASS / 0 FAIL |
+| 390x844 | no-preference | 13 PASS / 0 FAIL |
+| 1024x768 | no-preference | 13 PASS / 0 FAIL |
+| 768x1024 | no-preference | 13 PASS / 0 FAIL |
+| 1440x900 | reduce | 13 PASS / 0 FAIL |
+
+Cenários: X, Escape, backdrop, Cancelar do reagendamento, guarda com horário escolhido, Continuar editando, Descartar, Salvar duração, reabertura, troca 10:00→11:00 e Escape durante a saída. Backdrop é N/A em 390 (painel ocupa 100%). Em `reduce` a saída desmonta em 1–23 ms; sem `reduce`, em ~195–330 ms.
+
+### Não feito nesta rodada (declarado)
+
+- Consolidação de `Drawer`, `Dialog`, `WorkspaceSheet` e `Popover`/`HoverCard`: inventariada, não migrada.
+- Prova de consistência em Cliente 360, Pet 360, Equipe e Configurações (entrada/saída, backdrop, foco, desktop e mobile).
+- Regressão de Recepção e Professional no motion; vídeo a 25 fps; matriz ABERTO/FECHADO em 1440/1024/768/390.
+- Padronização de formulários, campos, botões e tipografia: não iniciada.
+- Dashboard por papel e lotes B e C: não iniciados.
+- Esta rodada não declara aprovação visual humana. Estado: **NÃO APTO PARA HOMOLOGAÇÃO HUMANA** para a missão Frontend Convergence (motion consolidado pendente).

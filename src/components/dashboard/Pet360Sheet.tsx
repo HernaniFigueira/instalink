@@ -5,8 +5,9 @@
 // Ao clicar no pet (Greg) na agenda/detalhe: resumo do paciente,
 // atendimentos, agenda, anamnese e arquivos DO PET. Financeiro NÃO
 // é duplicado — só o link "Responsável financeiro: tutor".
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
@@ -14,6 +15,7 @@ import { apiGet } from '@/lib/api-client';
 import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
 import { formatDateBR } from '@/lib/tz';
 import { followUpDueDate } from '@/lib/encounters';
+import { encounterHref } from '@/lib/encounter-workspace';
 import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/types';
 
 type PetTab = 'resumo' | 'encounters' | 'agenda' | 'anamnese' | 'files' | 'notes';
@@ -26,17 +28,32 @@ function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemp
   return Object.entries(response.answers || {}).map(([id, value]) => ({ id, label: id, type: '', value }));
 }
 
-type Pet360SheetProps = { open?: boolean; onExited?: () => void } & Omit<Parameters<typeof Pet360SheetSurface>[0], 'open' | 'onExited'>;
+type Pet360SheetProps = { open?: boolean; onExited?: () => void } & Omit<Parameters<typeof Pet360SheetSurface>[0], 'open' | 'onExited' | 'onOpenEncounter'>;
 /**
  * Pet 360 — contrato público de PRESENÇA: `open` controlado pelo pai. A ficha
  * sai animada antes de desmontar (ver useOverlayPresence). `onExited` roda depois da saída
  * (ex.: abrir o atendimento só depois que o Pet 360 saiu da tela).
  */
 export function Pet360Sheet({ open = true, onExited, ...rest }: Pet360SheetProps) {
-  const { mounted, session, handleExited } = useOverlayPresence(open, onExited);
+  const router = useRouter();
+  // CONTRATO ÚNICO do histórico, igual em TODAS as origens (Cliente 360, Agenda → detalhe, …):
+  // clicar num atendimento fecha a Pet 360, espera a saída completa e só então abre o registro.
+  // Quem chama não decide nada disso — antes, o detalhe da Agenda não passava o callback e o
+  // histórico ficava sem ação. O destino fica em ref para o `onExited` ler sempre o valor atual.
+  const pendingRef = useRef<{ id: string; returnTo: string } | null>(null);
+  const { mounted, session, handleExited } = useOverlayPresence(open, () => {
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (pending) router.push(encounterHref(pending.id, rest.businessId, pending.returnTo));
+    onExited?.();
+  });
   const frozen = useFrozenWhileClosed(open, rest);
   if (!mounted) return null;
-  return <Pet360SheetSurface key={session} {...frozen} open={open} onExited={handleExited} />;
+  const openFromHistory = (row: EncounterRow) => {
+    pendingRef.current = { id: row.id, returnTo: `${window.location.pathname}${window.location.search}` };
+    rest.onClose();
+  };
+  return <Pet360SheetSurface key={session} {...frozen} open={open} onExited={handleExited} onOpenEncounter={openFromHistory} />;
 }
 
 function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName, tutorPhone, onOpenEncounter, onExited }: {
@@ -52,8 +69,8 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
   pet: Pet | null;
   tutorName: string;
   tutorPhone?: string;
-  /** Abre o atendimento completo (mesmo caminho do Paciente 360). */
-  onOpenEncounter?: (row: EncounterRow) => void;
+  /** Abre o atendimento completo (contrato único: ver Pet360Sheet). */
+  onOpenEncounter: (row: EncounterRow) => void;
 }) {
   const [tab, setTab] = useState<PetTab>('resumo');
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
@@ -247,14 +264,7 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
                 <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">Histórico clínico de {pet.name}</p>
                 {encounters.length === 0
                   ? <p className="text-sm text-[var(--text-muted)]">Nenhum atendimento registrado para este pet.</p>
-                  : onOpenEncounter
-                    ? <EncounterList rows={encounters} onOpen={onOpenEncounter} empty="" />
-                    : <ul className="space-y-2">{encounters.map((e) => (
-                      <li key={e.id} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                        <span className="text-xs font-semibold text-[var(--text-muted)] tabular-nums">{formatDateBR(e.date)}{e.time ? ` · ${e.time}` : ''}</span>
-                        <span className="block text-sm text-[var(--text)]">{e.evolution || e.complaint || e.serviceName}</span>
-                      </li>
-                    ))}</ul>}
+                  : <EncounterList rows={encounters} onOpen={onOpenEncounter} empty="" />}
               </div>
             )}
 
@@ -272,7 +282,7 @@ function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName
                             <span className="block text-xs text-[var(--text-muted)] truncate">{b.customerName}{b.status === 'completed' ? ' · concluído' : b.status === 'cancelled' ? ' · cancelado' : ''}</span>
                           </span>
                           <Link className="text-xs font-semibold text-[var(--brand-fg)] hover:underline shrink-0"
-                            href={`/agenda?b=${businessId}&data=${b.date}`}>Abrir</Link>
+                            href={`/agenda?b=${businessId}&view=day&data=${b.date}&booking=${encodeURIComponent(b.id)}`}>Abrir</Link>
                         </li>
                       ))}
                     </ul>

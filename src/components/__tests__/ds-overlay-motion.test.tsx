@@ -61,6 +61,14 @@ describe('overlayMotionMs · token CSS é a fonte da duração', () => {
   });
 });
 
+// jsdom não roda CSS animations: o fim da saída é o animationend do próprio dialog.
+function endDialogExit(el: Element | null) {
+  if (!el) throw new Error('dialog de saída ausente');
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: 'gd-dialog-out' });
+  act(() => { el.dispatchEvent(ev); });
+}
+
 describe('Dialog · saída animada', () => {
   it('fechar pelo X mantém o dialog montado com data-closing e só chama onClose ao fim', () => {
     const onClose = vi.fn();
@@ -75,7 +83,18 @@ describe('Dialog · saída animada', () => {
 
     act(() => { vi.advanceTimersByTime(149); });
     expect(onClose).not.toHaveBeenCalled();
+    endDialogExit(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem animationend, a rede de segurança (duração + folga) chama onClose uma única vez', () => {
+    const onClose = vi.fn();
+    render(<Dialog open onClose={onClose} title="Teste sem evento">corpo</Dialog>);
+    fireEvent.click(screen.getByRole('button', { name: /fechar/i }));
+    act(() => { vi.advanceTimersByTime(150 + 120 - 1); });
+    expect(onClose).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
+    act(() => { vi.advanceTimersByTime(1000); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -84,7 +103,8 @@ describe('Dialog · saída animada', () => {
     render(<Dialog open onClose={onClose} title="Teste Escape">corpo</Dialog>);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
-    act(() => { vi.advanceTimersByTime(200); });
+    expect(screen.getByRole('dialog').getAttribute('data-closing')).not.toBeNull();
+    endDialogExit(screen.getByRole('dialog'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

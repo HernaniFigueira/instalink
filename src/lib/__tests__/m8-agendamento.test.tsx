@@ -97,7 +97,7 @@ describe('§19–25 · overlay único que expande', () => {
   });
 });
 
-describe('§19–25 · NewClientForm embedded (cadastro rápido no lado)', () => {
+describe('§19–25 · NewClientForm (cadastro completo na página /clientes/novo)', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -111,9 +111,9 @@ describe('§19–25 · NewClientForm embedded (cadastro rápido no lado)', () =>
   it('traz o rodapé próprio com as strings travadas (tutor e pet)', () => {
     render(
       <NewClientForm
-        embedded businessId="biz-1" vetMode
+        businessId="biz-1" vetMode
         initialName="Tereza" initialPhone="21912345678"
-        onClose={() => {}} onSaved={() => {}}
+        onCancel={() => {}} onSaved={() => {}}
       />,
     );
     // §21 — o rápido em veterinária NASCE com o pet rápido ligado
@@ -129,21 +129,22 @@ describe('§19–25 · NewClientForm embedded (cadastro rápido no lado)', () =>
     const onSaved = vi.fn();
     render(
       <NewClientForm
-        embedded businessId="biz-1" vetMode={false}
+        businessId="biz-1" vetMode={false}
         initialName="Tereza Alves" initialPhone="21912345678"
-        onClose={() => {}} onSaved={onSaved}
+        onCancel={() => {}} onSaved={onSaved}
       />,
     );
     fireEvent.click(screen.getByText('Salvar cliente'));
-    await vi.waitFor(() => expect(onSaved).toHaveBeenCalledWith('cont-1', { contactId: 'cont-1' }));
+    // O contrato ganhou nome/WhatsApp gravados (o retorno ao agendamento usa os dados reais).
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalledWith('cont-1', expect.objectContaining({ contactId: 'cont-1' })));
   });
 
   it('valida o mínimo sem tocar na rede (nome/telefone)', async () => {
     const onSaved = vi.fn();
     render(
       <NewClientForm
-        embedded businessId="biz-1"
-        onClose={() => {}} onSaved={onSaved}
+        businessId="biz-1"
+        onCancel={() => {}} onSaved={onSaved}
       />,
     );
     fireEvent.click(screen.getByText('Salvar cliente'));

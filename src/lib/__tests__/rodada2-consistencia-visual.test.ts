@@ -300,8 +300,9 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
 
   it('confirmação de EDIÇÃO é modal central (não gaveta lateral)', () => {
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
-    expect(agenda).toContain('{resizeAsk && <Drawer open variant="dialog" dialogWidth="460px"');
-    expect(agenda).toContain('<Drawer open variant="dialog" dialogWidth="520px"');
+    // Montagem controlada (não condicional): a saída anima antes do desmonte.
+    expect(agenda).toContain('<Drawer open={!!resizeAsk} variant="dialog" dialogWidth="460px"');
+    expect(agenda).toContain('<Drawer open={!!dropAsk} variant="dialog" dialogWidth="520px"');
     // O formulário completo de bloqueio já era central e continua sendo.
     expect(agenda).toContain('<Drawer open={blockForm} variant="dialog" dialogWidth="480px"');
   });

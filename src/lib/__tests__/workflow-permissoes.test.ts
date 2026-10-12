@@ -454,8 +454,9 @@ describe('Workflow · fechamento sem registro clínico é de quem atende', () =>
     expect((await setStatus(T.orlando, 'bk-past', 'completed')).status).toBe(200); // idempotente
   });
   it('não conclui por fora quem chegou ou está em atendimento', async () => {
-    await checkIn(T.maria, 'bk-past');
-    expect((await setStatus(T.orlando, 'bk-past', 'completed')).status).toBe(409);
+    // Pré-condição válida pela regra de data (contrato C): chegada no DIA do agendamento (bk-a = hoje).
+    await checkIn(T.maria, 'bk-a');
+    expect((await setStatus(T.orlando, 'bk-a', 'completed')).status).toBe(409);
   });
 });
 
@@ -693,5 +694,35 @@ describe('Cliente (área pública) não altera quem já chegou', () => {
     const move = await customerPATCH(req('PATCH', '/api/customer/bookings', tk, { id: 'bk-pend', date: '2026-09-26', time: '10:00' }));
     expect(move.status).toBe(409);
     expect((await dbNow()).bookings.find((b) => b.id === 'bk-pend')!.status).toBe('pending');
+  });
+});
+
+// ── Contrato C · chegada só no DIA do agendamento (fuso da unidade) ──
+// Hoje (fixture) = 18/09/2026. bk-a = hoje; bk-pend = 19/09 (futuro); bk-past = 17/09 (passado).
+describe('C · chegada só no dia do agendamento', () => {
+  it('agendamento futuro: chegada recusada com motivo e a ação não é oferecida', async () => {
+    const r = await checkIn(T.maria, 'bk-pend');
+    expect(r.status).toBe(400);
+    expect((await j(r)).error).toMatch(/dia do atendimento/);
+    const m = await manage(T.maria);
+    expect(m['bk-pend'].workflow.allowed).not.toContain('check_in');
+    expect(m['bk-pend'].checkedInAt).toBeFalsy();
+  });
+  it('agendamento de dia anterior não recebe chegada', async () => {
+    const r = await checkIn(T.maria, 'bk-past');
+    expect(r.status).toBe(400);
+    expect((await j(r)).error).toMatch(/dia do atendimento/);
+    expect((await manage(T.maria))['bk-past'].workflow.allowed).not.toContain('check_in');
+  });
+  it('no dia do agendamento a chegada é oferecida, registrada e pode ser desfeita', async () => {
+    expect((await manage(T.maria))['bk-a'].workflow.allowed).toContain('check_in');
+    expect((await checkIn(T.maria, 'bk-a')).status).toBe(200);
+    expect((await manage(T.maria))['bk-a'].workflow.allowed).toContain('check_in_undo');
+    expect((await patchBooking(T.maria, { id: 'bk-a', action: 'check-in-undo' })).status).toBe(200);
+  });
+  it('a regra de data não altera a matriz de ações quando a data não é informada', () => {
+    const f: WorkflowFacts = { state: 'scheduled', status: 'confirmed', overdue: false, hasEncounter: false, hasDraft: false };
+    expect(workflowAllowedActions(f, { agenda: true, atendimento: false })).toContain('check_in');
+    expect(workflowAllowedActions({ ...f, checkInDay: false }, { agenda: true, atendimento: false })).not.toContain('check_in');
   });
 });

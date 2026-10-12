@@ -311,8 +311,10 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
       time: '10:00',
       professionalId: HERNANI,
     });
-    // E o campo de data reflete a data da coluna.
-    expect(val(dateInput())).toBe(DATE);
+    // Missão 03 (fluxo progressivo): o campo de data entra depois do serviço.
+    // Escolhido o serviço (só Hernani), o campo reflete a data da coluna.
+    await pickCombo(serviceSelect(), SVC_CARDIO);
+    await waitFor(() => expect(val(dateInput())).toBe(DATE));
   });
 
   it('o horário vem da posição vertical (snap de 15 min, medido na grade real)', async () => {

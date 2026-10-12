@@ -40,7 +40,8 @@ describe('CP1 · estados canônicos', () => {
   });
 
   it('Drawer: saída mantém a superfície montada até o fim (data-closing) e entrada/saída usam tokens', () => {
-    expect(UI).toContain("overlayMotionMs('--gd-motion-sheet-out', 170)");
+    // Drawer: o token da saída é o MESMO da animação CSS gd-drawer-strip-out (side-modal-out).
+    expect(UI).toContain("overlayMotionMs('--gd-motion-side-modal-out', 170)");
     expect(UI).toMatch(/if \(!present\) return null;/);
     expect(CSS).toMatch(/\.il-drawer\[data-closing\] \.il-drawer__strip/);
     expect(CSS).toMatch(/\.il-drawer__strip:not\(\[data-expanded\]\)/);

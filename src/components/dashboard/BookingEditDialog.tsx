@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Dialog, Field, DatePicker, Button, SelectMenu, Combobox } from '@/components/ui';
+import { Dialog, Field, DatePicker, Button, SelectMenu, Combobox, useOverlayPresence } from '@/components/ui';
 import { durationLabel } from '@/lib/duration-label';
 import { adminBookingMaxDate, bookingDurationOf, rescheduleDecision } from '@/lib/booking-ops';
 import { eligibleProfessionalIds } from '@/lib/booking';
@@ -13,7 +13,9 @@ import type { Booking, Professional, Service } from '@/lib/types';
  * Patient/service/duration/observation are read here, not silently dropped or
  * turned into a duplicate; broad editing needs a separate server contract.
  */
-export function BookingEditDialog({ booking, businessId, services, pros, timezone, onClose, onChanged, returnFocus }: {
+export interface BookingEditDialogProps {
+  /** Controlado pelo pai. Omitido = aberto (comportamento anterior). */
+  open?: boolean;
   booking: Booking;
   businessId: string;
   services: Service[];
@@ -22,7 +24,19 @@ export function BookingEditDialog({ booking, businessId, services, pros, timezon
   onClose: () => void;
   onChanged: () => void;
   returnFocus?: React.RefObject<HTMLElement | null>;
-}) {
+}
+
+/**
+ * Dialog central de edição (largura 600 px).
+ * A sessão de presença recria o formulário a cada abertura: data, horário e
+ * profissional voltam ao agendamento atual, sem resto da edição anterior.
+ */
+export function BookingEditDialog({ open = true, ...props }: BookingEditDialogProps) {
+  const { session } = useOverlayPresence(open);
+  return <BookingEditForm key={session} {...props} open={open} />;
+}
+
+function BookingEditForm({ open, booking, businessId, services, pros, timezone, onClose, onChanged, returnFocus }: BookingEditDialogProps & { open: boolean }) {
   const service = services.find((entry) => entry.id === booking.serviceId);
   const [date, setDate] = useState(booking.date);
   const [time, setTime] = useState(booking.time);
@@ -94,7 +108,7 @@ export function BookingEditDialog({ booking, businessId, services, pros, timezon
 
   return (
     <Dialog
-      open
+      open={open}
       onClose={onClose}
       returnFocus={returnFocus}
       title="Editar agendamento"

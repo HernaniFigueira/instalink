@@ -100,7 +100,9 @@ describe('3A · posicionamento do resumo (flip e clamp) — regressão medida', 
     expect(face).toMatch(/else if \(preferLeft \? fitsRight : fitsLeft\) left = preferLeft \? toRight : toLeft;/);
     // Não cabe em nenhum → empilha fora do evento (nunca em cima dele).
     expect(face).toContain('else {');
-    expect(face).toContain('top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;');
+    // Empilha fora do evento: vira para cima quando abaixo não cabe, medido contra os limites VISÍVEIS
+    // (dialog que contém a camada, ou a janela) — ver popover-dialog-bounds.test.tsx.
+    expect(face).toContain('if (h && below + h > vb.bottom - margin && above >= vb.top) { top = above; flipped = true; } else top = below;');
   });
 
   it('re-mede quando a camada muda de tamanho (conteúdo assentando)', () => {
