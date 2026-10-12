@@ -25,6 +25,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
 }) {
   const [vet, setVet] = useState<boolean | null>(null); // null = ainda não perguntou
   const [pets, setPets] = useState<Pet[]>([]);
+  // P1 · falha de leitura é exibida como erro (com nova tentativa), nunca some em silêncio.
+  const [loadError, setLoadError] = useState(false);
   const [editing, setEditing] = useState<Partial<Pet> | null>(null);
   const [editingBaseline, setEditingBaseline] = useState<Partial<Pet> | null>(null);
   const petDismiss = useOverlayDismissGuard();
@@ -38,7 +40,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
       `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(tutorId)}`,
       { scope: 'area', area: 'Clientes' },
     );
-    if (!res.ok) { setVet(false); return; }
+    if (!res.ok) { setLoadError(true); return; }
+    setLoadError(false);
     setVet(!!res.data?.vet);
     setPets(res.data?.pets || []);
   }, [businessId, tutorId]);
@@ -90,6 +93,16 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
       : 'Pet removido.');
     void load();
     onChanged?.();
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="mt-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+        <p className="text-sm font-semibold text-[var(--text)]">Não foi possível carregar os pets deste tutor.</p>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">A leitura falhou; isto não significa que o tutor não tem pet.</p>
+        <button type="button" className="mt-2 text-xs font-semibold text-[var(--brand)] underline" onClick={() => void load()}>Tentar novamente</button>
+      </div>
+    );
   }
 
   // Não veterinária (ou ainda carregando): NADA desta estrutura aparece.
@@ -155,8 +168,8 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
           o canto superior direito ficou só para o conteúdo (leitura mais
           natural; hierarquia pet × tutor preservada). */}
       <div className="mt-3.5">
-        <Button size="sm" variant="primary" onClick={() => startPetForm(EMPTY_PET)}>
-          <Icon n="plus" size={14} /> Cadastrar pet
+        <Button size="sm" variant="secondary" onClick={() => startPetForm(EMPTY_PET)}>
+          <Icon n="plus" size={16} /> Cadastrar pet
         </Button>
       </div>
 

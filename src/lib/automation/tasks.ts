@@ -102,6 +102,14 @@ export function createTaskTx(db: DB, input: CreateTaskInput): { task: Task | nul
     if (dup) return { task: dup, created: false, reason: 'tarefa já criada por esta execução' };
   }
 
+  // Pedido da equipe ligado a um atendimento (ex.: "Pedir à recepção"): um pedido ABERTO
+  // por atendimento e título. Repetir o clique devolve o mesmo — nunca duplica.
+  if (input.encounterId && !input.automationRunId) {
+    const aberto = db.tasks.find((t) => t.businessId === input.businessId
+      && t.encounterId === input.encounterId && t.status === 'open' && t.title === title);
+    if (aberto) return { task: aberto, created: false, reason: 'pedido já aberto para este atendimento' };
+  }
+
   const open = db.tasks.filter((t) => t.businessId === input.businessId && t.status === 'open').length;
   if (open >= MAX_OPEN_TASKS_PER_BUSINESS) {
     return { task: null, created: false, reason: `limite de ${MAX_OPEN_TASKS_PER_BUSINESS} tarefas abertas atingido` };

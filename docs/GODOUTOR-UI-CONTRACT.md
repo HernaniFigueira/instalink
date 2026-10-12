@@ -113,3 +113,27 @@ Role de acesso e cargo/função profissional são dados separados: role usa os r
 A revisão só pode ser declarada concluída depois de: (1) auditoria de fonte por rota e segunda varredura; (2) testes de tokens, contraste e persistência para os 21 presets; (3) inspeção real em browser/render de cada rota autenticada em 1440/1366/390; (4) rotas críticas em Deep Blue, verde, neutro e vinho, com reload F5 confirmando persistência; (5) reabertura das telas críticas e registro de capturas; (6) execução da suíte completa com separação explícita do baseline conhecido de cinco falhas preexistentes. Teste de JSX/CSS não substitui inspeção visual.
 
 O estado, a matriz de rotas, os artefatos e as pendências ficam em [`GODOUTOR-UI-AUDIT-V2.md`](./GODOUTOR-UI-AUDIT-V2.md). As auditorias históricas DESIGN-360 não são reescritas por esta revisão.
+
+## 7. Agenda, dashboard por papel e jornada operacional (Entrega 3)
+
+- **Agenda — seletor e Mês:** a visão é escolhida em um único `SelectMenu` (Dia · Semana · Mês · Lista), com teclado e Escape. A grade Mês é a mesma fonte de dados das demais visões. "Bloquear horário" é um cadeado com `aria-label` e tooltip, não um botão de texto.
+- **Estado preservado:** `data`, `view`, `professionalId` e filtros vivem na URL. A ida para Atendimento/Registro e a volta ("Voltar para agenda") restauram o mesmo recorte; sem `returnTo` válido, o destino é a agenda.
+- **Dashboard por papel:** Permissão define **acesso**; papel define **destaque**. Profissional vê "Meu dia · agora" (pacientes aguardando, em atendimento, próximos) antes de Conversas, sem perder nada que a permissão libere. O preset padrão de Recepção ("Agenda, clientes e conversas") não inclui Visão geral: a tela inicial dela é a Agenda (`landing.ts`) e `/dashboard` responde com o aviso de acesso. Quando a permissão de Visão geral é concedida, o fluxo de hoje aparece com a mesma regra. WhatsApp/oportunidades só aparecem quando o preset e a permissão pedirem. Owner/Admin mantém a visão ampla com o fluxo de hoje abaixo dos KPIs.
+- **Check-in:** "Registrar chegada" muda o workflow para Chegou (`checkedInAt`), sem alterar `BookingStatus` e sem tocar no Clinical Access. A etapa é derivada no servidor e lida pelo dashboard, pela agenda e pelo Atendimento.
+- **Jornada única:** Recepção (agenda → criar → detalhe → check-in) → Profissional (dashboard → paciente → atendimento → registro) → Agenda (mesma data, visão e profissional) → Cliente 360 (atendimento na história correta).
+
+## Gate visual canônico (PR #69) — regras executáveis
+
+- **Drag na agenda:** limiar de 8px (`DRAG_THRESHOLD_PX`). Até 8px é clique e abre o detalhe; `pointerup` antes da ativação também abre o detalhe.
+- **Dialog de confirmação (descarte):** backdrop global (`.overlay-confirm-layer`), cartão centralizado, `role="alertdialog"` com `aria-modal="true"`, foco preso no cartão, Escape = continuar editando.
+- **Abas (`OverflowTabs`):** por padrão, as que cabem ficam visíveis e o resto vai para "Mais". Em seções que precisam manter todas as opções visíveis (Cliente 360), use `wrap`: as abas quebram em linhas e nada é escondido.
+- **Ações:** SECONDARY com contorno visível em repouso; TERTIARY em cor de ação; DANGER só para ação destrutiva. Ação sem contorno em repouso é defeito.
+- **Gatilho de SelectMenu:** `gd-select-trigger` mantém contorno em repouso (`:not(.gd-select-trigger)` nas regras de toolbar).
+- **Trabalho clínico prolongado** vai para o workspace do atendimento (ex.: Anamnese via `?secao=anamnese`), não para sheet.
+
+- **Dialog central (confirmação, lab, resize):** entra com `gd-dialog-in` (fade + translateY 8px + scale .985) e sai em fade. Nunca desliza da borda; a faixa `translateX` é exclusiva do drawer lateral.
+- **Formulário com erro (Novo agendamento):** cada bloqueio chama `fail(mensagem, campo)`: o foco vai ao primeiro campo com erro, o campo recebe `data-invalid` e a mensagem aparece junto da causa. Não há bloqueio silencioso. Mensagens específicas: "Escolha o serviço deste atendimento.", "Escolha a data deste atendimento.", "Escolha o horário deste atendimento.", "Em clínica veterinária, escolha o pet (paciente) deste agendamento."
+- **Duração:** a escolha vai de 15 a 720 min (`DURATIONS`). Valor fora da lista (vindo do serviço ou do agendamento) é preservado, não truncado.
+- **Reduced motion:** `prefers-reduced-motion` desliga todas as animações de overlay (medido: zero animações em todos os fluxos).
+
+Manifesto de divergências restantes: `docs/GODOUTOR-UI-CONVERGENCE-MANIFEST.md`. Tokens, escala tipográfica, comparação de fontes e motion: `docs/GODOUTOR-DESIGN-SYSTEM.md` §14.

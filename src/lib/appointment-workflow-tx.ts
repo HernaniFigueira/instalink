@@ -122,6 +122,11 @@ export function transitionAppointment(
     if (from === 'arrived') return unchanged(); // idempotente
     if (from === 'in_care') throw werr('Este atendimento já está em andamento.', 409);
     if (from !== 'scheduled') throw werr('Atendimento encerrado não recebe check-in.', 400);
+    // Contrato C: a chegada é um fato do DIA do atendimento (fuso da unidade).
+    // Antes ou depois da data, a recepção não registra chegada: a regra é do servidor.
+    if (booking.date !== todayISO(new Date(now), tz)) {
+      throw werr('A chegada só pode ser registrada no dia do atendimento.', 400);
+    }
     freezeLegacy();
     booking.checkedInAt = now;
     booking.checkedInBy = ctx.user.id;

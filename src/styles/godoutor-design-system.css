@@ -43,7 +43,7 @@
   --gd-text-on-accent: #ffffff;
 
   /* ── COLOR · bordas ───────────────────────────────────────────────────── */
-  --gd-border: #e2e8f0;          /* borda estrutural/divisória sutil */
+  --gd-border: #c5cfdc;          /* hairline estrutural: visível (1.6:1 no branco), nunca some */
   --gd-border-soft: #eef2f6;     /* divisória interna */
   --gd-border-2: #dbe3ec;        /* degrau intermediário */
   --gd-border-strong: #7d8ca3;   /* borda de CONTROLE (input/botão) — 3:1 */
@@ -134,10 +134,10 @@
   --gd-nav-panel-shadow: 0 10px 24px -18px rgba(19, 26, 54, 0.28);
   --gd-nav-cta: var(--gd-accent);
 
-  /* ── TYPOGRAPHY (DS 1.1 — Barlow + escala canônica) ────────────────────── */
-  /* Barlow é servida pelo `next/font/google` (self-hosted no build). A lista de
+  /* ── TYPOGRAPHY (camada visual PR #69 — Inter + escala canônica) ─────────── */
+  /* Inter é self-hosted em `src/app/fonts/inter/` (next/font/local). A lista de
      fallback fica no token para que o texto nunca caia em serifada. */
-  --gd-font-sans: var(--font-barlow), Barlow, ui-sans-serif, system-ui,
+  --gd-font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui,
     -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --gd-font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --gd-weight-regular: 400;
@@ -167,10 +167,10 @@
        button     · 14/20 500   — rótulo de botão
      700 (`--gd-weight-bold`) só quando a hierarquia justifica (título de página
      e marca) — nunca em corpo, metadado ou botão. */
-  --gd-type-page-title-size: 20px;   --gd-type-page-title-line: 26px;  --gd-type-page-title-weight: var(--gd-weight-semibold);
-  --gd-type-section-size: 18px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
+  --gd-type-page-title-size: 22px;   --gd-type-page-title-line: 28px;  --gd-type-page-title-weight: var(--gd-weight-bold);
+  --gd-type-section-size: 16px;      --gd-type-section-line: 22px;     --gd-type-section-weight: var(--gd-weight-semibold);
   --gd-type-body-size: 14px;         --gd-type-body-line: 20px;        --gd-type-body-weight: var(--gd-weight-regular);
-  --gd-type-label-size: 14px;        --gd-type-label-line: 20px;       --gd-type-label-weight: var(--gd-weight-medium);
+  --gd-type-label-size: 12px;        --gd-type-label-line: 18px;       --gd-type-label-weight: var(--gd-weight-semibold);
   --gd-type-metadata-size: 12px;     --gd-type-metadata-line: 18px;    --gd-type-metadata-weight: var(--gd-weight-medium);
   --gd-type-helper-size: 12px;       --gd-type-helper-line: 18px;      --gd-type-helper-weight: var(--gd-weight-regular);
   --gd-type-button-size: 14px;       --gd-type-button-line: 20px;      --gd-type-button-weight: var(--gd-weight-medium);
@@ -197,11 +197,11 @@
 
   /* ── RADIUS (compacto e único) ────────────────────────────────────────── */
   --gd-radius-xs: 4px;
-  --gd-radius-sm: 8px;
-  --gd-radius-md: 8px;
-  --gd-radius-lg: 8px;
-  --gd-radius-xl: 8px;
-  --gd-radius-2xl: 8px;
+  --gd-radius-sm: 6px;   /* itens compactos / menu */
+  --gd-radius-md: 8px;   /* botões, inputs, selects, tabs, popovers */
+  --gd-radius-lg: 12px;  /* cards, dialogs, drawers (geometria NOVA) */
+  --gd-radius-xl: 12px;
+  --gd-radius-2xl: 12px;
   --gd-radius-pill: 999px;
 
   /* ── BORDER ───────────────────────────────────────────────────────────── */
@@ -216,6 +216,13 @@
   --gd-shadow-md: 0 4px 12px -4px rgba(15, 23, 42, 0.12), 0 12px 24px -12px rgba(15, 23, 42, 0.14);
   --gd-shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.16), 0 28px 48px -20px rgba(15, 23, 42, 0.20);
   --gd-shadow-overlay: 0 24px 60px -18px rgba(15, 23, 42, 0.30), 0 4px 12px -4px rgba(15, 23, 42, 0.12);
+  /* DIALOG central (modal do DS: Novo agendamento, confirmações). Sombra externa
+     SUTIL e única: um contato curto + uma queda longa e baixa. Não vale para
+     sheets laterais, popovers nem hovercards (esses mantêm os seus tokens). */
+  --gd-shadow-dialog: 0 1px 2px rgba(15, 23, 42, 0.08), 0 12px 28px -10px rgba(15, 23, 42, 0.22), 0 36px 72px -32px rgba(15, 23, 42, 0.30);
+  /* Véu do Dialog central: um pouco mais denso que o véu de menus/popovers, para o
+     modal se separar da tela de fundo sem depender só da borda. */
+  --gd-overlay-dialog: rgba(13, 18, 32, 0.48);
 
   /* ── CONTROL HEIGHT (uma régua para botão, input, select, chip) ─────────
      REGRA DA CASA (missão UX Closure): controle do MESMO nível tem a MESMA
@@ -615,7 +622,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
   position: fixed; inset: 0; z-index: var(--gd-z-modal);
   display: flex; align-items: center; justify-content: center;
   padding: var(--gd-space-4);
-  background: var(--gd-overlay);
+  background: var(--gd-overlay-dialog);
   animation: gd-fade-in var(--gd-motion-base) var(--gd-ease);
 }
 @keyframes gd-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -630,7 +637,7 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
   background: var(--gd-bg-surface);
   border: 1px solid var(--gd-border);
   border-radius: var(--gd-radius-lg);
-  box-shadow: var(--gd-shadow-overlay);
+  box-shadow: var(--gd-shadow-dialog);
 }
 /* Entrada/saída simétricas do Dialog: a saída é o reverso da entrada (sem corte
    seco). O componente segura a desmontagem por `--gd-motion-dialog-out`. */
@@ -638,6 +645,8 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
 @keyframes gd-dialog-out { to { opacity: 0; transform: translateY(8px) scale(.985); } }
 .gd-dialog-backdrop[data-closing] { animation: gd-fade-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 .gd-dialog[data-closing] { animation: gd-dialog-out var(--gd-motion-dialog-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Motion · saída inerte: superfície em animação de saída não recebe clique (nenhuma ação dispara durante a saída). */
+.gd-dialog[data-closing], .gd-detail[data-closing], .il-drawer[data-closing] { pointer-events: none; }
 .gd-dialog__header, .gd-dialog__footer {
   display: flex; align-items: center; gap: var(--gd-space-2);
   padding: var(--gd-space-4); flex-shrink: 0;
@@ -794,8 +803,13 @@ textarea.il-field-control { min-height: var(--gd-textarea-min-h); }
    painel (entrada e saída). A saída roda com o painel MONTADO (data-closing). */
 @keyframes gd-drawer-strip-in { from { transform: translateX(100%); } to { transform: none; } }
 @keyframes gd-drawer-strip-out { from { transform: none; } to { transform: translateX(100%); } }
-.il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
-.il-drawer[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+.il-drawer:not(.il-drawer--dialog) .il-drawer__strip:not([data-expanded]) { animation: gd-drawer-strip-in var(--gd-motion-side-modal) var(--gd-ease); }
+.il-drawer:not(.il-drawer--dialog)[data-closing] .il-drawer__strip { animation: gd-drawer-strip-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Dialog CENTRAL não é folha lateral: entra com o contrato de dialog (fade +
+   translateY 8px + scale .985) e sai em fade. Nunca desliza da borda direita. */
+/* Sem :not([data-expanded]): expandir/recolher o cadastro aninhado NÃO reinicia a entrada (que partia de opacidade 0). */
+.il-drawer--dialog .il-drawer__strip { animation: gd-dialog-in var(--gd-motion-dialog) var(--gd-ease) both; }
+.il-drawer--dialog[data-closing] .il-drawer__strip { animation: gd-fade-out var(--gd-motion-fast) cubic-bezier(.4, 0, 1, 1) forwards; }
 .il-drawer::backdrop { animation: gd-fade-in var(--gd-motion-side-modal) var(--gd-ease); }
 .il-drawer[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion-side-modal-out) cubic-bezier(.4, 0, 1, 1) forwards; }
 /* Entra de FORA da borda (translateX 100%), não com um deslocamento simbólico:

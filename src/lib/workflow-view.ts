@@ -34,6 +34,7 @@ export function workflowForBookings(
     out[b.id] = workflowView(
       {
         booking: b, encounter: encByBooking.get(b.id) || null, queue: queueByBooking.get(b.id) || null,
+        checkInDay: b.date === today,
         overdue: needsClosure(b, bookingDurationOf(b, svc.get(b.serviceId)), today, hm),
       },
       // Fora do escopo do profissional nenhuma ação é oferecida.

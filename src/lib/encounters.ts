@@ -607,6 +607,15 @@ export function isResponsibleProfessional(db: DB, encounter: Encounter, actorId:
   return Boolean(professional);
 }
 
+/**
+ * Há pedido ABERTO à recepção ligado a este atendimento? Leitura derivada da
+ * própria tarefa (fonte da verdade): some quando a recepção conclui/cancela.
+ * Mesmo businessId obrigatório — nunca tarefa de outra unidade.
+ */
+export function hasOpenReceptionTask(db: DB, e: Pick<Encounter, 'id' | 'businessId'>): boolean {
+  return (db.tasks || []).some((t) => t.encounterId === e.id && t.businessId === e.businessId && t.status === 'open');
+}
+
 export function encounterView(
   e: Encounter,
   db: DB,
@@ -627,6 +636,7 @@ export function encounterView(
   return {
     ...e,
     professionalName: pro?.name || '',
+    receptionTaskOpen: hasOpenReceptionTask(db, e),
     serviceName: svc?.name || '',
     bookingStatus: booking?.status || '',
     customerPhone: contact?.phone || booking?.customerPhone || queue?.customerPhone || '',
@@ -680,6 +690,8 @@ export function encounterView(
 /** Visão de leitura entregue pelas rotas (entidade + nomes + contexto F1A). */
 export interface EncounterWorkspaceView extends Encounter {
   professionalName: string;
+  /** Pedido aberto à recepção (derivado da tarefa; só leitura). */
+  receptionTaskOpen?: boolean;
   serviceName: string;
   bookingStatus: string;
   customerPhone: string;

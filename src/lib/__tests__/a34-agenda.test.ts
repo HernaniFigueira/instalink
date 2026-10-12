@@ -139,15 +139,18 @@ describe('A3.4 · Bloco 3 — Novo agendamento no design system', () => {
     // Pré-F1: preserve the column/slot, but refuse saving incompatible intent.
     expect(sheet).toContain('const activeProId = proId');
     expect(sheet).toContain('incompatiblePro');
-    expect(sheet).toContain('if (pastIssue || proIssue || (!opts.fitIn && slotIssue))');
+    // Bloqueios de horário/profissional agora dizem a causa e levam o foco ao campo.
+    expect(sheet).toContain("if (proIssue) { fail(proIssue, 'service'); return; }");
+    expect(sheet).toContain("if (pastIssue) { fail(pastIssue, 'time'); return; }");
+    expect(sheet).toContain("if (!opts.fitIn && slotIssue) { fail(slotIssue, 'time'); return; }");
     expect(sheet).not.toContain("setProId(''); setTime('')");
 
   });
 
   it('a agenda passa o pré-preenchimento ao abrir pelo clique', () => {
     const agenda = stripComments(read('src/app/(dashboard)/agenda/page.tsx'));
-    expect(agenda).toContain('date: creating.date || focus');
-    expect(agenda).toContain('time: creating.time');
-    expect(agenda).toContain('professionalId: creating.professionalId');
+    expect(agenda).toContain('date: sheetCtx.date || focus');
+    expect(agenda).toContain('time: sheetCtx.time');
+    expect(agenda).toContain('professionalId: sheetCtx.professionalId');
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cn, centsToBR } from '@/lib/utils';
 import type { Category, Professional, ScheduleResource, Service } from '@/lib/types';
-import { Button, Drawer, EmptyState, IconButton, ListSkeleton, Notice, PageHeader } from '@/components/ui';
+import { Button, Drawer, EmptyState, IconButton, ListSkeleton, Notice, PageHeader, useFrozenWhileClosed } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { AccessDenied, AreaLoadError } from '@/components/dashboard/AccessNotice';
 import { apiGet, apiSend } from '@/lib/api-client';
@@ -42,6 +42,7 @@ export default function ServicosPage() {
   const [catName, setCatName] = useState('');
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
+  const askDeleteFrozen = useFrozenWhileClosed(!!askDelete, askDelete);
   const [loadError, setLoadError] = useState('');
   const [denied, setDenied] = useState(false);
 
@@ -152,8 +153,7 @@ export default function ServicosPage() {
 
       {loaded && (
         <>
-          {showCat && (
-            <Drawer open onClose={() => { setShowCat(false); setEditingCat(null); setCatName(''); }} title="Grupos" subtitle="Grupos internos da clínica (opcional, sem migração)" width="max-w-md">
+          <Drawer open={showCat} onClose={() => { setShowCat(false); setEditingCat(null); setCatName(''); }} title="Grupos" subtitle="Grupos internos da clínica (opcional, sem migração)" width="max-w-md">
               <div className="p-4 space-y-4">
                 <div className="space-y-2">
                   {cats.length === 0 ? (
@@ -189,7 +189,6 @@ export default function ServicosPage() {
                 {editingCat && <p className="text-xs text-zinc-500">Renomeando: {editingCat.name} — serviços vinculados continuam pelo ID.</p>}
               </div>
             </Drawer>
-          )}
           {services.length === 0 ? (
             <EmptyState
               icon="service"
@@ -254,11 +253,12 @@ export default function ServicosPage() {
           onSave={async (payload) => { await call('service.save', payload); setShowForm(false); setEditing(null); }} />
       )}
 
-      {askDelete && (
+      {askDeleteFrozen && (
         <DeleteSheet
-          name={askDelete.name}
-          kindLabel={askDelete.kind === 'service' ? 'serviço' : 'profissional'}
-          blocked={askDelete.blocked}
+          open={!!askDelete}
+          name={askDeleteFrozen.name}
+          kindLabel={askDeleteFrozen.kind === 'service' ? 'serviço' : 'profissional'}
+          blocked={askDeleteFrozen.blocked}
           onDeactivate={doDeactivate}
           onConfirm={doDelete}
           onClose={() => setAskDelete(null)}

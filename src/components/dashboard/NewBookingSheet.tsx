@@ -6,6 +6,7 @@ import { FIT_IN_MARK_CLS } from '@/lib/status';
 //   3. só oferece "+ Novo cliente" quando a busca não encontra ninguém;
 //   4. serviço → data → horário (grade real da agenda) → observação.
 import { durationLabel } from '@/lib/duration-label';
+import { prefersReducedMotion } from '@/lib/focus-highlight';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
@@ -14,6 +15,17 @@ import { fitInPastError } from '@/lib/fit-in';
 import { bookingPastTimeError } from '@/lib/booking-past-time';
 import { adminBookingMaxDate } from '@/lib/booking-ops';
 import { BookingRecurrence } from './BookingRecurrence';
+
+type ErrorField = 'client' | 'pet' | 'service' | 'date' | 'time' | '';
+/** Causa do erro do servidor → campo que deve receber o foco. Sem causa clara, fica no aviso geral. */
+function fieldForServerError(message: string): ErrorField {
+  if (/\bpet\b|paciente/i.test(message)) return 'pet';
+  if (/servi[çc]o/i.test(message)) return 'service';
+  if (/data|passad/i.test(message)) return 'date';
+  if (/hor[áa]rio|interval|conflit|encaixe/i.test(message)) return 'time';
+  if (/cliente|tutor|whatsapp|telefone/i.test(message)) return 'client';
+  return '';
+}
 import type { BookingOccurrence } from '@/lib/booking-recurrence';
 import type { OccurrencePreview } from '@/lib/booking-series';
 import { cn, minToTime, onlyDigits, timeToMin } from '@/lib/utils';
@@ -21,11 +33,12 @@ import { isLegacyPagesEnabled } from '@/lib/product';
 import type { Pet, Professional, Service } from '@/lib/types';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { breedSuggestions, PET_SPECIES, PET_SPECIES_LABELS, validatePet } from '@/lib/pets';
-import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Tooltip, SelectMenu } from '@/components/ui';
-import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
+import { Drawer, Avatar, Badge, Button, Checkbox, Combobox, DatePicker, Disclosure, Field, IconButton, Input, Notice, Select, Skeleton, Tooltip, SelectMenu, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { uniqueEligibleServiceId } from '@/lib/agenda-cell-prefill';
-import { eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
-import { NewClientForm } from '@/components/dashboard/NewClientSheet';
+import { automaticProfessionalDisplay, eligibleProfessionalIds, professionalServesService } from '@/lib/booking';
+import { useRouter } from 'next/navigation';
+import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
+import { newClientFromBookingHref, writeBookingReturn } from '@/lib/booking-return';
 
 interface Contact {
   id: string;
@@ -36,7 +49,12 @@ interface Contact {
   registered?: boolean;
 }
 
-export function NewBookingSheet({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated }: {
+/* Superfície interna. NÃO é exportada: o contrato público é `NewBookingSheet`
+   (abaixo), que cuida da presença (saída animada antes de desmontar). */
+function NewBookingSheetSurface({ businessId, services, pros, timezone, initial, quick = false, onClose, onCreated, open, onExited }: {
+  open: boolean;
+  /** Chamado quando a saída termina; o wrapper desmonta a superfície aqui. */
+  onExited: () => void;
   businessId: string;
   services: Service[];
   pros: Professional[];
@@ -93,11 +111,13 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // mostramos os dados copiados como dados informados (não fingimos um contato
   // selecionado); a gravação segue o fluxo normal de criação.
   const [unlinkedPrefill, setUnlinkedPrefill] = useState(!initial?.contactId && !initial?.searchQuery && !!(initial?.name || initial?.phone));
-  // HOMOLOGAÇÃO · fechamento — SEM cadastro temporário: "+ Cadastrar" abre o
-  // CADASTRO REAL (NewClientSheet) que grava no CRM na hora. Abandonar o
-  // agendamento depois NÃO apaga o paciente.
-  const [registerOpen, setRegisterOpen] = useState(!!initial?.openRegistration);
-  const [clientPersistence, setClientPersistence] = useState({ dirty: false, saving: false, error: '' });
+  // Missão 02 — "+ Novo cliente" NÃO abre painel aqui: o agendamento em
+  // andamento vai para o rascunho de sessão e o cadastro completo é a página
+  // /clientes/novo. Ao salvar, a Agenda reabre este agendamento com o tutor.
+  const router = useRouter();
+  const workspace = useWorkspace();
+  // Mesma régua de Clientes e do servidor: cadastro de cliente é da unidade inteira.
+  const canRegisterClient = !workspace.agendaScope || workspace.agendaScope === 'all';
   const [vetMode, setVetMode] = useState(!!initial?.vetMode);
   const [serviceId, setServiceId] = useState(presetServiceId);
   const [proId, setProId] = useState(initial?.professionalId || '');
@@ -108,6 +128,11 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [advanced, setAdvanced] = useState(false);
   // FASE 2 · P6 — veterinária: pet do tutor selecionado (paciente da agenda).
   const [pets, setPets] = useState<Pet[]>([]);
+  // P1 · leitura de pets do tutor com estado explícito: nunca "vazio" por falha.
+  const [petsStatus, setPetsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [petsRetry, setPetsRetry] = useState(0);
+  // `vetResolved`: a unidade já foi classificada por uma resposta OK (ou pela Agenda).
+  const [vetResolved, setVetResolved] = useState(!!initial?.vetMode);
   const [isVet, setIsVet] = useState(!!initial?.vetMode);
   const [petId, setPetId] = useState(initial?.petId || '');
   // A3.4 · Bloco 4 — ENCAIXE: horário fora da grade, com conflito mostrado.
@@ -122,16 +147,43 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const [reviewing, setReviewing] = useState(false);
   function changeOccurrences(rows: BookingOccurrence[]) { setOccurrences(rows); setPreview(null); }
   useEffect(() => { setOccurrences([]); setPreview(null); }, [serviceId, date, time, proId, repeat]);
+  /* Dependências do fluxo (Missão 03): trocar serviço, profissional ou data
+     muda SÓ a grade de horários (re-busca pelo intervalo novo). Tutor, pet e
+     observação não são tocados. O horário escolhido (inclusive o que veio do
+     clique na Agenda) é PRESERVADO enquanto continuar disponível; se deixar de
+     existir no novo intervalo, o aviso de disponibilidade (slotIssue) decide.
+     A rolagem até a grade acontece quando a disponibilidade do NOVO intervalo
+     chega (ver efeito abaixo). */
+  const timeScrollPending = useRef(false);
+  const timeSectionRef = useRef<HTMLDivElement>(null);
+  function chooseService(id: string) { if (id === serviceId) return; setServiceId(id); timeScrollPending.current = true; }
+  function chooseProfessional(id: string) { if (id === proId) return; setProId(id); timeScrollPending.current = true; }
+  function chooseDate(iso: string) { if (iso === date) return; setDate(iso); timeScrollPending.current = true; }
   const rangeIntent = !!initial?.selectedDurationMin;
   const [editingTime, setEditingTime] = useState(false);
   const [slots, setSlots] = useState<string[]>([]);
+  /** Horários que existiam na grade mas estão ocupados (vêm de `occupied` da API). Explicam por que a lista é menor. */
+  const [occupiedCount, setOccupiedCount] = useState(0);
   // A2-B3 (F4): estado honesto do dia (fechado × lotado) para a mensagem.
   const [dayState, setDayState] = useState<{ state?: string; full?: boolean; reason?: string } | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Erro → PRIMEIRO campo com problema recebe o foco, com a mensagem junto da causa.
+  const [errorField, setErrorField] = useState<ErrorField>('');
+  const formRef = useRef<HTMLDivElement>(null);
+  const fail = (message: string, field: ErrorField = '') => { setError(message); setErrorField(field); };
+  useEffect(() => {
+    if (!error || !errorField) return;
+    const id = requestAnimationFrame(() => {
+      formRef.current?.querySelector<HTMLElement>(`[data-field="${errorField}"] input, [data-field="${errorField}"] button, [data-field="${errorField}"] [role="combobox"], [data-field="${errorField}"] textarea`)?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [error, errorField]);
   const [created, setCreated] = useState<{
+    /** Paciente (pet) quando a unidade é veterinária; ausente nos demais segmentos. */
+    pet?: string;
     count?: number;
     occurrences?: Array<{ id: string; date: string; time: string; professionalName: string }>;
     customer: string;
@@ -151,11 +203,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   }));
   const bookingSnapshot = JSON.stringify({ query, contactId, name, phone, email, serviceId, proId, date, time, note, staffDuration, petId, fitInOpen, fitInTime, repeat, occurrences });
   const bookingDirty = !created && bookingSnapshot !== initialBookingSnapshot.current;
-  const wholeOverlayDirty = bookingDirty || clientPersistence.dirty;
-  const overlayGuard = {
-    dirty: wholeOverlayDirty, saving: saving || clientPersistence.saving,
-    context: bookingDirty && clientPersistence.dirty ? 'combined' as const : clientPersistence.dirty ? 'new-client' as const : 'new-booking' as const,
-  };
+  const overlayGuard = { dirty: bookingDirty, saving, context: 'new-booking' as const };
 
   // A2-B5 (F9): "hoje" no fuso do negócio (o servidor continua validando).
   const today = todayISO(new Date(), timezone || undefined);
@@ -170,6 +218,8 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   const incompatiblePro = !!proId && !!service && !professionalServesService(service as any, proId, pros);
   const activeProId = proId;
   const noEligiblePro = !!service && eligibleProfessionalIds(service as any, pros).length === 0;
+  // Sem profissional explícita: nome real se só existe UMA possível; "Automático · N" se há 2+.
+  const autoPro = automaticProfessionalDisplay(service as any, pros);
   const proIssue = noEligiblePro ? 'Nenhum profissional está habilitado para este serviço.' : incompatiblePro ? `${pros.find(p => p.id === proId)?.name || 'Este profissional'} não realiza este serviço. Escolha outro profissional habilitado.` : '';
   const orderedServices = [...bookable].sort((a, b) => Number(!!proId && professionalServesService(b as any, proId, pros)) - Number(!!proId && professionalServesService(a as any, proId, pros)));
   const slotKey = `${serviceId}|${date}|${proId}|${staffDuration}`;
@@ -186,7 +236,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   useEffect(() => {
     const mySeq = ++slotSeq.current;
-    if (!serviceId || !date || incompatiblePro || noEligiblePro) { setSlots([]); setSlotsError(''); setDayState(null); setLoadingSlots(false); return; }
+    if (!serviceId || !date || incompatiblePro || noEligiblePro) { setSlots([]); setSlotsError(''); setDayState(null); setOccupiedCount(0); setLoadingSlots(false); return; }
     setLoadingSlots(true);
     setSlotsError('');
     const professionalQuery = activeProId ? `&professionalId=${encodeURIComponent(activeProId)}` : '';
@@ -197,6 +247,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         if (!r.ok) throw new Error(d.error || 'Não foi possível carregar os horários.');
         const list: string[] = d.slots || [];
         setSlots(list);
+        setOccupiedCount(Array.isArray(d.occupied) ? d.occupied.length : 0);
         setDayState(d.closed || d.state ? { state: d.state, full: d.full, reason: d.reason } : null);
         setCheckedSlotKey(slotKey);
         if (list.length === 0 && d.closed) setSlotsError('');
@@ -211,6 +262,16 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         setLoadingSlots(false);
       });
   }, [businessId, serviceId, date, activeProId, staffDuration, incompatiblePro, noEligiblePro, slotKey]);
+
+  // Rolagem suave até os horários só quando a disponibilidade do intervalo
+  // alterado chega (ou falha). `block: nearest` move o mínimo; sem animação
+  // em prefers-reduced-motion.
+  useEffect(() => {
+    if (!timeScrollPending.current || loadingSlots) return;
+    if (checkedSlotKey !== slotKey && !slotsError) return;
+    timeScrollPending.current = false;
+    timeSectionRef.current?.scrollIntoView?.({ block: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }, [checkedSlotKey, loadingSlots, slotKey, slotsError, slots]);
 
   // Busca no CRM (nome OU WhatsApp) com debounce.
   useEffect(() => {
@@ -234,17 +295,18 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
   // FASE 2 · P6 — tipo da clínica vem do BUSINESS/contexto (nunca de
   // contactId preexistente). Pets do tutor carregam quando há tutor.
   useEffect(() => {
+    // Sem unidade não há leitura válida: não consulta com businessId vazio (400).
+    if (!businessId) return;
     let on = true;
     // Vet mode: flag do negócio (pets?businessId sem tutorId devolve `vet`).
     apiGet<{ vet: boolean }>(
       `/api/pets?businessId=${encodeURIComponent(businessId)}`,
       { scope: 'area', area: 'Agenda' },
-    ).then((r) => { if (on) { setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); } })
-      .catch(() => { if (on) {
-        // Se a leitura auxiliar falhar, preserva a informação já resolvida
-        // pela Agenda; nunca infere veterinária a partir do contato.
-        setVetMode(!!initial?.vetMode); setIsVet(!!initial?.vetMode);
-      } });
+    ).then((r) => {
+      // Falha NÃO é "não veterinária": preserva o que a Agenda já resolveu.
+      if (!on || !r.ok) return;
+      setVetMode(!!r.data?.vet); setIsVet(!!r.data?.vet); setVetResolved(true);
+    }).catch(() => { /* mantém o estado atual (vindo da Agenda) */ });
     return () => { on = false; };
   }, [businessId]);
 
@@ -256,7 +318,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
    */
   const initialPetRef = useRef(initial?.petId || '');
   useEffect(() => {
-    if (contactId || !initialPetRef.current) return;
+    if (contactId || !initialPetRef.current || !businessId) return;
     let on = true;
     apiGet<{ pets: Pet[] }>(`/api/pets?businessId=${encodeURIComponent(businessId)}`, { scope: 'area', area: 'Agenda' })
       .then((r) => {
@@ -270,22 +332,28 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
   useEffect(() => {
     setPetId('');
-    if (!contactId) { setPets([]); return; }
+    setPets([]);
+    if (!contactId || !businessId) { setPetsStatus('idle'); return; }
     let on = true;
+    setPetsStatus('loading');
     apiGet<{ vet: boolean; pets: Pet[] }>(
       `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
       { scope: 'area', area: 'Agenda' },
     ).then((r) => {
       if (!on) return;
-      setIsVet(!!r.data?.vet);
+      // Falha de leitura é ERRO explícito: não vira "sem pets" nem "não veterinária".
+      if (!r.ok) { setPetsStatus('error'); return; }
+      setIsVet(!!r.data?.vet); setVetResolved(true);
       const list = r.data?.pets?.filter((p) => p.active !== false) || [];
       setPets(list);
+      setPetsStatus('ready');
       // Prefill de duplicação: restaura o pet semeado quando ele pertence ao tutor.
+      // Nunca escolhe o primeiro pet automaticamente.
       const seeded = initialPetRef.current;
       if (seeded && list.some((p) => p.id === seeded)) setPetId(seeded);
-    }).catch(() => { if (on) setPets([]); });
+    }).catch(() => { if (on) setPetsStatus('error'); });
     return () => { on = false; };
-  }, [contactId, businessId]);
+  }, [contactId, businessId, petsRetry]);
 
   function pick(c: Contact) {
     setUnlinkedPrefill(false);
@@ -298,49 +366,29 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     setQuery('');
   }
 
-  /** Abre o CADASTRO REAL (CRM). Prefill do que já foi digitado na busca. */
+  /**
+   * "+ Novo cliente": guarda o agendamento em andamento na sessão (por unidade)
+   * e segue para a página de cadastro. Nada é gravado no CRM nem na agenda aqui.
+   */
   function startNew() {
-    setUnlinkedPrefill(false);
-    const digits = onlyDigits(query);
-    setContactId('');
-    setName(digits.length >= 10 ? '' : query.trim());
-    setPhone(digits.length >= 10 ? query.trim() : '');
-    setEmail('');
-    setResults([]);
-    setRegisterOpen(true);
+    if (!businessId) return;
+    const typed = query.trim() || name.trim() || phone.trim();
+    writeBookingReturn({
+      businessId, contactId: '', name: name.trim(), phone: phone.trim(), query: typed,
+      petId, serviceId, professionalId: proId, date, time,
+      durationMin: staffDuration, note, vetMode: vetMode || isVet,
+    });
+    router.push(newClientFromBookingHref(businessId));
   }
 
-  /**
-   * Cadastro real salvo → volta ao agendamento com tutor selecionado e,
-   * em veterinária, o pet recém-criado selecionado.
-   */
-  function onClientRegistered(contactId: string, extra?: { petId?: string }) {
-    setUnlinkedPrefill(false);
-    setRegisterOpen(false);
-    setContactId(contactId);
-    setQuery(''); setResults([]); setError('');
-    // Recarrega dados do contato + pets (efeitos reagem ao contactId).
-    fetch(`/api/contacts?businessId=${businessId}&q=${encodeURIComponent(name.trim())}&limit=5`)
-      .then((r) => r.json())
-      .then((d) => {
-        const hit = (d.contacts || []).find((c: Contact) => c.id === contactId);
-        if (hit) { setName(hit.name); setPhone(hit.phone); setEmail(hit.email || ''); }
-      })
-      .catch(() => { /* mantém o nome digitado */ });
-    if (extra?.petId) {
-      // Pet veio do cadastro unificado — seleciona após o load de pets.
-      setTimeout(() => setPetId(extra.petId || ''), 0);
-      // Também injeta na lista local para o <Select> ter a opção.
-      apiGet<{ pets: Pet[] }>(
-        `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(contactId)}`,
-        { scope: 'area', area: 'Agenda' },
-      ).then((r) => {
-        const list = r.data?.pets?.filter((x) => x.active !== false) || [];
-        setPets(list);
-        if (extra.petId) setPetId(extra.petId);
-      }).catch(() => { if (extra.petId) setPetId(extra.petId); });
-    }
-  }
+  // Quick Create com CTA de cadastro: segue direto para a página (uma vez).
+  const openedRegistrationRef = useRef(false);
+  useEffect(() => {
+    if (!initial?.openRegistration || openedRegistrationRef.current) return;
+    openedRegistrationRef.current = true;
+    startNew();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function resetClient() {
     setUnlinkedPrefill(false);
@@ -379,28 +427,39 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
     if (saving || reviewing) return;
     if (repeat && (!preview || preview.some((r) => r.state !== 'available'))) { setError('Valide e corrija todas as ocorrências antes de confirmar.'); return; }
     setError('');
-    if (pastIssue || proIssue || (!opts.fitIn && slotIssue)) { return; }
+    setErrorField('');
+    // Bloqueios com mensagem junto da causa e foco no campo (antes voltavam em silêncio).
+    if (proIssue) { fail(proIssue, 'service'); return; }
+    if (pastIssue) { fail(pastIssue, 'time'); return; }
+    if (!opts.fitIn && slotIssue) { fail(slotIssue, 'time'); return; }
     // Campos obrigatórios ANTES da conferência de intervalo: formulário vazio
     // deve dizer o que falta (cliente/serviço), não "aguarde o intervalo".
-    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
-    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
-    if (!serviceId || !date) { setError('Escolha serviço, data e horário.'); return; }
-    if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { setError(slotsError || 'Aguarde a conferência do intervalo.'); return; }
-    if (!picked || !name.trim()) { setError('Busque o cliente ou cadastre um novo para usar neste agendamento.'); return; }
-    if (!contactId) { setError('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).'); return; }
+    if (!picked || !name.trim()) { fail('Busque o cliente ou cadastre um novo para usar neste agendamento.', 'client'); return; }
+    if (!contactId) { fail('Busque um paciente existente ou cadastre um novo (o cadastro fica no CRM).', 'client'); return; }
+    if (!serviceId || !date) { fail(!serviceId ? 'Escolha o serviço deste atendimento.' : 'Escolha a data deste atendimento.', !serviceId ? 'service' : 'date'); return; }
+    if (!opts.fitIn && (loadingSlots || slotsError || checkedSlotKey !== slotKey)) { fail(slotsError || 'Aguarde a conferência do intervalo.', 'time'); return; }
     // P0-3 — veterinária com pets no tutor: o PET é o paciente (obrigatório).
     if (isVet && contactId && pets.length > 0 && !petId) {
-      setError('Em clínica veterinária, escolha o pet (paciente) deste agendamento.');
+      fail('Em clínica veterinária, escolha o pet (paciente) deste agendamento.', 'pet');
       return;
     }
-    if (onlyDigits(phone).length < 10) { setError('Informe um WhatsApp válido.'); return; }
+    // P1 · veterinária com leitura pendente ou falha: não envia sem saber os pets.
+    if (picked && contactId && (isVet || vetMode) && petsStatus === 'loading') {
+      fail('Aguarde a leitura dos pets do tutor.', 'pet');
+      return;
+    }
+    if (picked && contactId && (isVet || vetMode) && petsStatus === 'error') {
+      fail('Não foi possível carregar os pets deste tutor. Tente novamente antes de agendar.', 'pet');
+      return;
+    }
+    if (onlyDigits(phone).length < 10) { fail('Informe um WhatsApp válido.', 'client'); return; }
     const when = opts.timeOverride || time;
-    if (!serviceId || !date || !when) { setError('Escolha serviço, data e horário.'); return; }
+    if (!serviceId || !date || !when) { fail('Escolha o horário deste atendimento.', 'time'); return; }
     // Encaixe em horário que já passou: recusado AQUI, sem chamar o servidor
     // (que recusaria do mesmo jeito — a frase é a mesma).
     if (opts.fitIn) {
       const past = fitInPastError(date, when, today, nowHM(new Date(), timezone || undefined));
-      if (past) { setError(past); return; }
+      if (past) { fail(past, 'time'); return; }
     }
     if (opts.fitIn && repeat) { setError('Encaixe não cria série — desligue a repetição.'); return; }
     setSaving(true);
@@ -431,6 +490,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         count: data.count,
         occurrences: data.occurrences,
         customer: name,
+        pet: pets.find((p) => p.id === petId)?.name || undefined,
         service: service?.name || 'Serviço',
         professional: data.occurrences ? 'Veja as ocorrências abaixo' : data.professionalName || eligiblePros.find((p) => p.id === activeProId)?.name || 'Definido pela agenda',
         date: data.occurrences?.[0]?.date || date,
@@ -438,99 +498,141 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
         fitIn: opts.fitIn === true,
       });
     } catch (e: any) {
-      setError(e.message || 'Não foi possível criar o agendamento.');
+      const message = e.message || 'Não foi possível criar o agendamento.';
+      fail(message, fieldForServerError(message));
     } finally {
       setSaving(false);
     }
   }
 
+  /* Grupos de período dos horários livres (Manhã < 12h, Tarde < 18h, Noite). */
+  const slotGroups = [
+    { label: 'Manhã', items: slots.filter((t) => timeToMin(t) < 720) },
+    { label: 'Tarde', items: slots.filter((t) => timeToMin(t) >= 720 && timeToMin(t) < 1080) },
+    { label: 'Noite', items: slots.filter((t) => timeToMin(t) >= 1080) },
+  ].filter((g) => g.items.length > 0);
+  /* Estado sem horário: título e apoio separados (mesmos fatos de antes). */
+  const emptyDayCopy: [string, string] = dayState?.full
+    ? ['Todos os horários deste dia estão ocupados.', 'Escolha outro dia para ver a agenda livre.']
+    : dayState?.state === 'closed'
+      ? ['Fechado neste dia.', 'Escolha outro dia para ver os horários.']
+      : ['Nenhum horário disponível.', 'Escolha outra data ou outro profissional para ver os horários livres.'];
+  /* Contexto já determinado (slot da Agenda / pré-preenchimento) vai para o
+     cabeçalho como uma linha compacta: profissional · data · hora. */
+  const ctxProName = pros.find((p) => p.id === activeProId)?.name;
+  const ctxDateBR = date ? date.split('-').reverse().join('/') : '';
+  const ctxSubtitle = [ctxProName, ctxDateBR, time].filter(Boolean).join(' · ') || undefined;
+  /* Rodapé do diálogo: Cancelar (secundário) · Criar agendamento (primário). */
+  const createDisabled = saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')));
+  /* Confirmação (Missão 03): ações com HIERARQUIA, não três botões de mesmo
+     peso. Primário = concluir (Fechar); secundário = conferir na Agenda;
+     ghost = iniciar outro agendamento. Ficam no rodapé do Dialog (DS). */
+  const startAnotherBooking = () => { setCreated(null); setStaffDuration(''); setRepeat(false); setOccurrences([]); setPreview(null); requestId.current = ''; setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); };
+  const footerActions = created ? (
+    <>
+      <Button type="button" variant="ghost" onClick={startAnotherBooking}>Novo agendamento</Button>
+      <Button type="button" variant="secondary" onClick={() => { window.location.assign(`/agenda?b=${encodeURIComponent(businessId)}&data=${created.date}`); }}>Ver na agenda</Button>
+      <Button type="button" variant="primary" onClick={onClose}>Fechar</Button>
+    </>
+  ) : (
+    <>
+      <Button type="button" variant="secondary" onClick={() => { if (!saving && !reviewing) onClose(); }} disabled={saving || reviewing}>Cancelar</Button>
+      <Button type="button" variant="primary" onClick={() => save()} disabled={createDisabled}>
+        {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Criar agendamento'}
+      </Button>
+    </>
+  );
+
   return (
     <Drawer
-      open
-      /* MISSÃO UX CLOSURE · item 3C — NOVO/EDITAR AGENDAMENTO = MODAL CENTRAL.
-         Antes: faixa lateral de até 95% da viewport (um formulário curto
-         esticado contra a borda direita). Agora: modal central do DS, largura
-         confortável (672px; criação rápida vinda do slot fica mais compacta) e
-         o par 50/50 preservado quando o cadastro de paciente abre no MESMO
-         overlay. Regras de agenda, guardas de descarte e presets: intactos. */
+      open={open}
+      onExited={onExited}
+      /* CONTRATO ÚNICO do Novo agendamento (criação completa, em qualquer entrada):
+         MODAL CENTRAL do DS, largura pelo token --gd-booking-modal-w (672px).
+         O Quick Create é o popover ancorado ao slot; "Mais opções" abre esta
+         mesma superfície central com o contexto da célula. O cadastro de paciente
+         NÃO fica aqui: é a página /clientes/novo (Missão 02). */
       variant="dialog"
-      dialogWidth={quick && !advanced ? '560px' : '672px'}
-      dialogClassName={initial?.time ? 'gd-booking-range-drawer' : undefined}
+      title="Novo agendamento"
+      subtitle={ctxSubtitle}
+      footer={footerActions}
+      dialogWidth="var(--gd-booking-modal-w)"
       onClose={() => { if (!saving && !reviewing) onClose(); }}
       dismissGuard={overlayGuard}
-      sideDismissGuard={{ ...clientPersistence, context: 'new-client' }}
-      title="Novo agendamento"
-      width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}
-      /* §19–25 — mesmo overlay: os dois painéis usam presets oficiais; em
-         viewport estreita o cadastro ocupa a faixa sem comprimir agendamento. */
-      side={registerOpen ? (
-        <NewClientForm
-          embedded
-          businessId={businessId}
-          vetMode={vetMode || isVet}
-          initialName={onlyDigits(query).length >= 10 ? '' : query.trim()}
-          initialPhone={onlyDigits(query).length >= 10 ? query.trim() : ''}
-          onClose={() => setRegisterOpen(false)}
-          onPersistenceChange={setClientPersistence}
-          onSaved={(cid, extra) => { setClientPersistence({ dirty: false, saving: false, error: '' }); onClientRegistered(cid, extra); }}
-        />
-      ) : undefined}
-      sideTitle="Cadastrar novo paciente"
-      sideSubtitle="Dados do tutor e do paciente"
-      sideWidth={WORKSPACE_SHEET_SIZES.nestedForm}
-      onSideClose={() => setRegisterOpen(false)}
     >
-        <div className="px-5 py-4 space-y-3.5">
+        <div className="px-5 py-5 space-y-5">
           {created ? (
             <div className="space-y-4" data-booking-created="true">
-              <div className="rounded-xl border border-[var(--success-border)] bg-[var(--success-bg)] px-4 py-4">
-                <p className="text-base font-semibold text-[var(--success-fg)] flex items-center gap-2">
-                  <Icon n="check" size={18} strokeWidth={3} /> {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
-                  {created.fitIn && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
-                </p>
-                {created.fitIn && (
-                  <p className="text-xs text-[var(--success-fg)] mt-1">
-                    Encaixe registrado: este horário estava fora da grade e a decisão foi da equipe.
+              {/* Confirmação compacta (Missão 03): superfície BRANCA, verde só no
+                  ícone de status. Mesmo conteúdo de antes — tutor, pet quando
+                  houver, serviço, profissional, data e horário — em linhas com
+                  divisórias sutis. Ações ficam no rodapé (ver footerActions). */}
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--success-bg)] text-[var(--success-fg)]">
+                  <Icon n="check" size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-base font-semibold text-[var(--text)]">
+                    {created.count ? `${created.count} atendimentos criados` : 'Agendamento criado'}
+                    {created.fitIn && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
                   </p>
-                )}
-                <dl className="mt-3 divide-y divide-[var(--success-border)] text-sm text-[var(--text)]">
-                  {[
-                    ['Cliente', created.customer], ['Serviço', created.service], ['Profissional', created.professional],
-                    [created.count ? 'Primeira data' : 'Data', created.date.split('-').reverse().join('/')], ['Horário', created.time],
-                  ].map(([label, value]) => <div key={label} className="py-3"><dt className="text-xs text-[var(--text-muted)]">{label}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}
-                </dl>
-                {created.occurrences && <ol className="mt-3 space-y-1 text-xs tabular-nums">
-                  {created.occurrences.map((row, i) => <li key={row.id}>{String(i + 1).padStart(2, '0')}. {row.date.split('-').reverse().join('/')} · {row.time} · {row.professionalName}</li>)}
-                </ol>}
+                  {created.fitIn && (
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      Encaixe registrado: este horário estava fora da grade e a decisão foi da equipe.
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <Button type="button" variant="primary" onClick={onClose}>Fechar</Button>
-                <Button type="button" variant="secondary" onClick={() => { window.location.assign(`/agenda?b=${encodeURIComponent(businessId)}&data=${created.date}`); }}>Ver na agenda</Button>
-                <Button type="button" variant="secondary" onClick={() => { setCreated(null); setStaffDuration(''); setRepeat(false); setOccurrences([]); setPreview(null); requestId.current = ''; setServiceId(''); setDate(''); setTime(''); setNote(''); setError(''); }}>Novo agendamento</Button>
-              </div>
+              <dl className="border-y border-[var(--border)] text-sm">
+                {[
+                  [(isVet || vetMode) ? 'Tutor' : 'Cliente', created.customer],
+                  ...(created.pet ? [['Pet', created.pet]] : []),
+                  ['Serviço', created.service],
+                  ['Profissional', created.professional],
+                  [created.count ? 'Primeira data' : 'Data', created.date.split('-').reverse().join('/')],
+                  ['Horário', created.time],
+                ].map(([label, value]) => (
+                  <div key={label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--border-soft)] py-2.5 last:border-b-0">
+                    <dt className="pt-0.5 text-xs text-[var(--text-muted)]">{label}</dt>
+                    <dd className="min-w-0 break-words font-medium tabular-nums text-[var(--text)]">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {created.occurrences && <ol className="space-y-1 text-xs tabular-nums text-[var(--text-muted)]">
+                {created.occurrences.map((row, i) => <li key={row.id}>{String(i + 1).padStart(2, '0')}. {row.date.split('-').reverse().join('/')} · {row.time} · {row.professionalName}</li>)}
+              </ol>}
             </div>
           ) : (
+          <div className="space-y-5" ref={formRef}>
           <div className="space-y-3">
           {/* 1. Cliente — o rótulo usa o tipo canônico do DS (label 13/20 500);
               a nota de por que buscamos no CRM virou AJUDA CONTEXTUAL (tooltip),
               em vez de parágrafo permanente sob o campo (§13). */}
-          <div>
+          <div data-field="client">
             <span className="mb-1.5 flex items-center gap-1.5">
-              <span className="gd-t-label text-[var(--text)]">1. Cliente <span className="text-[var(--danger)]">*</span></span>
+              <span className="gd-field__label m-0">Cliente <span className="text-[var(--danger)]">*</span></span>
+              {errorField === 'client' && error && <span role="alert" className="ml-auto text-xs font-medium text-[var(--danger)]">{error}</span>}
+              {/* Ação de cadastro: pequena (ghost sm), na linha do rótulo — nunca uma
+                  linha inteira com peso de campo. */}
+              {!picked && !unlinkedPrefill && canRegisterClient && (
+                <Button type="button" variant="ghost" size="sm" onClick={startNew} className="ml-auto" data-new-client-trigger="true">
+                  + Novo cliente
+                </Button>
+              )}
               {!picked && (
                 <Tooltip label={`Buscamos no CRM para não duplicar cadastro — ${isLegacyPagesEnabled() ? 'o cliente pode já ter conta na sua página.' : 'o cliente pode já ter uma conta.'}`}>
                   <button type="button" aria-label="Por que buscamos no CRM" className="il-icon-button p-0 gd-icon-control--xs text-[var(--text-muted)]">
-                    <Icon n="help" size={13} />
+                    <Icon n="help" size={16} />
                   </button>
                 </Tooltip>
               )}
             </span>
             {picked ? (
-              <div className="flex flex-wrap items-center gap-3 bg-[var(--success-bg)] border border-[var(--success-border)] rounded-lg px-3.5 py-3">
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3">
                 <Avatar name={name || '?'} size={36} />
                 <span className="min-w-0 flex-1 basis-40">
                   <span className="block text-sm font-semibold text-[var(--text)] break-words">{name}</span>
-                  <span className="block text-xs text-[var(--success-fg)] break-words">
+                  <span className="block text-xs text-[var(--text-muted)] break-words">
                     {phone}{email ? ` · ${email}` : ''}
                   </span>
                 </span>
@@ -553,15 +655,9 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                   placeholder="Buscar cliente por nome ou WhatsApp…" aria-label="Buscar cliente" />
                 {searching && <p className="text-xs text-[var(--text-faint)] mt-1.5">Buscando…</p>}
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
-                  <Button type="button" variant="secondary" onClick={startNew} className="mt-2 w-full justify-start" data-new-client-trigger="true">
-                    + Cadastrar paciente {vetMode ? '(tutor e pet)' : `“${query.trim()}”`}
-                  </Button>
-                )}
-                {!searching && query.trim().length < 2 && (
-                  <Button type="button" variant="secondary" onClick={startNew}
-                    className="mt-2 w-full justify-start" data-new-client-trigger="true">
-                    + Cadastrar paciente
-                  </Button>
+                  <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                    Nenhum {vetMode ? 'tutor' : 'cliente'} encontrado para “{query.trim()}”. Use “+ Novo cliente”.
+                  </p>
                 )}
                 {!searching && results.length > 0 && (
                   <ul className="mt-2 border border-[var(--border)] rounded-lg divide-y divide-[var(--border)] overflow-hidden">
@@ -576,7 +672,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                             </span>
                             <span className="block text-xs text-[var(--text-muted)]">{c.phone || 'sem telefone'}</span>
                           </span>
-                          <Icon n="chevR" size={14} className="text-[var(--text-faint)] shrink-0" />
+                          <Icon n="chevR" size={16} className="text-[var(--text-faint)] shrink-0" />
                         </button>
                       </li>
                     ))}
@@ -588,21 +684,33 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
           {/* FASE 2 · P6 — veterinária: o PET é o paciente (obrigatório quando
               o tutor já tem pet; sem pet, use o cadastro unificado). */}
-          {picked && contactId && (isVet || vetMode) && pets.length > 0 && (
-            <Field label="Pet (paciente)" required
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'loading' && (
+            <div data-pets-state="loading" role="status" className="text-xs text-[var(--text-muted)]">Carregando pets do tutor…</div>
+          )}
+          {picked && contactId && petsStatus === 'error' && (isVet || vetMode || !vetResolved) && (
+            <div data-pets-state="error" role="alert" className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3">
+              <p className="text-xs font-semibold text-[var(--text)]">Não foi possível carregar os pets deste tutor.</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">A leitura falhou; isto não significa que o tutor não tem pet.</p>
+              <button type="button" className="mt-2 text-xs font-semibold text-[var(--brand)] underline" onClick={() => setPetsRetry((n) => n + 1)}>Tentar novamente</button>
+            </div>
+          )}
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'ready' && pets.length > 0 && (
+            <div data-field="pet"><Field label="Pet (paciente)" required error={errorField === 'pet' ? error : undefined}
               hint="Em clínica veterinária a agenda identifica pelo pet; o tutor continua sendo o contato.">
               <SelectMenu value={petId} disabled={saving || reviewing} onChange={(v) => setPetId(v)} placeholder="Selecione o pet…"
                 options={pets.map((p) => ({ value: p.id, label: p.name, hint: p.breed || undefined }))} />
-            </Field>
+            </Field></div>
           )}
-          {picked && contactId && (isVet || vetMode) && pets.length === 0 && (
+          {picked && contactId && (isVet || vetMode) && petsStatus === 'ready' && pets.length === 0 && (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3" data-vet-pet-empty="true">
               <p className="text-xs font-semibold text-[var(--text)]">Este tutor ainda não tem pet cadastrado.</p>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">Cadastre pelo fluxo “+ Cadastrar paciente” — o pet nasce junto com o tutor no CRM.</p>
             </div>
           )}
 
-          <Field label="2. Serviço" required>
+          </div>
+          <div className="space-y-3">
+          <div data-field="service"><Field label="Serviço" required error={errorField === 'service' ? error : undefined}>
             {/* CP3 · Combobox do DS (busca + teclado), no lugar do select nativo. */}
             <Combobox
               label="Serviço"
@@ -610,28 +718,38 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
               emptyLabel="Nenhum serviço encontrado"
               disabled={saving || reviewing}
               value={serviceId}
-              onChange={(v) => setServiceId(String(v))}
+              openOnFocus={errorField !== 'service'}
+              onChange={(v) => chooseService(String(v))}
               options={[{ value: '', label: 'Selecione…' }, ...orderedServices.map((s) => ({
                 value: s.id,
                 label: `${s.name} · ${durationLabel(s.durationMin)}`,
                 hint: eligibleProfessionalIds(s as any, pros).length === 0 ? 'Sem profissional habilitado' : undefined,
               }))]}
             />
-          </Field>
+          </Field></div>
 
 
 
+          {/* Contexto compacto: profissional e data lado a lado (sem três campos
+              burocráticos empilhados). */}
+          {/* Progressivo (Missão 03): profissional e data só entram depois do
+              serviço. Antes disso uma dica; o valor (ex.: data vinda da Agenda)
+              continua no estado e aparece no resumo do cabeçalho. */}
+          {!serviceId ? (
+            <p data-progressive-hint="service" className="text-xs text-[var(--text-muted)]">Escolha o serviço para ver profissionais e datas disponíveis.</p>
+          ) : (
+          <div className={(eligiblePros.length > 0 || incompatiblePro) ? 'grid grid-cols-1 items-start gap-3 sm:grid-cols-2' : undefined}>
           {(eligiblePros.length > 0 || incompatiblePro) && (
-            <Field label="Profissional" hint="Opcional — em branco a agenda equilibra a equipe automaticamente">
+            <Field label="Profissional" hint={!activeProId && autoPro.count >= 2 ? 'Em branco: a agenda equilibra a equipe' : undefined}>
               <Combobox
                 label="Profissional"
                 placeholder="Buscar profissional…"
                 emptyLabel="Nenhum profissional encontrado"
                 disabled={saving || reviewing}
                 value={activeProId}
-                onChange={(v) => setProId(String(v))}
+                onChange={(v) => chooseProfessional(String(v))}
                 options={[
-                  { value: '', label: 'Automático (equilibrar equipe)' },
+                  { value: '', label: autoPro.label },
                   ...(incompatiblePro ? [{ value: proId, label: `${pros.find(p => p.id === proId)?.name} — não realiza este serviço` }] : []),
                   ...eligiblePros.map((p) => ({ value: p.id, label: p.name })),
                 ]}
@@ -639,60 +757,93 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
             </Field>
           )}
 
-          {proIssue && <Notice tone="warning">{proIssue}</Notice>}
-          <Field label="3. Data" required>
+          <div data-field="date"><Field label="Data" required error={errorField === 'date' ? error : undefined}>
             {/* CP3 · DatePicker do DS: o input date nativo não é mais usado no produto. */}
-            <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => setDate(iso)} />
-          </Field>
+            <DatePicker label="Data" min={today} max={maxDate} value={date} disabled={saving || reviewing} onChange={(iso) => chooseDate(iso)} />
+          </Field></div>
+          </div>
+          )}
+          {proIssue && error !== proIssue && <Notice tone="warning">{proIssue}</Notice>}
 
-          {slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
+          {slotIssue && error !== slotIssue && <Notice tone="warning">{slotIssue}</Notice>}
+          </div>
+          <div className="space-y-3">
           {date && serviceId && !proIssue && (!rangeIntent || editingTime) && (
-            <div>
-              <span className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">4. Horário <span className="text-[var(--danger)]">*</span></span>
+            <div data-field="time" ref={timeSectionRef} className="scroll-mt-4 space-y-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="gd-field__label m-0 block">Horário <span className="text-[var(--danger)]">*</span></span>
+                {!loadingSlots && !slotsError && slots.length > 0 && (
+                  <span className="text-xs tabular-nums text-[var(--text-muted)]">{slots.length === 1 ? '1 livre' : `${slots.length} livres`}</span>
+                )}
+              </div>
+              {errorField === 'time' && error && <p role="alert" className="text-xs font-medium text-[var(--danger)]">{error}</p>}
               {loadingSlots ? (
-                <p className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
-                  <span className="w-3 h-3 border-2 border-[var(--border-strong)] border-t-[var(--brand)] rounded-full animate-spin" /> Carregando horários…
-                </p>
+                <div role="status" className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 md:grid-cols-9">
+                  <span className="sr-only">Carregando horários…</span>
+                  {Array.from({ length: 16 }, (_, i) => <Skeleton key={i} className="h-7 rounded-full" />)}
+                </div>
               ) : slotsError ? (
                 <Notice tone="error">{slotsError}</Notice>
               ) : slots.length === 0 ? (slotIssue ? null : (
-                <Notice tone="warning">
-                  {dayState?.full
-                    ? 'Todos os horários deste dia estão ocupados. Escolha outro dia.'
-                    : dayState?.state === 'closed'
-                      ? 'Fechado neste dia. Escolha outro dia.'
-                      : 'Nenhum horário disponível.'}
-                </Notice>
-              )) : (
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                  {slots.map((t) => (
-                    <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
-                      aria-pressed={time === t}
-                      className="il-option-choice il-option-choice--compact tabular-nums">
-                      {t}
-                    </button>
-                  ))}
+                <div role="status" className="rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] px-4 py-5 text-center">
+                  <Icon n="calendar" size={20} className="mx-auto text-[var(--text-muted)]" />
+                  <p className="mt-2 text-sm font-semibold text-[var(--text)]">{emptyDayCopy[0]}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{emptyDayCopy[1]}</p>
                 </div>
+              )) : (
+                <>
+                  {/* Horários agrupados por período, em grade alinhada e sem painel
+                      com rolagem interna: o corpo do diálogo é quem rola. */}
+                  <div data-slot-picker="true" className="space-y-3">
+                    {slotGroups.map((g) => (
+                      <div key={g.label}>
+                        <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                          {g.label} <span className="tabular-nums text-[var(--text-faint)]">· {g.items.length}</span>
+                        </p>
+                        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 md:grid-cols-9">
+                          {g.items.map((t) => (
+                            <button key={t} type="button" disabled={saving || reviewing} onClick={() => setTime(t)}
+                              aria-pressed={time === t}
+                              className="il-option-choice il-option-choice--compact w-full tabular-nums">
+                              {time === t && <Icon n="check" size={14} />}
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {!time && <p className="text-xs text-[var(--text-muted)]">Escolha um horário livre para continuar.</p>}
+                  {occupiedCount > 0 && (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {occupiedCount === 1 ? '1 horário ocupado não aparece' : `${occupiedCount} horários ocupados não aparecem`} nesta lista.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
 
-          {time && <section aria-label="Resumo do intervalo" data-testid="booking-range-summary" className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-3">
-            <h3 className="text-sm font-semibold">Horário</h3>
-            <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
-              <div><dt className="text-[var(--text-muted)]">Início</dt><dd className="font-medium">{time}</dd></div>
-              <div><dt className="text-[var(--text-muted)]">Fim</dt><dd className="font-medium">{minToTime(timeToMin(time) + (staffDuration || service?.durationMin || 30))}</dd></div>
-              <div className="col-span-2"><dt className="text-[var(--text-muted)]">Duração</dt><dd className="font-medium">{durationLabel(staffDuration || service?.durationMin || 30)}</dd></div>
+          {time && <section aria-label="Resumo do intervalo" data-testid="booking-range-summary" className="space-y-3 border-t border-[var(--border)] pt-4">
+            <h3 className="gd-field__label m-0">Resumo do agendamento</h3>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+              <div className="col-span-2 sm:col-span-3"><dt className="text-xs text-[var(--text-muted)]">Serviço</dt><dd className="mt-0.5 font-medium text-[var(--text)]">{service?.name || '—'}</dd></div>
+              <div className="col-span-2"><dt className="text-xs text-[var(--text-muted)]">Profissional</dt><dd className="mt-0.5 font-medium text-[var(--text)]">{ctxProName || autoPro.label}</dd></div>
+              <div><dt className="text-xs text-[var(--text-muted)]">Data</dt><dd className="mt-0.5 font-medium tabular-nums text-[var(--text)]">{ctxDateBR}</dd></div>
+              <div><dt className="text-xs text-[var(--text-muted)]">Início</dt><dd className="mt-0.5 text-base font-semibold tabular-nums text-[var(--text)]">{time}</dd></div>
+              <div><dt className="text-xs text-[var(--text-muted)]">Fim</dt><dd className="mt-0.5 text-base font-semibold tabular-nums text-[var(--text)]">{minToTime(timeToMin(time) + (staffDuration || service?.durationMin || 30))}</dd></div>
+              <div className="col-span-2 sm:col-span-1"><dt className="text-xs text-[var(--text-muted)]">Duração</dt><dd className="mt-0.5 font-medium text-[var(--text)]">{durationLabel(staffDuration || service?.durationMin || 30)}</dd></div>
             </dl>
             {rangeIntent && <Button type="button" variant="ghost" size="sm" aria-expanded={editingTime} disabled={saving || reviewing} onClick={() => setEditingTime(v => !v)}>{editingTime ? 'Manter horário selecionado' : 'Alterar horário'}</Button>}
             {rangeIntent && loadingSlots && <p role="status" className="text-sm text-[var(--text-muted)]">Verificando disponibilidade…</p>}
             {rangeIntent && !editingTime && slotsError && <Notice tone="error">{slotsError}</Notice>}
           </section>}
+          </div>
           {/* §9/§14 — as opções avançadas são DIVULGAÇÃO canônica (nasce
               fechada). O `<details>`+`<summary>` com chevron próprio desenhava
               um segundo padrão de abrir/fechar; agora é o `Disclosure` do DS,
               controlado pelo mesmo estado que decide o conteúdo. */}
-          <Disclosure label="Opções avançadas" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
+          <Disclosure label="Mais opções" open={advanced} onOpenChange={setAdvanced} className="rounded-md border border-[var(--border)] bg-[var(--surface)]">
             <div className="space-y-3 p-3">
           <Field label="Duração deste atendimento (min)" hint={`Serviço sugere ${service?.durationMin ? durationLabel(service.durationMin) : '—'}; deixe vazio para usar o padrão`}>
             <Input type="number" min="5" max="720" step="5" aria-label="Duração deste atendimento em minutos"
@@ -711,7 +862,7 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
                     <p className="text-xs text-[var(--text-muted)] mt-0.5">O encaixe aceita fora da grade — mostra o conflito e é registrado como encaixe.</p>
                   </div>
                   <Button type="button" variant="secondary" size="sm" onClick={() => { setFitInOpen(true); setFitInMessage(''); setFitInConflicts([]); setFitInTime(time || '09:00'); }}>
-                    <Icon n="clock" size={13} /> Encaixar
+                    <Icon n="clock" size={16} /> Encaixar
                   </Button>
                 </div>
               ) : (
@@ -773,18 +924,32 @@ export function NewBookingSheet({ businessId, services, pros, timezone, initial,
 
             </div>
           </Disclosure>
-          {service && date && (time || repeat) && <section aria-label="Revise o agendamento" className="rounded-lg bg-[var(--surface-3)] p-4 text-sm space-y-1">
-            <h3 className="font-semibold">Confira antes de confirmar</h3><p>{name || 'Cadastro selecionado'} · {service.name}</p><p>{date.split('-').reverse().join('/')} às {time || 'Horários da recorrência'}</p><p className="text-xs text-[var(--text-muted)]">{pros.find(p => p.id === activeProId)?.name || 'Distribuição automática entre profissionais elegíveis'}{repeat ? ` · ${occurrences.length} ocorrências` : ''}</p>
-          </section>}
-          {error && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
-          <Button type="button" variant="primary" size="lg" onClick={() => save()}
-            disabled={saving || reviewing || !!proIssue || (!repeat && (!!slotIssue || !!slotsError || intervalPending)) || (repeat && (!preview || preview.some((r) => r.state !== 'available')))}
-            className="w-full">
-            {saving ? 'Agendando…' : reviewing ? 'Validando…' : repeat ? `Confirmar ${occurrences.length} atendimentos` : 'Salvar agendamento'}
-          </Button>
+          {error && !errorField && error !== proIssue && error !== slotIssue && error !== slotsError && <Notice tone="error">{error}</Notice>}
         </div>
       )}
         </div>
     </Drawer>
   );
+}
+
+type NewBookingSheetProps = Omit<Parameters<typeof NewBookingSheetSurface>[0], 'open' | 'onExited'>;
+
+/**
+ * Novo agendamento — contrato público de PRESENÇA.
+ *
+ * Os pais controlam `open` (ex.: `open={!!creating}`) em vez de montar/desmontar
+ * o componente. Assim a saída é animada: a superfície permanece montada até o
+ * `onExited` do Drawer (fim da animação), e só então é desmontada.
+ *
+ * - Enquanto fecha, o conteúdo fica CONGELADO no último estado aberto: o pai
+ *   pode limpar o próprio estado sem que o título/formulário mudem por trás da animação.
+ * - Cada abertura cria uma nova `session` (remount da superfície): reabrir ou
+ *   trocar de contexto nunca reaproveita rascunho de sessão anterior. Reabrir
+ *   DURANTE a saída também remonta (o descarte já foi confirmado pelo guard).
+ */
+export function NewBookingSheet({ open = true, ...rest }: NewBookingSheetProps & { open?: boolean }) {
+  const { mounted, session, handleExited } = useOverlayPresence(open);
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  return <NewBookingSheetSurface key={session} {...frozen} open={open} onExited={handleExited} />;
 }

@@ -57,9 +57,24 @@ describe('agenda-drag — clique simples × arraste (threshold)', () => {
     expect(state).toEqual(IDLE_INTERACTION);
   });
 
+  it('threshold canônico é 8px: exatamente 8px continua clique; acima de 8px vira drag', () => {
+    expect(DRAG_THRESHOLD_PX).toBe(8);
+    const atEdge = runInteraction([
+      { type: 'down', id: 'b1', at: p(10, 10) },
+      { type: 'move', at: p(18, 10) },
+      { type: 'up', at: p(18, 10) },
+    ]);
+    expect(atEdge.effects).toEqual(['open-detail']);
+    const beyond = runInteraction([
+      { type: 'down', id: 'b1', at: p(10, 10) },
+      { type: 'move', at: p(18.5, 10) },
+    ]);
+    expect(beyond.effects).toEqual(['start-drag']);
+  });
+
   it('movimento diagonal pequeno não vira drag (distância euclidiana)', () => {
     expect(exceedsDragThreshold(p(0, 0), p(3, 3), DRAG_THRESHOLD_PX)).toBe(false);
-    expect(exceedsDragThreshold(p(0, 0), p(5, 5), DRAG_THRESHOLD_PX)).toBe(true);
+    expect(exceedsDragThreshold(p(0, 0), p(6, 6), DRAG_THRESHOLD_PX)).toBe(true);
     expect(pointerDistance(p(0, 0), p(3, 4))).toBe(5);
   });
 

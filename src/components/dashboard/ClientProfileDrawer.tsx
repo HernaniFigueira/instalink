@@ -29,7 +29,7 @@ import {
   BRAZILIAN_STATES, PROFILE_TAGS_MAX, ageFromBirthDate, clientTags, countAttended, formatCep, formatCpf,
   formatPhoneBR, isValidCpf, normalizeBirthDate, profileOf,
 } from '@/lib/contact-profile';
-import { Avatar, Badge, Button, DetailSideModal, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, buttonCls, PageBackAction, type TabItem } from '@/components/ui';
+import { Avatar, Badge, Button, DetailSideModal, DropdownMenu, IconButton, Input, Kpi, Notice, SelectMenu, StatusBadge, SubCard, Switch, OverflowTabs, Textarea, useOverlayPresence, useFrozenWhileClosed, buttonCls, PageBackAction, type MenuItem, type TabItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { cepError, contactFieldErrors, emailError, hasFieldErrors, maskCep, maskCpf, phoneError } from '@/lib/field-quality';
@@ -109,7 +109,30 @@ type HistoryTab =
  * sempre; o que muda é a casca (gaveta ou página) e o quanto carrega
  * (a gaveta não dispara atendimentos/financeiro à toa).
  */
-export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref }: {
+/**
+ * Ficha/prévia do cliente — contrato público de PRESENÇA.
+ *
+ * `open` é controlado pelo pai (ex.: `open={!!opened}`). Assim a saída é animada:
+ * a superfície fica montada até o fim do DetailSideModal (`onExited`) e só então
+ * desmonta. Antes, a página montava com `{opened && <ClientProfileDrawer/>}` e a
+ * prévia sumia no mesmo quadro (ex.: "Agendar atendimento" trocava de superfície
+ * sem saída). Enquanto fecha, o conteúdo fica congelado no último cliente aberto.
+ */
+type ClientProfileDrawerProps = Omit<Parameters<typeof ClientProfileDrawerSurface>[0], 'open' | 'onExited'> & {
+  open?: boolean;
+  /** Chamado depois que a saída termina e a superfície já saiu da tela. */
+  onExited?: () => void;
+};
+export function ClientProfileDrawer({ open = true, onExited, ...rest }: ClientProfileDrawerProps) {
+  const { mounted, session, handleExited } = useOverlayPresence(open, onExited);
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  return <ClientProfileDrawerSurface key={session} {...frozen} open={open} onExited={handleExited} />;
+}
+
+function ClientProfileDrawerSurface({ person, businessId, pipeline, canFunil, onClose, onChanged, onNewBooking, variant = 'preview', pageBackHref, open, onExited }: {
+  open: boolean;
+  onExited: () => void;
   person: Person360;
   businessId: string;
   pipeline: BusinessPipeline | null;
@@ -153,6 +176,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
   // HOMOLOGAÇÃO · P1 — Pet 360 (ficha do animal).
   const [pet360, setPet360] = useState<Pet | null>(null);
+  // Último Pet 360 não nulo: a ficha sai animada com o mesmo pet.
+  const lastPet360Ref = useRef<Pet | null>(null);
+  if (pet360) lastPet360Ref.current = pet360;
+  const pet360Ctx = pet360 ?? lastPet360Ref.current;
+  // "Abrir atendimento" a partir do Pet 360: o atendimento só abre depois que a ficha saiu.
   const [encountersError, setEncountersError] = useState('');
   const [encountersLoaded, setEncountersLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -221,6 +249,12 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   // usada pelo CRM (contato OU cliente), então o link nunca aponta para a
   // pessoa errada quando há contato e cliente com o mesmo nome.
   const profileHref = (query: string) => `/clientes/${encodeURIComponent(person.key)}${query}`;
+  // E3 · "Ver na agenda" abre o DIA e o profissional do próprio evento (nunca hoje por omissão).
+  const agendaHrefFor = (bk?: { date: string; professionalId?: string } | null) => {
+    if (!bk) return `/agenda?b=${encodeURIComponent(businessId)}`;
+    const pro = bk.professionalId ? `&professionalId=${encodeURIComponent(bk.professionalId)}` : '';
+    return `/agenda?b=${encodeURIComponent(businessId)}&view=day&data=${bk.date}${pro}`;
+  };
   // Dois destinos, um só domínio:
   //   • agendamento (`bookingId`)  → resolvedor → workspace canônico F1A;
   //   • registro JÁ EXISTENTE (`id`) → registro completo (legado), que é onde
@@ -343,7 +377,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         title: b.service,
         subtitle: [b.seriesId ? `Série · ${b.seriesIndex} de ${b.seriesCount}` : '', b.professional, (b.rescheduleCount || 0) > 0 ? `reagendado ${b.rescheduleCount}×` : ''].filter(Boolean).join(' · ') || 'Atendimento',
         badge: d.panel, tone: d.tone,
-        body: <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={10} /></Link>,
+        body: <Link href={agendaHrefFor(b)} className={buttonCls('secondary', 'xs')}>Ver na agenda <Icon n="chevR" size={16} /></Link>,
       });
     }
     for (const c of person.conversations || []) {
@@ -399,7 +433,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         body: (
           <div className="flex flex-wrap gap-1.5">
             {t.leadId && canFunil && <Link href={`/funil?b=${businessId}#${t.leadId}`} className={buttonCls('secondary', 'xs')}>Ver oportunidade</Link>}
-            {t.bookingId && <Link href={`/agenda?b=${businessId}`} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
+            {t.bookingId && <Link href={agendaHrefFor(person.bookings.find((x) => x.id === t.bookingId))} className={buttonCls('secondary', 'xs')}>Ver agenda</Link>}
           </div>
         ),
       });
@@ -480,7 +514,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const nextBooking = useMemo(
     () => [...person.bookings]
       .filter((b) => b.date >= today && b.status !== 'cancelled' && b.status !== 'completed' && b.status !== 'no_show')
-      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1))[0] || null,
+      .sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? -1 : 1))[0] || null,
     [person.bookings, today],
   );
   const lastEncounter = encounters[0] || null; // a API devolve mais recente primeiro
@@ -498,37 +532,50 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
   const pageBack = pageBackHref || `/clientes?b=${encodeURIComponent(businessId)}`;
   // Ações da ficha em PÁGINA: no cabeçalho do workspace (não sticky), uma
   // única primária (Novo agendamento).
+  // HIERARQUIA DE AÇÕES DO CABEÇALHO (shadcn): tertiary (ghost) à esquerda,
+  // secondary (contorno) no meio e UM primary sólido à direita. O divisor
+  // separa o grupo de leitura/edição do grupo de ação principal.
+  // Edição: abrir faz scroll + foco no primeiro campo; fechar pede o guard.
+  const toggleEdit = () => {
+    const opening = !editing;
+    if (editing) requestCloseEdit(); else setEditing(true);
+    // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
+    // campo + highlight sutil (1–2s). Fechar não mexe no foco.
+    if (opening) focusFieldSoon('client-edit-name');
+  };
+  // Cabeçalho com UMA primária (Novo agendamento) e no máximo um secundário
+  // visível. Nota e edição, que são ações de ficha e não de agenda, moram no
+  // menu "Mais" canônico (DropdownMenu): a barra deixa de parecer cheia.
+  const moreItems: MenuItem[] = [
+    ...(!clinicalView ? [
+      { id: 'note', label: 'Registrar nota', icon: 'pencil', onSelect: () => { setTab('notes'); focusFieldSoon('client-note-draft'); } },
+      { id: 'edit', label: editing ? 'Fechar edição' : 'Editar dados', icon: editing ? 'x' : 'pencil', onSelect: toggleEdit },
+    ] : []),
+  ];
   const pageActions = (
     <>
-      {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
-      {/* FASE 2 · P2 — ações rápidas: nota e iniciar atendimento (quando aplicável). */}
-      {/* §17–18 — "Registrar nota" conduz ao campo: troca a aba, rola até o
-          textarea e o foca com highlight sutil (sem modal novo). */}
-      {!clinicalView && (
-        <Button variant="secondary" size="sm" onClick={() => { setTab('notes'); focusFieldSoon('client-note-draft'); }}>
-          <Icon n="pencil" size={14} /> Registrar nota
-        </Button>
+      {person.phone && canWhats && (
+        <a href={waLink(person.phone, `Olá, ${firstName}!`)} target="_blank" rel="noreferrer" className={buttonCls('ghost', 'sm')}>
+          <Icon n="whatsapp" size={16} /> WhatsApp
+        </a>
       )}
       {/* Workflow: só quem JÁ CHEGOU (ou está em atendimento) abre o
           registro; antes disso a chegada é registrada na Agenda. */}
       {canEncounter && canStartBooking(nextBooking) && (nextBooking!.workflowState === 'arrived' || nextBooking!.workflowState === 'in_care') && (
         <Button variant="secondary" size="sm" onClick={() => openEncounter({ bookingId: nextBooking.id })}>
-          <Icon n="fileText" size={14} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
+          <Icon n="fileText" size={16} /> {nextBooking.workflowState === 'in_care' ? 'Abrir atendimento' : 'Iniciar atendimento'}
         </Button>
       )}
-      {!clinicalView && (
-        <Button variant="secondary" size="sm" onClick={() => {
-          const opening = !editing;
-          if (editing) requestCloseEdit(); else setEditing(true);
-          // §17–18 — ao abrir a edição: scroll suave + foco no primeiro
-          // campo + highlight sutil (1–2s). Fechar não mexe no foco.
-          if (opening) focusFieldSoon('client-edit-name');
-        }}>
-          <Icon n={editing ? 'x' : 'pencil'} size={14} /> {editing ? 'Fechar edição' : 'Editar dados'}
-        </Button>
+      {moreItems.length > 0 && (
+        <DropdownMenu
+          label="Mais ações da ficha"
+          items={moreItems}
+          trigger={<Button variant="ghost" size="sm">Mais <Icon n="chevD" size={16} /></Button>}
+        />
       )}
+      <span className="entity-main__sep" aria-hidden="true" />
       <Button variant="primary" size="sm" onClick={() => onNewBooking(person)}>
-        <Icon n="calendarPlus" size={14} /> Novo agendamento
+        <Icon n="calendarPlus" size={16} /> Novo agendamento
       </Button>
     </>
   );
@@ -537,6 +584,8 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
     <>
     <ProfileShell
       variant={variant}
+      open={open}
+      onExited={onExited}
       onClose={onClose}
       dismissGuard={editState}
       title={person.name || 'Cliente'}
@@ -545,16 +594,17 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         : (person.contactId ? 'Paciente 360 — prévia rápida do cadastro' : 'Pessoa ainda sem cadastro no CRM')}
       backHref={variant === 'page' ? pageBack : profileHref(`?b=${encodeURIComponent(businessId)}`)}
       footer={variant === 'page' ? null : (
-        <>
+        // Quebra de linha no rodapé: em 390 px os três botões não cabem em uma linha e o rodapé (justify-end, sem wrap) jogava o WhatsApp para fora da tela.
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
           {person.phone && canWhats && <A2 href={waLink(person.phone, `Olá, ${firstName}!`)} label="WhatsApp" icon="whatsapp" />}
           <Button variant="secondary" size="sm" onClick={() => onNewBooking(person)}>
-            <Icon n="calendarPlus" size={14} /> Novo agendamento
+            <Icon n="calendarPlus" size={16} /> Novo agendamento
           </Button>
           {/* A ficha completa é uma PÁGINA (§11): a gaveta só dá a passagem. */}
           <Link href={profileHref(`?b=${encodeURIComponent(businessId)}`)} className={buttonCls('primary', 'sm')}>
-            Ver perfil completo <Icon n="chevR" size={14} />
+            Ver perfil completo <Icon n="chevR" size={16} />
           </Link>
-        </>
+        </div>
       )}
     >
       {routeDismiss.dialog}
@@ -620,7 +670,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           {/* Cabeçalho do workspace: ações da ficha, sem sticky (o contexto
               persistente é o rail; nada cobre a identidade). */}
           <header className="entity-main__header">
-            <p className="entity-main__title">Visão do cliente</p>
+            <h2 className="entity-main__title">Visão do cliente</h2>
             <div className="entity-main__actions">{pageActions}</div>
           </header>
         {/* FASE 2 · P6 — pets do tutor (aparece SOMENTE em clínica veterinária). */}
@@ -639,11 +689,11 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
           <SubCard className="mt-4 p-4">
             <div className="flex items-center justify-between gap-3 mb-2">
               <h3 className="text-sm font-semibold text-[var(--text)] inline-flex items-center gap-1.5">
-                <Icon n="idcard" size={14} className="text-[var(--text-muted)]" /> Cadastro
+                <Icon n="idcard" size={16} className="text-[var(--text-muted)]" /> Cadastro
               </h3>
               {!clinicalView && (
                 <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>
-                  <Icon n="pencil" size={12} /> Editar
+                  <Icon n="pencil" size={16} /> Editar
                 </Button>
               )}
             </div>
@@ -841,7 +891,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     <button type="button" aria-label={`Remover etiqueta ${t}`}
                       onClick={() => setDraft((d) => ({ ...d, tags: d.tags.filter((x) => x !== t) }))}
                       className="text-[var(--text-faint)] hover:text-[var(--danger)]">
-                      <Icon n="x" size={11} strokeWidth={2.6} />
+                      <Icon n="x" size={16} />
                     </button>
                   </span>
                 ))}
@@ -876,21 +926,20 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
             <div className="flex flex-wrap items-center justify-end gap-2 mt-4 pt-3 border-t border-[var(--border-soft)]">
               <Button variant="ghost" size="sm" onClick={requestCloseEdit}>Cancelar</Button>
               <Button variant="primary" size="sm" onClick={saveProfile} disabled={saving}>
-                <Icon n="check" size={14} /> {saving ? 'Salvando…' : 'Salvar dados'}
+                <Icon n="check" size={16} /> {saving ? 'Salvando…' : 'Salvar dados'}
               </Button>
             </div>
           </div>
         )}
 
-      {pet360 && (
+      {pet360Ctx && (
         <Pet360Sheet
           open={!!pet360}
           onClose={() => setPet360(null)}
           businessId={businessId}
-          pet={pet360}
+          pet={pet360Ctx}
           tutorName={person.name}
           tutorPhone={person.phone}
-          onOpenEncounter={(row) => { setPet360(null); openEncounter({ id: row.id }); }}
         />
       )}
       {/* ═══ O QUE ACONTECEU — histórico ═══ */}
@@ -898,73 +947,82 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
         <div className="il-divider my-4">O que aconteceu com {firstName}</div>
         {/* Abas principais visíveis; o excedente vai para "Mais" (menu
             canônico). Sem scroll horizontal escondido. */}
-        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" />
+        <OverflowTabs items={tabItems} value={tab} onChange={setTab} ariaLabel="Seções do histórico do cliente" className="client360-tabs" variant="line" />
 
         <div className="mt-4 ws-panel">
           {/* ── FASE 2 · P2 — VISÃO GERAL (próximo passo em primeiro) ── */}
           {tab === 'overview' && (
-            <div className="p-5 space-y-5">
-              <div className="client360-overview-grid">
-                <div className="rounded-lg border border-[var(--border)] p-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo agendamento</h3>
+            <div className="p-5 space-y-6" data-overview>
+              {/* Três cards operacionais, nada além disso. Observação vira callout
+                  inline e financeiro vira seção de métricas: não são mais caixas. */}
+              <div className="grid gap-3 md:grid-cols-3" data-overview-operational>
+                <OverviewCard title="Próximo agendamento">
                   {nextBooking ? (
                     <>
-                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
-                      <p className="text-[12px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
-                      <Link href={`/agenda?b=${businessId}&data=${nextBooking.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
+                      <p className="text-[15px] font-semibold text-[var(--text)]">{formatDateBR(nextBooking.date)}{nextBooking.time ? ` · ${nextBooking.time}` : ''}</p>
+                      <p className="text-[13px] text-[var(--text-muted)]">{nextBooking.service}{nextBooking.professional ? ` · ${nextBooking.professional}` : ''}</p>
+                      <Link href={agendaHrefFor(nextBooking)} className={cn(buttonCls('ghost', 'xs'), 'mt-auto -ml-2 self-start')}>Ver na agenda</Link>
                     </>
-                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhum futuro marcado.</p>}
-                </div>
-                <div className="rounded-lg border border-[var(--border)] p-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Último atendimento</h3>
+                  ) : <p className="text-[13px] text-[var(--text-muted)]">Nenhum futuro marcado.</p>}
+                </OverviewCard>
+                <OverviewCard title="Último atendimento">
                   {lastEncounter ? (
                     <>
-                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
-                      <p className="text-[12px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
-                      <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
+                      <p className="text-[15px] font-semibold text-[var(--text)]">{formatDateBR(lastEncounter.date)}{lastEncounter.time ? ` · ${lastEncounter.time}` : ''}</p>
+                      <p className="text-[13px] text-[var(--text-muted)] line-clamp-2">{lastEncounter.evolution || lastEncounter.complaint || 'Sem descrição'}</p>
+                      <button type="button" className={cn(buttonCls('ghost', 'xs'), 'mt-auto -ml-2 self-start')} onClick={() => openEncounter({ id: lastEncounter.id })}>Abrir registro</button>
                     </>
-                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem registro de atendimento.</p>}
-                </div>
-                <div className="rounded-lg border border-[var(--border)] p-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Retorno previsto</h3>
+                  ) : <p className="text-[13px] text-[var(--text-muted)]">Sem registro de atendimento.</p>}
+                </OverviewCard>
+                <OverviewCard title="Retorno previsto">
                   {pendingReturn ? (
                     <>
-                      <p className="text-[15px] font-semibold text-[var(--text)] mt-1">{formatDateBR(pendingReturn.due)}</p>
-                      <p className="text-[12px] text-[var(--text-muted)]">{pendingReturn.e.followUp || (pendingReturn.e.followUpMode === 'interval' ? `Intervalo de ${pendingReturn.e.followUpDays} dias` : 'Retorno programado')}</p>
+                      <p className="text-[15px] font-semibold text-[var(--text)]">{formatDateBR(pendingReturn.due)}</p>
+                      <p className="text-[13px] text-[var(--text-muted)]">{pendingReturn.e.followUp || (pendingReturn.e.followUpMode === 'interval' ? `Intervalo de ${pendingReturn.e.followUpDays} dias` : 'Retorno programado')}</p>
                     </>
-                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Sem retorno estruturado registrado.</p>}
-                </div>
-
-                {!clinicalView && <div className="rounded-lg border border-[var(--border)] p-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Observação importante</h3>
-                  {lastNote ? (
-                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{lastNote.text}</p>
-                  ) : profile.adminNote ? (
-                    <p className="text-[13px] text-[var(--text)] mt-1 line-clamp-3">{profile.adminNote}</p>
-                  ) : <p className="text-[13px] text-[var(--text-muted)] mt-1">Nenhuma observação registrada.</p>}
-                  <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('notes')}>Ver observações</button>
-                </div>}
-                {canFinance ? (
-                  <div className="rounded-lg border border-[var(--border)] p-4">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Financeiro do paciente</h3>
-                    {!financeLoaded ? <p className="text-[13px] text-[var(--text-muted)] mt-1">Carregando…</p> : (
-                      <div className="grid grid-cols-2 gap-2 mt-1">
-                        <Kpi label="Recebido" value={centsToBR(financeReceived)} tone="success" />
-                        <Kpi label="Em aberto" value={centsToBR(financePending)} tone={financePending > 0 ? 'warning' : 'default'} />
-                      </div>
-                    )}
-                    <button type="button" className={buttonCls('secondary', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
-                  </div>
-                ) : !clinicalView && (
-                  <div className="rounded-lg border border-[var(--border)] p-4">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Status</h3>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
-                      {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
-                    </div>
-                  </div>
-                )}
+                  ) : <p className="text-[13px] text-[var(--text-muted)]">Sem retorno estruturado registrado.</p>}
+                </OverviewCard>
               </div>
+
+              {!clinicalView && (
+                <section role="note" aria-labelledby="client360-note-title" className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4" data-overview-callout>
+                  <span aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--text-muted)]"><Icon n="chat" size={16} /></span>
+                  <div className="min-w-0 flex-1">
+                    <h3 id="client360-note-title" className="text-[14px] font-semibold text-[var(--text)]">Observação importante</h3>
+                    <p className="mt-1 text-[14px] leading-6 text-[var(--text)] line-clamp-3">{lastNote ? lastNote.text : profile.adminNote ? profile.adminNote : 'Nenhuma observação registrada.'}</p>
+                    <button type="button" className={cn(buttonCls('ghost', 'xs'), 'mt-1 -ml-2')} onClick={() => setTab('notes')}>Ver observações</button>
+                  </div>
+                </section>
+              )}
+
+              {canFinance ? (
+                <section aria-labelledby="client360-finance-title" className="border-t border-[var(--border-soft)] pt-5" data-overview-finance>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 id="client360-finance-title" className="text-[12px] font-semibold text-[var(--text-muted)]">Financeiro do paciente</h3>
+                    <button type="button" className={buttonCls('ghost', 'xs')} onClick={() => setTab('finance')}>Abrir financeiro</button>
+                  </div>
+                  {!financeLoaded ? <p className="mt-2 text-[13px] text-[var(--text-muted)]">Carregando…</p> : (
+                    <dl className="mt-3 grid max-w-md grid-cols-2 gap-x-6">
+                      <div className="min-w-0">
+                        <dt className="text-[12px] font-medium text-[var(--text-muted)]">Recebido</dt>
+                        <dd className="mt-1 text-[18px] font-semibold tabular-nums text-[var(--success-fg)]">{centsToBR(financeReceived)}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-[12px] font-medium text-[var(--text-muted)]">Em aberto</dt>
+                        <dd className={cn('mt-1 text-[18px] font-semibold tabular-nums', financePending > 0 ? 'text-[var(--warning-fg)]' : 'text-[var(--text)]')}>{centsToBR(financePending)}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </section>
+              ) : !clinicalView && (
+                <section aria-labelledby="client360-status-title" className="border-t border-[var(--border-soft)] pt-5">
+                  <h3 id="client360-status-title" className="text-[12px] font-semibold text-[var(--text-muted)]">Etiquetas</h3>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {tags.map((t) => <Badge key={t.id} tone={(t.tone as any) || 'zinc'}>{t.label}</Badge>)}
+                    {tags.length === 0 && <Badge tone="zinc">Sem etiquetas</Badge>}
+                  </div>
+                </section>
+              )}
             </div>
           )}
 
@@ -977,7 +1035,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 <ul className="divide-y divide-[var(--border-soft)]">
                   {files.map((f) => (
                     <li key={f.id} className="flex items-center gap-3 px-4 py-3">
-                      <span className="grid place-items-center h-8 w-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="upload" size={15} /></span>
+                      <span className="grid place-items-center h-8 w-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand-fg)] shrink-0"><Icon n="upload" size={16} /></span>
                       <div className="min-w-0 flex-1">
                         <a href={f.url} target="_blank" rel="noreferrer" className="text-[13.5px] font-semibold text-[var(--text)] hover:underline truncate block">{f.name}</a>
                         <p className="text-[11.5px] text-[var(--text-muted)]">Atendimento de {formatDateBR(f.encounterDate)} · {Math.max(1, Math.round(f.size / 1024))} KB</p>
@@ -1026,7 +1084,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   {timeline.map((ev) => (
                     <li key={`${ev.kind}-${ev.id}`} className="px-4 py-3 flex gap-3">
                       <span className="w-8 h-8 shrink-0 rounded-md bg-[var(--brand-soft)] text-[var(--brand-fg)] flex items-center justify-center">
-                        <Icon n={ev.icon} size={15} />
+                        <Icon n={ev.icon} size={16} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1053,7 +1111,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                     return (
                       <li key={b.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
                         <span className="w-8 h-8 shrink-0 rounded-md bg-[var(--surface-3)] text-[var(--text-muted)] flex items-center justify-center">
-                          <Icon n="calendar" size={15} />
+                          <Icon n="calendar" size={16} />
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-[var(--text)]">{b.service}</p>
@@ -1065,7 +1123,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                           </p>
                         </div>
                         <StatusBadge tone={d.tone}>{d.panel}</StatusBadge>
-                        <Link href={`/agenda?b=${businessId}&data=${b.date}`} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
+                        <Link href={agendaHrefFor(b)} className={buttonCls('secondary', 'xs')}>Ver na agenda</Link>
                       </li>
                     );
                   })}
@@ -1089,7 +1147,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   {(person.conversations || []).map((c) => (
                     <li key={c.id} className="px-4 py-3 flex gap-3">
                       <span className="w-8 h-8 shrink-0 rounded-md bg-[var(--success-bg)] text-[var(--success-fg)] flex items-center justify-center">
-                        <Icon n={c.channel === 'whatsapp' ? 'whatsapp' : 'spark'} size={15} />
+                        <Icon n={c.channel === 'whatsapp' ? 'whatsapp' : 'spark'} size={16} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-[var(--text)]">{c.channel === 'whatsapp' ? 'WhatsApp' : 'Assistente'}</p>
@@ -1143,7 +1201,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                   {(person.tasks || []).map((t) => (
                     <li key={t.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
                       <span className="w-8 h-8 shrink-0 rounded-md bg-[var(--warning-bg)] text-[var(--warning-fg)] flex items-center justify-center">
-                        <Icon n="tasks" size={15} />
+                        <Icon n="tasks" size={16} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-[var(--text)]">{t.title}</p>
@@ -1181,7 +1239,7 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-[var(--text-muted)]">⌘/Ctrl + Enter salva · o histórico nunca é apagado.</p>
                   <Button variant="primary" size="sm" onClick={addNote} disabled={!noteDraft.trim() || saving}>
-                    <Icon n="plus" size={14} /> {saving ? 'Salvando…' : 'Salvar anotação'}
+                    <Icon n="plus" size={16} /> {saving ? 'Salvando…' : 'Salvar anotação'}
                   </Button>
                 </div>
               </div>
@@ -1244,8 +1302,21 @@ export function ClientProfileDrawer({ person, businessId, pipeline, canFunil, on
  *             à esquerda e as ações à direita. Sem gaveta dentro de página,
  *             sem perder sidebar/topbar.
  */
-function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
+/** Card operacional da Visão geral: rótulo + valor + ação. Só os três cards principais usam esta moldura. */
+function OverviewCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+      <h3 className="text-[12px] font-semibold text-[var(--text-muted)]">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function ProfileShell({ variant, open = true, onExited, onClose, title, subtitle, backHref, footer, children, dismissGuard }: {
   variant: 'preview' | 'page';
+  /** Preview: controlado pelo pai (saída animada). Página: sempre aberto. */
+  open?: boolean;
+  onExited?: () => void;
   onClose: () => void;
   title: string;
   subtitle: string;
@@ -1268,18 +1339,19 @@ function ProfileShell({ variant, onClose, title, subtitle, backHref, footer, chi
   // flutuante (`.ws-sheet`, com gap nas extremidades e raio de card) sai das
   // superfícies de PRÉVIA/FICHA: perfil de cliente, Pet 360 e contexto de
   // conversa usam o `DetailSideModal` — preso à borda direita, altura cheia do
-  // viewport, sem raio e sem sombra. A largura vem do token do DS (560px para
-  // a ficha) e o corpo não soma recuo (`flush`): quem recua é o conteúdo, que
-  // já tem o próprio `p-4`.
+  // viewport, sem raio e sem sombra. A largura vem do token do DS
+  // (`--gd-detail-w`, 460px; janela 420–480) — sem override de largura aqui
+  // (R6: o 560px fixo estava fora do contrato). O corpo não soma recuo
+  // (`flush`): quem recua é o conteúdo, que já tem o próprio `p-4`.
   return (
     <DetailSideModal
-      open
+      open={open}
+      onExited={onExited}
       onClose={onClose}
       dismissGuard={dismissGuard}
       title={title}
       subtitle={subtitle}
       icon="users"
-      width="560px"
       flush
       fullPage={{ href: backHref, label: 'Ver perfil completo' }}
       footer={footer}
@@ -1419,7 +1491,7 @@ function CopyChip({ value }: { value: string }) {
     <button type="button" title="Copiar" aria-label="Copiar telefone"
       onClick={() => { navigator.clipboard?.writeText(value); setDone(true); setTimeout(() => setDone(false), 1500); }}
       className="text-[var(--text-faint)] hover:text-[var(--brand-fg)]">
-      <Icon n={done ? 'check' : 'copy'} size={12} />
+      <Icon n={done ? 'check' : 'copy'} size={16} />
     </button>
   );
 }
@@ -1427,7 +1499,7 @@ function CopyChip({ value }: { value: string }) {
 function A2({ href, label, icon }: { href: string; label: string; icon: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}>
-      <Icon n={icon} size={14} /> {label}
+      <Icon n={icon} size={16} /> {label}
     </a>
   );
 }
@@ -1435,7 +1507,7 @@ function A2({ href, label, icon }: { href: string; label: string; icon: string }
 function Empty({ hint, action }: { hint: string; action?: React.ReactNode }) {
   return (
     <div className="il-empty">
-      <div className="il-empty__icon"><Icon n="history" size={22} /></div>
+      <div className="il-empty__icon"><Icon n="history" size={20} /></div>
       <p className="text-sm text-[var(--text-muted)] max-w-sm">{hint}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>

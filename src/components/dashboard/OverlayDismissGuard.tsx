@@ -179,6 +179,11 @@ export function useUnsavedChangesGuard(
       if (anchor.href === window.location.href) return;
       event.preventDefault();
       event.stopPropagation();
+      // O menu de navegação modal (ex.: gaveta do celular) é top-layer: cobriria a
+      // confirmação deste guard. O link veio de dentro dele → fecha o menu antes de
+      // perguntar. O formulário guardado NÃO está nesse menu: nada se perde.
+      const menu = anchor.closest('dialog.workspace-nav-drawer[open]') as HTMLDialogElement | null;
+      if (menu && typeof menu.close === 'function') menu.close();
       ask('navigation', () => {
         leaving.current = true;
         bypassLink.current = true;

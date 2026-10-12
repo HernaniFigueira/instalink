@@ -25,7 +25,10 @@ describe('Agenda — workspace compacto com scroll interno', () => {
   });
 
   it('mobile começa em Lista (grade de colunas não cabe em 390px)', () => {
-    expect(page).toMatch(/window\.matchMedia\('\(max-width: 767px\)'\)\.matches\) setDefaultView\('list'\)/);
+    // A regra mora em defaultAgendaView (celular → 'list'), coberta por agenda-view-preference.test.ts.
+    // Aqui se confere que a página detecta o celular e usa essa regra.
+    expect(page).toMatch(/setIsMobile\(window\.matchMedia\('\(max-width: 767px\)'\)\.matches\)/);
+    expect(page).toMatch(/defaultAgendaView\(\{ isMobile, professionalScoped/);
   });
 
   it('profissional tem foto com QUEDA para iniciais (Avatar)', () => {

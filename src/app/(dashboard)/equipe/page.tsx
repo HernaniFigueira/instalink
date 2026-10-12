@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useOverlayDismissGuard, useUnsavedChangesGuard } from '@/components/dashboard/OverlayDismissGuard';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch } from '@/components/ui';
+import { Avatar, Badge, Button, buttonCls, Drawer, Notice, PageHeader, PageSkeleton, Select, Input, Field, Switch, useFrozenWhileClosed } from '@/components/ui';
 import { cn, onlyDigits, parseMoneyToCents } from '@/lib/utils';
 import { permissionsFor } from '@/lib/permissions';
 import { roleLabel } from '@/lib/role-labels';
@@ -75,6 +75,7 @@ export default function EquipePage() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [askDelete, setAskDelete] = useState<DeleteAsk | null>(null);
+  const askDeleteFrozen = useFrozenWhileClosed(!!askDelete, askDelete);
   // Clinical OS — painel único ADICIONAR PESSOA (sem chooser)
   const [showAdd, setShowAdd] = useState(false);
   const [editEntry, setEditEntry] = useState<any>(null);
@@ -134,7 +135,8 @@ export default function EquipePage() {
   const personGuard = { dirty: !fSuccessProfessionalId && draftBaseline.current !== null && draftBaseline.current !== personDraft, saving: fSaving, error: fError, context: 'edit' as const, title: 'Descartar alterações não salvas?' };
   const cancelGuard = useOverlayDismissGuard();
   const navigationGuard = useUnsavedChangesGuard({ ...personGuard, dirty: showAdd && personGuard.dirty, saving: showAdd && personGuard.saving });
-  const closePerson = () => { setShowAdd(false); resetAddForm(); };
+  // Fechar só fecha: o rascunho é limpo em onExited, depois da animação de saída.
+  const closePerson = () => { setShowAdd(false); };
 
   function resetAddForm() {
     setFName('');
@@ -305,8 +307,8 @@ export default function EquipePage() {
         setFSaving(false);
         return;
       }
+      // Sucesso: fecha; o formulário é limpo em onExited, depois da saída animada.
       setShowAdd(false);
-      resetAddForm();
       setMsg(editEntry ? 'Pessoa atualizada.' : 'Pessoa adicionada.');
       setTimeout(()=>setMsg(''),3000);
       await load();
@@ -588,12 +590,14 @@ export default function EquipePage() {
 
       {/* ADICIONAR PESSOA — painel único Clinical OS (hideTrigger) */}
       {/* hideTrigger — chooser único, sem segunda porta; overlay via token WORKSPACE_SHEET_SIZES */}
-      {showAdd && (
-        <Drawer
+      {/* Modal (backdrop + foco preso): o formulário tem rascunho; a lista de
+          equipe atrás não pode receber cliques que sobrescrevam o rascunho
+          ("Gerenciar" de outra pessoa). A saída pelo menu lateral passa pelo
+          guard de descarte. Não usar `modal={false}` aqui. */}
+      <Drawer
           open={showAdd}
-          modal={false}
-          dialogClassName="gd-team-editor"
           onClose={closePerson}
+          onExited={resetAddForm}
           dismissGuard={personGuard}
           title={editEntry ? 'Gerenciar pessoa' : 'Adicionar pessoa'}
           subtitle={editEntry ? 'Edite os dados desta pessoa — o mesmo painel cria e gerencia.' : 'Identificação + acesso (opcional) + atuação clínica (opcional).'}
@@ -615,7 +619,7 @@ export default function EquipePage() {
                   <p className="text-sm text-[var(--gd-text-muted)]">Horário próprio ainda não configurado. Configure os horários desta pessoa para que ela apareça livre na agenda — ou feche e faça depois.</p>
                   <div className="flex justify-center gap-2 pt-2">
                     <Link href={`/disponibilidade?b=${businessId}&professionalId=${fSuccessProfessionalId}`} className={buttonCls('primary','sm')}>Configurar horários</Link>
-                    <Button variant="ghost" size="sm" onClick={()=> { setShowAdd(false); resetAddForm(); }}>Fechar</Button>
+                    <Button variant="ghost" size="sm" onClick={()=> { setShowAdd(false); }}>Fechar</Button>
                   </div>
                 </div>
               </div>
@@ -1009,8 +1013,7 @@ export default function EquipePage() {
               </div>
             )}
 
-            {showRemoveConfirm && editEntry?.kind === 'member' && (
-              <Drawer open onClose={()=> setShowRemoveConfirm(false)} title={`Remover acesso de ${editEntry.member?.name || fName}?`} width="max-w-md">
+            <Drawer open={showRemoveConfirm && editEntry?.kind === 'member'} onClose={()=> setShowRemoveConfirm(false)} title={`Remover acesso de ${(editEntry as any)?.member?.name || fName}?`} width="max-w-md">
                 <div className="p-5 space-y-4">
                   <p className="text-sm text-[var(--gd-text-secondary)]">Esta pessoa não poderá entrar no sistema. Se realiza atendimentos, o perfil profissional, serviços e disponibilidade serão preservados.</p>
                   <div className="flex justify-end gap-2 pt-2">
@@ -1020,25 +1023,24 @@ export default function EquipePage() {
                         const m = (editEntry as any).member;
                         const res = await apiSend(`/api/team?businessId=${businessId}&id=${m.id}`, 'DELETE', undefined, { scope: 'action', area: 'Equipe' });
                         if (!res.ok) throw new Error(res.message || 'Não foi possível remover acesso.');
-                        setShowRemoveConfirm(false); setShowAdd(false); resetAddForm(); setMsg('Acesso removido. Perfil profissional mantido.'); setTimeout(()=>setMsg(''),3000); await load();
+                        setShowRemoveConfirm(false); setShowAdd(false); setMsg('Acesso removido. Perfil profissional mantido.'); setTimeout(()=>setMsg(''),3000); await load();
                       } catch (e:any) { setFError(e.message || 'Não foi possível remover acesso.'); setShowRemoveConfirm(false); }
                     }}>Remover acesso</Button>
                   </div>
                 </div>
               </Drawer>
-            )}
           </div>
             )}
           {cancelGuard.dialog}
           {navigationGuard.dialog}
-        </Drawer>
-      )}
+      </Drawer>
 
-      {askDelete && (
+      {askDeleteFrozen && (
         <DeleteSheet
-          name={askDelete.name}
+          open={!!askDelete}
+          name={askDeleteFrozen.name}
           kindLabel="profissional"
-          blocked={askDelete.blocked}
+          blocked={askDeleteFrozen.blocked}
           onDeactivate={doDeactivatePro}
           onConfirm={doDeletePro}
           onClose={() => setAskDelete(null)}

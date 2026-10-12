@@ -23,9 +23,9 @@ const ruleBody = (sel: string) => {
 };
 
 describe('P1 · botões e ícones sem contorno ocioso', () => {
-  it('secundário: repouso neutro e sem borda, hover/active com superfície neutra', () => {
+  it('secundário: repouso com contorno visível (P1.6: ação sem contorno parecia texto), hover/active com superfície neutra', () => {
     const cls = buttonCls('secondary');
-    expect(cls).toContain('border-transparent');
+    expect(cls).toContain('border-[var(--border-strong)]');
     expect(cls).not.toContain('border-[var(--brand)]');
     expect(cls).toContain('text-[var(--text)]');
     expect(cls).toContain('hover:bg-[var(--surface-3)]');
@@ -45,17 +45,18 @@ describe('P1 · botões e ícones sem contorno ocioso', () => {
 });
 
 describe('Pass 2 · régua canônica de controles e Quick Create', () => {
-  it('define 40px no desktop, 44px no toque, raio 8, seção 18/600 e rótulo 14/500 na fonte única', () => {
+  it('define 40px no desktop, 44px no toque, raio NOVA (6 compacto), seção 16/600 e rótulo 12/600 na fonte única (camada visual PR #69)', () => {
     expect(ds).toMatch(/--gd-control-h: 40px/);
     expect(ds).toMatch(/--gd-control-h-touch: 44px/);
-    expect(ds).toMatch(/--gd-radius-sm: 8px/);
+    expect(ds).toMatch(/--gd-radius-sm: 6px/);
+    expect(ds).toMatch(/--gd-radius-lg: 12px/);
     // B4: título de seção é 18/600 pela escala canônica; o alias histórico
     // aponta para ela, então títulos de detalhe/formulário não ficam em 16px.
-    expect(ds).toMatch(/--gd-type-section-size: 18px/);
+    expect(ds).toMatch(/--gd-type-section-size: 16px/);
     expect(ds).toMatch(/--gd-type-section-weight: var\(--gd-weight-semibold\)/);
     expect(ds).toMatch(/--gd-font-size-section: var\(--gd-type-section-size\)/);
     expect(ds).toMatch(/\.gd-detail__header h2 \{[\s\S]*?font-size: var\(--gd-type-section-size\); line-height: var\(--gd-type-section-line\);[\s\S]*?font-weight: var\(--gd-type-section-weight\)/);
-    expect(ds).toMatch(/--gd-type-label-size: 14px/);
+    expect(ds).toMatch(/--gd-type-label-size: 12px/);
     expect(ds).toMatch(/\.gd-field__label \{[^}]*font-size: var\(--gd-type-label-size\)[^}]*font-weight: var\(--gd-type-label-weight\)/);
     // Field também usa o token `gd-*` diretamente: popovers são portais fora
     // de `.il-platform` e não podem depender do alias de altura do shell.
@@ -83,13 +84,13 @@ describe('Pass 2 · régua canônica de controles e Quick Create', () => {
 
 describe('P1 · toolbar da Agenda — uma família de controles', () => {
   it('o gatilho de data entra na régua dos botões (repouso sem contorno, hover suave)', () => {
-    const body = ruleBody('.ag-page .gd-toolbar .il-field-control {');
+    const body = ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger) {');
     expect(body).toContain('background: transparent');
     expect(body).toContain('border-color: transparent');
-    const hover = ruleBody('.ag-page .gd-toolbar .il-field-control:hover');
+    const hover = ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):hover');
     expect(hover).toContain('background: var(--surface-hover)');
     // Foco visível continua: o anel do DS (shadow) + borda de acento.
-    expect(ruleBody('.ag-page .gd-toolbar .il-field-control:focus-visible')).toContain('border-color: var(--accent)');
+    expect(ruleBody('.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):focus-visible')).toContain('border-color: var(--accent)');
   });
 
   it('o seletor Dia/Semana/Lista é um poço neutro com polegar suave (sem contorno duplo)', () => {
@@ -212,7 +213,7 @@ describe('P0.2 · hover da Agenda é RESUMO colado no evento (não painel)', () 
     expect(card).toContain('width: 100%');
     expect(card).toContain('max-width: 100%');
     expect(card).toContain('padding: var(--gd-space-4)');
-    expect(card).toContain('gap: var(--gd-space-2)');
+    expect(card).toContain('gap: var(--gd-space-3)');
     expect(ruleBody('.ag-hover__heading {')).toContain('font-size: var(--gd-type-section-size)');
     expect(ruleBody('.ag-hover__rows > div {')).toContain('font-size: var(--gd-type-body-size)');
     expect(read('src/app/(dashboard)/agenda/page.tsx')).toContain('className="text-[12px]">{b.statusLabel}</StatusBadge>');
@@ -299,8 +300,9 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
 
   it('confirmação de EDIÇÃO é modal central (não gaveta lateral)', () => {
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
-    expect(agenda).toContain('{resizeAsk && <Drawer open variant="dialog" dialogWidth="460px"');
-    expect(agenda).toContain('<Drawer open variant="dialog" dialogWidth="520px"');
+    // Montagem controlada (não condicional): a saída anima antes do desmonte.
+    expect(agenda).toContain('<Drawer open={!!resizeAsk} variant="dialog" dialogWidth="460px"');
+    expect(agenda).toContain('<Drawer open={!!dropAsk} variant="dialog" dialogWidth="520px"');
     // O formulário completo de bloqueio já era central e continua sendo.
     expect(agenda).toContain('<Drawer open={blockForm} variant="dialog" dialogWidth="480px"');
   });
@@ -320,7 +322,7 @@ describe('AUDITORIA · rodada 2 — menu de contexto e confirmações', () => {
     // o requisito é que o menu contextual SEMPRE silencie o resumo.
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain('suppress={hoverSuppressed}');
-    expect(agenda).toMatch(/hoverSuppressed=\{ctxMenu !== null/);
+    expect(agenda).toMatch(/hoverSuppressed=\{!!dragId \|\| ctxMenu !== null/);
   });
 
 describe('AUDITORIA · rodada 2 — rótulos de navegação e resumo do cliente', () => {

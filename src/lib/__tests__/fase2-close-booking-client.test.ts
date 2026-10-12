@@ -13,9 +13,12 @@ describe('fechamento · cadastro real no agendamento', () => {
     expect(src).not.toContain('new-ready');
     expect(src).not.toContain('confirmNewDraft');
     expect(src).not.toContain('O cliente será cadastrado quando este agendamento');
-    // Usa o cadastro REAL
-    expect(src).toContain('NewClientSheet');
-    expect(src).toContain('setRegisterOpen(true)');
+    // Usa o cadastro REAL, agora na página /clientes/novo (Missão 02): o
+    // agendamento vai para o rascunho de sessão e a rota de cadastro recebe o fluxo.
+    expect(src).toContain('newClientFromBookingHref');
+    expect(src).toContain('writeBookingReturn(');
+    // Painel lateral de cadastro removido (Missão 02): sem NewClientForm aninhado.
+    expect(src).not.toContain('side={registerOpen');
     // picked = contato JÁ existente no CRM
     expect(src).toContain('const picked = !!contactId');
   });
@@ -27,10 +30,11 @@ describe('fechamento · cadastro real no agendamento', () => {
     expect(src).toContain('setVetMode');
   });
 
-  it('NewClientSheet: WorkspaceSheet + tutor/pet unificado + responsável menor', async () => {
+  it('NewClientSheet: formulário único de PÁGINA (sem Sheet/Drawer) + tutor/pet unificado + responsável menor', async () => {
+    // Missão 02: o cadastro completo é tela própria (/clientes/novo); não é mais WorkspaceSheet.
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/components/dashboard/NewClientSheet.tsx', 'utf8');
-    expect(src).toContain('WorkspaceSheet');
+    expect(src).not.toContain('WorkspaceSheet');
     expect(src).not.toContain('Drawer');
     expect(src).toContain('vetMode');
     expect(src).toContain('Adicionar pet');
@@ -57,7 +61,10 @@ describe('fechamento · cadastro real no agendamento', () => {
     const src = readFileSync('src/components/dashboard/NewClientSheet.tsx', 'utf8');
     expect(src).toContain("'/api/contacts', 'POST'");
     const booking = readFileSync('src/components/dashboard/NewBookingSheet.tsx', 'utf8');
-    expect(booking).toContain('onClientRegistered');
+    // Missão 02: o retorno é o rascunho de sessão + a página de cadastro (sem onClientRegistered).
+    expect(booking).toContain('writeBookingReturn(');
+    const page = readFileSync('src/app/(dashboard)/clientes/novo/page.tsx', 'utf8');
+    expect(page).toContain('withRegisteredClient(draft');
     // Abandonar agendamento não apaga: cadastro é independente (confirmado no CRM)
     const client = readFileSync('src/components/dashboard/NewClientSheet.tsx', 'utf8');
     expect(client).toContain('Cadastro salvo');

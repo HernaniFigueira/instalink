@@ -16,7 +16,7 @@
 // pacientes do tenant (nome, telefone do tutor, carteirinha e agendamentos)
 // SEM histórico comercial (conversas, oportunidades, gasto/pedidos e dados de
 // conta). Não existe segunda tela: mesma rota, mesma ficha, outro recorte.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BookingConfig, BusinessPipeline } from '@/lib/types';
@@ -24,17 +24,17 @@ import { money, waLink } from '@/lib/utils';
 import { humanDay } from '@/lib/tz';
 import { formatPhoneBR } from '@/lib/contact-profile';
 import { SearchListSkeleton,
-  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Tabs, buttonCls, type TabItem,
+  Avatar, Badge, Button, EmptyState, ListSkeleton, PageHeader, Segmented, buttonCls, type TabItem,
 } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
-import { NewClientSheet } from '@/components/dashboard/NewClientSheet';
 import { ImportClientsSheet } from '@/components/dashboard/ImportClientsSheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { BROAD_ACCESS_ROLES } from '@/lib/access-core';
 import { useWorkspace } from '@/components/dashboard/WorkspaceContext';
 import { ClientProfileDrawer, type Person360 } from '@/components/dashboard/ClientProfileDrawer';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
+import { newClientFromListHref, rememberClientsListQuery } from '@/lib/booking-return';
 import { buildClientListReturnQuery } from '@/lib/client-return';
 import { AccessDenied, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { apiGet } from '@/lib/api-client';
@@ -90,14 +90,23 @@ export default function ClientesPage() {
   };
   const [error, setError] = useState('');
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
-  const [newClientOpen, setNewClientOpen] = useState(false);
-  // FASE 2 · P9 — Quick Create global: ?novo=1 abre a criação de paciente.
+  // Último cliente de agendamento não nulo: a superfície sai animada com o conteúdo congelado.
+  const lastBookingRef = useRef(bookingFor);
+  if (bookingFor) lastBookingRef.current = bookingFor;
+  const bookingCtx = bookingFor ?? lastBookingRef.current;
+  // Missão 02 — o cadastro completo é a página /clientes/novo (não há painel aqui).
+  // FASE 2 · P9 — Quick Create global: ?novo=1 segue para a mesma página.
   const [novoHandled, setNovoHandled] = useState(false);
   useEffect(() => {
     if (novoHandled || !businessId || params.get('novo') !== '1') return;
     setNovoHandled(true);
-    setNewClientOpen(true);
-  }, [novoHandled, businessId, params]);
+    router.replace(newClientFromListHref(businessId));
+  }, [novoHandled, businessId, params, router]);
+  // A busca/filtro/página da lista viajam para o "Voltar" do cadastro.
+  const openNewClient = () => {
+    if (businessId) rememberClientsListQuery(businessId, listStateQuery());
+    router.push(newClientFromListHref(businessId));
+  };
   // A3.4 · Bloco 7 — a base entra e sai em arquivo (CSV).
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState('');
@@ -119,8 +128,6 @@ export default function ClientesPage() {
   // Quem atende vê a lista como "Pacientes" (linguagem de cuidado); quem opera
   // a unidade continua vendo "Clientes" (CRM).
   const clinicalView = workspace.agendaScope === 'own' || workspace.agendaScope === 'none';
-  const [pendingClientOpen, setPendingClientOpen] = useState('');
-  const [createdClientId, setCreatedClientId] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [pros, setPros] = useState<any[]>([]);
 
@@ -254,17 +261,6 @@ export default function ClientesPage() {
     return () => { cancelled = true; };
   }, [businessId, canFunil]);
 
-  // Depois do cadastro, a lista é recarregada pelo mesmo endpoint do Cliente
-  // 360. Quando o contato aparece, abrimos sua ficha sem inventar uma pessoa
-  // paralela nem depender de um reload manual.
-  useEffect(() => {
-    if (!pendingClientOpen) return;
-    const person = people.find((item) => item.contactId === pendingClientOpen);
-    if (!person) return;
-    setOpenKey(person.key);
-    setPendingClientOpen('');
-  }, [people, pendingClientOpen]);
-
   // A2-B3 (F5): horizonte real do negócio para o "+ Novo agendamento".
   const [bookingCfg, setBookingCfg] = useState<BookingConfig | null>(null);
   // A2-B5 (F9): fuso do negócio para o sheet de agendamento.
@@ -291,6 +287,12 @@ export default function ClientesPage() {
   useEffect(() => { setPage(1); }, [filter]);
 
   const opened = people.find((p) => p.key === openKey) || null;
+  // Último cliente da prévia não nulo: a prévia sai animada com o mesmo cliente.
+  const lastOpenedRef = useRef(opened);
+  if (opened) lastOpenedRef.current = opened;
+  const openedCtx = opened ?? lastOpenedRef.current;
+  // "Agendar atendimento" na prévia: o agendamento só abre DEPOIS que a prévia terminou de sair.
+  const [pendingBooking, setPendingBooking] = useState<Person360 | null>(null);
 
   const tabItems: TabItem<ListFilter>[] = [
     { id: 'all', label: 'Todos', icon: 'users' },
@@ -331,7 +333,7 @@ export default function ClientesPage() {
               </Button>
             )}
             {unitScope && (
-              <Button variant="primary" onClick={() => setNewClientOpen(true)}>
+              <Button variant="primary" onClick={openNewClient}>
                 <Icon n="plus" size={15} strokeWidth={2.6} /> Novo cliente
               </Button>
             )}
@@ -350,7 +352,9 @@ export default function ClientesPage() {
         <>
           {/* Busca + filtros: o filtro é aplicado NO SERVIDOR antes da
               paginação, então o total sempre reflete o que está na tela. */}
-          <div className="ws-panel p-3 mb-3 space-y-2.5">
+          <div className="ws-panel p-3 mb-3">
+            {/* Uma linha só: a busca ocupa a largura útil; o filtro (Segmented, primitive
+                canônico de filtro — não é tab de workspace) e a contagem ficam à direita. */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[220px]">
                 <Icon n="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -359,14 +363,14 @@ export default function ClientesPage() {
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={clinicalView ? 'Buscar por nome ou telefone…' : 'Buscar por nome, telefone, e-mail ou CPF…'}
                   aria-label={clinicalView ? 'Buscar paciente' : 'Buscar cliente'}
-                  className="il-field-control bg-[var(--surface-3)] pl-9 pr-3 focus:bg-white"
+                  className="il-field-control w-full bg-[var(--surface-3)] pl-9 pr-3 focus:bg-white"
                 />
               </div>
-              <span className="text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">
+              <Segmented items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
+              <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)] bg-[var(--surface-3)] border border-[var(--border)] rounded-pill px-3 py-1.5 tabular-nums">
                 {total} {total === 1 ? (clinicalView ? 'paciente' : 'pessoa') : (clinicalView ? 'pacientes' : 'pessoas')} · pág {page}/{pages}
               </span>
             </div>
-            <Tabs items={tabItems} value={filter} onChange={(v) => setFilter(v)} ariaLabel={clinicalView ? 'Filtrar pacientes' : 'Filtrar clientes'} size="sm" />
           </div>
 
           {denied ? <AccessDenied area="Clientes" /> : !loaded ? <SearchListSkeleton rows={5} /> : people.length === 0 ? (
@@ -381,7 +385,7 @@ export default function ClientesPage() {
                   : clinicalView
                     ? 'Assim que um paciente for cadastrado ou agendado na clínica, ele aparece aqui — inclusive os atendidos por outro profissional.'
                     : 'Assim que alguém agendar, for cadastrado na clínica ou conversar pelo WhatsApp, o perfil aparece aqui.'}
-                action={clinicalView ? undefined : <Button variant="primary" onClick={() => setNewClientOpen(true)}><Icon n="plus" size={15} strokeWidth={2.6} /> Cadastrar cliente</Button>}
+                action={clinicalView ? undefined : <Button variant="primary" onClick={openNewClient}><Icon n="plus" size={15} strokeWidth={2.6} /> Cadastrar cliente</Button>}
               />
             </div>
           ) : (
@@ -463,15 +467,17 @@ export default function ClientesPage() {
         </>
       )}
 
-      {opened && (
+      {openedCtx && (
         <ClientProfileDrawer
-          person={opened}
+          open={!!opened}
+          person={openedCtx}
           businessId={businessId}
           pipeline={pipeline}
           canFunil={canFunil}
           onClose={() => setOpenKey(null)}
           onChanged={load}
-          onNewBooking={(p) => { setOpenKey(null); openBooking(p); }}
+          onNewBooking={(p) => { setPendingBooking(p); setOpenKey(null); }}
+          onExited={() => { if (pendingBooking) { const p = pendingBooking; setPendingBooking(null); openBooking(p); } }}
         />
       )}
 
@@ -483,30 +489,15 @@ export default function ClientesPage() {
         />
       )}
 
-      {newClientOpen && (
-        <NewClientSheet
-          businessId={businessId}
-          onClose={() => setNewClientOpen(false)}
-          onSaved={(contactId) => {
-            setCreatedClientId(contactId);
-            load();
-          }}
-          onView360={() => {
-            // Open only on the explicit action, never over the save confirmation.
-            setPendingClientOpen(createdClientId);
-            setNewClientOpen(false);
-          }}
-        />
-      )}
-
-      {bookingFor && (
+      {bookingCtx && (
         <NewBookingSheet
+          open={!!bookingFor}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={effectiveHorizonDays(bookingCfg)}
           timezone={bizTz}
-          initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
+          initial={{ contactId: bookingCtx.contactId, name: bookingCtx.name, phone: bookingCtx.phone, email: bookingCtx.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}
         />

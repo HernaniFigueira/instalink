@@ -8,7 +8,7 @@
 //   4. “Novo agendamento” imediatamente ao lado do seletor (Linha 2);
 //   5–6. quick create “+” NO TOPO (missão 6: o botão volta como ação global
 //        premium — reversão explícita do pedido do usuário);
-//   7. Dia/Semana/Lista funcionando (Mês fora da UI; lógica preservada);
+//   7. Dia/Semana/Mês/Lista — UM seletor canônico (SelectMenu, não nativo; E3).
 //   8. toolbar canônica do DS 1.0: `Hoje · [◀] data [▶]` — o “Hoje” voltou
 //      como AÇÃO (supersede o contrato da correção cirúrgica) e a data é o
 //      DatePicker canônico (fim do `<input type="date">` nativo);
@@ -153,8 +153,8 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
     const fila = within(header).getByRole('button', { name: /Fila/ });
     expect(header.contains(filtros)).toBe(true);
     expect(header.contains(fila)).toBe(true);
-    // Os modos NÃO se misturam com os auxiliares: o tablist fica na Linha 2.
-    expect(within(header).queryByRole('tablist')).toBeNull();
+    // Os modos NÃO se misturam com os auxiliares: o seletor fica na Linha 2.
+    expect(within(header).queryByRole('combobox', { name: 'Visualização da agenda' })).toBeNull();
     // “?” de ajuda permanece na Linha 1, depois de Filtros e Fila.
     const help = within(header).getByRole('button', { name: /Legenda/ });
     const order = [filtros, fila, help].map((el) => Array.from(header.querySelectorAll('button, [role=button]')).indexOf(el as Element));
@@ -162,18 +162,19 @@ describe('Agenda — Linha 1 (título/auxiliares) e Linha 2 (data/modo/ação)',
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it('4. “Novo agendamento” está na Linha 2, imediatamente ao lado do seletor', async () => {
+  it('4. “Novo agendamento” está na Linha 2, à direita do seletor (cadeado à esquerda)', async () => {
     await renderAgenda();
     const header = screen.getByRole('heading', { level: 1, name: 'Agenda' }).closest('header')!;
     const cta = screen.getByRole('button', { name: 'Novo agendamento' });
     // Não está no header (saiu da Linha 1)…
     expect(header.contains(cta)).toBe(false);
-    // …e é o vizinho direito do seletor Dia/Semana/Mês/Lista.
-    const tablist = screen.getByRole('tablist', { name: 'Visualização da agenda' });
-    const row = tablist.parentElement!;
-    expect(row.contains(cta)).toBe(true);
+    // …e é o vizinho direito do seletor Dia/Semana/Mês/Lista (SelectMenu canônico).
+    const trigger = screen.getByRole('combobox', { name: 'Visualização da agenda' });
+    const row = trigger.closest('.ag-toolbar-actions') as HTMLElement;
     const kids = Array.from(row.children);
-    expect(kids[0]).toBe(tablist);
+    // Ordem homologada: Bloquear horário (cadeado) | seletor de visualização | Novo agendamento.
+    expect(kids[0].getAttribute('aria-label')).toBe('Bloquear horário');
+    expect(kids[1].contains(trigger)).toBe(true);
     expect(kids[kids.length - 1]).toBe(cta);
     // E tudo vive na Linha 2 (toolbar da agenda).
     expect(cta.closest('[data-agenda-main]')).toBeTruthy();
@@ -208,34 +209,44 @@ describe('quick create “+” — ação global premium no topo (missão 6)', (
     expect(labels.join('|')).not.toContain('Novo tutor e pet');
   });
 
-  it('6. os demais itens da topbar permanecem (busca · sino · ajuda · conta)', () => {
+  it('6. os demais itens da topbar permanecem (busca · sino · conta); o “?” duplicado saiu', () => {
     render(<WorkspaceTopbar {...topbarProps()} />);
     expect(document.querySelector('.global-search')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Notifica/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ajuda e suporte' })).toBeTruthy();
+    // Ajuda e suporte vive na navegação/menu da conta, não mais como “?” na topbar.
+    expect(screen.queryByRole('button', { name: 'Ajuda e suporte' })).toBeNull();
     expect(screen.getByRole('button', { name: /Dona Unidade/ })).toBeTruthy();
   });
 });
 
 // ═══ 7–8 · Modos e navegação de data ════════════════════════════════════
 describe('Dia/Semana/Lista e navegação [◀][▶] (correção cirúrgica)', () => {
-  it('7. os três modos (Dia/Semana/Lista) funcionam — sem tab “Mês” na UI', async () => {
+  it('7. os quatro modos (Dia/Semana/Mês/Lista) pelo seletor canônico — sem <select> nativo', async () => {
     const user = userEvent.setup();
     await renderAgenda();
-    const tabs = within(screen.getByRole('tablist', { name: 'Visualização da agenda' }));
+    const trigger = screen.getByRole('combobox', { name: 'Visualização da agenda' });
+    expect(trigger.tagName).not.toBe('SELECT');
 
-    // “Mês” saiu da UI (a lógica profunda segue para links view=month).
-    expect(tabs.queryByRole('tab', { name: /Mês/ })).toBeNull();
+    await user.click(trigger);
+    const list = await screen.findByRole('listbox');
+    const labels = within(list).getAllByRole('option').map((o) => o.textContent?.trim());
+    expect(labels).toEqual(['Dia', 'Semana', 'Mês', 'Lista']);
 
-    await user.click(tabs.getByRole('tab', { name: /Semana/ }));
+    await user.click(within(list).getByRole('option', { name: 'Semana' }));
     await waitFor(() => expect(window.location.search).toContain('view=week'));
-    expect(tabs.getByRole('tab', { name: /Semana/ }).getAttribute('aria-selected')).toBe('true');
 
-    await user.click(tabs.getByRole('tab', { name: /Lista/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Visualização da agenda' }));
+    await user.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Mês' }));
+    await waitFor(() => expect(window.location.search).toContain('view=month'));
+    expect(document.querySelector('[data-agenda-view="month"]')).toBeTruthy();
+
+    await user.click(screen.getByRole('combobox', { name: 'Visualização da agenda' }));
+    await user.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Lista' }));
     await waitFor(() => expect(window.location.search).toContain('view=list'));
     expect(screen.getByRole('region', { name: 'Lista de atendimentos do dia' })).toBeTruthy();
 
-    await user.click(tabs.getByRole('tab', { name: /^Dia/ }));
+    await user.click(screen.getByRole('combobox', { name: 'Visualização da agenda' }));
+    await user.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Dia' }));
     await waitFor(() => expect(window.location.search).toContain('view=day'));
     expect(await screen.findByText('Dra. Foto Real')).toBeTruthy();
   });
@@ -276,9 +287,13 @@ describe('CTA, Filtros e Fila continuam abrindo os fluxos existentes', () => {
     const texto = dialog.textContent || '';
     expect(texto).not.toContain('Paciente → serviço → data e horário');
     // A sequência continua legível nos rótulos numerados do formulário.
-    expect(texto).toContain('1. Cliente');
-    expect(texto).toContain('2. Serviço');
-    expect(texto).toContain('3. Data');
+    expect(texto).toContain('Cliente');
+    expect(texto).toContain('Serviço');
+    // Missão 03 (fluxo progressivo): profissional e data só entram depois do
+    // serviço. Antes disso, o cabeçalho mostra a data pré-preenchida e uma dica
+    // diz o próximo passo — o campo Data não aparece vazio nem fora de ordem.
+    expect(texto).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+    expect(dialog.querySelector('[data-progressive-hint="service"]')).toBeTruthy();
   });
 
   it('10. Filtros continua abrindo (popover com Status · Serviços · Profissional)', async () => {

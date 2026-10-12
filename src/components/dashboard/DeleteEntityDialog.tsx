@@ -1,10 +1,16 @@
 'use client';
 import { useEffect,useRef,useState } from 'react';
-import { Drawer,Button,Field,Input } from '@/components/ui';
+import { Drawer,Button,Field,Input,useOverlayPresence } from '@/components/ui';
 import { apiGet,apiRequest } from '@/lib/api-client';
 import type { DeletionImpact,EntityKind } from '@/lib/entity-deletion';
 export type DeleteTarget={kind:EntityKind;id:string;organizationId:string;name:string};
-export function DeleteEntityDialog({target,onClose,onDeleted}:{target:DeleteTarget;onClose:()=>void;onDeleted:()=>void}) {
+/** Drawer de exclusão. Sessão de presença: cada abertura começa com nome, senha e impacto zerados. */
+export function DeleteEntityDialog({open=true,target,onClose,onDeleted}:{open?:boolean;target:DeleteTarget;onClose:()=>void;onDeleted:()=>void}) {
+  const { session } = useOverlayPresence(open);
+  return <DeleteEntityForm key={session} open={open} target={target} onClose={onClose} onDeleted={onDeleted} />;
+}
+
+function DeleteEntityForm({open,target,onClose,onDeleted}:{open:boolean;target:DeleteTarget;onClose:()=>void;onDeleted:()=>void}) {
   const [impact,setImpact]=useState<DeletionImpact|null>(null),[error,setError]=useState(''),[name,setName]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false);
   const locked=useRef(false);
   const label=target.kind==='business'?'filial':'organização';
@@ -15,7 +21,7 @@ export function DeleteEntityDialog({target,onClose,onDeleted}:{target:DeleteTarg
       const res=await send('DELETE',{token:auth.data.token});if(!res.ok){if(res.data?.impact)setImpact(res.data.impact);setError(res.message);return;}onDeleted();
     }finally{locked.current=false;setBusy(false);}
   }
-  return <Drawer open onClose={()=>{if(!locked.current)onClose();}} title={`Excluir ${label}: ${target.name}`} width="max-w-xl"><div className="p-5 space-y-4">
+  return <Drawer open={open} onClose={()=>{if(!locked.current)onClose();}} dismissGuard={{saving:busy}} title={`Excluir ${label}: ${target.name}`} width="max-w-xl"><div className="p-5 space-y-4">
     <p>Exclusão definitiva de {label}. Esta ação não retira uma filial da organização nem arquiva registros.</p>
     {error&&<p role="alert" className="text-[var(--danger-fg)]">{error}</p>}
     {!impact&&!error&&<p role="status">Verificando dependências no servidor…</p>}

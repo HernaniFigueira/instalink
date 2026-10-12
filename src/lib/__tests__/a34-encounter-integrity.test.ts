@@ -262,7 +262,7 @@ describe('A3.4 · 2ª revisão — fila 1:1, reload por id e pós-atendimento (r
     expect(SHEET).toMatch(/Agendar retorno abre o agendamento já preenchido — nada é marcado sem você confirmar/);
     expect(RECORD).toContain('sessionStorage.setItem(RETURN_BOOKING_KEY');
     expect(AGENDA).toContain("params.get('retornoAtendimento') !== '1'");
-    expect(AGENDA).toMatch(/initial=\{\{\s*name: creating\.name/);
+    expect(AGENDA).toMatch(/initial=\{\{\s*name: sheetCtx\.name/);
     expect((await readDB()).bookings).toHaveLength(0);
   });
 

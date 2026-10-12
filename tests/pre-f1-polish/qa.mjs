@@ -23,7 +23,7 @@ try{
  await test('Michelle dermatology drag195 and click30 split all widths',async()=>{
   for(const width of [1440,1280,1024,390]){
    await p.setViewportSize({width:width===390?1024:width,height:1100});await agenda();await gesture(645,840);
-   await p.getByLabel('2. Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByText('Verificando disponibilidade…',{exact:true}).waitFor({state:'hidden'});
+   await p.getByLabel('Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByText('Verificando disponibilidade…',{exact:true}).waitFor({state:'hidden'});
    assert.match(await summary().innerText(),/Início\s+10:45\s+Fim\s+14:00\s+Duração\s+195 min · 3h15/);
    assert.equal(await p.getByRole('button',{name:'09:00',exact:true}).count(),0);assert.equal(await p.getByLabel('Duração deste atendimento em minutos').isVisible(),false);
    if(width===390)await p.setViewportSize({width,height:844});else{const r=await p.getByTestId('agenda-selected-range').boundingBox(),s=await p.locator('.gd-booking-range-drawer .il-drawer__strip').boundingBox();assert.ok(r.x+r.width<s.x)}
@@ -32,8 +32,8 @@ try{
    await p.getByRole('button',{name:'Manter horário selecionado',exact:true}).click();assert.equal(await p.getByRole('button',{name:'10:45',exact:true}).count(),0);
   }
   await p.setViewportSize({width:1440,height:1100});await agenda();await gesture(645);
-  await p.getByLabel('2. Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByRole('button',{name:'10:45',exact:true}).waitFor();assert.match(await summary().innerText(),/10:45\s+Fim\s+11:15\s+Duração\s+30 min/);await shot('click30');
-  await agenda();await gesture(645,840);await p.getByLabel('2. Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByRole('searchbox',{name:'Buscar cliente'}).fill('Ana');await p.getByRole('button',{name:/Ana Tutora QA/}).click();await p.getByLabel('Pet (paciente)',{exact:false}).selectOption('qa-pet');await p.getByText('Verificando disponibilidade…',{exact:true}).waitFor({state:'hidden'});await p.getByRole('button',{name:'Salvar agendamento',exact:true}).click();await p.locator('[data-booking-created="true"]').waitFor();await p.reload();
+  await p.getByLabel('Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByRole('button',{name:'10:45',exact:true}).waitFor();assert.match(await summary().innerText(),/10:45\s+Fim\s+11:15\s+Duração\s+30 min/);await shot('click30');
+  await agenda();await gesture(645,840);await p.getByLabel('Serviço',{exact:false}).selectOption({label:'Consulta dermatológica · 30 min'});await p.getByRole('searchbox',{name:'Buscar cliente'}).fill('Ana');await p.getByRole('button',{name:/Ana Tutora QA/}).click();await p.getByLabel('Pet (paciente)',{exact:false}).selectOption('qa-pet');await p.getByText('Verificando disponibilidade…',{exact:true}).waitFor({state:'hidden'});await p.getByRole('button',{name:'Criar agendamento',exact:true}).click();await p.locator('[data-booking-created="true"]').waitFor();await p.reload();
   const data=await readApi(`/api/bookings?mode=manage&businessId=${b}&from=2026-11-16&to=2026-11-16`),bk=data.bookings.find(x=>x.professionalId==='pro-michele'&&x.time==='10:45');assert.equal(bk.durationMin,195);assert.equal(Date.parse(bk.endAt)-Date.parse(bk.startAt),195*60000);
   await p.locator('button').filter({hasText:'Consulta dermatológica'}).first().click();await p.getByText(/195 min · 3h15/).waitFor();await shot('booking195-reopened');
  });

@@ -493,14 +493,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {/* Hierarquia (item 4 do briefing): o papel de quem está logado era
               um parágrafo permanente no miolo de TODA tela. A informação não
               foi removida — mora na topbar, ao lado do nome, onde pertence. */}
-          {!conversationFocus && business?.agendaScope === 'own' && (
-            // Honestidade com quem atende: a agenda mostrada é SÓ a dele.
-            // (A restrição é do servidor — aqui só avisamos.)
-            <p className="mb-4 text-xs font-semibold text-[var(--text)] bg-white border border-[var(--border)] rounded-md px-3 py-2 inline-flex items-center gap-2 shadow-xs">
-              <I n="idcard" size={14} />
-              Você vê <strong>somente a sua agenda</strong>{business.professionalName ? ` (${business.professionalName})` : ''}. Os clientes da unidade continuam disponíveis em Clientes.
-            </p>
-          )}
+          {/* E3 · O aviso permanente "Você vê somente a sua agenda" saiu: é texto
+              institucional repetido em toda tela. A restrição de escopo continua no
+              SERVIDOR (agendaScope 'own'); só o aviso acionável (vínculo ausente) fica. */}
           {!conversationFocus && business?.agendaScope === 'none' && (
             // Vínculo ainda não configurado: a agenda fica vazia por segurança
             // (nunca a de todo mundo). O caminho para resolver é o Equipe.
