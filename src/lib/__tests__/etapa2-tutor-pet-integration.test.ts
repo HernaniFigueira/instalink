@@ -6,7 +6,7 @@
 //   B. sem responsável informado, o atendimento herda o tutor do pet;
 //   C. o histórico do pet (encounters?petId) não mistura pets do mesmo tutor;
 //   D. alergia só é gravada por quem tem atendimento; recepção só lê;
-//   E. profissional sem vínculo: lê o paciente (política clínica) mas NÃO grava alergia (404);
+//   E. profissional sem vínculo: lê o paciente (política clínica) mas NÃO grava alergia (403 com motivo);
 //   F. alergia pertence ao petId: não vaza para o outro pet do tutor;
 //   G. inativar mantém o registro (histórico); editar cadastro não apaga alergias;
 //   H. pet de outra unidade não existe nesta (404).
@@ -102,6 +102,8 @@ async function seed() {
   db.bookings.push(
     booking('bk-thor', 'pet-thor', 'Thor', 'pro-michele', 'Bernardo Tutor'),
     booking('bk-mel', 'pet-mel', 'Mel', 'pro-michele', 'Carolina Tutora'),
+    // Walk-in / agendamento SEM pet identificado: continua permitido e não recebe animal.
+    booking('bk-sem-pet', '', '', 'pro-michele', 'Visitante sem pet'),
   );
   await writeDB(db);
 }
@@ -153,6 +155,18 @@ describe('A/B · atendimento respeita o vínculo tutor × pet', () => {
   });
 });
 
+describe('W · atendimento sem pet identificado (walk-in) é permitido e NÃO recebe animal', () => {
+  it('abre sem paciente e não atribui pet nenhum', async () => {
+    const res = await startPOST(req('/api/encounters/start', ownerT, { businessId: BIZ, bookingId: 'bk-sem-pet' }, 'POST'));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    const stored = readDBFile().encounters.find((e) => e.id === body.encounterId)!;
+    expect(stored.petId || '').toBe('');
+    // Nenhum atendimento clínico foi atribuído a um animal sem vínculo confirmado.
+    expect(readDBFile().encounters.filter((e) => e.petId === 'pet-thor' || e.petId === 'pet-luna' || e.petId === 'pet-mel')).toHaveLength(0);
+  });
+});
+
 describe('C · histórico do pet não mistura pets do mesmo tutor', () => {
   it('encounters?petId devolve SÓ os atendimentos daquele pet', async () => {
     const thor = await startPOST(req('/api/encounters/start', ownerT, { businessId: BIZ, bookingId: 'bk-thor' }, 'POST'));
@@ -176,7 +190,7 @@ describe('D/E/F/G/H · alergias: autorização, vínculo exclusivo e histórico'
     expect(write.status).toBe(403);
   });
 
-  it('E. profissional SEM vínculo: LÊ o paciente da unidade (leitura clínica, por política) mas NÃO grava alergia', async () => {
+  it('E. profissional SEM vínculo: LÊ o paciente (política clínica); grava → 403 com motivo, nunca "inexistente"', async () => {
     // Política documentada em /api/pets (CLINICAL ACCESS): o profissional da unidade
     // localiza os pacientes para o histórico longitudinal; a ESCRITA exige vínculo real.
     const read = await petsGET(req(`/api/pets?businessId=${BIZ}&petId=pet-thor`, orlandoT));
@@ -184,7 +198,9 @@ describe('D/E/F/G/H · alergias: autorização, vínculo exclusivo e histórico'
     const write = await petsPOST(req('/api/pets', orlandoT, {
       action: 'allergy-add', businessId: BIZ, petId: 'pet-thor', allergy: { substance: 'Frango', severity: 'leve' },
     }, 'POST'));
-    expect(write.status).toBe(404);
+    // Autorização (403) com motivo — o pet é legível por ele, então não é "inexistente".
+    expect(write.status).toBe(403);
+    expect((await json(write)).error).toMatch(/Sem vínculo clínico/);
     const db = readDBFile();
     expect(db.pets.find((p) => p.id === 'pet-thor')?.allergies ?? []).toHaveLength(0);
   });

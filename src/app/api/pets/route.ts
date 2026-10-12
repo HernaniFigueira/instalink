@@ -101,7 +101,16 @@ export async function POST(req: NextRequest) {
       }
       const saved = await updateDB((d) => {
         const pet = d.pets.find((p) => p.id === petId && p.businessId === businessId);
-        if (!pet || (scoped && !isLinkedPet(d, guard.ctx, pet))) {
+        if (!pet) {
+          throw Object.assign(new Error('Pet não encontrado nesta unidade.'), { status: 404 });
+        }
+        if (scoped && !isLinkedPet(d, guard.ctx, pet)) {
+          // Autorização, não inexistência: o pet já é legível para quem pergunta
+          // (leitura clínica da unidade), então a recusa pode dizer o motivo sem
+          // revelar dado inacessível. Sem leitura nenhuma, continua 404.
+          if (canReadPet(d, guard.ctx, pet)) {
+            throw Object.assign(new Error('Sem vínculo clínico com este paciente: alergias só podem ser registradas pela equipe que atende o pet.'), { status: 403 });
+          }
           throw Object.assign(new Error('Pet não encontrado nesta unidade.'), { status: 404 });
         }
         const now = new Date().toISOString();

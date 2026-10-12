@@ -61,7 +61,13 @@ export function PetAllergyManager({ businessId, pet, canWrite, onChanged }: {
     setBusy(true); setError(''); setFlash('');
     const res = await apiSend<{ pet?: Pet }>('/api/pets', 'POST', { businessId, petId: pet.id, ...body }, { scope: 'action', area: 'Atendimento' });
     setBusy(false);
-    if (!res.ok) { setError(res.message || 'Não foi possível salvar a alergia.'); return false; }
+    if (!res.ok) {
+      // 403 = autorização: título canônico + motivo do servidor (sem perder o porquê).
+      // 404 e demais = mensagem do servidor/canônica.
+      const reason = res.denied ? [res.denied.title, res.denied.hint].filter(Boolean).join(' — ') : res.message;
+      setError(reason || 'Não foi possível salvar a alergia.');
+      return false;
+    }
     const saved = (res.data as any)?.pet as Pet | undefined;
     if (saved) onChanged(saved);
     setFlash(okMessage);
