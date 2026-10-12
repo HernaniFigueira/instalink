@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 // ═══════════════════════════════════════════════════════════════
-// DetailSideModal · contrato de presença e saída (sem variante `instant`)
+// DetailSideModal · contrato de presença e saída
 // ═══════════════════════════════════════════════════════════════
 // Histórico: o detalhe do agendamento usava `instant` (fallback da homologação
-// R7) para "resolver" uma entrada que não aparecia. A causa real era a flag
-// `data-instant`, que zerava `animation` no painel. A flag foi removida: a
-// entrada e a saída são animadas para TODOS os DetailSideModal, e o pai só
-// desmonta o conteúdo em `onExited`, depois da saída.
+// R7) porque a entrada do painel não era pintada no Chromium. A integração
+// (PR #69 × checkpoint) manteve `instant` SOMENTE neste consumidor, por EXCEÇÃO
+// VISUAL APROVADA pelo usuário (Master Plan · pendência visual "DetailSideModal
+// instant na Agenda"). Todas as outras superfícies animam entrada e saída.
+// Cobertura preservada: abertura, fechamento animado, reabertura durante a saída,
+// desmonte só em onExited, foco e ausência de estados órfãos.
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DetailSideModal } from '../ui';
 
@@ -24,7 +26,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('DetailSideModal · presença e saída', () => {
-  it('não existe variante instant: nenhum atributo data-instant é renderizado', () => {
+  it('padrão sem `instant`: nenhum atributo data-instant é renderizado', () => {
     render(<DetailSideModal open title="Detalhe" onClose={() => {}}><p>corpo</p></DetailSideModal>);
     expect(document.querySelector('dialog.gd-detail')?.hasAttribute('data-instant')).toBe(false);
   });
@@ -57,12 +59,39 @@ describe('DetailSideModal · presença e saída', () => {
     expect(document.querySelector('dialog.gd-detail')).toBeTruthy();
   });
 
-  it('o detalhe do agendamento recebe open e onExited do pai (sem instant)', () => {
+  it('o detalhe do agendamento recebe open e onExited do pai; `instant` só existe nesta exceção aprovada', () => {
     const src = readFileSync(resolve(__dirname, '../dashboard/BookingDetailSheet.tsx'), 'utf8');
     const block = src.slice(src.indexOf('<DetailSideModal'), src.indexOf('<DetailSideModal') + 200);
-    expect(block).not.toMatch(/\binstant\b/);
     expect(block).toMatch(/open=\{open\}/);
     expect(block).toMatch(/onExited=\{onExited\}/);
+    // Exceção aprovada: o detalhe da Agenda é o ÚNICO consumidor com `instant`.
+    expect(block).toMatch(/\binstant\b/);
+  });
+
+  it('exceção visual: nenhuma outra superfície DetailSideModal usa `instant`', () => {
+    const roots = [resolve(__dirname, '..'), resolve(__dirname, '../../app')];
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = resolve(dir, name);
+        if (statSync(full).isDirectory()) { if (!name.startsWith('__')) walk(full); }
+        else if (/\.(tsx|ts)$/.test(name)) files.push(full);
+      }
+    };
+    roots.forEach(walk);
+    const offenders: string[] = [];
+    for (const file of files) {
+      if (file.endsWith('BookingDetailSheet.tsx')) continue;
+      const src = readFileSync(file, 'utf8');
+      let i = src.indexOf('<DetailSideModal');
+      while (i >= 0) {
+        const chunk = src.slice(i, i + 400);
+        const end = chunk.indexOf('>');
+        if (/\binstant\b/.test(chunk.slice(0, end > 0 ? end : 400))) offenders.push(file);
+        i = src.indexOf('<DetailSideModal', i + 1);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('a Agenda só desmonta o agendamento em onExited; o fechamento principal anima', () => {

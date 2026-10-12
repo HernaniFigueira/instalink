@@ -448,3 +448,19 @@ NÃO EXECUTADO nesta rodada: conflito 409 de ponta a ponta no Chromium; recorrê
 - Chromium real, build de produção, banco QA isolado, CEP mockado (sem integração real): 14/14 PASS. Cobre CEP encontrado, não encontrado, indisponível e atrasado; layout 1440/1024/390; CPF inválido; data inexistente; cadastro completo tutor + pet com persistência ISO e Cliente 360; duplo clique com uma gravação; RBAC (Recepção cadastra, Professional não).
 - Limites: integração real com ViaCEP e BrasilAPI não homologada (sem egress). Sem aprovação visual humana.
 - Falhas do harness de QA (não do produto): base em `127.0.0.1` (o cookie `Secure` é descartado em HTTP) e `--single-process` do Chromium, que derrubava sessões entre contextos. Corrigido no roteiro, não no produto.
+
+## Pendência visual aprovada · DetailSideModal `instant` (integração PR #69 × checkpoint)
+
+- **Exceção:** o detalhe do agendamento da Agenda (`BookingDetailSheet` → `DetailSideModal`) abre e fecha com `instant` (sem animação de painel/backdrop). Única superfície com essa exceção; as demais DetailSideModal mantêm 190/170 ms.
+- **Motivo:** a entrada do painel não era pintada no Chromium (PR #69 · R7). Sonda de movimento (Chromium 153, build local): no DOM a animação roda (transform 460→0, saída com `data-closing`, desmonte em `onExited`); na captura em câmera lenta (0,1×), o quadro intermediário não foi pintado. Investigação de quadros intermediários encerrada nesta etapa por decisão do usuário.
+- **Garantias mantidas com `instant`:** abertura e fechamento, foco no título e retorno ao gatilho, scroll travado e liberado, desmonte só após `onExited`, reabertura durante a saída sem estado órfão, `Escape`/X/backdrop pelo guard.
+- **Teste:** `detail-side-modal-exit-contract.test.tsx` agora aceita `instant` somente nesse consumidor e reprova qualquer outro uso.
+- **Pendência:** provar a pintura do movimento (ou corrigir a causa-raiz no compositor/top-layer do `<dialog>`) e remover a exceção. Evidências: `EXPERIMENTO-sem-instant-*` (Drive, pasta da integração).
+
+## Gate funcional da integração PR #69 × checkpoint 44ffade
+
+- Chromium real, build de produção local (estado commitado), banco QA isolado (porta 3100), dados sintéticos: **75/75 PASS**, sem erro de página JS.
+- Cobre: Novo Agendamento progressivo e confirmação única (uma gravação no duplo clique); rodapé de confirmação; disponibilidade (horário ocupado sai da lista) e conflito 409; Quick Create → Mais opções (herda horário e profissional); guardas de descarte (Escape, continuar editando, descartar, reabrir limpo); cadastro `/clientes/novo` → Cliente 360 → retorno com tutor e pet; Dialog, Drawer (prévia de cliente), DetailSideModal (Agenda), Cliente 360 e Pet 360 com abertura, fechamento e reabertura, foco e scroll; layout 1440 e 390 px sem rolagem horizontal.
+- Testes: vitest 3616/3622; as 6 falhas são a linha de base da PR #69 (a34-instagram ×3, automation-audit-p4, convergence-wave2, pipeline). `tsc`: 3 erros de linha de base em `production-db-routing.test.ts`.
+- Exceção de animação: `instant` no detalhe da Agenda, conforme a seção acima.
+- Evidências: `/home/user/qa-evidence/integracao-pr69/gate/` (`gate-resultados.json`, `gate-run-final.log`, capturas).
