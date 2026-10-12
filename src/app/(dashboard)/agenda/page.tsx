@@ -428,7 +428,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
           <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
           <span className="ag-event__name block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
-          {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.petName && b.customerName && b.height <= 80 ? `${b.service} · Tutor: ${b.customerName}` : b.service}</span>}
+          {/* ETAPA 3 · veterinária: o PET é o título; o tutor é contexto discreto. */}
+          {b.petName && b.customerName && b.height > 80 && <span data-card-tutor className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">Tutor: {b.customerName}</span>}
           {b.height > 80 && b.pro && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
           {b.fitIn && (
             <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
@@ -1130,6 +1132,31 @@ export default function AgendaPage() {
     if (rangeFocus && scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [rangeFocus]);
 
+  const [railMaxH, setRailMaxH] = useState<number | null>(null);
+  // ETAPA 3 · abertura operacional: a grade abre 1h antes do primeiro agendamento
+  // do período visível (no máximo 08:00 − 1h), e nunca em 00:00 sem motivo. A
+  // rolagem é posicionada UMA vez por dia/visão — recargas não arrastam o usuário.
+  const openAnchorMin = useMemo(() => {
+    const dates = new Set(columns.map((c) => c.date));
+    const starts = bookings
+      .filter((b) => dates.has(b.date) && b.status !== 'cancelled' && b.status !== 'no_show')
+      .map((b) => timeToMin(b.time));
+    const first = starts.length ? Math.min(...starts) : 8 * 60;
+    const anchor = Math.min(first, 8 * 60) - 60;
+    return Math.min(Math.max(anchor, grid.start), grid.end - 4 * 60);
+  }, [columns, bookings, grid.start, grid.end]);
+  const openKey = `${view}|${focus}|${openAnchorMin}`;
+  const openedKeyRef = useRef('');
+  useLayoutEffect(() => {
+    // Só aplica quando o contêiner de rolagem já existe E rola de fato; sem isso
+    // não marca a chave, e o efeito tenta de novo quando a altura muda (railMaxH).
+    const el = scrollRef.current;
+    if (rangeFocus || !el || openedKeyRef.current === openKey) return;
+    if (el.scrollHeight <= el.clientHeight + 1) return;
+    el.scrollTop = Math.round(((openAnchorMin - grid.start) / 60) * PX_PER_HOUR);
+    openedKeyRef.current = openKey;
+  }, [openKey, openAnchorMin, grid.start, rangeFocus, loaded, view, railMaxH]);
+
   const gridHeight = Math.max(460, Math.round((grid.span / 60) * PX_PER_HOUR));
   const dayWidth = GUTTER_W + columns.length * COL_MIN;
 
@@ -1197,7 +1224,6 @@ export default function AgendaPage() {
   // Altura útil da região do workspace (viewport - topo - folga): é o teto
   // da rail da fila E da grade (FASE E: scroll interno, a página não rola
   // junto com a agenda).
-  const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
