@@ -15,14 +15,17 @@
 //     aditivo em profile.guardian — nunca um "segundo paciente");
 //   • CPF e endereço são opcionais, recolhidos; validados pelo servidor.
 // ═══════════════════════════════════════════════════════════════
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { apiGet, apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
 import { cepError, emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
+import { lookupCep } from '@/lib/cep-lookup';
+import { todayIsoLocal } from '@/lib/date-field';
+import { DateField } from '@/components/dashboard/DateField';
 import { ageFromBirthDate, BRAZILIAN_STATES, emptyAddress, formatCep, formatCpf, profileCpfError } from '@/lib/contact-profile';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
 import { Icon } from '@/components/icons';
-import { Button, Disclosure, Notice, PageBackAction, PageHeader, Select } from '@/components/ui';
+import { Button, Notice, PageBackAction, PageHeader, Select } from '@/components/ui';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, validatePet } from '@/lib/pets';
 import { useUnsavedChangesGuard, type DismissGuardState } from './OverlayDismissGuard';
 import type { Pet } from '@/lib/types';
@@ -50,6 +53,16 @@ export interface NewClientResult {
 const input = 'w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900';
 const label = 'block text-xs font-semibold tracking-[0.06em] uppercase text-[var(--text-muted)]';
 const fieldError = 'mt-1 block text-xs font-medium text-[var(--danger)]';
+
+/** Bloco visível da ficha (sem recolher): título pequeno + conteúdo. */
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text)]">{title}</h3>
+      {children}
+    </section>
+  );
+}
 
 export function NewClientForm({
   businessId,
@@ -92,7 +105,12 @@ export function NewClientForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [duplicate, setDuplicate] = useState<{ id: string; name: string; phone: string } | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Erros de data (DD/MM/AAAA) vêm do DateField; `attempted` mostra o erro ao tentar salvar.
+  const [birthErr, setBirthErr] = useState('');
+  const [petBirthErr, setPetBirthErr] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  // Estado da consulta de CEP (só mensagem; os campos continuam editáveis).
+  const [cepNote, setCepNote] = useState('');
   // Tutor gravado, pet ainda pendente: o tutor fica travado e só o pet é retentado.
   const [savedContactId, setSavedContactId] = useState('');
   const [tutorResponse, setTutorResponse] = useState<SaveResponse | null>(null);
@@ -134,7 +152,36 @@ export function NewClientForm({
 
   const cpfMsg = cpf.trim() ? profileCpfError({ cpf }) : '';
   const cepMsg = address.cep.trim() ? cepError(address.cep) : '';
-  const advancedHasError = !!cpfMsg || !!cepMsg;
+
+  // CEP: consulta somente com 8 dígitos (nunca por tecla). A troca de CEP cancela a
+  // consulta anterior, e uma resposta antiga não sobrescreve o endereço atual.
+  useEffect(() => {
+    const digits = address.cep;
+    if (digits.length !== 8) { setCepNote(''); return; }
+    const ctl = new AbortController();
+    setCepNote('Buscando endereço pelo CEP…');
+    const fail = 'Não foi possível consultar o CEP agora. Preencha o endereço manualmente.';
+    lookupCep(digits, { signal: ctl.signal })
+      .then((r) => {
+        if (ctl.signal.aborted) return;
+        if (r.status === 'found') {
+          setAddress((prev) => (prev.cep !== digits ? prev : {
+            ...prev,
+            street: r.address.street || prev.street,
+            district: r.address.district || prev.district,
+            city: r.address.city || prev.city,
+            state: r.address.state || prev.state,
+          }));
+          setCepNote('Endereço preenchido pelo CEP. Confira e ajuste se precisar.');
+        } else if (r.status === 'notfound') {
+          setCepNote('CEP não encontrado. Preencha o endereço manualmente.');
+        } else {
+          setCepNote(fail);
+        }
+      })
+      .catch(() => { if (!ctl.signal.aborted) setCepNote(fail); });
+    return () => ctl.abort();
+  }, [address.cep]);
 
   function finish(contactId: string, petId: string | undefined, tutor: SaveResponse | null) {
     const result: NewClientResult = { contactId, ...(petId ? { petId } : {}), name: name.trim(), phone: onlyDigits(phone) };
@@ -175,10 +222,11 @@ export function NewClientForm({
     const emailMsg = emailError(email);
     if (emailMsg) { setError(emailMsg); return; }
     // CPF/CEP: o erro fica JUNTO do campo (aria-invalid), sem repetir no aviso geral.
-    if (cpfMsg || cepMsg) { setAdvancedOpen(true); return; }
+    if (cpfMsg || cepMsg || birthErr) { setAttempted(true); return; }
     if (vetMode && petOn) {
       const petMsg = validatePet(pet);
       if (petMsg) { setError(petMsg); return; }
+      if (petBirthErr) { setAttempted(true); return; }
     }
     if (showGuardian) {
       if (!guardian.name.trim()) { setError('Informe o nome do responsável legal.'); return; }
@@ -303,43 +351,45 @@ export function NewClientForm({
             {vetMode && (
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
             )}
-            <label className="block"><span className={label}>NOME *</span>
-              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Bernardo Souza" /></label>
-            <label className="block"><span className={label}>WHATSAPP *</span>
-              <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
-            <label className="block"><span className={label}>E-MAIL</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
-            {!vetMode && (
-              <label className="block"><span className={label}>DATA DE NASCIMENTO</span>
-                <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={input + ' mt-1'} max="2099-12-31" />
-                {showGuardian && <span className="block text-[11px] text-amber-700 mt-1 font-semibold">Paciente com {age} anos — preencha o responsável legal abaixo.</span>}
-              </label>
-            )}
-            <label className="block"><span className={label}>OBSERVAÇÃO</span>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} className={input + ' mt-1 resize-none'} placeholder="Opcional — fica no histórico do cliente" /></label>
-
-            <Disclosure
-              label="Documento e endereço"
-              hint="Opcional"
-              open={advancedOpen || advancedHasError}
-              onOpenChange={setAdvancedOpen}
-            >
-              <div className="space-y-4 pt-2">
-                <label className="block">
-                  <span className={label}>CPF</span>
-                  <input
-                    value={cpf}
-                    onChange={(e) => setCpf(formatCpf(e.target.value))}
-                    className={input + ' mt-1'}
-                    inputMode="numeric"
-                    placeholder="000.000.000-00"
-                    maxLength={14}
-                    aria-invalid={cpfMsg ? true : undefined}
-                    aria-describedby={cpfMsg ? 'client-cpf-error' : undefined}
-                  />
+            <FormSection title="Identificação">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block sm:col-span-2"><span className={label}>NOME *</span>
+                  <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Bernardo Souza" /></label>
+                <div className="block">
+                  <label className="block"><span className={label}>CPF</span>
+                    <input
+                      value={cpf}
+                      onChange={(e) => setCpf(formatCpf(e.target.value))}
+                      className={input + ' mt-1'}
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      aria-invalid={cpfMsg ? true : undefined}
+                      aria-describedby={cpfMsg ? 'client-cpf-error' : undefined}
+                    /></label>
                   {cpfMsg && <span id="client-cpf-error" role="alert" className={fieldError}>{cpfMsg}</span>}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+                </div>
+                <div className="block">
+                  <DateField
+                    label="DATA DE NASCIMENTO"
+                    value={birthDate}
+                    onChange={(iso, err) => { setBirthDate(iso); setBirthErr(err); }}
+                    max={todayIsoLocal()}
+                    forceError={attempted}
+                    disabled={!!savedContactId}
+                  />
+                  {showGuardian && <span className="block text-[11px] text-amber-700 mt-1 font-semibold">Paciente com {age} anos — preencha o responsável legal abaixo.</span>}
+                </div>
+                <label className="block"><span className={label}>WHATSAPP *</span>
+                  <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
+                <label className="block"><span className={label}>E-MAIL</span>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" /></label>
+              </div>
+            </FormSection>
+
+            <FormSection title="Endereço">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="block">
                   <label className="block">
                     <span className={label}>CEP</span>
                     <input
@@ -350,34 +400,33 @@ export function NewClientForm({
                       placeholder="00000-000"
                       maxLength={9}
                       aria-invalid={cepMsg ? true : undefined}
-                      aria-describedby={cepMsg ? 'client-cep-error' : undefined}
-                    />
-                    {cepMsg && <span id="client-cep-error" role="alert" className={fieldError}>{cepMsg}</span>}
-                  </label>
-                  <label className="block">
-                    <span className={label}>UF</span>
-                    <Select value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} aria-label="Estado (UF)">
-                      <option value="">—</option>
-                      {BRAZILIAN_STATES.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-                    </Select>
-                  </label>
+                      aria-describedby={cepMsg ? 'client-cep-error' : cepNote ? 'client-cep-note' : undefined}
+                    /></label>
+                  {cepMsg && <span id="client-cep-error" role="alert" className={fieldError}>{cepMsg}</span>}
+                  {!cepMsg && cepNote && <span id="client-cep-note" role="status" className="mt-1 block text-xs text-[var(--text-muted)]">{cepNote}</span>}
                 </div>
-                <label className="block"><span className={label}>RUA</span>
-                  <input value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-                <div className="grid grid-cols-3 gap-3">
-                  <label className="block"><span className={label}>NÚMERO</span>
-                    <input value={address.number} onChange={(e) => setAddress({ ...address, number: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-                  <label className="block col-span-2"><span className={label}>COMPLEMENTO</span>
-                    <input value={address.complement} onChange={(e) => setAddress({ ...address, complement: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block"><span className={label}>BAIRRO</span>
-                    <input value={address.district} onChange={(e) => setAddress({ ...address, district: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-                  <label className="block"><span className={label}>CIDADE</span>
-                    <input value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className={input + ' mt-1'} placeholder="Opcional" /></label>
-                </div>
+                <label className="block sm:col-span-2"><span className={label}>LOGRADOURO</span>
+                  <input value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>NÚMERO</span>
+                  <input value={address.number} onChange={(e) => setAddress({ ...address, number: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block sm:col-span-2"><span className={label}>COMPLEMENTO</span>
+                  <input value={address.complement} onChange={(e) => setAddress({ ...address, complement: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>BAIRRO</span>
+                  <input value={address.district} onChange={(e) => setAddress({ ...address, district: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>CIDADE</span>
+                  <input value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>UF</span>
+                  <Select value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} aria-label="Estado (UF)">
+                    <option value="">—</option>
+                    {BRAZILIAN_STATES.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+                  </Select></label>
               </div>
-            </Disclosure>
+            </FormSection>
+
+            <FormSection title="Informações adicionais">
+              <label className="block"><span className={label}>OBSERVAÇÕES</span>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} className={input + ' mt-1 resize-none'} placeholder="Fica no histórico do cliente" /></label>
+            </FormSection>
 
             {/* ── Responsável legal (humano · menor de 18) ── aditivo, NÃO um segundo paciente. */}
             {showGuardian && (
@@ -403,9 +452,9 @@ export function NewClientForm({
                 </div>
                 <div className="grid sm:grid-cols-2 gap-2.5">
                   <label className="block"><span className={label}>E-MAIL</span>
-                    <input value={guardian.email} onChange={(e) => setGuardian({ ...guardian, email: e.target.value })} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
+                    <input value={guardian.email} onChange={(e) => setGuardian({ ...guardian, email: e.target.value })} className={input + ' mt-1'} inputMode="email" /></label>
                   <label className="block"><span className={label}>CPF DO RESPONSÁVEL</span>
-                    <input value={guardian.cpf} onChange={(e) => setGuardian({ ...guardian, cpf: e.target.value })} className={input + ' mt-1'} inputMode="numeric" placeholder="Opcional" maxLength={14} /></label>
+                    <input value={guardian.cpf} onChange={(e) => setGuardian({ ...guardian, cpf: e.target.value })} className={input + ' mt-1'} inputMode="numeric" maxLength={14} /></label>
                 </div>
               </section>
             )}
@@ -434,7 +483,7 @@ export function NewClientForm({
                         {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s] || s}</option>)}
                       </Select></label>
                     <label className="block"><span className={label}>RAÇA</span>
-                      <input value={pet.breed} onChange={(e) => setPet({ ...pet, breed: e.target.value })} className={input + ' mt-1'} list="new-client-breeds" placeholder="Opcional" />
+                      <input value={pet.breed} onChange={(e) => setPet({ ...pet, breed: e.target.value })} className={input + ' mt-1'} list="new-client-breeds" />
                       <datalist id="new-client-breeds">
                         {breedSuggestions(pet.species).map((b) => <option key={b} value={b} />)}
                       </datalist></label>
@@ -444,8 +493,13 @@ export function NewClientForm({
                       <Select value={pet.sex} onChange={(e) => setPet({ ...pet, sex: e.target.value })} aria-label="Sexo do pet">
                         <option value="">—</option><option value="M">Macho</option><option value="F">Fêmea</option>
                       </Select></label>
-                    <label className="block"><span className={label}>NASCIMENTO</span>
-                      <input type="date" value={pet.birthDate} onChange={(e) => setPet({ ...pet, birthDate: e.target.value })} className={input + ' mt-1'} max="2099-12-31" /></label>
+                    <DateField
+                      label="NASCIMENTO"
+                      value={pet.birthDate}
+                      onChange={(iso, err) => { setPet({ ...pet, birthDate: iso }); setPetBirthErr(err); }}
+                      max={todayIsoLocal()}
+                      forceError={attempted}
+                    />
                     <label className="block"><span className={label}>PESO (KG)</span>
                       <input type="number" step="0.01" min="0" max="500" value={pet.weightKg} onChange={(e) => setPet({ ...pet, weightKg: e.target.value })} className={input + ' mt-1'} placeholder="0" /></label>
                   </div>

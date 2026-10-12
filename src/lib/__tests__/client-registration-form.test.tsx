@@ -88,7 +88,7 @@ describe('cadastro completo · erro de validação', () => {
   it('CPF inválido: erro junto do campo com aria-invalid e nenhuma chamada à rede', async () => {
     mockFetch();
     render(<NewClientForm businessId="biz-1" onCancel={() => {}} onSaved={() => {}} initialName="Tereza" initialPhone="21912345678" />);
-    fireEvent.click(screen.getByText('Documento e endereço'));
+    // Missão · Etapa 1: CPF e endereço são campos visíveis (sem seção recolhida).
     const cpf = screen.getByLabelText('CPF') as HTMLInputElement;
     fireEvent.change(cpf, { target: { value: '111.111.111-11' } });
     fireEvent.click(screen.getByText('Salvar cliente'));
