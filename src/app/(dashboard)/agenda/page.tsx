@@ -2613,6 +2613,7 @@ export default function AgendaPage() {
                    oferece quem ATENDE o serviço escolhido. */
                 services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [], professionalMode: (x as any).professionalMode }))}
                 onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) openDetail(b); }}
+                petNameOf={(id) => bookingsRef.current.get(id)?.petName || undefined}
                 onEncounter={(row) => router.push(encounterWorkspaceHref({ businessId, queueId: row.id, returnTo: `${window.location.pathname}${window.location.search}` }))}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
                 onClose={() => setShowQueue(false)}
