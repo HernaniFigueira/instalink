@@ -200,7 +200,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
+const GridColumn = memo(function GridColumn({ column, closedLabel, outsideRanges, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -226,6 +226,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   selectedRange: { time: string; durationMin: number } | null;
   onResize: (id: string, end: string) => void;
   unavailableRanges: Array<{ start: number; end: number; label: string }>;
+  /** ETAPA 3 · dia sem atendimento (feriado/fechamento ou sem expediente configurado). */
+  closedLabel: { title: string; detail: string } | null;
+  /** ETAPA 3 · janelas fora do expediente normal (derivadas das regras reais). */
+  outsideRanges: Array<{ start: number; end: number }>;
   operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string; timeLabel: string; scopeLabel: string }>;
   onOperationalBlock: (block: ScheduleBlock) => void;
   gridHeight: number;
@@ -345,6 +349,15 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           dia — um agendamento dentro de uma exceção aparecia só como uma faixa
           fina na borda. Nada muda de semântica: continua sem ação de clique
           (`pointer-events-none`) e o texto diz a janela do dia especial. */}
+      {outsideRanges.map((r, i) => (
+        <div key={`out-${i}`} data-outside-hours aria-hidden="true" className="pointer-events-none absolute z-0 inset-x-0 ag-outside"
+          style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }} />
+      ))}
+      {closedLabel && (
+        <div data-closed-day aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 ag-closed">
+          <span className="ag-closed__tag"><strong>{closedLabel.title}</strong><span>{closedLabel.detail}</span></span>
+        </div>
+      )}
       {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-0 inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
         <span className="block tabular-nums font-medium">{minToTime(r.start)}–{minToTime(r.end)}</span><span className="block">INDISPONÍVEL</span><span className="block">{r.label}</span>
       </div>)}
@@ -426,8 +439,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
-          <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
+          <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{variant === 'week' ? b.time : b.timeRange}</span>
           <span className="ag-event__name block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
+          {b.petName && b.customerName && b.height >= 50 && <span data-card-tutor-m className="ag-event__tutor-m block text-[11px] leading-tight truncate opacity-70">Tutor: {b.customerName}</span>}
           {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.petName && b.customerName && b.height <= 80 ? `${b.service} · Tutor: ${b.customerName}` : b.service}</span>}
           {/* ETAPA 3 · veterinária: o PET é o título; o tutor é contexto discreto. */}
           {b.petName && b.customerName && b.height > 80 && <span data-card-tutor className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">Tutor: {b.customerName}</span>}
@@ -579,7 +593,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           </HoverCard>
         );
       })}
-      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
+      {variant === 'week' && !closedLabel && column.blocks.length === 0 && column.freeRanges.length === 0 && (
         <>
           <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
           <span className="absolute inset-x-0 top-24 text-center pointer-events-none">
@@ -622,7 +636,15 @@ export default function AgendaPage() {
   // Escolha salva desta conta (navegador). Sem ela: padrão por papel/dispositivo (ver defaultAgendaView).
   const [savedView, setSavedView] = useState<AgendaView | ''>('');
   const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => { setIsMobile(window.matchMedia('(max-width: 767px)').matches); }, []);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  // ETAPA 3 · celular (Dia): uma coluna por vez, escolhida no seletor de profissional.
+  const [mobileProKey, setMobileProKey] = useState('');
   useEffect(() => { setSavedView(readAgendaViewPreference(userId)); }, [userId]);
   const defaultView = (savedView || defaultAgendaView({ isMobile, professionalScoped: !!professionalId })) as View;
   const view = (['day','week','month','list'].includes(params.get('view') || '') ? params.get('view') : defaultView) as View;
@@ -1127,7 +1149,38 @@ export default function AgendaPage() {
   // While editing a dragged interval, keep its actual column alongside the
   // drawer. Other columns return unchanged on dismiss (no synthetic booking).
   const rangeFocus = !!selectedRange && !!(creating || blockForm);
-  const displayedColumns = rangeFocus ? columns.filter(c => c.key === selectedRange?.columnKey) : columns;
+  // ETAPA 3 · leitura do expediente REAL para a apresentação (o motor de slots não muda):
+  // janelas normais da coluna = mesmo critério de escopo (clínica ou horário próprio do profissional).
+  const normalWindowsFor = (c: ColumnVM): Array<{ start: number; end: number }> => rules
+    .filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId
+      ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId)
+      : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules))))
+    .map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) }))
+    .filter(w => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start);
+  const closedFor = (c: ColumnVM): { title: string; detail: string } | null => {
+    const ex = exceptions.find(e => e.date === c.date);
+    if (ex?.closed) return { title: 'Fechado', detail: ex.note || 'Sem atendimento neste dia' };
+    if (ex) return null; // horário especial: a própria faixa já mostra a janela
+    return normalWindowsFor(c).length > 0 ? null : { title: 'Fechado', detail: 'Sem expediente neste dia' };
+  };
+  const outsideFor = (c: ColumnVM): Array<{ start: number; end: number }> => {
+    if (exceptions.some(e => e.date === c.date)) return [];
+    const windows = normalWindowsFor(c).sort((a, b) => a.start - b.start);
+    if (windows.length === 0) return []; // dia fechado: quem explica é o rótulo de Fechado
+    const out: Array<{ start: number; end: number }> = [];
+    let cursor = grid.start;
+    for (const w of windows) {
+      if (w.start > cursor) out.push({ start: cursor, end: Math.min(w.start, grid.end) });
+      cursor = Math.max(cursor, w.end);
+    }
+    if (cursor < grid.end) out.push({ start: cursor, end: grid.end });
+    return out.filter(r => r.end > r.start);
+  };
+  const mobileDay = isMobile && view === 'day' && !rangeFocus;
+  const mobileKey = columns.some(c => c.key === mobileProKey) ? mobileProKey : (columns[0]?.key ?? '');
+  const displayedColumns = rangeFocus
+    ? columns.filter(c => c.key === selectedRange?.columnKey)
+    : (mobileDay ? columns.filter(c => c.key === mobileKey) : columns);
   useLayoutEffect(() => {
     if (rangeFocus && scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [rangeFocus]);
@@ -1938,30 +1991,6 @@ export default function AgendaPage() {
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
           {/* Composição contínua (A1): o aviso de bloqueio fica na mesma linha
               do título, em vez de uma faixa própria abaixo da toolbar. */}
-          {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
-        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
-            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
-            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
-            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
-            de horário/escopo. A explicação vira a dica curta de uma linha, e o
-            clique continua abrindo o MESMO formulário do bloqueio. */}
-        <span className="ag-blocks-bar__label">
-          <Icon n="lock" size={13} aria-hidden="true" />
-          {blockCountLabel}
-        </span>
-        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
-        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
-          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
-            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
-            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
-            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-          }}>
-            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
-            <span>{block.reason || block.note || 'Operacional'}</span>
-            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
-          </button>
-        ))}</div>
-      </section>}
         </div>
         <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -2171,6 +2200,34 @@ export default function AgendaPage() {
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
+        {blocksInView.length > 0 && (
+          <div className="px-3 pt-2.5">
+            {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+          {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+              operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+              grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+              e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+              de horário/escopo. A explicação vira a dica curta de uma linha, e o
+              clique continua abrindo o MESMO formulário do bloqueio. */}
+          <span className="ag-blocks-bar__label">
+            <Icon n="lock" size={13} aria-hidden="true" />
+            {blockCountLabel}
+          </span>
+          <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
+          <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+            <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+              const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+              openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+              setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+            }}>
+              <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+              <span>{block.reason || block.note || 'Operacional'}</span>
+              <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+            </button>
+          ))}</div>
+        </section>}
+          </div>
+        )}
         <div className="gd-toolbar gap-x-4 px-3 py-2.5">
           {/* MISSÃO UX CLOSURE · item 5 — UMA MÉTRICA: Hoje, setas, data,
               Dia/Semana/Lista, Filtros, Fila, Bloquear horário e Novo
@@ -2187,7 +2244,7 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto">
+          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto flex-wrap">
             <Button
               variant="secondary"
               className="min-h-11 sm:min-h-0"
@@ -2204,7 +2261,7 @@ export default function AgendaPage() {
               label={`Escolher data (${focusRange})`}
               formatValue={() => focusLabel}
               max="2100-12-31"
-              className="min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
+              className="order-first sm:order-none basis-full sm:basis-auto min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
             />
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
@@ -2212,15 +2269,12 @@ export default function AgendaPage() {
           <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
             {/* E3 · Bloquear horário vira ÍCONE (cadeado) com tooltip e nome
                 acessível — o rótulo longo saiu da toolbar. */}
-            <IconButton
-              icon="lock"
-              label="Bloquear horário"
-              tip="Bloquear horário"
-              variant="secondary"
-              aria-pressed={blockMode}
+            <Button variant="secondary" aria-pressed={blockMode} aria-label="Bloquear horário" title="Bloquear horário"
               className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
               onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
-            />
+            >
+              <Icon n="lock" size={14} aria-hidden="true" /><span>Bloquear</span>
+            </Button>
             {/* E3 · UM seletor de visualização (Dia · Semana · Mês · Lista) no
                 SelectMenu canônico — listbox não nativo, teclado completo
                 (↑/↓, Home/End, Enter, Escape devolve o foco ao gatilho). */}
@@ -2236,7 +2290,7 @@ export default function AgendaPage() {
             {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
                 segmentado. Desktop mantém o rótulo visível. */}
             <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: proFilter })}>
-              <Icon n="calendarPlus" size={16} /><span className="ag-toolbar__label">Novo agendamento</span>
+              <Icon n="calendarPlus" size={16} /><span className="ag-toolbar__label"><span className="sm:hidden">Novo</span><span className="hidden sm:inline">Novo agendamento</span></span>
             </Button>
           </div>
         </div>
@@ -2376,6 +2430,17 @@ export default function AgendaPage() {
         </div>
       ) : (
         <div className="ag-mode-panel ag-grid-surface" data-range-focus={rangeFocus || undefined}>
+          {mobileDay && columns.length > 1 && (
+            <div role="group" aria-label="Escolher profissional" data-mobile-pro-picker className="flex gap-2 overflow-x-auto px-2 py-2 border-b border-[var(--border)] bg-[var(--surface)]">
+              {columns.map(c => (
+                <button key={c.key} type="button" aria-pressed={c.key === mobileKey} onClick={() => setMobileProKey(c.key)}
+                  className={`shrink-0 inline-flex items-center gap-2 min-h-11 rounded-full border px-3 text-sm font-medium ${c.key === mobileKey ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                  {c.isProfessional && <Avatar name={c.label} src={c.photo} size={20} />}
+                  <span className="whitespace-nowrap">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {/* AGENDA PROTAGONISTA — SCROLL INTERNO com dono único (Dia/Semana):
               o scroller é o ÚNICO dono da rolagem vertical — ele ocupa todo o
               resto do viewport (flex:1/min-height:0 na cadeia .ag-page) e rola
@@ -2424,6 +2489,7 @@ export default function AgendaPage() {
                         <span className="flex items-center gap-1.5 min-w-0">
                           <span className={`block text-[13.5px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
                           {c.isToday && <span className="ag-col-today">Hoje</span>}
+                          {closedFor(c) && <span className="ag-col-closed">Fechado</span>}
                         </span>
                         {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
@@ -2471,7 +2537,9 @@ export default function AgendaPage() {
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
                       onResize={onResize}
-                      unavailableRanges={exceptionUnavailableRanges(exceptions, c.date, grid.start, grid.end, rules.filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId) : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules)))).map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) })))}
+                      closedLabel={closedFor(c)}
+                      outsideRanges={outsideFor(c)}
+                      unavailableRanges={closedFor(c) ? [] : exceptionUnavailableRanges(exceptions, c.date, grid.start, grid.end, rules.filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId) : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules)))).map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) })))}
                       operationalBlocks={scheduleBlocks.flatMap(block => {
                         const window = blockOnAgendaColumn(block, c.date, c.professionalId, view === 'week' ? 'week' : 'day', bizTz);
                         if (!window) return [];

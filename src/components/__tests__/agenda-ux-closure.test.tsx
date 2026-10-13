@@ -236,7 +236,7 @@ describe('5 · toolbar da Agenda com UMA métrica', () => {
     expect(line2).toContain('<IconButton icon="chevL"');       // setas (quadradas MD)
     expect(line2).toContain('<DatePicker');
     expect(line2).toContain('<SelectMenu');                       // seletor único Dia/Semana/Mês/Lista (E3)
-    expect(line2).toContain('icon="lock"');                      // Bloquear horário = cadeado (E3)
+    expect(line2).toMatch(/<Icon n="lock"/);                    // Bloquear horário = cadeado (E3; ícone DS + rótulo visível)
     expect(line2).toContain('Novo agendamento');
   });
 
