@@ -26,14 +26,14 @@ describe('P0-3 · veterinária exige pet quando o tutor já tem pets', () => {
     expect(api).toContain('!params.petId');
   });
 
-    it('NewBookingSheet: pet obrigatório; cadastro de pet vive no NewClientSheet unificado', () => {
+    it('NewBookingSheet: pet obrigatório; cadastro de pet vive na página de cliente unificada', () => {
     const sheet = read('src/components/dashboard/NewBookingSheet.tsx');
     expect(sheet).toContain('data-vet-pet-empty');
     expect(sheet).toContain('Pet (paciente)');
     expect(sheet).toContain('Selecione o pet…');
     expect(sheet).toContain('escolha o pet (paciente)');
-    // Cadastro unificado tutor+pet (fechamento Fase 2): fora do form temporário.
-    expect(sheet).toContain('NewClientSheet');
+    // Cadastro unificado tutor+pet (Missão 02): a página /clientes/novo, fora do agendamento.
+    expect(sheet).toContain('newClientFromBookingHref');
     const reg = read('src/components/dashboard/NewClientSheet.tsx');
     expect(reg).toContain('Adicionar pet');
     expect(reg).toContain('Salvar tutor e pet');
@@ -81,17 +81,19 @@ describe('P0-4 · campos do pet persistem sem troca de conteúdo', () => {
     expect(validatePet(edited)).toBe('');
   });
 
-  it('PetsSection: cada campo tem id/label próprio e não compartilha state', () => {
-    const section = read('src/components/dashboard/PetsSection.tsx');
+  it('PetsSection/PetEditSheet: cada campo tem id/label próprio e não compartilha state', () => {
+    // Etapa 2: o formulário foi extraído para PetEditSheet (fonte única do Tutor 360 e da Pet 360).
+    const sheet = read('src/components/dashboard/PetEditSheet.tsx');
     for (const id of ['pet-name', 'pet-species', 'pet-breed', 'pet-sex', 'pet-birth', 'pet-weight', 'pet-notes']) {
-      expect(section).toContain(`id="${id}"`);
-      expect(section).toContain(`htmlFor="${id}"`);
+      expect(sheet).toContain(`id="${id}"`);
+      expect(sheet).toContain(`htmlFor="${id}"`);
     }
     // abertura clona o objeto do pet uma vez e captura baseline isolada da lista
-    expect(section).toMatch(/const startPetForm = \(pet: Partial<Pet>\) => \{[\s\S]*?const initial = \{ \.\.\.pet \};[\s\S]*?setEditing\(initial\);[\s\S]*?setEditingBaseline\(initial\);/);
-    expect(section).toContain('onClick={() => startPetForm(p)}');
-    expect(section).toMatch(/setEditing\(\{ \.\.\.editing,/);
-    // abrir novo zera o rascunho
+    expect(sheet).toMatch(/const initial = \{ \.\.\.pet \};[\s\S]*?setEditing\(initial\);[\s\S]*?setBaseline\(initial\);/);
+    expect(sheet).toMatch(/setEditing\(\{ \.\.\.editing,/);
+    // a lista abre a edição pelo lápis; "novo" parte do EMPTY_PET
+    const section = read('src/components/dashboard/PetsSection.tsx');
+    expect(section).toContain('onClick={() => setEditing(p)}');
     expect(section).toContain('EMPTY_PET');
   });
 });
@@ -107,7 +109,8 @@ describe('P1 · raças em autocomplete (sempre digitar outra)', () => {
   });
 
   it('PetsSection e cadastro de pet (NewClientSheet) usam datalist (não lista fechada)', () => {
-    const section = read('src/components/dashboard/PetsSection.tsx');
+    // O campo Raça mora no PetEditSheet (fonte única do cadastro de pet).
+    const section = read('src/components/dashboard/PetEditSheet.tsx');
     expect(section).toContain('list="pet-breeds-datalist"');
     expect(section).toContain('breedSuggestions');
     const reg = read('src/components/dashboard/NewClientSheet.tsx');
@@ -139,8 +142,12 @@ describe('P1 · Pet 360 retorna só dados do pet', () => {
     const detail = read('src/components/dashboard/BookingDetailSheet.tsx');
     expect(detail).toContain('Pet360Sheet');
     expect(detail).toContain('setPet360Open(true)');
+    // Etapa 2: no Tutor 360 o card ABRE A PÁGINA COMPLETA do pet (/pets/[id]);
+    // o painel lateral Pet 360 fica como consulta rápida a partir da Agenda.
     const drawer = read('src/components/dashboard/ClientProfileDrawer.tsx');
-    expect(drawer).toContain('onOpenPet={setPet360}');
-    expect(drawer).toContain('Pet360Sheet');
+    expect(drawer).not.toContain('onOpenPet={setPet360}');
+    expect(drawer).not.toContain('Pet360Sheet');
+    const section = read('src/components/dashboard/PetsSection.tsx');
+    expect(section).toContain('href={`/pets/${encodeURIComponent(p.id)}?b=${encodeURIComponent(businessId)}`}');
   });
 });

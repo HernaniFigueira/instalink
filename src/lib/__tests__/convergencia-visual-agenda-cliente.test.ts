@@ -57,7 +57,9 @@ describe('hierarquia do hover e prévia do cliente', () => {
 
   it('perfil completo usa cabeçalhos de seção h3 com a mesma tipografia de rótulo', () => {
     const overview = drawer.slice(drawer.indexOf("tab === 'overview'"), drawer.indexOf("tab === 'files'"));
-    expect(overview).toContain('<h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]">Próximo agendamento</h3>');
+    // Cards operacionais usam a moldura única OverviewCard (rótulo 12px/600).
+    expect(overview).toContain('<OverviewCard title="Próximo agendamento">');
+    expect(drawer).toContain('<h3 className="text-[12px] font-semibold text-[var(--text-muted)]">{title}</h3>');
     expect(overview).not.toContain('text-[11.5px]');
   });
 });

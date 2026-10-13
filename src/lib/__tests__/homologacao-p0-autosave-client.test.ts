@@ -84,14 +84,15 @@ describe('P0-1 · autosave não fecha EncounterSheet/BookingDetailSheet', () => 
 // "+ Cadastrar" abre o CADASTRO REAL (NewClientSheet → POST /api/contacts);
 // abandonar o agendamento NÃO apaga o cadastro; sem formulário duplicado.
 describe('P0-2 · cadastro real dentro do agendamento (fechamento Fase 2)', () => {
-  it('SEM stages temporários — só busca + registro real via NewClientSheet', () => {
+  it('SEM stages temporários — só busca + registro real na página /clientes/novo', () => {
     expect(NEW_BOOKING).not.toContain('new-form');
     expect(NEW_BOOKING).not.toContain('new-ready');
     expect(NEW_BOOKING).not.toContain('confirmNewDraft');
     expect(NEW_BOOKING).not.toContain('cancelNewDraft');
-    expect(NEW_BOOKING).toContain('NewClientSheet');
-    expect(NEW_BOOKING).toContain('setRegisterOpen(true)');
-    expect(NEW_BOOKING).toContain('onClientRegistered');
+    // Missão 02: "+ Novo cliente" guarda o rascunho e segue para a página de cadastro.
+    expect(NEW_BOOKING).toContain('newClientFromBookingHref');
+    expect(NEW_BOOKING).toContain('writeBookingReturn(');
+    expect(NEW_BOOKING).not.toContain('onClientRegistered');
     // Nenhum formulário de cliente duplicado dentro do agendamento
     expect(NEW_BOOKING).not.toContain('data-new-client-form');
     expect(NEW_BOOKING).not.toContain('O cliente será cadastrado quando este agendamento');
@@ -109,8 +110,8 @@ describe('P0-2 · cadastro real dentro do agendamento (fechamento Fase 2)', () =
     expect(NEW_BOOKING).toMatch(/requestId/);
   });
 
-  it('gatilho de busca é "+ Cadastrar paciente" e abre cadastro real', () => {
-    expect(NEW_BOOKING).toContain('+ Cadastrar paciente');
+  it('gatilho de cadastro é "+ Novo cliente" e abre cadastro real', () => {
+    expect(NEW_BOOKING).toContain('+ Novo cliente');
     expect(NEW_BOOKING).toContain('data-new-client-trigger');
   });
 

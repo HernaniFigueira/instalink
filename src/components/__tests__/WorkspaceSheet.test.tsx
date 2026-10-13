@@ -25,6 +25,18 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+// Fim real da saída: o sheet só se desmonta/avisa o pai quando a animação
+// ws-sheet-out termina (animationend). Sem o evento, a rede de segurança cobre.
+// jsdom não tem AnimationEvent: o evento é montado à mão, com animationName.
+function fireAnimationEnd(el: Element, animationName: string) {
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: animationName });
+  act(() => { el.dispatchEvent(ev); });
+}
+function endSheetExit(dialog: HTMLElement) {
+  fireAnimationEnd(dialog, 'ws-sheet-out');
+}
+
 function sheet(props: Partial<React.ComponentProps<typeof WorkspaceSheet>> = {}) {
   return render(
     <WorkspaceSheet open onClose={vi.fn()} title="Conversas" {...props}>
@@ -46,31 +58,35 @@ describe('WorkspaceSheet', () => {
     expect(screen.getByText('conteúdo do sheet')).toBeTruthy();
   });
 
-  it('ESC fecha respeitando a janela da animação de saída', () => {
-    vi.useFakeTimers();
-    try {
-      const onClose = vi.fn();
-      sheet({ onClose });
-      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
-      expect(onClose).not.toHaveBeenCalled(); // ainda na animação de saída
-      act(() => { vi.advanceTimersByTime(250); });
-      expect(onClose).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('Escape anima a saída e chama onClose só ao fim (animationend ws-sheet-out)', () => {
+    const onClose = vi.fn();
+    sheet({ onClose });
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled(); // ainda na animação de saída
+    expect(dialog.getAttribute('data-closing')).not.toBeNull();
+    endSheetExit(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('animationend de outra animação (filho) não encerra a saída', () => {
+    const onClose = vi.fn();
+    sheet({ onClose });
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireAnimationEnd(screen.getByText('conteúdo do sheet'), 'gd-fade-in');
+    expect(onClose).not.toHaveBeenCalled();
+    endSheetExit(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('o X fecha e é rotulado pelo título', () => {
-    vi.useFakeTimers();
-    try {
-      const onClose = vi.fn();
-      sheet({ onClose });
-      fireEvent.click(screen.getByRole('button', { name: 'Fechar Conversas' }));
-      act(() => { vi.advanceTimersByTime(250); });
-      expect(onClose).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    const onClose = vi.fn();
+    sheet({ onClose });
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar Conversas' }));
+    expect(onClose).not.toHaveBeenCalled();
+    endSheetExit(screen.getByRole('dialog'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('"Abrir página completa" só aparece com destino real informado', () => {
@@ -134,10 +150,9 @@ describe('WorkspaceSheet', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(document.activeElement).not.toBe(opener); // foco entrou no sheet
 
-    vi.useFakeTimers();
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
-    act(() => { vi.advanceTimersByTime(250); });
-    vi.useRealTimers();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    endSheetExit(dialog);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(opener);
   });

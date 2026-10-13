@@ -23,7 +23,7 @@ describe('Agenda cell → NewBookingSheet prefill', () => {
     expect(agenda).toContain('setQuickCreate({ x: point.x, y: point.y, date: col.date, time, professionalId: col.professionalId })');
     expect(agenda).toContain('<QuickBookingPopover');
     expect(agenda).toMatch(/onMore=\{\(seed\) => \{[\s\S]*?setCreating\(\{/);
-    expect(agenda).toMatch(/initial=\{\{[\s\S]*?date: creating\.date[\s\S]*?time: creating\.time/);
+    expect(agenda).toMatch(/initial=\{\{[\s\S]*?date: sheetCtx\.date[\s\S]*?time: sheetCtx\.time/);
     expect(sheet).toContain('const [date, setDate] = useState(initial?.date || \'\')');
     expect(sheet).toContain('const [time, setTime] = useState(initial?.time || \'\')');
   });

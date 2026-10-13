@@ -37,6 +37,8 @@ export type WorkflowActionId =
 
 export interface WorkflowInputs {
   booking: Pick<Booking, 'status' | 'checkedInAt'>;
+  /** Data do agendamento é o dia de hoje na unidade (regra de chegada). */
+  checkInDay?: boolean;
   /** Registro de atendimento do agendamento (se existir). */
   encounter?: Pick<Encounter, 'status'> | null;
   /** Entrada de fila ligada ao agendamento (se existir). */
@@ -87,6 +89,11 @@ export interface WorkflowFacts {
   hasEncounter: boolean;
   /** Existe registro de atendimento em rascunho. */
   hasDraft: boolean;
+  /**
+   * Chegada permitida pela DATA: só no dia do agendamento (fuso da unidade).
+   * Ausente = sem restrição temporal (compatível com chamadas antigas).
+   */
+  checkInDay?: boolean;
 }
 
 /** Ações permitidas na etapa para as capacidades informadas. Matriz ÚNICA. */
@@ -97,7 +104,8 @@ export function workflowAllowedActions(f: WorkflowFacts, caps: WorkflowCaps): Wo
   switch (f.state) {
     case 'scheduled':
       if (a) {
-        out.push('check_in');
+        // Chegada só no dia do agendamento (contrato C). Desfazer segue até in_care.
+        if (f.checkInDay !== false) out.push('check_in');
         if (f.status === 'pending') out.push('confirm');
         out.push('reschedule');
         // Falta só de agendamento CONFIRMADO (máquina de status do Booking).
@@ -145,6 +153,7 @@ export function workflowView(
     allowed: workflowAllowedActions({
       state, status: i.booking.status, overdue: !!i.overdue,
       hasEncounter, hasDraft: i.encounter?.status === 'draft',
+      checkInDay: i.checkInDay,
     }, caps),
   };
 }

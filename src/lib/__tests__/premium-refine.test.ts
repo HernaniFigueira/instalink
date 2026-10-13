@@ -71,7 +71,7 @@ describe('missão 4 · 1 — ação carvão com identidade preservada', () => {
     // link antes da interação.
     expect(ui).toMatch(/primary:\s*\n?\s*'bg-\[var\(--accent\)\]/);
     expect(ui).toMatch(/primary:[^}]*text-\[var\(--accent-contrast\)\]/);
-    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-transparent text-\[var\(--text\)\] border/);
+    expect(ui).toMatch(/secondary:\s*\n?\s*'bg-\[var\(--surface\)\] text-\[var\(--text\)\] border border-\[var\(--border-strong\)\]/);
     expect(ui).toMatch(/destructive:\s*\n?\s*'bg-\[var\(--danger\)\]/); // destrutivo = vermelho mantido
   });
 });
@@ -151,8 +151,9 @@ describe('missão 4 · 5 — pet sheet premium (visual; lógica intacta)', () =>
 });
 
 describe('missão 4 · 6 — Pet 360 com dados claros + anotações em bloquinho', () => {
-  it('Pet 360: nome forte e chips de espécie/raça/idade/peso', () => {
-    expect(pet360).toMatch(/text-lg font-semibold text-\[var\(--text\)\] leading-tight/);
+  it('Pet 360: identidade única — título = nome, subtítulo espécie · raça, sem nome repetido no corpo', () => {
+    expect(pet360).toContain('`Pet 360 · ${speciesBreed}`');
+    expect(pet360).not.toMatch(/<p className="text-lg[^"]*">\{pet\.name\}<\/p>/);
     expect(pet360).toContain('rounded-pill border border-[var(--border)] bg-[var(--surface-3)]');
   });
 
@@ -172,7 +173,7 @@ describe('missão 4 · 7 — tela Clientes coerente com o novo padrão', () => {
     expect(clientes).toContain('> Novo cliente');
     expect(clientes).toContain("buttonCls('secondary', 'sm')");
     // filtros seguem nas abas pill do design system
-    expect(clientes).toContain('<Tabs items={tabItems}');
+    expect(clientes).toContain('<Segmented items={tabItems}');
   });
 });
 

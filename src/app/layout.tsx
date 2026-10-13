@@ -7,32 +7,23 @@ import '@/styles/godoutor-design-system.css';
 import './globals.css';
 import { AuthBootstrap } from '@/components/AuthBootstrap';
 
-// TIPOGRAFIA — uma família só (DS 1.1): **Barlow**, self-hosted, zero requisição
-// ao Google em runtime (e nenhuma no BUILD).
-//
-// Por que `next/font/local` e não `next/font/google` (decisão documentada):
-// `next/font/google` baixa a fonte NO BUILD. O ambiente de homologação desta
-// missão não tem acesso a fonts.googleapis.com (TLS bloqueado: `curl` falha e o
-// `next build` morre em "Failed to fetch `Barlow` from Google Fonts"), o que
-// tornaria o gate de build e TODA a evidência visual irreproduzíveis fora de uma
-// máquina com rede aberta. Os arquivos OFL da própria Barlow foram vendorizados
-// em `src/app/fonts/barlow/` (origem: pacote `@fontsource/barlow`, licença em
-// `OFL.txt`), e o resultado é o mesmo do `next/font/google`: self-host, preload,
-// `swap`, fallback métrico — e agora também buildável offline.
-//
-// Barlow entra pelos pesos que a escala usa (400/500/600/700); 700 é exceção de
-// hierarquia, não padrão. Numerais tabulares (`tabular-nums`) continuam valendo:
-// a Agenda depende disso para alinhar horários.
+// TIPOGRAFIA — uma família só (camada visual PR #69): **Inter**, self-hosted.
+// Decisão fixa da missão visual (VISUAL-EXECUTION-PACK-SHADCN-NOVA, 00/08):
+// Inter entra no preview como fonte única do produto. Os woff2 (OFL, origem
+// `@fontsource/inter` / gate da PR) ficam vendorizados em `src/app/fonts/inter/`
+// — zero requisição ao Google em runtime e nenhuma no BUILD.
+// Pesos da escala: 400 (value/helper), 500 (value/meta), 600 (title/label), 700
+// (só título de página). Numerais tabulares continuam valendo na Agenda.
 const sans = localFont({
   src: [
-    { path: './fonts/barlow/barlow-latin-400-normal.woff2', weight: '400', style: 'normal' },
-    { path: './fonts/barlow/barlow-latin-500-normal.woff2', weight: '500', style: 'normal' },
-    { path: './fonts/barlow/barlow-latin-600-normal.woff2', weight: '600', style: 'normal' },
-    { path: './fonts/barlow/barlow-latin-700-normal.woff2', weight: '700', style: 'normal' },
+    { path: './fonts/inter/inter-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/inter/inter-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/inter/inter-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/inter/inter-latin-700-normal.woff2', weight: '700', style: 'normal' },
   ],
   display: 'swap',
   preload: true,
-  variable: '--font-barlow',
+  variable: '--font-inter',
   fallback: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
 });
 // Mono continua Geist Mono (pacote `geist`): nosso único uso de mono é código/

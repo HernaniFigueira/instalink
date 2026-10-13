@@ -116,7 +116,10 @@
   --attention-fg: var(--gd-warning-fg);
   --attention-mark: var(--gd-warning);
   /* Texto sobre a marca âmbar: escuro o bastante para contraste AA. */
-  --attention-mark-fg: var(--gd-warning-fg);
+  /* Glyph do marcador de atenção (bolinha ! e ícone da faixa). Era --gd-warning-fg
+     (#92400e) sobre --attention-mark (#b45309): contraste ~1.5:1. Branco sobre o
+     âmbar atinge ~5:1 (AA). A cor semântica do fundo não muda. */
+  --attention-mark-fg: #ffffff;
 
   /* ── Destrutivo ─────────────────────────────────────────────── */
   --danger: var(--gd-danger);
@@ -305,7 +308,7 @@ body {
   gap: 2px;
   padding: 3px;
   background: var(--surface-3);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
 .il-tab {
@@ -325,10 +328,31 @@ body {
 .il-tab[aria-selected='true'] {
   background: var(--surface);
   color: var(--accent);
-  box-shadow: none;
-  outline: 1px solid var(--border-soft);
+  box-shadow: 0 1px 2px rgba(20, 16, 13, 0.10);
+  outline: 1px solid var(--border-strong);
 }
 .il-tab:disabled { opacity: 0.45; pointer-events: none; }
+
+/* Variante `line` (shadcn Tabs · line): sem caixa, texto de peso médio e
+   indicador de 2px no rodapé da aba ativa sobre uma régua hairline. Opt-in
+   por `variant="line"` (hoje só no Cliente 360). */
+.il-tabbar--line {
+  gap: 20px; padding: 0; background: transparent; border: 0; border-radius: 0;
+  border-bottom: 1px solid var(--border-soft, #eef2ef);
+}
+.il-tabbar--line .il-tab {
+  position: relative; padding: 10px 0 11px; border-radius: 0; background: transparent;
+  box-shadow: none; outline: none; font-size: 14px; font-weight: 500; color: var(--text-muted);
+}
+.il-tabbar--line .il-tab:hover { background: transparent; color: var(--text); }
+.il-tabbar--line .il-tab[aria-selected='true'] {
+  background: transparent; box-shadow: none; outline: none; color: var(--text); font-weight: 600;
+}
+.il-tabbar--line .il-tab[aria-selected='true']::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--accent); border-radius: 2px 2px 0 0;
+}
+.il-tabbar--line .il-tab:focus-visible { box-shadow: var(--focus-ring); border-radius: 4px; }
 
 /* ── Segmented control (§8) ──────────────────────────────────────
    Um controle, quatro modos. O indicador é um elemento só que se MOVE
@@ -837,7 +861,10 @@ input[type='color'] { @apply cursor-pointer; }
   --attention-border: var(--gd-warning-border);
   --attention-fg: var(--gd-warning-fg);
   --attention-mark: var(--gd-warning);
-  --attention-mark-fg: var(--gd-warning-fg);
+  /* Glyph do marcador de atenção (bolinha ! e ícone da faixa). Era --gd-warning-fg
+     (#92400e) sobre --attention-mark (#b45309): contraste ~1.5:1. Branco sobre o
+     âmbar atinge ~5:1 (AA). A cor semântica do fundo não muda. */
+  --attention-mark-fg: #ffffff;
   /* Laranja com contraste ≥ 3:1 sobre branco: é o tom usado em ÍCONE/rail de
      "atenção" (Tarefas). O `--warning` puro continua sendo a cor de estado. */
   --orange-deep: #b45309;
@@ -1100,7 +1127,8 @@ dialog.il-drawer::backdrop { background: var(--overlay); }
 
 .il-drawer__strip {
   border: 1px solid var(--border);
-  border-radius: 20px;
+  /* Contrato de drawer/dialog do DS: raio 12px (token --gd-radius-lg), não 20px. */
+  border-radius: var(--gd-radius-lg);
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 32px 64px -24px rgba(15, 23, 42, .38), 0 8px 24px -12px rgba(15, 23, 42, .16);
@@ -1156,7 +1184,10 @@ dialog.il-drawer .il-actionbar {
   /* Tokens de largura em vw (ex.: WORKSPACE_SHEET_SIZES.clinical = 46vw) deixam a
      faixa com ~180px em celular. Abaixo de 768px a faixa ocupa a largura útil do
      dialog (já com 8px de respiro): título legível, footer e campos cabem. */
-  dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important; }
+  /* Sem transição de largura/max-width no celular: o movimento canônico é só o
+     translate da entrada/saída; uma transição de layout em paralelo (200ms)
+     deslocava a faixa por ~140ms além do translate (residual medido em 390px). */
+  dialog.il-drawer:not(.workspace-nav-drawer) .il-drawer__strip { max-width: none !important; transition: none; }
 }
 @media (max-width: 1359px) {
   .il-drawer__strip[data-expanded='true'] { max-width: none !important; width: 100% !important; }
@@ -1190,7 +1221,11 @@ dialog.il-drawer--dialog {
   top: 50%; left: 50%; right: auto; bottom: auto;
   transform: translate(-50%, -50%);
   width: min(var(--il-dialog-w, 672px), calc(100vw - 2 * var(--gd-space-4)));
-  height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
+  /* Expandir/recolher o cadastro aninhado anima a largura (token; 0 ms em reduce). */
+  transition: width var(--gd-motion-side-modal) var(--gd-ease);
+  /* Altura ADAPTATIVA ao conteúdo: formulário curto não vira card gigante com
+     área branca; o teto é a viewport e o corpo rola (.ws-sheet__body). */
+  height: auto;
   max-height: calc(100dvh - 2 * var(--gd-space-4));
 }
 /* Com o cadastro aninhado aberto o par 50/50 precisa de faixa: a MESMA regra
@@ -1198,10 +1233,18 @@ dialog.il-drawer--dialog {
 dialog.il-drawer--dialog[data-expanded='true'] {
   width: min(1280px, calc(100vw - 2 * var(--gd-space-4)));
 }
+dialog.il-drawer--dialog::backdrop { background: var(--gd-overlay-dialog); }
 dialog.il-drawer--dialog .il-drawer__strip {
   width: 100%; max-width: none;
+  /* Elevação do Dialog vem do token compartilhado do DS (sem sombra por tela). */
+  box-shadow: var(--gd-shadow-dialog);
+  /* Faixa com altura do conteúdo, limitada pela viewport; o scroll fica no corpo. */
+  height: auto;
+  max-height: min(88dvh, calc(100dvh - 2 * var(--gd-space-4)));
+  overflow: hidden;
   border-radius: var(--gd-radius-lg);
 }
+dialog.il-drawer--dialog .il-drawer__panels { height: auto; flex: 1 1 auto; }
 /* Bolinha do topo: no modal central a faixa tem raio do DS (8px, não 20px). */
 dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) var(--gd-radius-lg); }
 @media (max-width: 767px) {
@@ -1210,7 +1253,10 @@ dialog.il-drawer--dialog .il-actionbar { border-radius: 0 0 var(--gd-radius-lg) 
   dialog.il-drawer--dialog {
     top: 50%; left: 50%; right: auto; bottom: auto;
     width: calc(100vw - 2 * var(--gd-space-3));
-    height: calc(100dvh - 2 * var(--gd-space-3));
+    height: auto;
+    max-height: calc(100dvh - 2 * var(--gd-space-3));
+  }
+  dialog.il-drawer--dialog .il-drawer__strip {
     max-height: calc(100dvh - 2 * var(--gd-space-3));
   }
 }
@@ -2277,14 +2323,17 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    data (o único CONTROLE DE CAMPO da linha) entra nessa régua — antes era a
    única caixa outlined da toolbar e fazia o resto parecer desalinhado. O foco
    continua no anel canônico do DS (`:focus-visible` + `shadow-focus`). */
-.ag-page .gd-toolbar .il-field-control {
+/* O gatilho do SelectMenu é ação SECUNDÁRIA (canônico): mantém contorno em
+   repouso mesmo na toolbar (`gd-select-trigger`). A régua sem contorno vale
+   só para o gatilho de data. */
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger) {
   background: transparent;
   border-color: transparent;
   transition: background-color var(--gd-motion-fast) var(--gd-ease),
               border-color var(--gd-motion-fast) var(--gd-ease);
 }
-.ag-page .gd-toolbar .il-field-control:hover { background: var(--surface-hover); }
-.ag-page .gd-toolbar .il-field-control:focus-visible {
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):hover { background: var(--surface-hover); }
+.ag-page .gd-toolbar .il-field-control:not(.gd-select-trigger):focus-visible {
   background: var(--surface);
   border-color: var(--accent);
 }
@@ -2613,37 +2662,65 @@ dialog.il-customer-dialog::backdrop { background:transparent; }
    lateral. Hover e detalhe nunca ocupam a tela ao mesmo tempo. */
 .gd-hovercard.ag-hover {
   /* O wrapper posicionado é o que o HoverCard mede para flip/clamp. A largura
-     precisa viver nele (não apenas no filho), senão o max-width genérico de
-     320px mede errado e deixa o conteúdo de 360px avançar sobre o evento. */
+     precisa viver nele (não apenas no filho). Geometria NOVA: card 12px com
+     hairline; sombra mínima (só separa a camada do evento). */
   width: 340px; max-width: min(340px, calc(100vw - 24px)); padding: 0;
-  border: 1px solid var(--gd-border-soft); border-radius: var(--gd-radius-md);
-  background: var(--gd-bg-surface); box-shadow: var(--gd-shadow-md);
+  border: 1px solid var(--gd-border); border-radius: var(--gd-radius-lg);
+  background: var(--gd-bg-surface); box-shadow: 0 6px 18px rgba(20, 16, 13, .08);
 }
-/* Prévia rica, ainda contextual: cresce para leitura confortável sem cobrir o
-   evento que a abriu e sem ganhar a sombra forte de um modal. */
+/* Prévia de leitura (composição CE): cabeçalho com ícone e data forte; pessoa
+   com avatar sobre superfície suave; linhas com ícone (status, profissional,
+   serviço, observação); rodapé com Editar (contorno) e Ver detalhes (sólido). */
 .ag-hover__card {
   width: 100%; max-width: 100%; padding: var(--gd-space-4);
-  display: flex; flex-direction: column; gap: var(--gd-space-2);
+  display: flex; flex-direction: column; gap: var(--gd-space-3);
 }
-/* Hierarquia da prévia: horário é a informação principal (semibold, ink);
-   paciente/serviço/profissional vêm em pares rótulo→valor; "Ver detalhes" é a
-   única ação primária, "Editar" fica secundário e nunca compete com ela. */
-.ag-hover__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gd-space-2); }
-.ag-hover__heading { font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line); font-weight: var(--gd-weight-semibold); color: var(--gd-text); }
-.ag-hover__date { margin: 0; color: var(--gd-text); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); font-weight: var(--gd-weight-semibold); }
-.ag-hover__rows { margin: 0; display: flex; flex-direction: column; gap: var(--gd-space-1); }
-.ag-hover__rows > div { display: flex; align-items: baseline; gap: var(--gd-space-2); font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); }
-.ag-hover__rows dt { flex: 0 0 76px; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); }
-.ag-hover__rows dd { min-width: 0; margin: 0; color: var(--gd-text); overflow-wrap: anywhere; }
-.ag-hover__observation { display: -webkit-box; margin: 0; overflow: hidden; color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.ag-hover__observation strong { color: var(--gd-text-secondary); font-weight: var(--gd-weight-medium); }
+.ag-hover__head { display: flex; align-items: flex-start; gap: var(--gd-space-3); }
+.ag-hover__tile {
+  flex: 0 0 auto; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--gd-radius-md); background: var(--surface-2); color: var(--gd-accent-fg);
+}
+.ag-hover__heading {
+  margin: 0; font-size: var(--gd-type-section-size); line-height: var(--gd-type-section-line);
+  font-weight: var(--gd-weight-semibold); color: var(--gd-text-strong);
+}
+/* Data/hora é a leitura forte do hover (REF-CE-01): 14/600, cor de título. */
+.ag-hover__date {
+  margin: 2px 0 0; font-size: 14px; line-height: 20px;
+  font-weight: var(--gd-weight-semibold); color: var(--gd-text-strong);
+}
+.ag-hover__person {
+  display: flex; align-items: center; gap: var(--gd-space-3);
+  padding: var(--gd-space-3); border-radius: var(--gd-radius-md); background: var(--surface-2);
+}
+.ag-hover__value {
+  margin: 0; font-size: 15px; line-height: 20px; font-weight: var(--gd-weight-semibold);
+  color: var(--gd-text-strong); overflow-wrap: anywhere;
+}
+.ag-hover__sub { margin: 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); color: var(--gd-text-muted); }
+.ag-hover__rows { display: flex; flex-direction: column; gap: var(--gd-space-2); }
+.ag-hover__rows > div {
+  display: flex; align-items: flex-start; gap: var(--gd-space-2);
+  font-size: var(--gd-type-body-size); line-height: var(--gd-type-body-line); color: var(--gd-text);
+}
+.ag-hover__ico {
+  flex: 0 0 16px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--gd-text-soft);
+}
+.ag-hover__dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
+.ag-hover__obs {
+  color: var(--gd-text-muted); font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere;
+}
 .ag-hover__flag { margin: 0; font-size: var(--gd-type-helper-size); line-height: var(--gd-type-helper-line); font-weight: var(--gd-weight-medium); color: var(--gd-text-muted); }
 .ag-hover__flag--attention { color: var(--attention-fg); }
+/* Rodapé de ações: Editar (secundário com contorno) e Ver detalhes (primário
+   sólido). Dois pesos distintos, alvos de 36px, nunca dois textos equivalentes. */
 .ag-hover__actions {
-  display: flex; align-items: center; justify-content: flex-end; gap: var(--gd-space-2); padding-top: var(--gd-space-3); margin-top: var(--gd-space-1);
-  border-top: 1px solid var(--gd-border-soft);
+  display: flex; align-items: center; gap: var(--gd-space-2);
+  padding-top: var(--gd-space-3); border-top: 1px solid var(--gd-border-soft);
 }
-.ag-hover__actions > button { flex: 0 0 auto; min-height: var(--gd-control-h); font-weight: var(--gd-weight-semibold); }
+.ag-hover__actions > button { flex: 0 0 auto; min-height: var(--gd-control-h); font-weight: var(--gd-weight-semibold); justify-content: center; }
+.ag-hover__actions > button:last-child { flex: 1 1 0; }
 .ag-hover__actions > button:focus-visible { outline: none; box-shadow: var(--gd-focus-ring); }
 /* Resultado pós-PATCH (nunca otimista): sucesso e falha são avisos distintos. */
 .ag-ctx-success,
@@ -2812,7 +2889,7 @@ dialog.ws-sheet[data-closing]::backdrop { animation: gd-fade-out var(--gd-motion
 }
 .ws-sheet__sub {
   margin: 3px 0 0; font-size: 12px; color: var(--text-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .ws-sheet__actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; border-left: 1px solid var(--border-soft); padding-left: 10px; margin-left: 6px; }
 .ws-sheet__fullpage {
@@ -2965,20 +3042,28 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 @media(max-width:767px) { .il-platform .conversation-view :is(button,input), .il-platform .conversation-view a.inline-flex { min-height:44px; } }
 
 /* Shared inline alert dialog used by guarded overlays (no second native modal/backdrop). */
+/* P1.4 — UMA camada modal só: o backdrop é o do diálogo que já está aberto.
+   A confirmação de descarte NÃO pinta outro véu nem centraliza um segundo
+   modal: é um cartão de decisão no canto inferior do próprio diálogo. A
+   camada transparente continua capturando o ponteiro para que os controles
+   de baixo não abram um segundo pedido de fechamento enquanto ela existe. */
 .overlay-confirm-layer {
+  /* Dialog CANÔNICO: backdrop global (escurece o que está atrás, inclusive o
+     formulário que o originou), cartão centralizado, foco preso no cartão. */
   position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  backdrop-filter: blur(1px);
-  /* Covers the existing dialog surface to keep controls underneath from
-     opening a second close request while this decision is pending. */
+  padding: 24px;
+  background: var(--overlay-scrim, rgba(15, 23, 42, 0.42));
   pointer-events: auto;
+  /* Entrada do dialog: fade do backdrop (mesma régua do gd-dialog). Antes o
+     cartão aparecia sem transição — salto comprovado na medição de motion. */
+  animation: gd-fade-in var(--gd-motion-fast) linear both;
 }
 .overlay-confirm {
+  animation: gd-dialog-in var(--gd-motion-dialog) var(--gd-ease) both;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2989,7 +3074,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 12%));
   text-align: center;
   pointer-events: auto;
 }
@@ -3079,7 +3164,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
 .encounter-page__save-state--saving { color: var(--brand-fg, #276347); }
 .encounter-page__save-state--error { color: var(--danger, #b42318); }
 .encounter-page__save-state--dirty { color: var(--warning-fg, #8a5b00); }
-.encounter-page > .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+.encounter-page > .overlay-confirm-layer { z-index: 1200; }
 @media (max-width: 767px) {
   .encounter-page { min-height: calc(100dvh - 56px); margin-inline: -16px; }
   .encounter-page__header { align-items: flex-start; gap: 10px; padding: 12px 16px; }
@@ -3341,7 +3426,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
   .encounter-workspace__header { scroll-behavior: auto; }
   .encounter-workspace__nav-item { transition: none; }
 }
-.client-profile-page .overlay-confirm-layer { position: fixed; z-index: 1200; inset: 0; background: rgb(10 22 16 / 30%); pointer-events: auto; }
+.client-profile-page .overlay-confirm-layer { z-index: 1200; }
 
 /* ═══════════════════════════════════════════════════════════════
    CONVERSAS — workspace operacional full-height
@@ -3658,17 +3743,7 @@ dialog.ws-sheet[data-minimized]::backdrop { background: transparent; }
      sistema), não a largura inteira de um painel colado à direita. */
   .ag-mode-panel[data-range-focus] { margin-right: calc(min(var(--gd-booking-modal-w), 92vw) / 2 + 14px); }
   .ag-mode-panel[data-range-focus] [data-agenda-column] { min-width: 0 !important; }
-  /* Legado preservado: se algum fluxo ainda usar a FAIXA lateral para o
-     agendamento, a largura dela continua a mesma de antes. */
-  dialog.gd-booking-range-drawer:not(.il-drawer--dialog):not([data-expanded]) .il-drawer__strip {
-    width: min(46vw, 560px); max-width: min(46vw, 560px);
-  }
 }
-/* A team editor is a nonmodal workspace surface: sidebar links remain real
-   links, and useUnsavedChangesGuard pauses them before any draft is lost. */
-dialog.gd-team-editor { z-index: 50; }
-dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay); }
-
 /* Curated workspace type scale — DS 1.1: os papéis APONTAM para a escala
  * canônica (`--gd-type-*`), então trocar a escala (ou a família) muda o produto
  * inteiro de uma vez. Barlow é a identidade; a escala é a mesma em toda tela.
@@ -4351,12 +4426,10 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
   padding: 0 0 20px; margin: 0 0 24px; border-bottom: 1px solid var(--border-soft, #eef2ef);
 }
-.entity-main__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text, #1c2822); }
+.entity-main__title { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.3; color: var(--text, #1c2822); }
 .entity-main__actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.entity-main__sep { width: 1px; height: 20px; background: var(--border, #dfe6e2); margin: 0 4px; flex: none; }
 .entity-main__history { padding: 0 0 8px; }
-.client360-overview-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
-.client360-overview-grid > * { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.client360-overview-grid > * > :is(a, button):last-child { margin-top: 10px; }
 
 @media (max-width: 1023px) {
   .entity-rail {
@@ -4381,8 +4454,16 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 .gd-overflow-tabs { position: relative; min-width: 0; width: 100%; }
 .gd-overflow-tabs__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .gd-overflow-tabs__list { flex: 0 1 auto; min-width: 0; }
+.gd-overflow-tabs--wrap .gd-overflow-tabs__list { flex-wrap: wrap; overflow: visible; row-gap: 4px; width: 100%; }
 .gd-overflow-tabs__more { border: 1px solid var(--border-soft); background: var(--surface-3); flex: none; }
 [aria-expanded='true'] .gd-overflow-tabs__more { background: var(--surface); color: var(--accent); }
+.gd-overflow-tabs--line .gd-overflow-tabs__list { flex: 1 1 auto; }
+.gd-overflow-tabs--line .gd-overflow-tabs__more--line {
+  border: 0; background: transparent; padding: 10px 0 11px; border-radius: 0; font-size: 14px; font-weight: 500;
+  color: var(--text-muted); box-shadow: none;
+}
+.gd-overflow-tabs--line .gd-overflow-tabs__more--line:hover,
+.gd-overflow-tabs--line [aria-expanded='true'].gd-overflow-tabs__more--line { background: transparent; color: var(--text); }
 .gd-overflow-tabs__more-count {
   min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; font-size: 10px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -4432,3 +4513,42 @@ dialog.gd-team-editor > div > [aria-hidden='true'] { background: var(--overlay);
 /* Sessão empilhada (<1024): conteúdo curto (ex.: Procedimentos vazio) não pode
    esticar a linha do rail e abrir um vão entre o rail e a navegação. */
 .encounter-session { align-content: start; }
+
+/* ── ETAPA 3 · AGENDA: dia fechado, fora do expediente, seletor do celular ──
+   Superfícies neutras e hachura discreta (tokens existentes). Nada aqui é
+   bloqueio: são apenas leituras das regras reais de disponibilidade. */
+.ag-outside {
+  background-color: var(--surface-2);
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in srgb, var(--border-strong) 38%, transparent) 7px 8px);
+}
+.ag-closed {
+  background-color: var(--surface-3);
+  background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--border-strong) 34%, transparent) 9px 10px);
+}
+.ag-closed__tag {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  max-width: calc(100% - 14px); padding: 6px 10px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
+  text-align: center;
+}
+.ag-closed__tag strong { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text); }
+.ag-closed__tag > span { display: block; max-width: 100%; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-col-closed {
+  flex-shrink: 0; padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--surface-3); color: var(--text-muted); border: 1px solid var(--border);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+}
+
+/* ETAPA 3 · celular: a linha de data ocupa a largura toda; ações com rótulo
+   curto visível; o gatilho do seletor de visão ocupa o espaço disponível. */
+.ag-event__tutor-m { display: none; }
+@media (max-width: 767px) {
+  .ag-event__tutor-m { display: block; }
+  .ag-page .ag-toolbar-nav { flex-wrap: wrap; row-gap: 6px; }
+  .ag-page .ag-toolbar-actions { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .ag-page .ag-toolbar-actions > button { width: auto; min-width: 44px; padding: 0 12px; }
+  .ag-page .ag-toolbar-actions > button .ag-toolbar__label { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: nowrap; }
+  .ag-page .ag-toolbar-actions > .ag-view-select,
+  .ag-page .ag-toolbar-actions > .ag-view-select button { width: 100%; min-width: 0; }
+}

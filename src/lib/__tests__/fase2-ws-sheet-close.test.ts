@@ -93,7 +93,8 @@ describe('Overlays operacionais usam WorkspaceSheet', () => {
 
   it('AnamneseFiller e NewClientSheet já são WorkspaceSheet', () => {
     expect(read('src/components/dashboard/AnamneseFiller.tsx')).toContain('WorkspaceSheet');
-    expect(read('src/components/dashboard/NewClientSheet.tsx')).toContain('WorkspaceSheet');
+    // Missão 02: o cadastro completo virou página (sem Sheet). Expectativa anterior obsoleta.
+    expect(read('src/components/dashboard/NewClientSheet.tsx')).not.toContain('WorkspaceSheet');
     expect(read('src/components/dashboard/NewClientSheet.tsx')).not.toContain('<Drawer');
   });
 });

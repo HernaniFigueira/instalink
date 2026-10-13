@@ -100,7 +100,9 @@ describe('3A · posicionamento do resumo (flip e clamp) — regressão medida', 
     expect(face).toMatch(/else if \(preferLeft \? fitsRight : fitsLeft\) left = preferLeft \? toRight : toLeft;/);
     // Não cabe em nenhum → empilha fora do evento (nunca em cima dele).
     expect(face).toContain('else {');
-    expect(face).toContain('top = (h && below + h > window.innerHeight - margin && above > margin) ? above : below;');
+    // Empilha fora do evento: vira para cima quando abaixo não cabe, medido contra os limites VISÍVEIS
+    // (dialog que contém a camada, ou a janela) — ver popover-dialog-bounds.test.tsx.
+    expect(face).toContain('if (h && below + h > vb.bottom - margin && above >= vb.top) { top = above; flipped = true; } else top = below;');
   });
 
   it('re-mede quando a camada muda de tamanho (conteúdo assentando)', () => {
@@ -150,7 +152,7 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
   });
 
   it('hover, detalhe e editor central são mutuamente exclusivos e devolvem foco ao evento', () => {
-    expect(agenda).toContain('hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null');
+    expect(agenda).toContain('hoverSuppressed={!!dragId || ctxMenu !== null || detail !== null || editBooking !== null');
     expect(agenda).toContain('returnFocus={detailTriggerRef}');
     expect(read('src/components/dashboard/BookingEditDialog.tsx')).toContain('returnFocus={returnFocus}');
   });
@@ -170,8 +172,13 @@ describe('3B · "Ver detalhes" é o MODAL LATERAL canônico', () => {
 describe('3C · criar/editar agendamento é MODAL CENTRAL', () => {
   it('o formulário de criação usa o mesmo overlay system com geometria central', () => {
     const sheet = read('src/components/dashboard/NewBookingSheet.tsx');
+    // CONTRATO DEFINITIVO (PR #69, correção de superfícies): criação COMPLETA do
+    // Novo agendamento = MODAL CENTRAL (variant="dialog"), largura pelo token do DS.
+    // O Quick Create continua sendo o popover ancorado ao slot. Regressão: se a
+    // criação voltar à faixa lateral, este teste falha.
     expect(sheet).toMatch(/variant="dialog"/);
-    expect(sheet).toMatch(/dialogWidth=\{quick && !advanced \? '560px' : '672px'\}/);
+    expect(sheet).toMatch(/dialogWidth="var\(--gd-booking-modal-w\)"/);
+    expect(sheet).not.toMatch(/width=\{WORKSPACE_SHEET_SIZES\.booking\}/);
     // Faixa central = token do DS (uma fonte), com fallback no componente.
     expect(dsCss).toContain('--gd-booking-modal-w: 672px');
     expect(css).toMatch(/dialog\.il-drawer--dialog \{[\s\S]*?transform: translate\(-50%, -50%\)/);
@@ -225,10 +232,11 @@ describe('5 · toolbar da Agenda com UMA métrica', () => {
   it('todos os controles da linha de ações usam o nível MD (sem size="sm")', () => {
     const line2 = agenda.slice(agenda.indexOf('LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL'), agenda.indexOf('{isDragging && view !== \'month\''));
     expect(line2).not.toMatch(/size="sm"/);
-    expect(line2).toContain('<Button variant="secondary"');   // Hoje
+    expect(line2).toMatch(/<Button\s+variant="secondary"/);      // Hoje
     expect(line2).toContain('<IconButton icon="chevL"');       // setas (quadradas MD)
     expect(line2).toContain('<DatePicker');
-    expect(line2).toContain('<Segmented');
+    expect(line2).toContain('<SelectMenu');                       // seletor único Dia/Semana/Mês/Lista (E3)
+    expect(line2).toMatch(/<Icon n="lock"/);                    // Bloquear horário = cadeado (E3; ícone DS + rótulo visível)
     expect(line2).toContain('Novo agendamento');
   });
 
@@ -413,8 +421,8 @@ describe('Fechamento — queda inválida, Fila e toque compacto', () => {
   it('drop horizontal fora da grade continua inválido em vez de cair na primeira coluna', () => {
     const drop = agenda.slice(agenda.indexOf('const planDropAt ='), agenda.indexOf('const acceptDrop ='));
     const hover = agenda.slice(agenda.indexOf('const computeHover ='), agenda.indexOf('const scheduleHover ='));
-    expect(drop).toMatch(/point:\s*\{\s*x:\s*point\.x,\s*y:\s*Math\.max\(point\.y, geo\.minY\)\s*\}/);
-    expect(hover).toMatch(/const point: Point = \{ x: at\.x, y: Math\.max\(at\.y, geo\.minY\) \}/);
+    expect(drop).toMatch(/point:\s*\{\s*x:\s*point\.x,\s*y:\s*Math\.max\(point\.y - grabOffsetRef\.current, geo\.minY\)\s*\}/);
+    expect(hover).toMatch(/const point: Point = \{ x: at\.x, y: Math\.max\(at\.y - grabOffsetRef\.current, geo\.minY\) \}/);
     expect(agenda).not.toContain('geo.minX');
   });
 

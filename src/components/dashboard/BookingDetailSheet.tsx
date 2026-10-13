@@ -18,11 +18,11 @@
 //    histórico/timeline real — nada de fileira de links sem contexto.
 // A lógica de ações e transições é exatamente a mesma do P1.
 import { durationLabel } from '@/lib/duration-label';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { StatusBadge, Button, buttonCls } from '@/components/ui';
+import { StatusBadge, Button, Avatar, Separator, buttonCls } from '@/components/ui';
 import { Pet360Sheet } from '@/components/dashboard/Pet360Sheet';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
 import { BOOKING_STATUS, FIT_IN_MARK_CLS } from '@/lib/status';
@@ -39,9 +39,25 @@ import { useOverlayDismissGuard } from './OverlayDismissGuard';
 interface ServiceRef { id: string; name: string; durationMin: number; price?: number; questions?: string[] }
 interface ProRef { id: string; name: string }
 
-const ROW = 'flex items-baseline justify-between gap-3 py-2';
-const ROW_DT = 'text-xs font-medium text-zinc-500 shrink-0';
-const ROW_DD = 'text-sm text-zinc-900 text-right font-medium';
+/** Cabeçalho de grupo do drawer: rótulo pequeno em caixa-alta, valor é o protagonista. */
+const GROUP_H = 'text-[12px] font-semibold uppercase tracking-wide text-[var(--gd-text-muted)]';
+
+/** Linha escaneável do drawer: ícone discreto + valor forte; `hint` é o rótulo de apoio,
+ *  `aside` alinha um valor à direita (financeiro). Substitui a grade rótulo→valor. */
+function DetailRow({ icon, hint, aside, children }: { icon: string; hint?: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--gd-text-soft)]"><Icon n={icon} size={16} /></span>
+      <div className="min-w-0 flex flex-1 items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-[var(--gd-text-strong)] break-words">{children}</p>
+          {hint && <p className="text-xs text-[var(--gd-text-muted)]">{hint}</p>}
+        </div>
+        {aside !== undefined && <p className="shrink-0 text-sm font-semibold tabular-nums text-[var(--gd-text-strong)]">{aside}</p>}
+      </div>
+    </div>
+  );
+}
 
 /** Carimbo do histórico no fuso da UNIDADE (o servidor guarda UTC). */
 function historyStamp(at: string | undefined, timezone?: string): string {
@@ -52,8 +68,15 @@ function historyStamp(at: string | undefined, timezone?: string): string {
   catch { return t.toLocaleString('pt-BR', opts).replace(',', ''); }
 }
 
-export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus }: {
+export function BookingDetailSheet({ booking, service, pro, resources = [], businessId, timezone, onClose, onChanged, startRescheduling = false, returnFocus, open = true, onExited }: {
   booking: Booking;
+  /**
+   * Presença controlada pelo PAI (contrato de overlay de leitura): `open` false
+   * dispara a saída animada do painel; `onExited` avisa que ela terminou, e só
+   * então o pai desmonta o agendamento. O pai não desmonta antes disso.
+   */
+  open?: boolean;
+  onExited?: () => void;
   /**
    * MISSÃO UX CLOSURE · item 3A — o resumo do evento pode abrir o detalhe
    * DIRETO no fluxo de reagendamento. O detalhe continua sendo o mesmo; a
@@ -260,55 +283,157 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
 
   // O DetailSideModal recebe o foco, devolve ao gatilho e fecha em ESC/backdrop.
 
-  function showHistory() {
-    setHistoryOpen(true);
-    requestAnimationFrame(() => historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
-  }
-
   const hasHistory = (booking.history || []).length > 0;
   const checkedInHM = booking.checkedInAt
     ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: timezone || undefined })
       .format(new Date(booking.checkedInAt))
     : '';
 
+  /* Zona de ações fixa no rodapé do painel (padrão CE): principal preenchida,
+     secundárias com contorno, destrutiva isolada. Mesmos handlers/permissões. */
+  const actionFooter = rescheduling ? undefined : (
+    // O rodapé do DetailSideModal já traz padding, borda e fundo: aqui fica só o
+    // conteúdo, sem caixa aninhada. Zona principal (primary + secondary + ghost)
+    // e zona de perigo isolada, como na régua do shadcn.
+    <div className="flex w-full flex-col gap-3" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
+                {nextActionLabel && (
+                  <p className="mb-2 text-xs text-[var(--text-muted)]" data-workflow-next-action>
+                    Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-2" data-action-zone="principal">
+                  {/*
+                    §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:
+                    ela move o atendimento adiante. As demais (Confirmar/Concluir/
+                    Não compareceu/Reabrir/Reagendar) são transições e ficam
+                    NEUTRAS; só o Cancelar mantém tintura, porque é destrutivo.
+                  */}
+                  {can('check_in') && (
+                    <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
+                      <Icon n="check" size={16} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
+                    </Button>
+                  )}
+                  {can('start_care') && (
+                    <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
+                      <Icon n="fileText" size={16} /> Iniciar atendimento
+                    </Button>
+                  )}
+                  {can('open_care') && (
+                    // F1A — o atendimento JÁ ESTÁ EM ANDAMENTO: o botão diz o que
+                    // vai acontecer (retomar o mesmo registro, nunca criar outro).
+                    <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
+                      <Icon n="fileText" size={16} /> Retomar atendimento
+                    </Button>
+                  )}
+                  {can('view_care') && (
+                    <Button size="sm" variant="secondary" onClick={openCare} disabled={!!acting}>
+                      <Icon n="fileText" size={16} /> Ver atendimento
+                    </Button>
+                  )}
+                  {can('confirm') && (
+                    <Button size="sm" variant={primaria === 'confirm' ? 'primary' : 'secondary'} onClick={() => act('confirmed')} disabled={!!acting}>
+                      {acting === 'confirmed' ? 'Salvando…' : 'Confirmar'}
+                    </Button>
+                  )}
+                  {can('close_retro') && (
+                    <Button size="sm" variant={primaria === 'close_retro' ? 'primary' : 'secondary'} onClick={() => act('completed')} disabled={!!acting}
+                      title="Fechar o atendimento que já passou, sem registro clínico">
+                      {acting === 'completed' ? 'Salvando…' : 'Concluir'}
+                    </Button>
+                  )}
+                  {can('no_show') && (
+                    <Button size="sm" variant="secondary" onClick={() => act('no_show')} disabled={!!acting}>
+                      {acting === 'no_show' ? 'Salvando…' : 'Não compareceu'}
+                    </Button>
+                  )}
+                  {can('reopen') && (
+                    <Button size="sm" variant="secondary"
+                      onClick={() => act(booking.status === 'no_show' ? 'confirmed' : 'pending')} disabled={!!acting}>
+                      {booking.status === 'no_show' ? 'Reativar' : 'Reabrir'}
+                    </Button>
+                  )}
+                </div>
+                {(can('reschedule') || can('check_in_undo')) && (
+                  // Terciária: atalhos de baixa ênfase (ghost), fora da zona principal.
+                  <div className="flex flex-wrap items-center gap-x-1 gap-y-1" data-action-zone="terciaria">
+                    {can('reschedule') && (
+                      <Button size="sm" variant="ghost" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
+                        <Icon n="calendar" size={16} /> Reagendar
+                      </Button>
+                    )}
+                    {can('check_in_undo') && (
+                      <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
+                        title="Desfazer o check-in deste atendimento">
+                        Desfazer chegada
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {can('cancel') && (
+                  // Perigo: isolado por separador próprio e alinhado à esquerda, nunca junto da principal.
+                  <>
+                    <Separator />
+                    <div className="flex justify-start" data-action-zone="perigo">
+                      <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
+                        {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {wf.allowed.length === 0 && (
+                  <p className="text-[11px] text-[var(--text-muted)]">Nenhuma ação disponível para o seu perfil nesta etapa.</p>
+                )}
+                {booking.checkedInAt && wf.state === 'arrived' && (
+                  <p className="text-[11px] text-[var(--text-muted)] mt-2">
+                    Chegada registrada às {checkedInHM}{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
+                  </p>
+                )}
+              </div>
+  );
+
   return (
     <DetailSideModal
-      open
+      open={open}
+      onExited={onExited}
+      instant
       onClose={onClose}
       returnFocus={returnFocus}
       dismissGuard={{ dirty: rescheduleDirty, saving: !!acting, context: 'edit' }}
       title="Detalhe do agendamento"
       flush
+      footer={actionFooter}
       >
         {/* ── Sumário do atendimento (1ª seção do detalhe) ──
             Sem divisória própria: quem separa do cabeçalho do painel é a borda
             dele — duas linhas empilhadas viravam degrau sem função. */}
-        <header className="px-4 pt-3 pb-2.5 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <header className="px-5 pt-4 pb-3 flex items-start gap-3" data-drawer-zone="cabecalho">
+          <span aria-hidden="true" className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--gd-radius-md)] bg-[var(--surface-2)] text-[var(--brand-fg)]">
+            <Icon n="calendar" size={18} />
+          </span>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-zinc-600 tabular-nums">{formatDateBR(booking.date)} · {booking.time}–{endHM}</span>
+              <h3 className="min-w-0 truncate text-[16px] font-semibold leading-6 text-[var(--gd-text-strong)]" data-entity-title>{service?.name || 'Serviço'}</h3>
               {/* Status persistido do agendamento e etapa operacional são
                   informações diferentes. "Chegou" é workflow/check-in, nunca
                   um novo BookingStatus. */}
-              <span className="inline-flex items-center gap-1" data-booking-status>
-                <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Agendamento</span>
+              <span className="inline-flex items-center gap-1.5" data-booking-status>
                 <StatusBadge tone={def.tone}>{def.panel}</StatusBadge>
               </span>
               {booking.bookingKind === 'fit_in' && <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${FIT_IN_MARK_CLS}`}>Encaixe</span>}
               {(wf.state === 'arrived' || wf.state === 'in_care') && (
-                <span className="inline-flex items-center gap-1" data-workflow-stage>
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Etapa operacional</span>
+                <span className="inline-flex items-center gap-1.5" data-workflow-stage>
+                  <span className="text-[11px] font-medium text-[var(--gd-text-muted)]">Etapa operacional</span>
                   <StatusBadge tone={wf.state === 'in_care' ? 'blue' : 'emerald'}>{wf.label}</StatusBadge>
                 </span>
               )}
             </div>
-            <p className="font-semibold text-sm mt-1 leading-snug truncate">{service?.name || 'Serviço'}</p>
-            <p className="text-xs text-zinc-500 mt-0.5">{humanDay(booking.date, today)} · {durationLabel(dur)}</p>
+            <p className="mt-1 text-[13px] font-medium tabular-nums text-[var(--gd-text)]">
+              {humanDay(booking.date, today)} · {booking.time}–{endHM} <span className="text-[var(--gd-text-muted)]">· {durationLabel(dur)}</span>
+            </p>
           </div>
-
         </header>
 
-        {pet360Open && booking.petId && booking.petName && (
+        {booking.petId && booking.petName && (
           <Pet360Sheet
             open={pet360Open}
             onClose={() => setPet360Open(false)}
@@ -323,96 +448,6 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
           />
         )}
 
-          {/* ── Ações do atendimento: etapa × papel (servidor decide) ──
-              §12/§14 — UMA ação primária por etapa (a próxima do fluxo) e as
-              demais NEUTRAS: antes a linha misturava azul + verde + âmbar +
-              vermelho e disputava a leitura. Só o destrutivo mantém tintura. */}
-          {!rescheduling && (
-            <div className="px-4 py-3 border-b border-zinc-100" data-workflow-state={wf.state} aria-label="Ações elegíveis do atendimento">
-              {nextActionLabel && (
-                <p className="mb-2 text-xs text-[var(--text-muted)]" data-workflow-next-action>
-                  Próxima ação elegível: <strong className="text-[var(--text)]">{nextActionLabel}</strong>
-                </p>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {/*
-                  §12 — a ação PRIMÁRIA da etapa é a PRIMEIRA do fluxo permitida:
-                  ela move o atendimento adiante. As demais (Confirmar/Concluir/
-                  Não compareceu/Reabrir/Reagendar) são transições e ficam
-                  NEUTRAS; só o Cancelar mantém tintura, porque é destrutivo.
-                */}
-                {can('check_in') && (
-                  <Button size="sm" variant="primary" onClick={() => checkIn(false)} disabled={!!acting}>
-                    <Icon n="check" size={13} /> {acting === 'checkin' ? 'Registrando…' : 'Registrar chegada'}
-                  </Button>
-                )}
-                {can('start_care') && (
-                  <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
-                    <Icon n="fileText" size={13} /> Iniciar atendimento
-                  </Button>
-                )}
-                {can('open_care') && (
-                  // F1A — o atendimento JÁ ESTÁ EM ANDAMENTO: o botão diz o que
-                  // vai acontecer (retomar o mesmo registro, nunca criar outro).
-                  <Button size="sm" variant="primary" onClick={openCare} disabled={!!acting}>
-                    <Icon n="fileText" size={13} /> Retomar atendimento
-                  </Button>
-                )}
-                {can('view_care') && (
-                  <Button size="sm" variant="secondary" onClick={openCare} disabled={!!acting}>
-                    <Icon n="fileText" size={13} /> Ver atendimento
-                  </Button>
-                )}
-                {can('confirm') && (
-                  <Button size="sm" variant={primaria === 'confirm' ? 'primary' : 'secondary'} onClick={() => act('confirmed')} disabled={!!acting}>
-                    {acting === 'confirmed' ? 'Salvando…' : 'Confirmar'}
-                  </Button>
-                )}
-                {can('close_retro') && (
-                  <Button size="sm" variant={primaria === 'close_retro' ? 'primary' : 'secondary'} onClick={() => act('completed')} disabled={!!acting}
-                    title="Fechar o atendimento que já passou, sem registro clínico">
-                    {acting === 'completed' ? 'Salvando…' : 'Concluir'}
-                  </Button>
-                )}
-                {can('no_show') && (
-                  <Button size="sm" variant="secondary" onClick={() => act('no_show')} disabled={!!acting}>
-                    {acting === 'no_show' ? 'Salvando…' : 'Não compareceu'}
-                  </Button>
-                )}
-                {can('reopen') && (
-                  <Button size="sm" variant="secondary"
-                    onClick={() => act(booking.status === 'no_show' ? 'confirmed' : 'pending')} disabled={!!acting}>
-                    {booking.status === 'no_show' ? 'Reativar' : 'Reabrir'}
-                  </Button>
-                )}
-                {can('reschedule') && (
-                  <Button size="sm" variant="secondary" onClick={() => { setRescheduling(true); setError(''); }} disabled={!!acting}>
-                    <Icon n="calendar" size={13} /> Reagendar
-                  </Button>
-                )}
-                {can('check_in_undo') && (
-                  <Button size="sm" variant="ghost" onClick={() => checkIn(true)} disabled={!!acting}
-                    title="Desfazer o check-in deste atendimento">
-                    <Icon n="check" size={13} /> Chegou às {checkedInHM}
-                  </Button>
-                )}
-                {can('cancel') && (
-                  <Button size="sm" variant="destructive-soft" onClick={() => act('cancelled')} disabled={!!acting}>
-                    {acting === 'cancelled' ? 'Salvando…' : 'Cancelar'}
-                  </Button>
-                )}
-              </div>
-              {wf.allowed.length === 0 && (
-                <p className="text-[11px] text-[var(--text-muted)]">Nenhuma ação disponível para o seu perfil nesta etapa.</p>
-              )}
-              {booking.checkedInAt && wf.state === 'arrived' && (
-                <p className="text-[11px] text-[var(--text-muted)] mt-2">
-                  Check-in registrado{booking.checkedInByName ? ` por ${booking.checkedInByName}` : ''} — o status do atendimento continua “{def.panel}”.
-                </p>
-              )}
-            </div>
-          )}
-
           {booking.seriesId && <div className="px-4 py-3 border-b border-zinc-100 space-y-2">
             <p className="text-xs text-zinc-500">Série · {booking.seriesIndex} de {booking.seriesCount}. Reagendar altera somente este atendimento.</p>
             {!cancelSeries ? <Button size="sm" variant="secondary" disabled={!!acting} onClick={() => setCancelSeries(true)}>Cancelar ocorrências futuras da série</Button> : <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3">
@@ -424,87 +459,91 @@ export function BookingDetailSheet({ booking, service, pro, resources = [], busi
             </div>}
           </div>}
 
-          {/* ── Dados do atendimento (linhas com separadores discretos) ── */}
-          <dl className="px-4 py-1 divide-y divide-zinc-100">
-            <div className={ROW}>
-              <dt className={ROW_DT}>{booking.petName ? 'Pet / Tutor' : 'Cliente'}</dt>
-              <dd className={ROW_DD}>
+          {/* ── Conteúdo em grupos (CE): paciente com avatar, atendimento,
+              observação e financeiro. Ícone + valor forte; rótulo vira apoio. ── */}
+          <div className="px-5 pb-4 pt-1 space-y-5" data-drawer-zone="conteudo">
+            <section className="flex items-center gap-3">
+              <Avatar name={booking.petName || booking.customerName || '?'} size={40} />
+              <div className="min-w-0">
+                <h4 className={GROUP_H}>{booking.petName ? 'Paciente' : 'Cliente'}</h4>
                 {/* FASE 2 · P6 — veterinária: PET em primeiro; tutor identificado.
                     Clique no pet abre o Pet 360 (HOMOLOGAÇÃO P1). */}
                 {booking.petId && booking.petName ? (
-                  <button type="button" className="font-semibold hover:underline text-[var(--brand-fg)]"
+                  <button type="button" className="text-[15px] font-semibold text-[var(--brand-fg)] hover:underline"
                     onClick={() => setPet360Open(true)} title={`Abrir ficha de ${booking.petName}`}>
                     {booking.petName}
                   </button>
-                ) : (booking.petName || booking.customerName)}
-                {(booking.petName || booking.customerPhone) && (
-                  <span className="block text-xs text-zinc-500 font-normal">
-                    {booking.petName ? `Tutor: ${booking.customerName}` : ''}
-                    {booking.petName && booking.customerPhone ? ' · ' : ''}
-                    {booking.customerPhone || ''}
-                  </span>
+                ) : (
+                  <p className="text-[15px] font-semibold text-[var(--gd-text-strong)]">{booking.petName || booking.customerName}</p>
                 )}
-              </dd>
-            </div>
-            <div className={ROW}>
-              <dt className={ROW_DT}>Profissional</dt>
-              <dd className={ROW_DD}>{pro?.name || 'Automático'}</dd>
-            </div>
-            {(booking.resourceIds || []).map(id => {
-              const resource = resources.find(r => r.id === id);
-              return resource ? <div key={id} className={ROW}><dt className={ROW_DT}>{resource.kind === 'room' ? 'Sala' : 'Equipamento'}</dt><dd className={ROW_DD}>{resource.name}</dd></div> : null;
-            })}
-            <div className={ROW}>
-              <dt className={ROW_DT}>Valor</dt>
-              <dd className={ROW_DD}>{service?.price !== undefined ? money(service.price) : '—'}</dd>
-            </div>
+                {booking.petName && (
+                  <p className="text-xs text-[var(--gd-text-muted)]">
+                    Tutor: {booking.customerName}{booking.customerPhone ? ` · ${booking.customerPhone}` : ''}
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
+              <h4 className={GROUP_H}>Atendimento</h4>
+              <DetailRow icon="userCircle" hint="Profissional">{pro?.name || 'Automático'}</DetailRow>
+              {(booking.resourceIds || []).map(id => {
+                const resource = resources.find(r => r.id === id);
+                return resource ? (
+                  <DetailRow key={id} icon="buildings" hint={resource.kind === 'room' ? 'Sala' : 'Equipamento'}>{resource.name}</DetailRow>
+                ) : null;
+              })}
+              {(booking.rescheduleCount || 0) > 0 && (
+                <DetailRow icon="history" hint="Reagendamentos">{booking.rescheduleCount}×</DetailRow>
+              )}
+            </section>
+
             {booking.note && (
-              <div className={ROW}>
-                <dt className={ROW_DT}>Observação</dt>
-                <dd className={`${ROW_DD} font-normal text-zinc-700`}>“{booking.note}”</dd>
-              </div>
+              <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
+                <h4 className={GROUP_H}>Observação</h4>
+                <DetailRow icon="chat">“{booking.note}”</DetailRow>
+              </section>
             )}
-            {(booking.rescheduleCount || 0) > 0 && (
-              <div className={ROW}>
-                <dt className={ROW_DT}>Reagendamentos</dt>
-                <dd className={ROW_DD}>{booking.rescheduleCount}×</dd>
-              </div>
-            )}
+
+            <section className="space-y-3 border-t border-[var(--gd-border-soft)] pt-4">
+              <h4 className={GROUP_H}>Financeiro</h4>
+              <DetailRow icon="wallet" hint="Valor do atendimento" aside={service?.price !== undefined ? money(service.price) : '—'}>
+                {service?.name || 'Serviço'}
+              </DetailRow>
+            </section>
+
             {(booking.answers || []).some(Boolean) && (
               <div className="py-2">
-                <dt className={`${ROW_DT} mb-1`}>Respostas do cliente</dt>
+                <h4 className={`${GROUP_H} mb-1`}>Respostas do cliente</h4>
                 {(booking.answers || []).map((a, i) => a && (
-                  <dd key={i} className="text-xs text-zinc-700 mb-1">
+                  <p key={i} className="text-xs text-zinc-700 mb-1">
                     <span className="text-zinc-400 font-medium">{(service?.questions || [])[i] || `Pergunta ${i + 1}`}: </span>{a}
-                  </dd>
+                  </p>
                 ))}
               </div>
             )}
-          </dl>
+          </div>
 
           {/* ── Contexto: só o que tem ação real com os dados existentes ── */}
-          <div className="px-4 py-3 border-t border-zinc-100">
-            <p className={`${ROW_DT} uppercase tracking-wide mb-2`}>Contexto</p>
+          <div className="px-5 py-3 border-t border-[var(--gd-border-soft)]">
+            <h4 className={`${GROUP_H} mb-2`}>Contexto</h4>
             <div className="flex flex-wrap gap-1.5">
               {booking.customerPhone && (
                 <Link href={`/clientes?b=${businessId}&q=${encodeURIComponent(booking.customerPhone)}`}
-                  className={cn(buttonCls('secondary', 'sm'))}>
-                  <Icon n="user" size={13} /> Cliente
+                  className={cn(buttonCls('ghost', 'sm'))}>
+                  <Icon n="user" size={16} /> Cliente
                 </Link>
               )}
               {booking.customerPhone && (
                 <a href={waLink(booking.customerPhone, waMsg)} target="_blank" rel="noreferrer"
-                  className={cn(buttonCls('secondary', 'sm'))}>
-                  <Icon n="whatsapp" size={13} className="text-emerald-600" /> WhatsApp
+                  className={cn(buttonCls('ghost', 'sm'))}>
+                  <Icon n="whatsapp" size={16} className="text-emerald-600" /> WhatsApp
                 </a>
               )}
-              {hasHistory && (
-                <Button size="sm" variant="secondary" onClick={showHistory}>
-                  <Icon n="clock" size={13} /> Ver histórico
-                </Button>
-              )}
-              {!booking.customerPhone && !hasHistory && (
-                <span className="text-xs text-zinc-400">Sem telefone nem histórico registrado.</span>
+              {/* Só atalhos com destino real. O histórico já está aberto logo abaixo
+                  neste painel: um botão "Ver histórico" aqui era redundante. */}
+              {!booking.customerPhone && (
+                <span className="text-xs text-zinc-400">Sem telefone registrado.</span>
               )}
             </div>
           </div>

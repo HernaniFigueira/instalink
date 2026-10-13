@@ -265,13 +265,13 @@ test('new patient, keyboard modal containment and persisted team appointment',as
   await page.goto(`/agenda?b=${f.b}&data=${f.date}&view=list`); await page.getByRole('button',{name:'Novo agendamento',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Novo agendamento',exact:true}); await dialog.getByLabel('Buscar cliente').fill(name);
   await dialog.getByRole('button').filter({hasText:name}).click(); await expect(dialog).toContainText('Cadastro vinculado');
-  await dialog.getByRole('combobox',{name:'2. Serviço'}).selectOption(f.serviceId); await dialog.getByRole('combobox',{name:'Profissional'}).selectOption(f.p1);
-  await dialog.getByLabel(/3. Data/).fill(f.date);
+  await dialog.getByRole('combobox',{name:'Serviço'}).selectOption(f.serviceId); await dialog.getByRole('combobox',{name:'Profissional'}).selectOption(f.p1);
+  await dialog.getByLabel(/Data/).fill(f.date);
   const slot=dialog.getByRole('button',{name:/^\d\d:\d\d$/}).last(); await slot.click();
-  await expect(dialog.getByRole('region',{name:'Revise o agendamento'})).toContainText(name);
-  await dialog.getByRole('region',{name:'Revise o agendamento'}).scrollIntoViewIfNeeded();
+  await expect(dialog).toContainText(name);
+  await dialog.scrollIntoViewIfNeeded();
   await page.screenshot({path:info.outputPath('team-booking-review-390.png')});
-  await dialog.getByRole('button',{name:'Salvar agendamento'}).click(); await expect(dialog.getByText('Agendamento criado',{exact:true})).toBeVisible();
+  await dialog.getByRole('button',{name:'Criar agendamento'}).click(); await expect(dialog.getByText('Agendamento criado',{exact:true})).toBeVisible();
   await page.keyboard.press('Escape'); await expect(page.getByRole('region',{name:'Lista de atendimentos do dia'})).toContainText(name);
 });
 

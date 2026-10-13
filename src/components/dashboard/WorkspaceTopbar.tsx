@@ -9,7 +9,7 @@
 //
 //   ESQUERDA → [logo] Andrioni Veterinaria      (troca de unidade quando há mais de uma)
 //   CENTRO   → busca global (Ctrl+K)
-//   DIREITA  → quick create “+” · sino · conversas · ajuda · conta
+//   DIREITA  → quick create “+” · sino · conversas · conta (ajuda: na navegação)
 //
 // Sem breadcrumb global: o contrato do refino final continua valendo (o
 // cabeçalho da página identifica a tela; o contexto vive na navegação).
@@ -170,14 +170,12 @@ export function WorkspaceTopbar({ page, query, searchItems, activePath, business
           <button type="button" className="ws-topbar__icon-button" data-topbar-secondary="true"
             aria-label="Abrir Conversas" title="Conversas"
             onClick={() => window.dispatchEvent(new Event('godoutor:open-conversations'))}>
-            <Icon n="inbox" size={18} />
+            <Icon n="chat" size={18} />
           </button>
         )}
 
-        <button type="button" className="ws-topbar__icon-button" data-topbar-secondary="true"
-          aria-label="Ajuda e suporte" title="Ajuda e suporte" onClick={onOpenHelp}>
-          <Icon n="help" size={18} />
-        </button>
+        {/* Ajuda e suporte NÃO fica aqui (era o "?" duplicado): vive na navegação
+            (rodapé da sidebar e do menu mobile) e no menu da conta. */}
 
         <AccountMenu
           user={user} unit={unit} units={units} overview={overview}

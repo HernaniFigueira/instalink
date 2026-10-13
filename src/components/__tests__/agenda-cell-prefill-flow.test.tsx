@@ -278,10 +278,10 @@ async function clickEmptyCell(professionalId: string, time: string, opts: { full
 }
 
 const sheet = () => document.querySelector<HTMLElement>('dialog.il-drawer')!;
-const dateInput = () => within(sheet()).getByLabelText(/^3\. Data/) as HTMLInputElement;
+const dateInput = () => within(sheet()).getByLabelText(/^Data/) as HTMLInputElement;
 // CP3 · Serviço/Profissional são Combobox do DS e a data é DatePicker: o valor
 // técnico fica em data-value (automação), e a escolha é feita pela UI real.
-const serviceSelect = () => within(sheet()).getByLabelText(/^2\. Serviço/) as HTMLElement;
+const serviceSelect = () => within(sheet()).getByLabelText(/^Serviço/) as HTMLElement;
 const proSelect = () => within(sheet()).queryByLabelText(/^Profissional/) as HTMLElement | null;
 const val = (el: HTMLElement | null) => el?.getAttribute('data-value') ?? '';
 async function pickCombo(el: HTMLElement, id: string) {
@@ -311,8 +311,10 @@ describe('1 · o clique entrega date + time + professionalId ao NewBookingSheet'
       time: '10:00',
       professionalId: HERNANI,
     });
-    // E o campo de data reflete a data da coluna.
-    expect(val(dateInput())).toBe(DATE);
+    // Missão 03 (fluxo progressivo): o campo de data entra depois do serviço.
+    // Escolhido o serviço (só Hernani), o campo reflete a data da coluna.
+    await pickCombo(serviceSelect(), SVC_CARDIO);
+    await waitFor(() => expect(val(dateInput())).toBe(DATE));
   });
 
   it('o horário vem da posição vertical (snap de 15 min, medido na grade real)', async () => {
@@ -371,8 +373,8 @@ describe('A1 · handoff do Quick Create sem serviço escolhido', () => {
       onClose={vi.fn()}
       onCreated={vi.fn()}
     />);
-    await waitFor(() => expect(screen.getByLabelText(/^2\. Serviço/)).toBeTruthy());
-    expect(val(screen.getByLabelText(/^2\. Serviço/))).toBe(SVC_CARDIO);
+    await waitFor(() => expect(screen.getByLabelText(/^Serviço/)).toBeTruthy());
+    expect(val(screen.getByLabelText(/^Serviço/))).toBe(SVC_CARDIO);
   });
 });
 
@@ -487,7 +489,7 @@ describe('3 · combinação inválida: preserva intenção e exige decisão expl
     expect(within(screen.getByTestId('booking-range-summary')).getByText('Início').nextElementSibling?.textContent).toBe('10:00');
     const message = /Este profissional não está disponível neste intervalo/;
     expect(screen.getAllByText(message)).toHaveLength(1);
-    const save = within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement;
+    const save = within(sheet()).getByRole('button', { name: 'Criar agendamento' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.click(save);
     expect(screen.getAllByText(message)).toHaveLength(1);
@@ -554,7 +556,7 @@ describe('Clinical UX Closure — range and block mode', () => {
     // fechadas e o conteúdo só entra no DOM quando abertas (nada de dado oculto
     // vazando para leitura de tela/print). A duração desenhada pelo arraste
     // continua sendo a MESMA intenção — medida com o painel aberto.
-    const avancadas = within(sheet()).getByRole('button', { name: 'Opções avançadas' });
+    const avancadas = within(sheet()).getByRole('button', { name: 'Mais opções' });
     expect(avancadas.getAttribute('aria-expanded')).toBe('false');
     expect(within(sheet()).queryByLabelText('Duração deste atendimento em minutos')).toBeNull();
     fireEvent.click(avancadas);
@@ -608,7 +610,7 @@ describe('P2 — canonical eligibility and preventive validation', () => {
     await pickCombo(serviceSelect(), SVC_CARDIO);
     await waitFor(() => expect(screen.getAllByText('Nenhum profissional está habilitado para este serviço.')).toHaveLength(1));
     expect(screen.queryByText(/Fechado neste dia/)).toBeNull();
-    const save = within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement;
+    const save = within(sheet()).getByRole('button', { name: 'Criar agendamento' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     await userEvent.click(serviceSelect());
     expect(document.querySelector<HTMLElement>(`[role="option"][data-value="${SVC_CARDIO}"]`)?.textContent).toContain('Sem profissional habilitado');
@@ -627,7 +629,7 @@ describe('P2 — unavailable whole day', () => {
     await clickEmptyCell(HERNANI, '10:00', { serviceId: SVC_CARDIO });
     await waitFor(() => expect(screen.getAllByText(/Este profissional não está disponível neste intervalo/)).toHaveLength(1));
     expect(screen.queryByText('Nenhum horário disponível.')).toBeNull();
-    expect((within(sheet()).getByRole('button', { name: 'Salvar agendamento' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(sheet()).getByRole('button', { name: 'Criar agendamento' }) as HTMLButtonElement).disabled).toBe(true);
     expect(slotsApi.posts).toBe(0);
   });
 });

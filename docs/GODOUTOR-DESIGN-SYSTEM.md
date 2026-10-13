@@ -484,3 +484,80 @@ Validado em renderização real (1440, 1366, 1024, 768; smoke 390). A geometria 
 - **Fonte única por campo:** "Orientações ao tutor" e "Retorno" são editados só na seção Atendimento. Conduta mostra esses campos como resumo somente leitura, rotulado "Resumo · editado em Atendimento", com o link "Editar em Atendimento". Nenhum campo é editável em dois lugares. O salvamento da Conduta envia apenas `conduct`.
 - **Timer:** "● HH:MM:SS" com o rótulo "Em atendimento", no rail, logo abaixo do Voltar. Calculado de `startedAt` do servidor a cada segundo (`encounter-timer.ts`), por isso sobrevive a reload, troca de seção e re-render. O ponto pulsa discretamente; `prefers-reduced-motion` desliga o pulso. Algarismos tabulares.
 - **Registro completo é continuação do Atendimento:** mesmo rail, mesmo Voltar e mesmo switcher. O conteúdo é um documento de leitura (`EncounterClinicalDocument`) em seções com título e régua, não uma parede de cards. O finalizado é somente leitura. O rascunho não é um segundo editor: aponta para "Revisar e finalizar no Atendimento". A nota interna aparece como seção do documento, marcada "Só na unidade".
+
+## 13. Agenda, dashboard por papel e continuidade de contexto (Entrega 3)
+
+Validado em renderização real (1440, 1366, 1024, 768; smoke 390) e no E2E de navegador. Regras consolidadas:
+
+- **Seletor de visão único:** `Dia · Semana · Mês · Lista` é um `SelectMenu` (combobox "Visualização da agenda"), na Linha 2 da Agenda, ao lado de "Novo agendamento". Não há `<select>` nativo nem `Segmented` nessa linha. Teclado completo (setas, Enter, Escape devolve o foco ao gatilho) e foco visível. Sem degradê.
+- **Mês:** a grade Mês reaproveita o mesmo motor de intervalo, bloqueios e agendamentos das outras visões (sem implementação paralela). Navega mês a mês, abre o agendamento no mesmo drawer e respeita o escopo do profissional.
+- **Toolbar enxuta:** `Hoje · [◀] data [▶]`, seletor de visão, "Novo agendamento" e o cadeado "Bloquear horário". O cadeado é `IconButton` com `aria-label` e tooltip. Textos institucionais permanentes ("Você vê somente sua agenda…") saíram da tela; a restrição de escopo continua no servidor (`agendaScope`), e só o aviso acionável (vínculo ausente) permanece.
+- **Estado em URL:** data, visão, profissional e filtros ficam na URL (`data`, `view`, `professionalId`). Agenda → Atendimento → "Voltar para agenda" devolve exatamente o mesmo recorte.
+- **Disponibilidade:** Semana e Mês não escondem profissional por não trabalhar no dia consultado. O algoritmo de disponibilidade não foi alterado.
+- **Fluxo de hoje por papel:** o bloco "Fluxo de hoje" (Chegou · aguardando, Em atendimento, Próximos hoje) usa a etapa canônica do workflow já filtrada pelo escopo. Para Profissional ("Meu dia · agora") e para quem tem Visão geral com perfil operacional ele vem no topo (o preset padrão de Recepção não tem Visão geral; a tela inicial dela é a Agenda); para Owner/Admin fica abaixo dos KPIs. Permissão define acesso; papel define só destaque. Nenhum acesso permitido é removido.
+- **"Ver na agenda" sempre abre o evento:** o link leva `data` exata do atendimento, `view=day` e `professionalId` do próprio evento. Nunca cai em "hoje" por omissão (o próximo atendimento futuro abre o dia dele).
+
+## 14. Gate visual canônico (PR #69) — consolidação
+
+Esta seção é a referência canônica do gate. As regras executáveis ficam em
+`GODOUTOR-UI-CONTRACT.md` ("Gate visual canônico"); o que falta convergir fica em
+`GODOUTOR-UI-CONVERGENCE-MANIFEST.md`. Nenhum outro documento de design deve ser criado.
+
+### 14.1 Gramática de tela
+
+`informação → estado → ação → superfície → movimento → responsividade`.
+
+- **Superfícies:** popover (ancorado, fade e deslocamento de 2px), drawer direito (detalhe e formulário, `translateX(100%)→0`, saída inversa), dialog central (confirmação e escolhas curtas, fade + 8px + scale .985).
+- **Trabalho clínico prolongado** vai para o workspace do atendimento, não para sheet.
+
+### 14.2 Ações
+
+| Papel | Visual | Uso |
+|---|---|---|
+| PRIMARY | preenchido em `--accent` | uma por grupo |
+| SECONDARY | contorno 1px `--border-strong` + superfície suave, visível em repouso | ações de apoio |
+| TERTIARY | texto em `--accent-fg`, sem contorno em repouso, hover/focus claros | ações leves, ícone quando ajuda |
+| DANGER | `destructive-soft` em repouso; sólido só no passo final de confirmação | só destrutiva |
+
+Medido na UI Lab (build r10): secundário com contorno 1px em repouso; terciário sem contorno e com texto de ação.
+
+### 14.3 Tipografia e espaçamento (escala de referência)
+
+Papéis: page title, section title, entity title, label, value, helper, muted, status, action.
+Escala: page 24–32 px · section 20–24 px · grupos 16–24 px · micro 8–12 px.
+O formulário Novo agendamento usa a escala de espaçamento e mede 20 px de respiro em
+ambos os lados do corpo (`.ws-sheet__body`).
+
+### 14.4 Comparação de fontes (Barlow × Inter × Geist)
+
+Comparação feita na UI Lab (`/ui-lab?font=barlow|inter|geist`, mesmos textos, pesos e
+componentes) e nas quatro superfícies ouro com a fonte aplicada só na página de teste.
+A fonte global **não foi trocada** nesta PR.
+
+| Fonte | Largura (texto de referência 14 px / 500) | Leitura |
+|---|---|---|
+| Barlow (atual) | 205 px | condensada; labels e helpers de 12 px ficam apertados |
+| Inter | 222 px | mais larga; helpers e valores ficam mais legíveis nas capturas (leitura visual, não medida por contraste) |
+| Geist | 216 px | limpa; ganho de legibilidade menor que o Inter nas capturas de texto pequeno |
+
+**Recomendação:** Inter (candidato principal declarado). A troca global deve ser uma
+decisão posterior: exige revisão de largura de colunas, toolbars e tabelas.
+
+Capturas: `screenshots/antes/` e `screenshots/depois/` do Drive (ver `qa-browser.md`).
+
+### 14.5 Motion medido
+
+| Superfície | Animação | Duração | Observação |
+|---|---|---|---|
+| Hover-card da agenda | `gd-layer-in` | 140 ms | translateY(-2px) + fade |
+| Detalhe do agendamento | `gd-detail-in` / `gd-fade-in` | 190 ms | translateX(100%)→0 + backdrop |
+| Detalhe — saída | `gd-detail-out` / `gd-fade-out` | 170 ms | |
+| Novo agendamento | `gd-drawer-strip-in` / `gd-fade-in` | 190 ms | |
+| Descarte (confirmação) | `gd-fade-in` / `gd-dialog-in` | 140 / 180 ms | antes sem entrada |
+| Popover (lab) | `gd-layer-in` | 140 ms | |
+| Drawer (lab) | `gd-detail-in` | 190 ms | easing `cubic-bezier(0.2, 0.8, 0.2, 1)` |
+| Dialog (lab e confirmação de resize) | `gd-dialog-in` | 180 ms | sem `translateX` |
+
+`prefers-reduced-motion`: zero animações em todos os fluxos medidos.
+Evidência: `motion/product-default.json`, `motion/product-reduce.json`, `motion/lab-and-resize-*.json`.
+Easing lido por `getComputedStyle(el).animationTimingFunction`; `getTiming().easing` não é prova (retorna `linear`).

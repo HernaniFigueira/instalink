@@ -34,6 +34,7 @@ import {
 } from './encounters';
 import { emitAutomationEvent } from './automation/events';
 import { findContact } from './contacts';
+import { resolvePetTutor } from './pets';
 import { nowHM, todayISO } from './tz';
 import type { DB, Encounter, User } from './types';
 
@@ -225,7 +226,7 @@ export function startOrResumeEncounter(d: DB, args: StartOrResumeArgs): StartOrR
   const customerId = str(body.customerId) || str(booking?.customerId);
   const customerPhone = str(body.customerPhone) || str(booking?.customerPhone) || str(queueEntry?.customerPhone);
   const customerName = str(body.customerName) || str(booking?.customerName) || str(queueEntry?.customerName);
-  const contactId = str(body.contactId) || str(queueEntry?.contactId)
+  let contactId = str(body.contactId) || str(queueEntry?.contactId)
     || (findContact(d, businessId, customerId, customerPhone, customerName)?.id || '');
   if (contactId && !d.contacts.some((c) => c.id === contactId && c.businessId === businessId)) {
     throw err('O responsável informado não pertence a esta unidade.', 409);
@@ -239,6 +240,12 @@ export function startOrResumeEncounter(d: DB, args: StartOrResumeArgs): StartOrR
   if (requestedPetId && !finalPetId) {
     throw err('Paciente não encontrado nesta unidade.', 404);
   }
+  // ── Vínculo TUTOR × PET (Etapa 2): o registro do paciente nunca vai para outro
+  // responsável. Sem responsável informado, herda o tutor do pet; divergente, recusa.
+  const linkedPet = finalPetId ? (d.pets || []).find((p) => p.id === finalPetId && p.businessId === businessId) : undefined;
+  const petTutor = resolvePetTutor(linkedPet, contactId);
+  if (petTutor.error) throw err(petTutor.error, 409);
+  contactId = petTutor.contactId;
 
   // ── Etapa operacional: arrived → in_care (autoridade do workflow) ──
   // Quem ainda não chegou não inicia atendimento clínico; finalizado/cancelado/

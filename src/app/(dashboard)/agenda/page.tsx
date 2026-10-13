@@ -35,7 +35,7 @@ import { durationLabel } from '@/lib/duration-label';
 import { followsBusinessHours } from '@/lib/schedule';
 import { exceptionUnavailableRanges } from '@/lib/agenda-exceptions';
 import type { Availability, AvailabilityException, Booking, BookingConfig, BookingStatus, Professional, Service, ScheduleBlock, ScheduleResource } from '@/lib/types';
-import { Avatar, Badge, Drawer, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, Segmented, DatePicker, Select, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
+import { Avatar, Badge, Drawer, useFrozenWhileClosed, AgendaSkeleton, ListSkeleton, Button, IconButton, AttentionStrip, DatePicker, Select, SelectMenu, Combobox, Input, Field, Notice, PageActionBar, HoverCard, StatusBadge, ContextMenu, type MenuItem } from '@/components/ui';
 import { Icon } from '@/components/icons';
 import {
   ATTENTION_MARK_CLS, ATTENTION_RING_CLS, BOOKING_BLOCK, BOOKING_DOT, BOOKING_FLOW, BOOKING_STATUS,
@@ -47,9 +47,11 @@ import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
 import { BookingEditDialog } from '@/components/dashboard/BookingEditDialog';
 import { QuickBookingPopover, type QuickBookingAnchor } from '@/components/dashboard/QuickBookingPopover';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
+import { clearBookingReturn, readBookingReturn } from '@/lib/booking-return';
 import { QueuePanel, type QueueRow } from '@/components/dashboard/QueuePanel';
 import { encounterWorkspaceHref } from '@/lib/encounter-workspace';
 import { usePanelPermissions } from '@/components/dashboard/usePanelPermissions';
+import { defaultAgendaView, readAgendaViewPreference, writeAgendaViewPreference, type AgendaView } from '@/lib/agenda-view-preference';
 import { canReopenEncounter } from '@/lib/encounters';
 import { AccessDenied, AreaLoadError, PermissionNotice, useAreaLoad, useForbiddenNotice } from '@/components/dashboard/AccessNotice';
 import { useRevalidateOnFocus } from '@/components/dashboard/use-revalidate';
@@ -198,7 +200,7 @@ interface HoverTarget {
 let lastGridPressAt = 0;
 
 // ── Coluna da grade (memoizada: o drag não re-renderiza a grade inteira) ──
-const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
+const GridColumn = memo(function GridColumn({ column, closedLabel, outsideRanges, basisPct, variant, highlight, onPressStart, onPressMove, onPressEnd, onPressCancel, onBlockClick, onBlockEdit, onBlockContextMenu, onEmptyPress, onRangeSelect, selectedRange, onResize, operationalBlocks, unavailableRanges, onOperationalBlock, gridHeight, hours, startMinute, endMinute, hoverSuppressed }: {
   column: ColumnVM;
   basisPct: number;
   variant: 'day' | 'week';
@@ -224,6 +226,10 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
   selectedRange: { time: string; durationMin: number } | null;
   onResize: (id: string, end: string) => void;
   unavailableRanges: Array<{ start: number; end: number; label: string }>;
+  /** ETAPA 3 · dia sem atendimento (feriado/fechamento ou sem expediente configurado). */
+  closedLabel: { title: string; detail: string } | null;
+  /** ETAPA 3 · janelas fora do expediente normal (derivadas das regras reais). */
+  outsideRanges: Array<{ start: number; end: number }>;
   operationalBlocks: Array<{ block: ScheduleBlock; top: number; height: number; label: string; timeLabel: string; scopeLabel: string }>;
   onOperationalBlock: (block: ScheduleBlock) => void;
   gridHeight: number;
@@ -297,8 +303,9 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
         const minutes = minuteFromOffsetY(e.clientY - rect.top, { startMinute, endMinute, pxPerHour: PX_PER_HOUR }, CLICK_SNAP_MIN);
         onEmptyPress(column.key, minToTime(minutes), { x: e.clientX, y: e.clientY });
       }}>
-      <div ref={overlay} aria-hidden="true" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
-      {selectedRange && <div data-testid="agenda-selected-range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
+      {/* Arraste de CRIAÇÃO ainda não salvo: borda tracejada (agendamento persistido segue sólido). */}
+      <div ref={overlay} aria-hidden="true" data-draft-selection="drag" className="pointer-events-none absolute inset-x-1 z-30 hidden rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-softer)] text-xs font-semibold p-1" />
+      {selectedRange && <div data-testid="agenda-selected-range" data-draft-selection="range" aria-label={`Intervalo selecionado ${selectedRange.time}`} className="pointer-events-none absolute inset-x-1 z-30 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)] text-xs font-semibold p-1" style={{ top: (timeToMin(selectedRange.time) - startMinute) / 60 * PX_PER_HOUR, height: selectedRange.durationMin / 60 * PX_PER_HOUR }}>{selectedRange.time}–{minToTime(timeToMin(selectedRange.time) + selectedRange.durationMin)}</div>}
       {column.freeRanges.map((r,i)=><span key={i} aria-hidden="true" className="ag-free-range absolute inset-x-0 bg-white transition-colors" style={{top:(r.start-startMinute)/60*PX_PER_HOUR,height:(r.end-r.start)/60*PX_PER_HOUR}}/>)}
       {column.isToday && <span aria-hidden="true" className="absolute inset-0 bg-[var(--brand-softer)] pointer-events-none" />}
       {Array.from({ length: Math.max(0, hours - 1) }, (_, idx) => idx + 1).map((i) => (
@@ -342,6 +349,15 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           dia — um agendamento dentro de uma exceção aparecia só como uma faixa
           fina na borda. Nada muda de semântica: continua sem ação de clique
           (`pointer-events-none`) e o texto diz a janela do dia especial. */}
+      {outsideRanges.map((r, i) => (
+        <div key={`out-${i}`} data-outside-hours aria-hidden="true" className="pointer-events-none absolute z-0 inset-x-0 ag-outside"
+          style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }} />
+      ))}
+      {closedLabel && (
+        <div data-closed-day aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 ag-closed">
+          <span className="ag-closed__tag"><strong>{closedLabel.title}</strong><span>{closedLabel.detail}</span></span>
+        </div>
+      )}
       {unavailableRanges.map((r, i) => <div key={i} data-availability-exception className="pointer-events-none absolute z-0 inset-x-1 rounded-md border border-dashed border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-muted)] px-2 py-2 text-xs overflow-hidden" style={{ top: (r.start - startMinute) / 60 * PX_PER_HOUR, height: (r.end - r.start) / 60 * PX_PER_HOUR }}>
         <span className="block tabular-nums font-medium">{minToTime(r.start)}–{minToTime(r.end)}</span><span className="block">INDISPONÍVEL</span><span className="block">{r.label}</span>
       </div>)}
@@ -377,6 +393,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           type="button"
           ref={(el) => { if (el) eventRefs.current.set(b.id, el); else eventRefs.current.delete(b.id); }}
           aria-label={b.label}
+          data-booking-id={b.id}
           /* SEM tooltip nativo: o resumo do evento é o HoverCard (item 3A) —
              o `title` do navegador era o que aparecia em vez dele. */
           draggable={false}
@@ -422,9 +439,12 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           {b.fitIn && <span aria-hidden="true" className={FIT_IN_STRIPE_CLS} />}
           {/* quem + quando + o quê + com quem — detalhe fica no drawer.
               Densidade do mockup: nome forte, linhas de apoio discretas. */}
-          <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{b.timeRange}</span>
+          <span className="ag-event__time block text-[10.5px] font-semibold tabular-nums leading-tight opacity-75">{variant === 'week' ? b.time : b.timeRange}</span>
           <span className="ag-event__name block text-[12.5px] font-semibold leading-tight truncate">{b.name}</span>
-          {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.service}</span>}
+          {b.petName && b.customerName && b.height >= 50 && <span data-card-tutor-m className="ag-event__tutor-m block text-[11px] leading-tight truncate opacity-70">Tutor: {b.customerName}</span>}
+          {b.height > 62 && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-75">{b.petName && b.customerName && b.height <= 80 ? `${b.service} · Tutor: ${b.customerName}` : b.service}</span>}
+          {/* ETAPA 3 · veterinária: o PET é o título; o tutor é contexto discreto. */}
+          {b.petName && b.customerName && b.height > 80 && <span data-card-tutor className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">Tutor: {b.customerName}</span>}
           {b.height > 80 && b.pro && <span className="ag-event__secondary block text-[11px] leading-tight truncate opacity-70">{b.pro}</span>}
           {b.fitIn && (
             <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold leading-tight">
@@ -528,18 +548,38 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
                  "Editar" (modal central) e "Ver detalhes" (painel lateral),
                  com camadas exclusivas. Nada de tooltip nativo ou card fixo. */
               <div className="ag-hover__card">
+                {/* Composição CE: cabeçalho com ícone + data forte; pessoa com avatar;
+                    linhas com ícone (status, profissional, serviço, observação);
+                    rodapé com Editar (contorno) e Ver detalhes (sólido). */}
                 <div className="ag-hover__head">
-                  <span className="ag-hover__heading">Agendamento</span>
-                  <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
+                  <span aria-hidden="true" className="ag-hover__tile"><Icon n="calendar" size={16} /></span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="ag-hover__heading">Agendamento</h3>
+                    <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
+                  </div>
                 </div>
-                <p className="ag-hover__date tabular-nums">{b.dateLabel} · {b.timeRange}</p>
-                <dl className="ag-hover__rows">
-                  <div><dt>{b.petName ? 'Paciente' : 'Tutor'}</dt><dd>{b.petName || b.customerName}</dd></div>
-                  {b.petName && <div><dt>Tutor</dt><dd>{b.customerName}</dd></div>}
-                  {b.service && <div><dt>Serviço</dt><dd>{b.service}</dd></div>}
-                  {b.pro && <div><dt>Profissional</dt><dd>{b.pro}</dd></div>}
-                </dl>
-                {b.observation && <p className="ag-hover__observation"><strong>Observação</strong> · {b.observation}</p>}
+                <div className="ag-hover__person">
+                  <Avatar name={b.petName || b.customerName || '?'} size={36} />
+                  <div className="min-w-0">
+                    <p className="ag-hover__value">{b.petName || b.customerName}</p>
+                    {b.petName && <p className="ag-hover__sub">Tutor · {b.customerName}</p>}
+                  </div>
+                </div>
+                <div className="ag-hover__rows">
+                  <div>
+                    <span className="ag-hover__ico" aria-hidden="true"><span className={`ag-hover__dot ${b.dot}`} /></span>
+                    <StatusBadge tone={bookingStatusDef(b.status).tone} className="text-[12px]">{b.statusLabel}</StatusBadge>
+                  </div>
+                  {b.pro && (
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="userCircle" size={16} /></span><span>{b.pro}</span></div>
+                  )}
+                  {b.service && (
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="service" size={16} /></span><span>{b.service}</span></div>
+                  )}
+                  {b.observation && (
+                    <div><span className="ag-hover__ico" aria-hidden="true"><Icon n="chat" size={16} /></span><span className="ag-hover__obs">{b.observation}</span></div>
+                  )}
+                </div>
                 {b.fitIn && <p className="ag-hover__flag">Encaixe · decisão da equipe</p>}
                 {b.attention && <p className="ag-hover__flag ag-hover__flag--attention">Precisa de fechamento</p>}
                 <div className="ag-hover__actions">
@@ -553,7 +593,7 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
           </HoverCard>
         );
       })}
-      {variant === 'week' && column.blocks.length === 0 && column.freeRanges.length === 0 && (
+      {variant === 'week' && !closedLabel && column.blocks.length === 0 && column.freeRanges.length === 0 && (
         <>
           <span aria-hidden="true" className="ag-hatch absolute inset-0 pointer-events-none" />
           <span className="absolute inset-x-0 top-24 text-center pointer-events-none">
@@ -572,6 +612,14 @@ const GridColumn = memo(function GridColumn({ column, basisPct, variant, highlig
 
 // Chip de filtro do popover — ativo usa a cor de AÇÃO (tokens), não cor de
 // estado: filtrar não é status.
+/** Visões da agenda (um único seletor). `month` reaproveita a grade e o intervalo já existentes. */
+const AGENDA_VIEW_OPTIONS: Array<{ value: View; label: string }> = [
+  { value: 'day', label: 'Dia' },
+  { value: 'week', label: 'Semana' },
+  { value: 'month', label: 'Mês' },
+  { value: 'list', label: 'Lista' },
+];
+
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active} className="il-chip">
@@ -584,8 +632,21 @@ export default function AgendaPage() {
   const params = useSearchParams();
   const router = useRouter();
   const businessId = params.get('b') || '';
-  const [defaultView, setDefaultView] = useState<View>('day');
-  useEffect(() => { if (window.matchMedia('(max-width: 767px)').matches) setDefaultView('list'); }, []);
+  const { permissions, role, professionalId, userId } = usePanelPermissions();
+  // Escolha salva desta conta (navegador). Sem ela: padrão por papel/dispositivo (ver defaultAgendaView).
+  const [savedView, setSavedView] = useState<AgendaView | ''>('');
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  // ETAPA 3 · celular (Dia): uma coluna por vez, escolhida no seletor de profissional.
+  const [mobileProKey, setMobileProKey] = useState('');
+  useEffect(() => { setSavedView(readAgendaViewPreference(userId)); }, [userId]);
+  const defaultView = (savedView || defaultAgendaView({ isMobile, professionalScoped: !!professionalId })) as View;
   const view = (['day','week','month','list'].includes(params.get('view') || '') ? params.get('view') : defaultView) as View;
   const dataParam = params.get('data') || '';
   const focus = /^\d{4}-\d{2}-\d{2}$/.test(dataParam) ? dataParam : todayISO();
@@ -600,6 +661,12 @@ export default function AgendaPage() {
     window.history.pushState(null, '', url.pathname + url.search);
   }
   const setView = (value: View) => setPresentation({view:value});
+  /** Escolha EXPLÍCITA do usuário (barra Dia/Semana/Mês/Lista): vira a preferência desta conta. */
+  const chooseView = (value: View) => {
+    writeAgendaViewPreference(userId, value as AgendaView);
+    setSavedView(value as AgendaView);
+    setView(value);
+  };
   const setFocus = (value: string) => setPresentation({data:value});
   const setStatusFilter = (value: string) => setPresentation({status:value});
   const [filterOpen, setFilterOpen] = useState(false);
@@ -632,6 +699,10 @@ export default function AgendaPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [detail, setDetail] = useState<Booking | null>(null);
+  // Presença do detalhe: o pai controla `open`; o agendamento só sai do DOM em
+  // `onExited` (depois da saída animada). Abrir = agendamento + open.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const openDetail = useCallback((b: Booking) => { setDetail(b); setDetailOpen(true); }, []);
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
   /** true = o detalhe abre com o formulário de reagendamento já aberto
    *  (vem do "Reagendar" do resumo do evento). O clique simples nunca ativa. */
@@ -640,6 +711,13 @@ export default function AgendaPage() {
   // O fluxo COMPLETO (`creating`) continua existindo e é o destino de
   // "Mais opções" e do CTA "Novo agendamento".
   const [quickCreate, setQuickCreate] = useState<QuickBookingAnchor | null>(null);
+  // P0.1 — clique em dia/intervalo fechado não abre o Quick Create: mostra o motivo.
+  const [closedHint, setClosedHint] = useState<{ x: number; y: number; title: string; detail: string } | null>(null);
+  useEffect(() => {
+    if (!closedHint) return;
+    const t = setTimeout(() => setClosedHint(null), 4500);
+    return () => clearTimeout(t);
+  }, [closedHint]);
   const [creating, setCreating] = useState<{
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
@@ -651,6 +729,11 @@ export default function AgendaPage() {
     /** Duplicação copia só os campos operacionais autorizados; nunca histórico clínico/pagamentos. */
     petId?: string; note?: string;
   } | null>(null);
+  // Último contexto de criação não nulo: o Novo agendamento sai animado com o
+  // conteúdo congelado (o pai zera `creating` ao fechar, a superfície ainda existe).
+  const lastCreatingRef = useRef(creating);
+  if (creating) lastCreatingRef.current = creating;
+  const sheetCtx = creating ?? lastCreatingRef.current;
   // FASE 2 · P9 — Quick Create global: ?novo=1 abre o sheet de agendamento
   // direto (uma abertura por visita; SPA não reabre sozinho ao voltar).
   const [novoHandled, setNovoHandled] = useState(false);
@@ -674,11 +757,29 @@ export default function AgendaPage() {
     setNovoHandled(true);
     setCreating({ date: '', time: '', professionalId: '', name: '', phone: '' });
   }, [novoHandled, businessId, params]);
+  // Missão 02 — volta do cadastro completo (/clientes/novo?from=agenda): reabre o
+  // agendamento em andamento do rascunho da unidade, com o tutor/pet recém-criados.
+  // Nada é criado aqui: a confirmação e a revalidação do horário são do sheet/servidor.
+  const [retomarHandled, setRetomarHandled] = useState(false);
+  const restoredBookingRef = useRef(false);
+  useEffect(() => {
+    if (retomarHandled || !businessId || params.get('retomar') !== 'agendamento') return;
+    setRetomarHandled(true);
+    const draft = readBookingReturn(businessId);
+    if (!draft) return;
+    restoredBookingRef.current = true;
+    setCreating({
+      date: draft.date, time: draft.time, professionalId: draft.professionalId,
+      selectedDurationMin: draft.durationMin || undefined,
+      contactId: draft.contactId, name: draft.name, phone: draft.phone,
+      serviceId: draft.serviceId, searchQuery: draft.contactId ? '' : draft.query,
+      petId: draft.petId, note: draft.note, vetMode: draft.vetMode,
+    });
+  }, [retomarHandled, businessId, params]);
   // A3.4 · Bloco 4 — fila do balcão (entidade própria, fora da agenda).
   const [queueRows, setQueueRows] = useState<QueueRow[]>([]);
   // A3.4 fix (revisão B5): o registro do atendimento tem permissão PRÓPRIA —
   // a fila continua operável por quem só faz balcão, sem abrir o conteúdo.
-  const { permissions, role } = usePanelPermissions();
   const canEncounter = permissions.atendimento === true;
   // Reabrir é de quem administra — a MESMA régua do servidor (nada de a tela
   // mostrar um botão que o servidor vai recusar). Ter a permissão de
@@ -696,6 +797,10 @@ export default function AgendaPage() {
   const [resizeAsk, setResizeAsk] = useState<{ booking: Booking; end: string } | null>(null);
   const [dropAsk, setDropAsk] = useState<{ booking: Booking; date: string; time: string; professionalId: string; columnLabel: string } | null>(null);
   const [dropError, setDropError] = useState('');
+  // Último valor enquanto a superfície existe: a saída animada continua mostrando o conteúdo.
+  const resizeFrozen = useFrozenWhileClosed(!!resizeAsk, resizeAsk);
+  const dropFrozen = useFrozenWhileClosed(!!dropAsk, dropAsk);
+  const editFrozen = useFrozenWhileClosed(!!editBooking, editBooking);
   const [saving, setSaving] = useState(false);
   const [dropChecking, setDropChecking] = useState(false);
 
@@ -703,8 +808,13 @@ export default function AgendaPage() {
   const dragSlotsRef = useRef<DragSlots>(emptyDragSlots());
   const hoverRef = useRef<HoverTarget | null>(null);
   const columnsRef = useRef<DropColumn[]>([]);
+  // P0.1 — motivo de fechamento por coluna, lido pelos handlers estáveis (useCallback).
+  const closedRef = useRef<Map<string, { title: string; detail: string } | null>>(new Map());
   const bookingsRef = useRef<Map<string, Booking>>(new Map());
   const durationRef = useRef(30);
+  // Distância (px) entre o ponteiro e o topo do evento no momento da pegada: o
+  // destino do drop é o TOPO do evento (ponto − pegada), não o ponteiro.
+  const grabOffsetRef = useRef(0);
   const geometryRef = useRef<{ g: GridGeometry; minY: number } | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -714,6 +824,21 @@ export default function AgendaPage() {
   /** Botão do evento que abriu o detalhe — recebe o foco de volta no fechamento
    *  quando o gatilho do clique foi um CTA do HoverCard (que desmonta junto). */
   const detailTriggerRef = useRef<HTMLElement | null>(null);
+  // Deep-link "Abrir" da Pet 360 (aba Agenda): `?booking=<id>` abre o detalhe DESTE agendamento,
+  // e não só o dia. Abre uma vez por id e tira o parâmetro da URL (um refresh não reabre).
+  const bookingParam = params.get('booking') || '';
+  const openedBookingParamRef = useRef('');
+  useEffect(() => {
+    if (!bookingParam || openedBookingParamRef.current === bookingParam) return;
+    const target = bookings.find((x) => x.id === bookingParam);
+    if (!target) return;
+    openedBookingParamRef.current = bookingParam;
+    detailTriggerRef.current = null;
+    setEditBooking(null); setDetailReschedule(false); openDetail(target);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('booking');
+    window.history.replaceState(null, '', url.pathname + url.search);
+  }, [bookings, bookingParam]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const colsRef = useRef<HTMLDivElement>(null);
   // A3.4 final UX — o workspace é a linha [Agenda | Fila]. É dele que sai o
@@ -1033,10 +1158,67 @@ export default function AgendaPage() {
   // While editing a dragged interval, keep its actual column alongside the
   // drawer. Other columns return unchanged on dismiss (no synthetic booking).
   const rangeFocus = !!selectedRange && !!(creating || blockForm);
-  const displayedColumns = rangeFocus ? columns.filter(c => c.key === selectedRange?.columnKey) : columns;
+  // ETAPA 3 · leitura do expediente REAL para a apresentação (o motor de slots não muda):
+  // janelas normais da coluna = mesmo critério de escopo (clínica ou horário próprio do profissional).
+  const normalWindowsFor = (c: ColumnVM): Array<{ start: number; end: number }> => rules
+    .filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId
+      ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId)
+      : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules))))
+    .map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) }))
+    .filter(w => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start);
+  const closedFor = (c: ColumnVM): { title: string; detail: string } | null => {
+    const ex = exceptions.find(e => e.date === c.date);
+    if (ex?.closed) return { title: 'Fechado', detail: ex.note || 'Sem atendimento neste dia' };
+    if (ex) return null; // horário especial: a própria faixa já mostra a janela
+    return normalWindowsFor(c).length > 0 ? null : { title: 'Fechado', detail: 'Sem expediente neste dia' };
+  };
+  closedRef.current = new Map(columns.map((c) => [c.key, closedFor(c)]));
+  const outsideFor = (c: ColumnVM): Array<{ start: number; end: number }> => {
+    if (exceptions.some(e => e.date === c.date)) return [];
+    const windows = normalWindowsFor(c).sort((a, b) => a.start - b.start);
+    if (windows.length === 0) return []; // dia fechado: quem explica é o rótulo de Fechado
+    const out: Array<{ start: number; end: number }> = [];
+    let cursor = grid.start;
+    for (const w of windows) {
+      if (w.start > cursor) out.push({ start: cursor, end: Math.min(w.start, grid.end) });
+      cursor = Math.max(cursor, w.end);
+    }
+    if (cursor < grid.end) out.push({ start: cursor, end: grid.end });
+    return out.filter(r => r.end > r.start);
+  };
+  const mobileDay = isMobile && view === 'day' && !rangeFocus;
+  const mobileKey = columns.some(c => c.key === mobileProKey) ? mobileProKey : (columns[0]?.key ?? '');
+  const displayedColumns = rangeFocus
+    ? columns.filter(c => c.key === selectedRange?.columnKey)
+    : (mobileDay ? columns.filter(c => c.key === mobileKey) : columns);
   useLayoutEffect(() => {
     if (rangeFocus && scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [rangeFocus]);
+
+  const [railMaxH, setRailMaxH] = useState<number | null>(null);
+  // ETAPA 3 · abertura operacional: a grade abre 1h antes do primeiro agendamento
+  // do período visível (no máximo 08:00 − 1h), e nunca em 00:00 sem motivo. A
+  // rolagem é posicionada UMA vez por dia/visão — recargas não arrastam o usuário.
+  const openAnchorMin = useMemo(() => {
+    const dates = new Set(columns.map((c) => c.date));
+    const starts = bookings
+      .filter((b) => dates.has(b.date) && b.status !== 'cancelled' && b.status !== 'no_show')
+      .map((b) => timeToMin(b.time));
+    const first = starts.length ? Math.min(...starts) : 8 * 60;
+    const anchor = Math.min(first, 8 * 60) - 60;
+    return Math.min(Math.max(anchor, grid.start), grid.end - 4 * 60);
+  }, [columns, bookings, grid.start, grid.end]);
+  const openKey = `${view}|${focus}|${openAnchorMin}`;
+  const openedKeyRef = useRef('');
+  useLayoutEffect(() => {
+    // Só aplica quando o contêiner de rolagem já existe E rola de fato; sem isso
+    // não marca a chave, e o efeito tenta de novo quando a altura muda (railMaxH).
+    const el = scrollRef.current;
+    if (rangeFocus || !el || openedKeyRef.current === openKey) return;
+    if (el.scrollHeight <= el.clientHeight + 1) return;
+    el.scrollTop = Math.round(((openAnchorMin - grid.start) / 60) * PX_PER_HOUR);
+    openedKeyRef.current = openKey;
+  }, [openKey, openAnchorMin, grid.start, rangeFocus, loaded, view, railMaxH]);
 
   const gridHeight = Math.max(460, Math.round((grid.span / 60) * PX_PER_HOUR));
   const dayWidth = GUTTER_W + columns.length * COL_MIN;
@@ -1105,7 +1287,6 @@ export default function AgendaPage() {
   // Altura útil da região do workspace (viewport - topo - folga): é o teto
   // da rail da fila E da grade (FASE E: scroll interno, a página não rola
   // junto com a agenda).
-  const [railMaxH, setRailMaxH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const fit = () => {
       const el = scrollRef.current;
@@ -1170,7 +1351,7 @@ export default function AgendaPage() {
     return planDrop({
       // Fora do eixo horizontal da grade é destino inválido; não clample à
       // primeira coluna (um drop à esquerda não pode virar reagendamento).
-      point: { x: point.x, y: Math.max(point.y, geo.minY) },
+      point: { x: point.x, y: Math.max(point.y - grabOffsetRef.current, geo.minY) },
       geometry: geo.g,
       columns: columnsRef.current,
       drag: slots,
@@ -1286,7 +1467,7 @@ export default function AgendaPage() {
     if (!geo) return;
     geometryRef.current = geo;
     const b = bookingsRef.current.get(interactionRef.current.id);
-    const point: Point = { x: at.x, y: Math.max(at.y, geo.minY) };
+    const point: Point = { x: at.x, y: Math.max(at.y - grabOffsetRef.current, geo.minY) };
     const plan = planDrop({
       point,
       geometry: geo.g,
@@ -1334,6 +1515,10 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
+    if (!blockMode) {
+      const closed = closedRef.current.get(columnKey);
+      if (closed) { setSelectedRange(null); setClosedHint({ x: point.x, y: point.y, title: closed.title, detail: closed.detail }); return; }
+    }
     const seed = { date: col.date, time, professionalId: col.professionalId, selectedDurationMin };
     setSelectedRange({ columnKey, time, durationMin: selectedDurationMin });
     // Bloquear horário continua sendo o fluxo de BLOQUEIO (não cria atendimento).
@@ -1385,6 +1570,10 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
+    if (!blockMode) {
+      const closed = closedRef.current.get(columnKey);
+      if (closed) { setSelectedRange(null); setClosedHint({ x: point.x, y: point.y, title: closed.title, detail: closed.detail }); return; }
+    }
     if (blockMode) { setSelectedRange({ columnKey, time, durationMin: 60 }); openBlock(newBookingSeedFromAgendaCell(col, time)); }
     else {
       setSelectedRange({ columnKey, time, durationMin: 30 });
@@ -1409,6 +1598,7 @@ export default function AgendaPage() {
       return;
     }
     durationRef.current = bookingDurationOf(booking, services.find((s) => s.id === booking.serviceId), 30);
+    grabOffsetRef.current = e.clientY - (e.currentTarget as HTMLElement).getBoundingClientRect().top;
     geometryRef.current = readGeometry();
     interactionRef.current = reduceInteraction(interactionRef.current, {
       type: 'down', id, at: { x: e.clientX, y: e.clientY },
@@ -1469,7 +1659,7 @@ export default function AgendaPage() {
     if (step.effect === 'open-detail') {
       // CLIQUE SIMPLES → detalhe. Nunca inicia reagendamento.
       const booking = bookingsRef.current.get(id);
-      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); setDetail(booking); }
+      if (booking) { detailTriggerRef.current = e.currentTarget as HTMLElement; setDetailReschedule(false); openDetail(booking); }
       return;
     }
     if (step.effect === 'drop') finishDrop(id, { x: e.clientX, y: e.clientY });
@@ -1503,7 +1693,7 @@ export default function AgendaPage() {
     const last = lastPointerUpRef.current;
     if (last.id === id && Date.now() - last.at < 700) return;
     const booking = bookingsRef.current.get(id);
-    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); setDetail(booking); }
+    if (booking) { detailTriggerRef.current = trigger ?? null; setDetailReschedule(false); setEditBooking(null); openDetail(booking); }
   }, []);
 
   /**
@@ -1577,7 +1767,7 @@ export default function AgendaPage() {
     const b = ctxMenu ? bookingsRef.current.get(ctxMenu.id) : null;
     if (!b) return [];
     const items: MenuItem[] = [
-      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); setDetail(b); } },
+      { id: 'detalhe', label: 'Ver detalhes', icon: 'eye', onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(false); openDetail(b); } },
     ];
     if (rescheduleDecision(b.status).kind === 'move') {
       items.push({
@@ -1610,7 +1800,7 @@ export default function AgendaPage() {
     if (rescheduleDecision(b.status).kind === 'move') {
       ops.push({
         id: 'reagendar', label: 'Reagendar', icon: 'sync',
-        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); setDetail(b); },
+        onSelect: () => { detailTriggerRef.current = ctxMenu?.trigger ?? null; setEditBooking(null); setDetailReschedule(true); openDetail(b); },
       });
     }
     ops.forEach((item, i) => items.push({ ...item, separatorBefore: i === 0 }));
@@ -1819,30 +2009,6 @@ export default function AgendaPage() {
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text)] leading-tight">Agenda</h1>
           {/* Composição contínua (A1): o aviso de bloqueio fica na mesma linha
               do título, em vez de uma faixa própria abaixo da toolbar. */}
-          {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
-        {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
-            operacionais" (título + parágrafo + botões grandes) DOMINAVA a
-            grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
-            e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
-            de horário/escopo. A explicação vira a dica curta de uma linha, e o
-            clique continua abrindo o MESMO formulário do bloqueio. */}
-        <span className="ag-blocks-bar__label">
-          <Icon n="lock" size={13} aria-hidden="true" />
-          {blockCountLabel}
-        </span>
-        <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
-        <div className="ag-blocks-bar__items">{blocksInView.map(block => (
-          <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
-            const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
-            openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
-            setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
-          }}>
-            <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
-            <span>{block.reason || block.note || 'Operacional'}</span>
-            <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
-          </button>
-        ))}</div>
-      </section>}
         </div>
         <div className="gd-toolbar justify-end">
           {/* Filtros: UM botão, UM popover (Status · Serviços · Profissional) e
@@ -2014,7 +2180,7 @@ export default function AgendaPage() {
           action={(
             <>
               {pendencies.slice(0, 4).map((b) => (
-                <button key={b.id} onClick={() => setDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
+                <button key={b.id} onClick={() => openDetail(b)} className="text-xs font-medium bg-[var(--surface)] border border-[var(--attention-border)] text-[var(--attention-fg)] px-2.5 py-1 rounded-md hover:bg-[var(--attention-bg-hover)]">
                   {formatDateBR(b.date)} {b.time} · {b.petName || b.customerName}
                 </button>
               ))}
@@ -2048,10 +2214,38 @@ export default function AgendaPage() {
         <main data-agenda-main="true" className="flex-1 min-w-0">
       {/* LINHA 2 — DATA / MODO / AÇÃO PRINCIPAL.
           Esquerda: [◀][▶] + data selecionada (fuso/regras preservados).
-          Direita: [Dia | Semana | Lista] + CTA "Novo agendamento".
+          Direita: [Bloquear horário] [Dia | Semana | Mês | Lista] [Novo agendamento].
           relative z-40: os popovers abrem sobre a grade e precisam ficar
           acima dos cabeçalhos sticky (z-20/30) das colunas. */}
       <div className="relative z-40 ws-panel mb-2.5">
+        {blocksInView.length > 0 && (
+          <div className="px-3 pt-2.5">
+            {blocksInView.length > 0 && <section className="ag-blocks-bar" aria-label="Bloqueios operacionais">
+          {/* MISSÃO UX CLOSURE · item 4 — a faixa laranja de "Bloqueios
+              operacionais" (título + parágrafo + botões grandes) DOMINAVA a
+              grade. O bloqueio agora é lido ONDE ele ocorre (hachura na coluna)
+              e aqui fica só um INDICADOR compacto: ícone, contagem e as pílulas
+              de horário/escopo. A explicação vira a dica curta de uma linha, e o
+              clique continua abrindo o MESMO formulário do bloqueio. */}
+          <span className="ag-blocks-bar__label">
+            <Icon n="lock" size={13} aria-hidden="true" />
+            {blockCountLabel}
+          </span>
+          <span className="ag-blocks-bar__hint">Não contam como atendimento.</span>
+          <div className="ag-blocks-bar__items">{blocksInView.map(block => (
+            <button key={block.id} type="button" className="ag-blocks-bar__chip" onClick={() => {
+              const start = instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo');
+              openBlock({ date: start.date, time: start.time, professionalId: block.professionalId }, block);
+              setBlockEnd(instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time);
+            }}>
+              <span className="tabular-nums">{instantToLocalProjection(block.startAt, bizTz || 'America/Sao_Paulo').time}–{instantToLocalProjection(block.endAt, bizTz || 'America/Sao_Paulo').time}</span>
+              <span>{block.reason || block.note || 'Operacional'}</span>
+              <span className="ag-blocks-bar__scope">{block.professionalId ? proName(block.professionalId) : block.resourceId ? scheduleResources.find(r => r.id === block.resourceId)?.name : 'Clínica'}</span>
+            </button>
+          ))}</div>
+        </section>}
+          </div>
+        )}
         <div className="gd-toolbar gap-x-4 px-3 py-2.5">
           {/* MISSÃO UX CLOSURE · item 5 — UMA MÉTRICA: Hoje, setas, data,
               Dia/Semana/Lista, Filtros, Fila, Bloquear horário e Novo
@@ -2068,7 +2262,7 @@ export default function AgendaPage() {
               design system). Nada de `<input type="date">` — a dependência do
               seletor nativo do navegador acabou; o rótulo rico do período
               continua sendo a leitura principal. */}
-          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto">
+          <div className="gd-toolbar ag-toolbar-nav min-w-0 w-full sm:w-auto flex-wrap">
             <Button
               variant="secondary"
               className="min-h-11 sm:min-h-0"
@@ -2085,34 +2279,36 @@ export default function AgendaPage() {
               label={`Escolher data (${focusRange})`}
               formatValue={() => focusLabel}
               max="2100-12-31"
-              className="min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
+              className="order-first sm:order-none basis-full sm:basis-auto min-w-0 flex-1 sm:flex-none max-w-none sm:max-w-[min(26rem,calc(100vw-11rem))] [&>button]:capitalize"
             />
             <IconButton icon="chevR" label={navLabel(1)} tip={navLabel(1)} variant="secondary" onClick={() => move(1)} />
             <span className="sr-only" aria-live="polite">{focusRange}</span>
           </div>
           <div className="ag-toolbar-actions grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:ml-auto sm:justify-end">
-            {/* Visualização: Dia | Semana | Lista (correção cirúrgica: “Mês”
-                saiu da UI — a lógica do modo mês segue intacta para links
-                diretos com view=month; nada foi destruído). */}
-                        <Segmented
-              items={[
-                { id: 'day' as View, label: 'Dia', icon: 'calendar' },
-                { id: 'week' as View, label: 'Semana', icon: 'grid' },
-                { id: 'list' as View, label: 'Lista', icon: 'tasks' },
-              ]}
+            {/* E3 · Bloquear horário vira ÍCONE (cadeado) com tooltip e nome
+                acessível — o rótulo longo saiu da toolbar. */}
+            <Button variant="secondary" aria-pressed={blockMode} aria-label="Bloquear horário" title="Bloquear horário"
+              className={`ag-toolbar__block ${blockMode ? 'is-active' : ''}`}
+              onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}
+            >
+              <Icon n="lock" size={14} aria-hidden="true" /><span>Bloquear</span>
+            </Button>
+            {/* E3 · UM seletor de visualização (Dia · Semana · Mês · Lista) no
+                SelectMenu canônico — listbox não nativo, teclado completo
+                (↑/↓, Home/End, Enter, Escape devolve o foco ao gatilho). */}
+            <SelectMenu
+              aria-label="Visualização da agenda"
+              className="ag-view-select w-full sm:w-[150px]"
               value={view}
-              onChange={(v) => { endDrag(); setView(v); }}
-              ariaLabel="Visualização da agenda"
+              options={AGENDA_VIEW_OPTIONS}
+              onChange={(v) => { endDrag(); chooseView(v as View); }}
             />
             {/* CTA PRINCIPAL da Agenda segue o TEMA ativo (--accent, contrato
                 universal de cor) — o fluxo/sheet de criação é o mesmo. */}
             {/* Mobile (<640): ícone + aria-label em 44px, na mesma linha do
                 segmentado. Desktop mantém o rótulo visível. */}
-            <Button variant="secondary" className="ag-toolbar__block w-full sm:w-auto" aria-label="Bloquear horário" aria-pressed={blockMode} title="Bloquear horário" onClick={() => { setBlockMode(!blockMode); setSelectedRange(null); if (view === 'list' || view === 'month') setView('day'); }}>
-              <Icon n="lock" size={15} /><span className="ag-toolbar__label">Bloquear horário</span>
-            </Button>
-            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: '' })}>
-              <Icon n="calendarPlus" size={15} /><span className="ag-toolbar__label">Novo agendamento</span>
+            <Button variant="primary" className="ag-toolbar__new w-full sm:w-auto" aria-label="Novo agendamento" title="Novo agendamento" onClick={() => setCreating({ date: focus, time: '', professionalId: proFilter })}>
+              <Icon n="calendarPlus" size={16} /><span className="ag-toolbar__label"><span className="sm:hidden">Novo</span><span className="hidden sm:inline">Novo agendamento</span></span>
             </Button>
           </div>
         </div>
@@ -2173,46 +2369,96 @@ export default function AgendaPage() {
               <p className="text-sm text-[var(--text-muted)] mt-1">Confira os filtros ou use Novo agendamento para consultar horários disponíveis.</p>
             </div>
           )}
-          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); setDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
+          {[...new Map(columns.flatMap(c => c.blocks).map(b => [b.id,b])).values()].sort((a,b) => a.time.localeCompare(b.time)).map(item => <button key={item.id} type="button" onClick={(event) => { const booking = bookings.find(b => b.id === item.id); if (booking) { detailTriggerRef.current = event.currentTarget; setEditBooking(null); setDetailReschedule(false); openDetail(booking); } }} className="ag-list__row w-full flex gap-4 items-start text-left">
             <span className="font-semibold tabular-nums text-[var(--brand-fg)]">{item.time}</span>
             <span className="min-w-0 flex-1"><strong className="block text-sm">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName || bk?.customerName; })()}</strong><span className="block text-xs text-[var(--text-muted)] mt-1">{(() => { const bk = bookings.find(b => b.id === item.id); return bk?.petName ? `Tutor: ${bk.customerName} · ` : ''; })()}{item.service} · {proName(bookings.find(b => b.id === item.id)?.professionalId || '') || 'Sem profissional'}</span><span className="inline-block text-xs mt-2 font-semibold">{item.statusLabel}{bookings.find(b => b.id === item.id)?.bookingKind === 'fit_in' ? ' · Encaixe' : ''}</span></span><Icon n="chevR" size={16} />
           </button>)}
         </section>
       ) : view === 'month' ? (
-        <div className="ag-mode-scroll ag-grid-surface overflow-hidden p-2">
+        // E3 · MÊS FUNCIONAL: a MESMA fonte (`bookings`, já filtrada pelo escopo do
+        // servidor e pelos filtros) e o MESMO intervalo `range` (grade de 6 semanas).
+        // Cada agendamento abre o detalhe da agenda; o número do dia leva ao Dia.
+        <div className="ag-mode-scroll ag-grid-surface overflow-hidden p-2" data-agenda-view="month">
           <div className="grid grid-cols-7 gap-px mb-1">
             {['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map((d) => (
-              <span key={d} className="text-[10px] font-semibold tracking-wider uppercase text-zinc-400 text-center py-1">{d}</span>
+              <span key={d} className="text-[10px] font-semibold tracking-wider uppercase text-[var(--text-muted)] text-center py-1">{d}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-px bg-zinc-200 border border-zinc-200">
+          <div className="grid grid-cols-7 gap-px bg-[var(--border)] border border-[var(--border)] rounded-[var(--radius-md)] overflow-hidden">
             {Array.from({ length: 42 }, (_, i) => addDaysISO(range.from, i)).map((d) => {
               const list = bookings
                 .filter((b) => b.date === d && b.status !== 'cancelled')
                 .filter((b) => !statusFilter || b.status === statusFilter)
                 .filter((b) => !specFilter || proRoleOf(b.professionalId || '') === specFilter)
-                .filter((b) => !proFilter || b.professionalId === proFilter);
+                .filter((b) => !proFilter || b.professionalId === proFilter)
+                .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
               const pend = list.filter((b) => needsClosure(b, bookingDurationOf(b, serviceOf(b.serviceId)), today, nowHM(new Date(), bizTz))).length;
               const inMonth = d.slice(0, 7) === focus.slice(0, 7);
+              const isToday = d === today;
+              const shown = list.slice(0, 3);
               return (
-                <button key={d} onClick={() => { setPresentation({data:d,view:'day'}); }} className={`bg-white p-1.5 min-h-[72px] text-left hover:bg-zinc-50 ${d === today ? 'ring-1 ring-inset ring-emerald-500 bg-emerald-50/40' : ''} ${!inMonth ? 'bg-zinc-50 text-zinc-400' : ''}`}>
-                  <span className="flex items-center justify-between">
-                    <span className={`text-xs font-semibold ${d === today ? 'text-emerald-700' : inMonth ? 'text-zinc-700' : 'text-zinc-400'}`}>{Number(d.slice(8, 10))}</span>
-                    {pend > 0 && <span className="text-[9px] font-semibold bg-amber-500 text-white rounded-full px-1">{pend}</span>}
-                  </span>
-                  {list.length > 0 && (
-                    <>
-                      <span className="block text-[10px] font-medium text-zinc-600 mt-1">{list.length} · {list.slice(0, 2).map((b) => b.time).join(', ')}</span>
-                      <span className="flex gap-0.5 mt-1">{list.slice(0, 6).map((b) => <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${bookingDotCls(b.status)}`} />)}</span>
-                    </>
+                <div
+                  key={d}
+                  data-month-day={d}
+                  className={`flex flex-col gap-0.5 p-1.5 min-h-[104px] min-w-0 bg-[var(--surface)] ${!inMonth ? 'bg-[var(--surface-subtle)] text-[var(--text-faint)]' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPresentation({ data: d, view: 'day' })}
+                      aria-label={`Abrir o dia ${formatDateBR(d)}`}
+                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-fg)] ${isToday ? 'bg-[var(--brand-fg)] text-white' : inMonth ? 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]' : 'text-[var(--text-faint)]'}`}
+                    >
+                      {Number(d.slice(8, 10))}
+                    </button>
+                    {pend > 0 && (
+                      <span className="rounded-full bg-[var(--warning-bg)] px-1.5 text-[10px] font-semibold text-[var(--warning-fg)]" title={`${pend} pendente${pend > 1 ? 's' : ''} de registro`} aria-label={`${pend} pendente${pend > 1 ? 's' : ''} de registro`}>{pend}</span>
+                    )}
+                  </div>
+                  {shown.map((b) => {
+                    const svc = serviceOf(b.serviceId)?.name || 'Serviço';
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={(e) => { detailTriggerRef.current = e.currentTarget as HTMLElement; setEditBooking(null); setDetailReschedule(false); openDetail(b); }}
+                        aria-label={`${b.time} · ${b.customerName} · ${svc}`}
+                        title={`${b.time} · ${b.customerName} · ${svc}`}
+                        className="flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand-fg)]"
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${bookingDotCls(b.status)}`} aria-hidden="true" />
+                        <span className="shrink-0 tabular-nums font-semibold">{b.time}</span>
+                        <span className="min-w-0 truncate">{b.customerName}</span>
+                      </button>
+                    );
+                  })}
+                  {list.length > shown.length && (
+                    <button
+                      type="button"
+                      onClick={() => setPresentation({ data: d, view: 'day' })}
+                      className="px-1 text-left text-[11px] font-semibold text-[var(--brand-fg)] hover:underline"
+                    >
+                      +{list.length - shown.length} mais
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
         </div>
       ) : (
         <div className="ag-mode-panel ag-grid-surface" data-range-focus={rangeFocus || undefined}>
+          {mobileDay && columns.length > 1 && (
+            <div role="group" aria-label="Escolher profissional" data-mobile-pro-picker className="flex gap-2 overflow-x-auto px-2 py-2 border-b border-[var(--border)] bg-[var(--surface)]">
+              {columns.map(c => (
+                <button key={c.key} type="button" aria-pressed={c.key === mobileKey} onClick={() => setMobileProKey(c.key)}
+                  className={`shrink-0 inline-flex items-center gap-2 min-h-11 rounded-full border px-3 text-sm font-medium ${c.key === mobileKey ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'}`}>
+                  {c.isProfessional && <Avatar name={c.label} src={c.photo} size={20} />}
+                  <span className="whitespace-nowrap">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {/* AGENDA PROTAGONISTA — SCROLL INTERNO com dono único (Dia/Semana):
               o scroller é o ÚNICO dono da rolagem vertical — ele ocupa todo o
               resto do viewport (flex:1/min-height:0 na cadeia .ag-page) e rola
@@ -2261,6 +2507,7 @@ export default function AgendaPage() {
                         <span className="flex items-center gap-1.5 min-w-0">
                           <span className={`block text-[13.5px] font-semibold truncate ${c.isToday ? 'text-[var(--brand-fg)]' : 'text-[var(--text-primary)]'}`}>{c.label}</span>
                           {c.isToday && <span className="ag-col-today">Hoje</span>}
+                          {closedFor(c) && <span className="ag-col-closed">Fechado</span>}
                         </span>
                         {c.sub && <span className="block text-[11px] text-[var(--text-muted)] truncate">{c.sub}</span>}
                       </span>
@@ -2303,12 +2550,14 @@ export default function AgendaPage() {
                       onBlockClick={onBlockClick}
                       onBlockEdit={onBlockEdit}
                       onBlockContextMenu={onBlockContextMenu}
-                      hoverSuppressed={ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
+                      hoverSuppressed={!!dragId || ctxMenu !== null || detail !== null || editBooking !== null || dropAsk !== null || resizeAsk !== null || quickCreate !== null || blockForm}
                       onEmptyPress={onEmptyPress}
                       onRangeSelect={onRangeSelect}
                       selectedRange={selectedRange?.columnKey === c.key ? selectedRange : null}
                       onResize={onResize}
-                      unavailableRanges={exceptionUnavailableRanges(exceptions, c.date, grid.start, grid.end, rules.filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId) : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules)))).map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) })))}
+                      closedLabel={closedFor(c)}
+                      outsideRanges={outsideFor(c)}
+                      unavailableRanges={closedFor(c) ? [] : exceptionUnavailableRanges(exceptions, c.date, grid.start, grid.end, rules.filter(r => r.weekday === weekdayOf(c.date) && (c.professionalId ? (followsBusinessHours(pros.find(p => p.id === c.professionalId), rules) ? !r.professionalId : r.professionalId === c.professionalId) : !r.professionalId || activePros.some(p => p.id === r.professionalId && !followsBusinessHours(p, rules)))).map(r => ({ start: timeToMin(r.start), end: timeToMin(r.end) })))}
                       operationalBlocks={scheduleBlocks.flatMap(block => {
                         const window = blockOnAgendaColumn(block, c.date, c.professionalId, view === 'week' ? 'week' : 'day', bizTz);
                         if (!window) return [];
@@ -2363,7 +2612,8 @@ export default function AgendaPage() {
                 /* A regra do serviço (`professionalIds`) vai junto: a fila só
                    oferece quem ATENDE o serviço escolhido. */
                 services={services.map((x) => ({ id: x.id, name: x.name, professionalIds: x.professionalIds || [], professionalMode: (x as any).professionalMode }))}
-                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) setDetail(b); }}
+                onOpenBooking={(id) => { const b = bookingsRef.current.get(id); if (b) openDetail(b); }}
+                petNameOf={(id) => bookingsRef.current.get(id)?.petName || undefined}
                 onEncounter={(row) => router.push(encounterWorkspaceHref({ businessId, queueId: row.id, returnTo: `${window.location.pathname}${window.location.search}` }))}
                 onOpenClient={(row) => { window.location.href = `/clientes?c=${encodeURIComponent(row.contactId)}`; }}
                 onClose={() => setShowQueue(false)}
@@ -2401,24 +2651,24 @@ export default function AgendaPage() {
           registro (o Material chama isso de alert dialog); estava em gaveta
           lateral, que é a geometria de LER o registro. A leitura continua no
           painel preso à direita (`.gd-detail`); a confirmação é central. */}
-      {resizeAsk && <Drawer open variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => !saving && setResizeAsk(null)} width="max-w-lg">
+      {resizeFrozen && <Drawer open={!!resizeAsk} variant="dialog" dialogWidth="460px" title="Confirmar duração" onClose={() => setResizeAsk(null)} dismissGuard={{ saving }} width="max-w-lg">
         <div className="p-5 space-y-3">
-          <p className="font-semibold">{resizeAsk.booking.time}–{resizeAsk.end} · {durationLabel(timeToMin(resizeAsk.end) - timeToMin(resizeAsk.booking.time))}</p>
+          <p className="font-semibold">{resizeFrozen.booking.time}–{resizeFrozen.end} · {durationLabel(timeToMin(resizeFrozen.end) - timeToMin(resizeFrozen.booking.time))}</p>
           <p className="text-sm">O serviço não será alterado. Somente este atendimento muda.</p>
           {dropError && <p role="alert" className="text-red-600 text-sm">{dropError}</p>}
           <div className="flex gap-2">
             <Button disabled={saving} onClick={async () => {
-              if (saving) return;
+              if (!resizeAsk || saving) return;
               setSaving(true); setDropError('');
               const res = await apiRequest<{ booking?: Partial<Booking> & Pick<Booking, 'id'>; queueChanged?: boolean }>(
                 '/api/bookings',
-                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeAsk.booking.id, resizeEnd: resizeAsk.end }) },
+                { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId, id: resizeFrozen.booking.id, resizeEnd: resizeFrozen.end }) },
                 { scope: 'action', area: 'Agenda' },
               );
               setSaving(false);
               if (!res.ok) { setDropError(res.status === 409 ? 'Esse horário acabou de ficar indisponível. Escolha outro fim.' : res.message); return; }
               setResizeAsk(null);
-              if (res.data?.booking && res.data.booking.id === resizeAsk.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
+              if (res.data?.booking && res.data.booking.id === resizeFrozen.booking.id) applyConfirmedTemporalPatch(res.data.booking, !!res.data.queueChanged);
               else void loadBookingsOnly();
             }}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
             <Button variant="secondary" disabled={saving} onClick={() => setResizeAsk(null)}>Cancelar</Button>
@@ -2427,23 +2677,23 @@ export default function AgendaPage() {
       </Drawer>}
 
       {/* Confirmação explícita do drop — nada acontece em silêncio */}
-      {dropAsk && (
-        <Drawer open variant="dialog" dialogWidth="520px" onClose={() => !saving && setDropAsk(null)} title="Confirmar reagendamento" width="max-w-lg">
+      {dropFrozen && (
+        <Drawer open={!!dropAsk} variant="dialog" dialogWidth="520px" onClose={() => setDropAsk(null)} dismissGuard={{ saving }} title="Confirmar reagendamento" width="max-w-lg">
           <div className="p-5">
-            <p className="font-semibold">{dropConfirmQuestion(dropAsk.date, dropAsk.time)}</p>
-            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropAsk.booking.petName || dropAsk.booking.customerName}</strong>{dropAsk.booking.petName ? ` (tutor: ${dropAsk.booking.customerName})` : ''} · {serviceName(dropAsk.booking.serviceId)}</p>
+            <p className="font-semibold">{dropConfirmQuestion(dropFrozen.date, dropFrozen.time)}</p>
+            <p className="text-sm text-zinc-600 mt-1.5"><strong>{dropFrozen.booking.petName || dropFrozen.booking.customerName}</strong>{dropFrozen.booking.petName ? ` (tutor: ${dropFrozen.booking.customerName})` : ''} · {serviceName(dropFrozen.booking.serviceId)}</p>
             <p className="text-sm mt-1">
-              {formatDateBR(dropAsk.booking.date)} {dropAsk.booking.time} → <strong>{formatDateBR(dropAsk.date)} {dropAsk.time}</strong>
+              {formatDateBR(dropFrozen.booking.date)} {dropFrozen.booking.time} → <strong>{formatDateBR(dropFrozen.date)} {dropFrozen.time}</strong>
             </p>
             {(() => {
-              const decision = rescheduleDecision(dropAsk.booking.status);
+              const decision = rescheduleDecision(dropFrozen.booking.status);
               return decision.kind === 'recreate' ? (
                 <p className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2 mt-3">
-                  Este atendimento está {dropAsk.booking.status === 'completed' ? 'concluído' : dropAsk.booking.status === 'no_show' ? 'marcado como falta' : 'cancelado'}: o novo horário entra como <strong>novo agendamento pendente</strong>, preservando o histórico.
+                  Este atendimento está {dropFrozen.booking.status === 'completed' ? 'concluído' : dropFrozen.booking.status === 'no_show' ? 'marcado como falta' : 'cancelado'}: o novo horário entra como <strong>novo agendamento pendente</strong>, preservando o histórico.
                 </p>
               ) : (
                 <p className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2 mt-3">
-                  O mesmo atendimento muda de horário e mantém “{dropAsk.booking.status === 'pending' ? 'pendente' : 'confirmado'}”.
+                  O mesmo atendimento muda de horário e mantém “{dropFrozen.booking.status === 'pending' ? 'pendente' : 'confirmado'}”.
                 </p>
               );
             })()}
@@ -2532,6 +2782,13 @@ export default function AgendaPage() {
           )}
         </div>
       </Drawer>
+      {closedHint && (
+        <div data-closed-hint className="fixed z-50 w-[260px]" style={{ left: Math.max(8, Math.min(closedHint.x + 12, (typeof window !== 'undefined' ? window.innerWidth : 1024) - 276)), top: closedHint.y + 12 }}>
+          <Notice tone="warning" live title={`Não é possível agendar: ${closedHint.title.toLowerCase()}`} onDismiss={() => setClosedHint(null)}>
+            {closedHint.detail}. Atendimento fora do expediente? A equipe registra em Novo agendamento → Encaixe.
+          </Notice>
+        </div>
+      )}
       {quickCreate && (
         <QuickBookingPopover
           anchor={quickCreate}
@@ -2610,7 +2867,10 @@ export default function AgendaPage() {
       )}
       {detail && (
         <BookingDetailSheet
+          key={detail.id}
           booking={detail}
+          open={detailOpen}
+          onExited={() => setDetail(null)}
           returnFocus={detailTriggerRef}
           startRescheduling={detailReschedule}
           timezone={bizTz}
@@ -2618,7 +2878,7 @@ export default function AgendaPage() {
           resources={scheduleResources}
           pro={detail.professionalId ? pros.find((p) => p.id === detail.professionalId) : undefined}
           businessId={businessId}
-          onClose={() => { setDetail(null); setDetailReschedule(false); }}
+          onClose={() => { setDetailOpen(false); setDetailReschedule(false); }}
           /* Mudança estrutural (status/finalizar): atualiza dados, mantém
              sheets abertos — o fechamento é só onClose (ação do usuário). */
           onChanged={() => { void load(); }}
@@ -2626,9 +2886,10 @@ export default function AgendaPage() {
       )}
 
 
-      {editBooking && (
+      {editFrozen && (
         <BookingEditDialog
-          booking={editBooking}
+          open={!!editBooking}
+          booking={editFrozen}
           businessId={businessId}
           services={services}
           pros={pros}
@@ -2639,30 +2900,36 @@ export default function AgendaPage() {
         />
       )}
 
-      {creating && (
+      {sheetCtx && (
         <NewBookingSheet
+          open={!!creating}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={horizonDays}
           timezone={bizTz}
-          quick={creating.quick}
+          quick={sheetCtx.quick}
           initial={{
-            name: creating.name || '', phone: creating.phone || '',
-            contactId: creating.contactId, serviceId: creating.serviceId,
-            searchQuery: creating.searchQuery,
-            openRegistration: creating.openRegistration,
-            vetMode: creating.vetMode,
-            allowSingleEligibleServicePrefill: creating.allowSingleEligibleServicePrefill,
-            date: creating.date || focus,
-            time: creating.time,
-            professionalId: creating.professionalId,
-            selectedDurationMin: creating.selectedDurationMin,
-            petId: creating.petId,
-            note: creating.note,
+            name: sheetCtx.name || '', phone: sheetCtx.phone || '',
+            contactId: sheetCtx.contactId, serviceId: sheetCtx.serviceId,
+            searchQuery: sheetCtx.searchQuery,
+            openRegistration: sheetCtx.openRegistration,
+            vetMode: sheetCtx.vetMode,
+            allowSingleEligibleServicePrefill: sheetCtx.allowSingleEligibleServicePrefill,
+            date: sheetCtx.date || focus,
+            time: sheetCtx.time,
+            professionalId: sheetCtx.professionalId,
+            selectedDurationMin: sheetCtx.selectedDurationMin,
+            petId: sheetCtx.petId,
+            note: sheetCtx.note,
           }}
-          onClose={() => { setCreating(null); setSelectedRange(null); }}
-          onCreated={() => { setSelectedRange(null); void load(); }}
+          onClose={() => { setCreating(null); setSelectedRange(null); restoredBookingRef.current = false; }}
+          onCreated={() => {
+            setSelectedRange(null);
+            // Só o agendamento que veio do rascunho consome o rascunho.
+            if (restoredBookingRef.current) { clearBookingReturn(businessId); restoredBookingRef.current = false; }
+            void load();
+          }}
         />
       )}
     </div>

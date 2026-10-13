@@ -1,27 +1,33 @@
 'use client';
 // ═══════════════════════════════════════════════════════════════
-// CADASTRO REAL de paciente/tutor — UMA experiência única.
-// Usada em Clientes (Quick Create) e DENTRO do Novo agendamento.
-// Salva NO CRM de imediato (POST /api/contacts) — abandone o
-// agendamento depois e o cadastro permanece.
+// CADASTRO REAL de paciente/tutor — formulário ÚNICO do GoDoutor.
+// Vive na PÁGINA própria `/clientes/novo` (Missão 02), usada pelos dois
+// pontos de entrada: Clientes e Novo agendamento. Não é overlay: é uma tela. Salva NO CRM (POST /api/contacts) ao confirmar.
 //
-// HOMOLOGAÇÃO · FASE 2 fechamento:
-//   • WorkspaceSheet (padrão operacional do GoDoutor);
-//   • clinicType veterinária → Tutor + Paciente (pet) na MESMA tela;
+// Regras:
+//   • duplicidade é verificada ANTES de gravar (GET /api/contacts por
+//     WhatsApp): o POST faria upsert silencioso no contato existente, então
+//     o cadastro duplicado é bloqueado aqui com o caminho para o existente;
+//   • falha parcial (tutor salvo, pet não): o tutor NÃO é regravado; o
+//     formulário fica no estado "pet pendente" e só o pet é tentado de novo;
+//   • veterinária → Tutor + Paciente (pet) na MESMA tela;
 //   • nascimento <18 (humano) → Responsável legal (contato vinculado,
-//     aditivo em profile.guardian — nunca um "segundo paciente").
+//     aditivo em profile.guardian — nunca um "segundo paciente");
+//   • CPF e endereço são opcionais, recolhidos; validados pelo servidor.
 // ═══════════════════════════════════════════════════════════════
-import { useEffect, useRef, useState } from 'react';
-import { apiSend } from '@/lib/api-client';
+import { useEffect, useState, type ReactNode } from 'react';
+import { apiGet, apiSend } from '@/lib/api-client';
 import { onlyDigits } from '@/lib/utils';
-import { emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
-import { ageFromBirthDate } from '@/lib/contact-profile';
+import { cepError, emailError, normalizeEmail, phoneError } from '@/lib/field-quality';
+import { lookupCep } from '@/lib/cep-lookup';
+import { todayIsoLocal } from '@/lib/date-field';
+import { DateField } from '@/components/dashboard/DateField';
+import { ageFromBirthDate, BRAZILIAN_STATES, emptyAddress, formatCep, formatCpf, profileCpfError } from '@/lib/contact-profile';
 import { PhoneBRInput } from '@/components/dashboard/PhoneBRInput';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
 import { Icon } from '@/components/icons';
-import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
+import { Button, Notice, PageBackAction, PageHeader, Select } from '@/components/ui';
 import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, validatePet } from '@/lib/pets';
-import { useOverlayDismissGuard } from './OverlayDismissGuard';
+import { useUnsavedChangesGuard, type DismissGuardState } from './OverlayDismissGuard';
 import type { Pet } from '@/lib/types';
 
 interface SavedContact {
@@ -39,43 +45,75 @@ interface SaveResponse {
 export interface NewClientResult {
   contactId: string;
   petId?: string;
+  /** Nome e WhatsApp (dígitos) gravados — o retorno ao agendamento usa os dados reais. */
+  name?: string;
+  phone?: string;
+}
+
+const input = 'w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900';
+const label = 'block text-xs font-semibold tracking-[0.06em] uppercase text-[var(--text-muted)]';
+const fieldError = 'mt-1 block text-xs font-medium text-[var(--danger)]';
+
+/** Bloco visível da ficha (sem recolher): título pequeno + conteúdo. */
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text)]">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
 export function NewClientForm({
   businessId,
-  onClose,
-  onSaved,
-  onView360,
-  /** Veterinária: bloco "Paciente (pet)" logo abaixo do Tutor. */
   vetMode = false,
-  /** Prefill do nome/telefone quando o fluxo nasce na busca do agendamento. */
   initialName = '',
   initialPhone = '',
-  title,
-  /** Painel lateral do overlay expansível (§19–25): traz o próprio rodapé. */
-  embedded = false,
-  onPersistenceChange,
+  onCancel,
+  onSaved,
+  onOpenExisting,
+  existingActionLabel = 'Abrir cadastro existente',
+  backLabel,
 }: {
   businessId: string;
-  onClose: () => void;
-  onSaved: (contactId: string, extra?: NewClientResult) => void;
-  onView360?: () => void;
+  /** Saída confirmada (Cancelar, Voltar, navegação): a página decide o destino. */
+  onCancel: () => void;
+  /** Cadastro COMPLETO salvo (tutor e, se houver, pet). */
+  onSaved: (contactId: string, extra: NewClientResult) => void;
+  /** Duplicidade: leva ao cadastro existente (decidido pela página). */
+  onOpenExisting?: (contact: { id: string; name: string; phone: string }) => void;
+  existingActionLabel?: string;
+  /**
+   * Rótulo do link "Voltar" acima do cabeçalho. O link sai pela MESMA guarda
+   * de Cancelar (requestFormClose), nunca direto para a rota.
+   */
+  backLabel?: string;
+  /** Veterinária: bloco "Paciente (pet)" na mesma tela do tutor. */
   vetMode?: boolean;
   initialName?: string;
   initialPhone?: string;
-  title?: string;
-  embedded?: boolean;
-  onPersistenceChange?: (state: { dirty: boolean; saving: boolean; error: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [address, setAddress] = useState(emptyAddress());
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [createAccess, setCreateAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [duplicate, setDuplicate] = useState<{ id: string; name: string; phone: string } | null>(null);
+  // Erros de data (DD/MM/AAAA) vêm do DateField; `attempted` mostra o erro ao tentar salvar.
+  const [birthErr, setBirthErr] = useState('');
+  const [petBirthErr, setPetBirthErr] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  // Estado da consulta de CEP (só mensagem; os campos continuam editáveis).
+  const [cepNote, setCepNote] = useState('');
+  // Tutor gravado, pet ainda pendente: o tutor fica travado e só o pet é retentado.
+  const [savedContactId, setSavedContactId] = useState('');
+  const [tutorResponse, setTutorResponse] = useState<SaveResponse | null>(null);
   const [saved, setSaved] = useState<SaveResponse | null>(null);
   const [savedResult, setSavedResult] = useState<NewClientResult | null>(null);
 
@@ -85,39 +123,110 @@ export function NewClientForm({
   const [guardian, setGuardian] = useState({ name: '', relationship: '', phone: '', email: '', cpf: '' });
 
   // Pet (só veterinária) — persistido na MESMA experiência do tutor.
-  // §21 — o cadastro rápido (embedded) em veterinária nasce COM o pet rápido
-  // ligado: tutor + pet é o fluxo mínimo do segmento (CTA "Salvar tutor e pet").
-  const [petOn, setPetOn] = useState(vetMode && embedded);
+  const [petOn, setPetOn] = useState(vetMode);
   const [pet, setPet] = useState({ name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '' as string | number, notes: '' });
-  const initialSnapshot = useRef(JSON.stringify({
-    name: initialName, phone: initialPhone, email: '', note: '', birthDate: '', marketingOptIn: false, createAccess: false,
-    guardian: { name: '', relationship: '', phone: '', email: '', cpf: '' }, petOn: vetMode && embedded,
-    pet: { name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '', notes: '' },
-  }));
-  const currentSnapshot = JSON.stringify({ name, phone, email, note, birthDate, marketingOptIn, createAccess, guardian, petOn, pet });
-  const dirty = !saved && currentSnapshot !== initialSnapshot.current;
-  const closeGuard = useOverlayDismissGuard();
-  const dismissState = { dirty, saving, error, context: 'new-client' as const };
-  const requestFormClose = () => closeGuard.requestClose('close-button', dismissState, onClose);
-  useEffect(() => { onPersistenceChange?.({ dirty, saving, error }); }, [dirty, saving, error, onPersistenceChange]);
 
+  const initialSnapshot = JSON.stringify({
+    name: initialName, phone: initialPhone, email: '', note: '', birthDate: '', cpf: '', address: emptyAddress(),
+    marketingOptIn: false, createAccess: false,
+    guardian: { name: '', relationship: '', phone: '', email: '', cpf: '' }, petOn: vetMode,
+    pet: { name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: '', notes: '' },
+  });
+  const currentSnapshot = JSON.stringify({ name, phone, email, note, birthDate, cpf, address, marketingOptIn, createAccess, guardian, petOn, pet });
+  const dirty = !saved && (!!savedContactId || currentSnapshot !== initialSnapshot);
+  // Pet pendente: o tutor JÁ existe. Sair agora deixa o cadastro incompleto — o
+  // aviso diz isso, em vez do genérico "dados serão perdidos".
+  const petPending = !!savedContactId && !saved;
+  const dismissState: DismissGuardState = {
+    dirty, saving, error, context: 'new-client',
+    ...(petPending ? {
+      title: 'Pet ainda não gravado',
+      description: 'O tutor já foi salvo, mas o pet não. Se você sair agora, o pet não será cadastrado.',
+    } : {}),
+  };
+  // Uma ÚNICA guarda para Cancelar, Voltar e navegação para fora (links,
+  // histórico e fechamento da aba) — a mesma proteção dos editores de página.
+  const closeGuard = useUnsavedChangesGuard(dismissState);
+  const leaveForm = () => { closeGuard.allowNavigation(); onCancel(); };
+  const requestFormClose = () => closeGuard.requestClose('close-button', dismissState, leaveForm);
+
+  const cpfMsg = cpf.trim() ? profileCpfError({ cpf }) : '';
+  const cepMsg = address.cep.trim() ? cepError(address.cep) : '';
+
+  // CEP: consulta somente com 8 dígitos (nunca por tecla). A troca de CEP cancela a
+  // consulta anterior, e uma resposta antiga não sobrescreve o endereço atual.
   useEffect(() => {
-    if (initialName && !name) setName(initialName);
-    if (initialPhone && !phone) setPhone(initialPhone);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialName, initialPhone]);
+    const digits = address.cep;
+    if (digits.length !== 8) { setCepNote(''); return; }
+    const ctl = new AbortController();
+    setCepNote('Buscando endereço pelo CEP…');
+    const fail = 'Não foi possível consultar o CEP agora. Preencha o endereço manualmente.';
+    lookupCep(digits, { signal: ctl.signal })
+      .then((r) => {
+        if (ctl.signal.aborted) return;
+        if (r.status === 'found') {
+          setAddress((prev) => (prev.cep !== digits ? prev : {
+            ...prev,
+            street: r.address.street || prev.street,
+            district: r.address.district || prev.district,
+            city: r.address.city || prev.city,
+            state: r.address.state || prev.state,
+          }));
+          setCepNote('Endereço preenchido pelo CEP. Confira e ajuste se precisar.');
+        } else if (r.status === 'notfound') {
+          setCepNote('CEP não encontrado. Preencha o endereço manualmente.');
+        } else {
+          setCepNote(fail);
+        }
+      })
+      .catch(() => { if (!ctl.signal.aborted) setCepNote(fail); });
+    return () => ctl.abort();
+  }, [address.cep]);
+
+  function finish(contactId: string, petId: string | undefined, tutor: SaveResponse | null) {
+    const result: NewClientResult = { contactId, ...(petId ? { petId } : {}), name: name.trim(), phone: onlyDigits(phone) };
+    setSaved(tutor || {});
+    setSavedResult(result);
+    onSaved(contactId, result);
+  }
+
+  /** Só o pet: usada após o tutor já ter sido gravado (nunca duplica o tutor). */
+  async function savePet(contactId: string, tutor: SaveResponse | null) {
+    const petMsg = validatePet(pet);
+    if (petMsg) { setError(petMsg); return; }
+    setSaving(true);
+    const petRes = await apiSend<{ ok?: boolean; pet?: Pet }>('/api/pets', 'POST', {
+      action: 'create', businessId, tutorId: contactId, pet: {
+        name: pet.name, species: pet.species, breed: pet.breed, sex: pet.sex,
+        birthDate: pet.birthDate, weightKg: pet.weightKg === '' ? 0 : Number(pet.weightKg),
+        notes: pet.notes,
+      },
+    }, { scope: 'action', area: 'Agenda' });
+    setSaving(false);
+    if (!petRes.ok || !petRes.data?.pet) {
+      setError(`Tutor salvo, mas o pet não foi gravado${petRes.message ? `: ${petRes.message}` : '.'} Corrija o pet e tente de novo — o tutor não será duplicado.`);
+      return;
+    }
+    finish(contactId, petRes.data.pet.id, tutor);
+  }
 
   async function save() {
-    if (saving) return;
+    if (saving || saved) return;
     setError('');
+    setDuplicate(null);
+    if (savedContactId) { await savePet(savedContactId, tutorResponse); return; }
+
     if (!name.trim()) { setError('Informe o nome do cliente.'); return; }
     const phoneMsg = phoneError(phone, { required: true });
     if (phoneMsg) { setError(phoneMsg); return; }
     const emailMsg = emailError(email);
     if (emailMsg) { setError(emailMsg); return; }
+    // CPF/CEP: o erro fica JUNTO do campo (aria-invalid), sem repetir no aviso geral.
+    if (cpfMsg || cepMsg || birthErr) { setAttempted(true); return; }
     if (vetMode && petOn) {
       const petMsg = validatePet(pet);
       if (petMsg) { setError(petMsg); return; }
+      if (petBirthErr) { setAttempted(true); return; }
     }
     if (showGuardian) {
       if (!guardian.name.trim()) { setError('Informe o nome do responsável legal.'); return; }
@@ -132,10 +241,32 @@ export function NewClientForm({
     }
 
     setSaving(true);
-    // Perfil aditivo: nascimento (+ responsável quando menor). Campos
-    // ausentes são preservados pelo normalizador do servidor.
+    // Duplicidade ANTES de gravar: o POST faria upsert no contato existente.
+    const digits = onlyDigits(phone);
+    const lookup = await apiGet<{ contacts?: Array<{ id: string; name: string; phone: string }> }>(
+      `/api/contacts?businessId=${encodeURIComponent(businessId)}&q=${digits}&limit=10`,
+      { scope: 'action', area: 'Clientes' },
+    );
+    if (!lookup.ok) {
+      setSaving(false);
+      setError(lookup.message || 'Não foi possível verificar se o cliente já existe. Tente de novo.');
+      return;
+    }
+    const hit = (lookup.data?.contacts || []).find((c) => onlyDigits(c.phone) === digits);
+    if (hit) {
+      setSaving(false);
+      setDuplicate({ id: hit.id, name: hit.name, phone: hit.phone });
+      setError('Já existe um cliente com este WhatsApp. Use o cadastro existente em vez de criar outro.');
+      return;
+    }
+
+    // Perfil aditivo: nascimento, CPF, endereço (+ responsável quando menor).
+    // Campos ausentes são preservados pelo normalizador do servidor.
     const profile: Record<string, unknown> = {};
     if (birthDate) profile.birthDate = birthDate;
+    if (cpf.trim()) profile.cpf = onlyDigits(cpf);
+    const hasAddress = Object.values(address).some((v) => String(v).trim());
+    if (hasAddress) profile.address = { ...address, cep: onlyDigits(address.cep) };
     if (showGuardian) {
       profile.guardian = {
         isMinor: true,
@@ -150,7 +281,7 @@ export function NewClientForm({
     const res = await apiSend<SaveResponse>('/api/contacts', 'POST', {
       businessId,
       name: name.trim(),
-      phone: onlyDigits(phone),
+      phone: digits,
       email: normalizeEmail(email),
       note: note.trim() || undefined,
       marketingOptIn,
@@ -164,41 +295,35 @@ export function NewClientForm({
       return;
     }
     const contactId = res.data.contact.id;
+    setTutorResponse(res.data);
+    setSavedContactId(contactId);
 
-    // Veterinária: pet na MESMA experiência — criado e vinculado ao tutor.
-    let petId: string | undefined;
-    if (vetMode && petOn) {
-      const petRes = await apiSend<{ ok?: boolean; pet?: Pet }>('/api/pets', 'POST', {
-        action: 'create', businessId, tutorId: contactId, pet: {
-          name: pet.name, species: pet.species, breed: pet.breed, sex: pet.sex,
-          birthDate: pet.birthDate, weightKg: pet.weightKg === '' ? 0 : Number(pet.weightKg),
-          notes: pet.notes,
-        },
-      }, { scope: 'action', area: 'Agenda' });
-      if (!petRes.ok || !petRes.data?.pet) {
-        setSaving(false);
-        setError(petRes.message || 'Tutor salvo, mas não foi possível salvar o pet.');
-        setSavedResult({ contactId });
-        setSaved(res.data!);
-        return;
-      }
-      petId = petRes.data.pet.id;
+    if (!(vetMode && petOn)) {
+      setSaving(false);
+      finish(contactId, undefined, res.data);
+      return;
     }
-
-    setSaving(false);
-    setSavedResult(petId ? { contactId, petId } : { contactId });
-    setSaved(res.data);
-    onSaved(contactId, petId ? { contactId, petId } : { contactId });
+    await savePet(contactId, res.data);
   }
 
-  const input = 'w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900';
-  const label = 'block text-xs font-semibold tracking-[0.06em] uppercase text-[var(--text-muted)]';
+  const primaryLabel = saving
+    ? 'Salvando…'
+    : savedContactId
+      ? 'Tentar salvar o pet de novo'
+      : (vetMode && petOn ? 'Salvar tutor e pet' : 'Salvar cliente');
+  const subtitle = saved
+    ? 'Cadastro salvo na base de clientes.'
+    : vetMode
+      ? `Tutor: ${name.trim() || '—'} · o pet entra como paciente no mesmo cadastro`
+      : 'Cadastro direto no CRM — se você sair antes de agendar, o cliente permanece.';
 
-  const primaryLabel = saving ? 'Salvando…' : (vetMode && petOn ? 'Salvar tutor e pet' : 'Salvar cliente');
-  const body = (
-    <>
+  return (
+    <section className="mx-auto w-full max-w-[720px] space-y-5" aria-label={vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente'}>
+      {backLabel && <PageBackAction onClick={requestFormClose} label={backLabel} />}
+      <PageHeader icon={vetMode ? 'paw' : 'users'} title={vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente'} hint={subtitle} />
+
       {saved ? (
-        <div className="px-5 py-6 space-y-4">
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-5 py-6 space-y-4" data-client-saved="true">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
             <p className="font-semibold text-emerald-900 flex items-center gap-2"><span className="text-lg">✓</span> Cadastro salvo</p>
             <p className="text-sm text-emerald-800 mt-1">O registro está no CRM e permanece mesmo se o agendamento for abandonado.</p>
@@ -218,63 +343,122 @@ export function NewClientForm({
               Esta pessoa já tinha uma conta. O acesso foi vinculado sem gerar ou revelar uma nova senha.
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" variant="primary" className="flex-1 min-w-[110px]" onClick={requestFormClose}>Voltar</Button>
-            {onView360 && (
-              <button type="button" onClick={() => closeGuard.requestClose('navigation', dismissState, () => { onView360(); onClose(); })} className="flex-1 min-w-[140px] rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">Ver Cliente 360</button>
-            )}
-          </div>
         </div>
       ) : (
-        <div className="px-5 py-5 space-y-4">
-          {vetMode && (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
-          )}
-          <label className="block"><span className={label}>NOME *</span>
-            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Bernardo Souza" /></label>
-          <label className="block"><span className={label}>WHATSAPP *</span>
-            <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
-          <label className="block"><span className={label}>E-MAIL</span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
-          {!vetMode && (
-            <label className="block"><span className={label}>DATA DE NASCIMENTO</span>
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={input + ' mt-1'} max="2099-12-31" />
-              {showGuardian && <span className="block text-[11px] text-amber-700 mt-1 font-semibold">Paciente com {age} anos — preencha o responsável legal abaixo.</span>}
-            </label>
-          )}
-          <label className="block"><span className={label}>OBSERVAÇÃO</span>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} className={input + ' mt-1 resize-none'} placeholder="Opcional — fica no histórico do cliente" /></label>
-
-          {/* ── Responsável legal (humano · menor de 18) ── aditivo, NÃO um segundo paciente. */}
-          {showGuardian && (
-            <section data-testid="guardian-section" className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 space-y-2.5">
-              <p className="text-xs font-semibold text-amber-950 uppercase tracking-wide">Responsável legal</p>
-              <p className="text-[11px] text-amber-900 -mt-1">Vinculado ao paciente como contato responsável — não cria outro cadastro de paciente.</p>
-              <label className="block"><span className={label}>NOME DO RESPONSÁVEL *</span>
-                <input value={guardian.name} onChange={(e) => setGuardian({ ...guardian, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Maria Souza" /></label>
-              <div className="grid sm:grid-cols-2 gap-2.5">
-                <label className="block"><span className={label}>PARENTESCO *</span>
-                  <Select value={guardian.relationship} onChange={(e) => setGuardian({ ...guardian, relationship: e.target.value })} aria-label="Parentesco">
-                    <option value="">Selecione…</option>
-                    <option value="mãe">Mãe</option>
-                    <option value="pai">Pai</option>
-                    <option value="avó">Avó</option>
-                    <option value="avô">Avô</option>
-                    <option value="tutora">Tutora</option>
-                    <option value="tutor">Tutor</option>
-                    <option value="outro">Outro</option>
-                  </Select></label>
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 space-y-5">
+          {/* Tutor — travado enquanto só o pet está pendente (não regrava o tutor). */}
+          <fieldset disabled={!!savedContactId} className="space-y-4 min-w-0">
+            {vetMode && (
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-fg)]">Tutor (contato)</p>
+            )}
+            <FormSection title="Identificação">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block sm:col-span-2"><span className={label}>NOME *</span>
+                  <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={input + ' mt-1'} placeholder="Ex.: Bernardo Souza" /></label>
+                <div className="block">
+                  <label className="block"><span className={label}>CPF</span>
+                    <input
+                      value={cpf}
+                      onChange={(e) => setCpf(formatCpf(e.target.value))}
+                      className={input + ' mt-1'}
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      aria-invalid={cpfMsg ? true : undefined}
+                      aria-describedby={cpfMsg ? 'client-cpf-error' : undefined}
+                    /></label>
+                  {cpfMsg && <span id="client-cpf-error" role="alert" className={fieldError}>{cpfMsg}</span>}
+                </div>
+                <div className="block">
+                  <DateField
+                    label="DATA DE NASCIMENTO"
+                    value={birthDate}
+                    onChange={(iso, err) => { setBirthDate(iso); setBirthErr(err); }}
+                    max={todayIsoLocal()}
+                    forceError={attempted}
+                    disabled={!!savedContactId}
+                  />
+                  {showGuardian && <span className="block text-[11px] text-amber-700 mt-1 font-semibold">Paciente com {age} anos — preencha o responsável legal abaixo.</span>}
+                </div>
                 <label className="block"><span className={label}>WHATSAPP *</span>
-                  <PhoneBRInput value={guardian.phone} onChange={(v) => setGuardian({ ...guardian, phone: v })} className="mt-1" /></label>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-2.5">
+                  <PhoneBRInput value={phone} onChange={setPhone} className="mt-1" placeholder="(11) 99999-9999" /></label>
                 <label className="block"><span className={label}>E-MAIL</span>
-                  <input value={guardian.email} onChange={(e) => setGuardian({ ...guardian, email: e.target.value })} className={input + ' mt-1'} inputMode="email" placeholder="Opcional" /></label>
-                <label className="block"><span className={label}>CPF DO RESPONSÁVEL</span>
-                  <input value={guardian.cpf} onChange={(e) => setGuardian({ ...guardian, cpf: e.target.value })} className={input + ' mt-1'} inputMode="numeric" placeholder="Opcional" maxLength={14} /></label>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} className={input + ' mt-1'} inputMode="email" /></label>
               </div>
-            </section>
-          )}
+            </FormSection>
+
+            <FormSection title="Endereço">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="block">
+                  <label className="block">
+                    <span className={label}>CEP</span>
+                    <input
+                      value={address.cep ? formatCep(address.cep) : ''}
+                      onChange={(e) => setAddress({ ...address, cep: onlyDigits(e.target.value).slice(0, 8) })}
+                      className={input + ' mt-1'}
+                      inputMode="numeric"
+                      placeholder="00000-000"
+                      maxLength={9}
+                      aria-invalid={cepMsg ? true : undefined}
+                      aria-describedby={cepMsg ? 'client-cep-error' : cepNote ? 'client-cep-note' : undefined}
+                    /></label>
+                  {cepMsg && <span id="client-cep-error" role="alert" className={fieldError}>{cepMsg}</span>}
+                  {!cepMsg && cepNote && <span id="client-cep-note" role="status" className="mt-1 block text-xs text-[var(--text-muted)]">{cepNote}</span>}
+                </div>
+                <label className="block sm:col-span-2"><span className={label}>LOGRADOURO</span>
+                  <input value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>NÚMERO</span>
+                  <input value={address.number} onChange={(e) => setAddress({ ...address, number: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block sm:col-span-2"><span className={label}>COMPLEMENTO</span>
+                  <input value={address.complement} onChange={(e) => setAddress({ ...address, complement: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>BAIRRO</span>
+                  <input value={address.district} onChange={(e) => setAddress({ ...address, district: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>CIDADE</span>
+                  <input value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className={input + ' mt-1'} /></label>
+                <label className="block"><span className={label}>UF</span>
+                  <Select value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} aria-label="Estado (UF)">
+                    <option value="">—</option>
+                    {BRAZILIAN_STATES.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+                  </Select></label>
+              </div>
+            </FormSection>
+
+            <FormSection title="Informações adicionais">
+              <label className="block"><span className={label}>OBSERVAÇÕES</span>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} className={input + ' mt-1 resize-none'} placeholder="Fica no histórico do cliente" /></label>
+            </FormSection>
+
+            {/* ── Responsável legal (humano · menor de 18) ── aditivo, NÃO um segundo paciente. */}
+            {showGuardian && (
+              <section data-testid="guardian-section" className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 space-y-2.5">
+                <p className="text-xs font-semibold text-amber-950 uppercase tracking-wide">Responsável legal</p>
+                <p className="text-[11px] text-amber-900 -mt-1">Vinculado ao paciente como contato responsável — não cria outro cadastro de paciente.</p>
+                <label className="block"><span className={label}>NOME DO RESPONSÁVEL *</span>
+                  <input value={guardian.name} onChange={(e) => setGuardian({ ...guardian, name: e.target.value })} className={input + ' mt-1'} placeholder="Ex.: Maria Souza" /></label>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  <label className="block"><span className={label}>PARENTESCO *</span>
+                    <Select value={guardian.relationship} onChange={(e) => setGuardian({ ...guardian, relationship: e.target.value })} aria-label="Parentesco">
+                      <option value="">Selecione…</option>
+                      <option value="mãe">Mãe</option>
+                      <option value="pai">Pai</option>
+                      <option value="avó">Avó</option>
+                      <option value="avô">Avô</option>
+                      <option value="tutora">Tutora</option>
+                      <option value="tutor">Tutor</option>
+                      <option value="outro">Outro</option>
+                    </Select></label>
+                  <label className="block"><span className={label}>WHATSAPP *</span>
+                    <PhoneBRInput value={guardian.phone} onChange={(v) => setGuardian({ ...guardian, phone: v })} className="mt-1" /></label>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  <label className="block"><span className={label}>E-MAIL</span>
+                    <input value={guardian.email} onChange={(e) => setGuardian({ ...guardian, email: e.target.value })} className={input + ' mt-1'} inputMode="email" /></label>
+                  <label className="block"><span className={label}>CPF DO RESPONSÁVEL</span>
+                    <input value={guardian.cpf} onChange={(e) => setGuardian({ ...guardian, cpf: e.target.value })} className={input + ' mt-1'} inputMode="numeric" maxLength={14} /></label>
+                </div>
+              </section>
+            )}
+          </fieldset>
 
           {/* ── Veterinária: Paciente (pet) na MESMA experiência ── */}
           {vetMode && (
@@ -285,7 +469,7 @@ export function NewClientForm({
                   <Icon n="paw" size={14} /> Paciente (pet)
                 </p>
                 <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer">
-                  <input type="checkbox" checked={petOn} onChange={(e) => setPetOn(e.target.checked)} className="il-check" />
+                  <input type="checkbox" checked={petOn} disabled={!!savedContactId} onChange={(e) => setPetOn(e.target.checked)} className="il-check" />
                   Adicionar pet
                 </label>
               </div>
@@ -299,18 +483,23 @@ export function NewClientForm({
                         {PET_SPECIES.map((s) => <option key={s} value={s}>{PET_SPECIES_LABELS[s] || s}</option>)}
                       </Select></label>
                     <label className="block"><span className={label}>RAÇA</span>
-                      <input value={pet.breed} onChange={(e) => setPet({ ...pet, breed: e.target.value })} className={input + ' mt-1'} list="new-client-breeds" placeholder="Opcional" />
+                      <input value={pet.breed} onChange={(e) => setPet({ ...pet, breed: e.target.value })} className={input + ' mt-1'} list="new-client-breeds" />
                       <datalist id="new-client-breeds">
                         {breedSuggestions(pet.species).map((b) => <option key={b} value={b} />)}
                       </datalist></label>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <label className="block"><span className={label}>SEXO</span>
                       <Select value={pet.sex} onChange={(e) => setPet({ ...pet, sex: e.target.value })} aria-label="Sexo do pet">
                         <option value="">—</option><option value="M">Macho</option><option value="F">Fêmea</option>
                       </Select></label>
-                    <label className="block"><span className={label}>NASCIMENTO</span>
-                      <input type="date" value={pet.birthDate} onChange={(e) => setPet({ ...pet, birthDate: e.target.value })} className={input + ' mt-1'} max="2099-12-31" /></label>
+                    <DateField
+                      label="NASCIMENTO"
+                      value={pet.birthDate}
+                      onChange={(iso, err) => { setPet({ ...pet, birthDate: iso }); setPetBirthErr(err); }}
+                      max={todayIsoLocal()}
+                      forceError={attempted}
+                    />
                     <label className="block"><span className={label}>PESO (KG)</span>
                       <input type="number" step="0.01" min="0" max="500" value={pet.weightKg} onChange={(e) => setPet({ ...pet, weightKg: e.target.value })} className={input + ' mt-1'} placeholder="0" /></label>
                   </div>
@@ -322,69 +511,26 @@ export function NewClientForm({
             </section>
           )}
 
+          {error && (
+            <Notice tone="error">
+              {error}
+              {duplicate && onOpenExisting && (
+                <span className="mt-2 block">
+                  <Button type="button" variant="secondary" size="sm" className="h-auto min-h-8 w-full max-w-full py-1.5" onClick={() => onOpenExisting(duplicate)}>
+                    <span className="block max-w-full whitespace-normal break-words text-center">{existingActionLabel} — {duplicate.name}</span>
+                  </Button>
+                </span>
+              )}
+            </Notice>
+          )}
 
-
-
-
-          {error && <Notice tone="error">{error}</Notice>}
+          <footer className="il-actionbar flex flex-wrap items-center justify-end gap-2 -mx-5 -mb-5 px-5 py-3 rounded-b-md">
+            <Button variant="secondary" onClick={requestFormClose} disabled={saving}>Cancelar</Button>
+            <Button variant="primary" onClick={save} disabled={saving}>{primaryLabel}</Button>
+          </footer>
         </div>
       )}
-    </>
-  );
-  const actions = (
-    <div className="flex w-full gap-2 justify-end">
-      <Button variant="secondary" onClick={requestFormClose} disabled={saving}>Cancelar</Button>
-      <Button variant="primary" onClick={save} disabled={saving}>{primaryLabel}</Button>
-    </div>
-  );
-  // §19–25 — painel LATERAL do overlay expansível (Novo agendamento →
-  // "Cadastrar novo paciente"): o MESMO form, com rodapé próprio, dentro do
-  // dialog que já está aberto. Nenhum segundo modal/backdrop é criado.
-  if (embedded) {
-    return (
-      <>
-        <div className="flex flex-col min-h-0">
-          <div className="flex-1 min-h-0">{body}</div>
-          {!saved && <footer className="il-actionbar shrink-0 px-4 py-3 flex flex-wrap items-center justify-end gap-2">{actions}</footer>}
-        </div>
-        {closeGuard.dialog}
-      </>
-    );
-  }
-  return (
-    <WorkspaceSheet
-      open
-      onClose={() => { if (!saving) onClose(); }}
-      dismissGuard={dismissState}
-      title={title || (vetMode ? 'Cadastrar tutor e paciente' : 'Novo cliente')}
-      subtitle={saved
-        ? 'Cadastro salvo na base de clientes.'
-        : vetMode
-          ? `Tutor: ${name.trim() || '—'} · o pet entra como paciente no mesmo cadastro`
-          : 'Cadastro direto no CRM — se abandonar o agendamento, o cliente permanece.'}
-      icon={vetMode ? 'paw' : 'users'}
-      width="max-w-[520px]"
-      footer={!saved ? actions : undefined}
-    >
-      {body}
       {closeGuard.dialog}
-    </WorkspaceSheet>
+    </section>
   );
-}
-
-/**
- * Wrapper standalone (Quick Create de Clientes): MESMO form em WorkspaceSheet.
- * Mantém a API pública original; o form vive em `NewClientForm`.
- */
-export function NewClientSheet(props: {
-  businessId: string;
-  onClose: () => void;
-  onSaved: (contactId: string, extra?: NewClientResult) => void;
-  onView360?: () => void;
-  vetMode?: boolean;
-  initialName?: string;
-  initialPhone?: string;
-  title?: string;
-}) {
-  return <NewClientForm {...props} />;
 }

@@ -8,20 +8,22 @@
 // `children` e `title`. Nenhuma tela reimplementa drawer.
 //
 // Comportamento garantido (briefing):
-//   • abre pela direita com animação de 180ms (DS 1.0 · §15; saída simétrica);
+//   • abre pela direita; entrada e saída com os tokens do DS (--gd-motion-sheet
+//     / --gd-motion-sheet-out) pelo contrato único `useOverlayPresence`;
+//   • fechar pelo PAI (open=false) também anima a saída antes de desmontar;
 //   • NUNCA cobre a topbar (top: --topbar-h + --sheet-gap) nem a sidebar
 //     (largura limitada por --sheet-left, medido em runtime pelo shell);
 //   • margem de --sheet-gap (14px) nas extremidades, raio e sombra elegantes;
 //   • backdrop discreto (não apaga o contexto de operação);
 //   • ESC fecha; foco entra no título; Tab fica contido (lib/dialog-focus);
 //     ao fechar o foco VOLTA para o elemento que abriu;
-//   • `prefers-reduced-motion` zera a animação (ver CSS).
+//   • `prefers-reduced-motion` zera a animação (ver CSS e overlayMotionMs).
 //
 // Cabeçalho: título · ação opcional "abrir página completa" · minimizar
 // (quando `minimizable`). Fechar = X padrão no canto superior direito
 // (herdado por TODO sheet) + ESC. Minimizar NÃO desmonta o conteúdo: o
 // sheet vira uma pílula ancorada no canto e o estado interno é preservado.
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
@@ -29,12 +31,7 @@ import { wrapDialogFocus } from '@/lib/dialog-focus';
 import { lockBodyScroll, unlockBodyScroll } from '@/lib/scroll-lock';
 import { isTopOverlay, popOverlay, pushOverlay } from '@/lib/overlay-stack';
 import { useOverlayDismissGuard, type DismissGuardState, type DismissReason } from './OverlayDismissGuard';
-import { CloseButton } from '@/components/ui';
-
-// DS 1.0 · §15 — janela de movimento do sistema é 140–180ms (ease-out). A
-// entrada/saída do sheet vivia em 200ms; entra na janela sem virar animação
-// decorativa (o tempo de saída acompanha, e prefers-reduced-motion zera).
-const MOTION_MS = 180;
+import { CloseButton, overlayMotionMs, useOverlayPresence } from '@/components/ui';
 
 const SHEET_WIDTH_PRESETS: Record<string, string> = {
   'max-w-xs': '20rem', 'max-w-sm': '24rem',
@@ -51,15 +48,11 @@ function sheetWidthValue(width?: string): string {
   return arbitrary?.[1] || SHEET_WIDTH_PRESETS[width] || width;
 }
 
-function motionMs(): number {
-  try {
-    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : MOTION_MS;
-  } catch { return MOTION_MS; }
-}
-
-export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageHref, fullPageLabel = 'Abrir página completa', minimizable = false, minimized = false, onMinimizedChange, width, children, footer, dismissGuard }: {
+export function WorkspaceSheet({ open, onClose, onExited, title, subtitle, icon, fullPageHref, fullPageLabel = 'Abrir página completa', minimizable = false, minimized = false, onMinimizedChange, width, children, footer, dismissGuard }: {
   open: boolean;
   onClose: () => void;
+  /** Chamado quando a saída termina (sheet já fora da tela). */
+  onExited?: () => void;
   title: string;
   subtitle?: string;
   icon?: string;
@@ -78,15 +71,17 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const [closing, setClosing] = useState(false);
   const titleId = useId();
   const dismiss = useOverlayDismissGuard();
-  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, closeNow);
+  // Presença e saída: contrato único (useOverlayPresence com exit). Token = sheet-out.
+  const presence = useOverlayPresence(open, onExited, { exitMs: () => overlayMotionMs('--gd-motion-sheet-out', 170), onClose });
+  const { present, closing, session } = presence;
+  const requestClose = (reason: DismissReason) => dismiss.requestClose(reason, dismissGuard, presence.requestExit);
 
-  // Abre/fecha com animação de saída; preserva e devolve o foco.
+  // Abre/fecha preservando e devolvendo o foco. Roda ao ficar presente (e a
+  // cada reabertura, via session); a saída mantém o sheet até o fim da animação.
   useEffect(() => {
-    if (!open || !dialog.current) return;
+    if (!present || !dialog.current) return;
     const element = dialog.current;
     const previous = document.activeElement as HTMLElement | null;
     // Lock compartilhado: sheets empilhados NÃO guardam overflow próprio.
@@ -111,31 +106,24 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
     return () => {
       observer.disconnect();
       document.removeEventListener('focusin', contain);
-      clearTimeout(timer.current);
       popOverlay(element);
       element.close();
       unlockBodyScroll(element);
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open]);
-
-  function closeNow() {
-    if (closing) return;
-    setClosing(true);
-    timer.current = setTimeout(() => {
-      setClosing(false);
-      onClose();
-    }, motionMs());
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [present, session]);
 
   function toggleMinimized() {
     onMinimizedChange?.(!minimized);
   }
 
-  if (!open) return null;
+  // Desmonta só depois da saída (present=false), nunca no quadro em que open cai.
+  if (!present) return null;
 
   return (
     <dialog
+      key={session}
       ref={dialog}
       className="ws-sheet"
       data-closing={closing || undefined}
@@ -143,6 +131,7 @@ export function WorkspaceSheet({ open, onClose, title, subtitle, icon, fullPageH
       style={{ '--sheet-w': sheetWidthValue(width) } as React.CSSProperties}
       aria-modal="true"
       aria-labelledby={titleId}
+      onAnimationEnd={(e) => { if (e.target === e.currentTarget && e.animationName === 'ws-sheet-out') presence.runExit(); }}
       onCancel={(e) => {
         e.preventDefault();
         // O <dialog> nativo só manda cancel para o de CIMA; a pilha garante o

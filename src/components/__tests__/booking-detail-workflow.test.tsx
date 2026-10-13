@@ -25,7 +25,8 @@ vi.mock('@/components/ui', () => ({
   StatusBadge: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   buttonCls: () => 'button',
-  DetailSideModal: ({ children }: any) => <section data-testid="detail-modal">{children}</section>,
+  DetailSideModal: ({ children, footer }: any) => <section data-testid="detail-modal">{children}{footer}</section>,
+  Avatar: ({ name }: any) => <span aria-hidden="true">{name}</span>,
 }));
 
 import { BookingDetailSheet } from '@/components/dashboard/BookingDetailSheet';
@@ -54,11 +55,33 @@ describe('BookingDetailSheet — status e workflow', () => {
     );
 
     const modal = screen.getByTestId('detail-modal');
-    expect(within(modal).getByText('Agendamento').parentElement?.textContent).toContain('Confirmado');
+    expect(modal.querySelector('[data-booking-status]')?.textContent).toContain('Confirmado');
     expect(within(modal).getByText('Etapa operacional').parentElement?.textContent).toContain('Chegou');
     expect(modal.querySelector('[data-workflow-state]')?.getAttribute('data-workflow-state')).toBe('arrived');
     expect(within(modal).getByText(/Próxima ação elegível/).textContent).toContain('Iniciar atendimento');
     expect(within(modal).getByRole('button', { name: 'Iniciar atendimento' })).toBeTruthy();
     expect(within(modal).queryByRole('button', { name: 'Registrar chegada' })).toBeNull();
+  });
+});
+
+// Contrato C · status, chegada registrada e desfazer são TRÊS elementos distintos.
+// Defeito: o botão de desfazer dizia "Chegou às HH:MM" (com ícone de check), confundível com o status.
+describe('BookingDetailSheet — chegada registrada × desfazer', () => {
+  it('desfazer tem rótulo próprio; a hora da chegada fica no registro, e o status continua Confirmado', () => {
+    render(
+      <BookingDetailSheet
+        booking={{ ...booking, workflow: { state: 'arrived', label: 'Chegou', allowed: ['start_care', 'check_in_undo'] } }}
+        service={{ id: 'service-a', name: 'Consulta', durationMin: 30 }}
+        pro={{ id: 'pro-a', name: 'Dra. Ana' }}
+        businessId="clinic-a"
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+    const modal = screen.getByTestId('detail-modal');
+    expect(within(modal).getByRole('button', { name: 'Desfazer chegada' })).toBeTruthy();
+    expect(within(modal).queryByRole('button', { name: /^Chegou às/ })).toBeNull();
+    expect(modal.querySelector('[data-booking-status]')?.textContent).toContain('Confirmado');
+    expect(modal.textContent).toMatch(/Chegada registrada às \d{2}:\d{2}/);
   });
 });

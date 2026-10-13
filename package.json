@@ -24,6 +24,8 @@
     "test:360:browser": "playwright test --config tests/360/playwright.config.ts",
     "test:agenda:setup": "node tests/agenda-viewport/setup.mjs",
     "test:agenda:browser": "playwright test --config tests/agenda-viewport/playwright.config.ts",
+    "test:e3:seed": "node scripts/seed-entrega3-qa.mjs",
+    "test:e3:browser": "playwright test --config tests/uiux-entrega3/playwright.config.ts",
     "spike:agenda": "npm --prefix spikes/agenda-temporal-2 run dev",
     "spike:agenda:build": "npm --prefix spikes/agenda-temporal-2 run build",
     "spike:agenda:test": "npm --prefix spikes/agenda-temporal-2 run test",

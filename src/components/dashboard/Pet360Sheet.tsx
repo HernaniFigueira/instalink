@@ -5,20 +5,23 @@
 // Ao clicar no pet (Greg) na agenda/detalhe: resumo do paciente,
 // atendimentos, agenda, anamnese e arquivos DO PET. Financeiro NÃO
 // é duplicado — só o link "Responsável financeiro: tutor".
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, DetailSideModal, ListSkeleton, Notice, Tabs } from '@/components/ui';
+import { Avatar, Button, DetailSideModal, ListSkeleton, Notice, OverflowTabs, useOverlayPresence, useFrozenWhileClosed } from '@/components/ui';
 import { EncounterList, type EncounterRow } from '@/components/dashboard/EncounterSheet';
+import { PetAllergyChips } from '@/components/dashboard/PetAllergies';
 import { apiGet } from '@/lib/api-client';
-import { PET_SPECIES_LABELS, petAge, petLabel } from '@/lib/pets';
+import { PET_SPECIES_LABELS, petAge } from '@/lib/pets';
 import { formatDateBR } from '@/lib/tz';
 import { followUpDueDate } from '@/lib/encounters';
+import { encounterHref } from '@/lib/encounter-workspace';
 import type { AnamneseResponse, AnamneseTemplate, Booking, Pet } from '@/lib/types';
 
 type PetTab = 'resumo' | 'encounters' | 'agenda' | 'anamnese' | 'files' | 'notes';
 
-function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemplate[]) {
+export function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemplate[]) {
   const template = templates.find((candidate) => candidate.id === response.templateId);
   if (template) return template.fields.filter((field) => field.type !== 'note').map((field) => ({
     id: field.id, label: field.label, type: field.type, value: response.answers?.[field.id],
@@ -26,15 +29,49 @@ function responseHistoryRows(response: AnamneseResponse, templates: AnamneseTemp
   return Object.entries(response.answers || {}).map(([id, value]) => ({ id, label: id, type: '', value }));
 }
 
-export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPhone, onOpenEncounter }: {
+type Pet360SheetProps = { open?: boolean; onExited?: () => void } & Omit<Parameters<typeof Pet360SheetSurface>[0], 'open' | 'onExited' | 'onOpenEncounter'>;
+/**
+ * Pet 360 — contrato público de PRESENÇA: `open` controlado pelo pai. A ficha
+ * sai animada antes de desmontar (ver useOverlayPresence). `onExited` roda depois da saída
+ * (ex.: abrir o atendimento só depois que o Pet 360 saiu da tela).
+ */
+export function Pet360Sheet({ open = true, onExited, ...rest }: Pet360SheetProps) {
+  const router = useRouter();
+  // CONTRATO ÚNICO do histórico, igual em TODAS as origens (Cliente 360, Agenda → detalhe, …):
+  // clicar num atendimento fecha a Pet 360, espera a saída completa e só então abre o registro.
+  // Quem chama não decide nada disso — antes, o detalhe da Agenda não passava o callback e o
+  // histórico ficava sem ação. O destino fica em ref para o `onExited` ler sempre o valor atual.
+  const pendingRef = useRef<{ id: string; returnTo: string } | null>(null);
+  const { mounted, session, handleExited } = useOverlayPresence(open, () => {
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (pending) router.push(encounterHref(pending.id, rest.businessId, pending.returnTo));
+    onExited?.();
+  });
+  const frozen = useFrozenWhileClosed(open, rest);
+  if (!mounted) return null;
+  const openFromHistory = (row: EncounterRow) => {
+    pendingRef.current = { id: row.id, returnTo: `${window.location.pathname}${window.location.search}` };
+    rest.onClose();
+  };
+  return <Pet360SheetSurface key={session} {...frozen} open={open} onExited={handleExited} onOpenEncounter={openFromHistory} />;
+}
+
+function Pet360SheetSurface({ open, onClose, businessId, pet: petProp, tutorName, tutorPhone, onOpenEncounter, onExited }: {
   open: boolean;
+  onExited?: () => void;
   onClose: () => void;
   businessId: string;
+  /**
+   * Ponto de partida (id + tutor + nome). A FICHA sempre usa o cadastro
+   * canônico do pet, carregado por id via /api/pets: quem chama (ex.: o
+   * detalhe do agendamento) não duplica espécie, raça, sexo e nascimento.
+   */
   pet: Pet | null;
   tutorName: string;
   tutorPhone?: string;
-  /** Abre o atendimento completo (mesmo caminho do Paciente 360). */
-  onOpenEncounter?: (row: EncounterRow) => void;
+  /** Abre o atendimento completo (contrato único: ver Pet360Sheet). */
+  onOpenEncounter: (row: EncounterRow) => void;
 }) {
   const [tab, setTab] = useState<PetTab>('resumo');
   const [encounters, setEncounters] = useState<EncounterRow[]>([]);
@@ -44,6 +81,27 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   const [templates, setTemplates] = useState<AnamneseTemplate[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
+  const [canonicalPet, setCanonicalPet] = useState<Pet | null>(null);
+  // Cadastro canônico do pet (fonte única): o que vale é o registro do pet,
+  // nunca o stub do chamador.
+  const pet = canonicalPet && petProp && canonicalPet.id === petProp.id ? canonicalPet : petProp;
+
+  const router = useRouter();
+  useEffect(() => {
+    if (!open || !petProp?.id) return;
+    let on = true;
+    setCanonicalPet(null);
+    const tutorQuery = petProp.tutorId ? `&tutorId=${encodeURIComponent(petProp.tutorId)}` : '';
+    apiGet<{ pets?: Pet[] }>(
+      `/api/pets?businessId=${encodeURIComponent(businessId)}${tutorQuery}`,
+      { scope: 'area', area: 'Atendimento' },
+    ).then((r) => {
+      if (!on || !r.ok) return;
+      const found = (r.data?.pets || []).find((candidate) => candidate.id === petProp.id);
+      if (found) setCanonicalPet(found);
+    }).catch(() => { /* mantém o ponto de partida; a ficha mostra o que existe */ });
+    return () => { on = false; };
+  }, [open, petProp?.id, petProp?.tutorId, businessId]);
 
   useEffect(() => {
     if (!open || !pet?.id) return;
@@ -52,8 +110,10 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
     setTab('resumo');
     (async () => {
       const [enc, bk, an] = await Promise.all([
+        // ETAPA 2: o histórico é do PACIENTE — filtrado no servidor por petId
+        // (nunca pelo tutor, que pode ter outros pets).
         apiGet<{ encounters?: EncounterRow[] }>(
-          `/api/encounters?businessId=${encodeURIComponent(businessId)}&contactId=${encodeURIComponent(pet.tutorId)}`,
+          `/api/encounters?businessId=${encodeURIComponent(businessId)}&petId=${encodeURIComponent(pet.id)}`,
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
         // CLINICAL ACCESS: a aba Agenda do Pet 360 mostra os agendamentos DO
@@ -64,18 +124,17 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
         apiGet<{ templates?: AnamneseTemplate[]; responses?: AnamneseResponse[] }>(
-          `/api/anamnese?businessId=${encodeURIComponent(businessId)}&responsesFor=${encodeURIComponent(pet.tutorId)}`,
+          `/api/anamnese?businessId=${encodeURIComponent(businessId)}&responsesFor=${encodeURIComponent(pet.tutorId)}&petId=${encodeURIComponent(pet.id)}`,
           { scope: 'area', area: 'Atendimento' },
         ).catch(() => ({ ok: false as const, message: '' })),
       ]);
       if (!on) return;
       if (!enc.ok && !bk.ok && !an.ok) setError('Não foi possível carregar a ficha do pet.');
-      // Só dados DESTSE pet (petId); tutor sem petId no registro fica de fora
-      // dos atendimentos clínicos específicos — mas bookings com petId filtram.
+      // Só dados DESTSE pet: o servidor já filtra por petId; o cliente confere de novo.
       setEncounters((enc.ok ? (enc.data?.encounters || []) : []).filter((e) => e.petId === pet.id));
       setBookings(bk.ok ? (bk.data?.bookings || []) : []);
       setTemplates(an.ok ? (an.data?.templates || []) : []);
-      setResponses((an.ok ? (an.data?.responses || []) : []).filter((r) => !r.petId || r.petId === pet.id));
+      setResponses((an.ok ? (an.data?.responses || []) : []).filter((r) => r.petId === pet.id));
       setLoaded(true);
     })();
     return () => { on = false; };
@@ -98,7 +157,18 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   const lastResponse = responses[0] || null;
   const templateName = (id: string) => templates.find((t) => t.id === id)?.name || 'Ficha';
 
-  if (!open || !pet) return null;
+  // Presença: NÃO desmontar com `open=false`. A saída animada pertence ao
+  // DetailSideModal (que avisa `onExited` ao terminar); se esta superfície
+  // retornasse null aqui, a ficha sumia sem animação, `onExited` nunca rodava
+  // e o atendimento escolhido na aba Atendimentos nunca abria.
+  if (!pet) return null;
+
+  // Identidade (uma só): o título já é o nome do pet; o subtítulo traz só
+  // espécie e raça ("Roedor (Ratazana)"). Nome não se repete no corpo.
+  const speciesLabel = PET_SPECIES_LABELS[pet.species] || pet.species || '';
+  const breedLabel = (pet.breed || '').trim();
+  const speciesBreed = speciesLabel && breedLabel ? `${speciesLabel} (${breedLabel})` : (speciesLabel || breedLabel);
+  const sexLabel = pet.sex === 'M' ? 'Macho' : pet.sex === 'F' ? 'Fêmea' : '';
 
   const tabs = [
     { id: 'resumo' as const, label: 'Resumo', icon: 'userCircle' },
@@ -115,30 +185,34 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
   return (
     <DetailSideModal
       open={open}
+      onExited={onExited}
       onClose={onClose}
       title={pet.name}
-      subtitle={`Pet 360 — ${petLabel(pet)}`}
+      subtitle={speciesBreed ? `Pet 360 · ${speciesBreed}` : 'Pet 360'}
       icon="paw"
       width="640px"
       flush
       footer={
-        <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
+        <div className="flex w-full items-center justify-between gap-2">
+          <Button variant="secondary" size="sm" onClick={() => router.push(`/pets/${encodeURIComponent(pet.id)}?b=${encodeURIComponent(businessId)}`)}
+            data-pet360-full-page>
+            Abrir ficha completa
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
+        </div>
       }
     >
       <div className="p-4 space-y-4" data-pet360="true">
-        {/* Cabeçalho do paciente — missão 5: bloco creme (o PET é o paciente),
-            nome grande + chips claros (espécie · raça · idade · peso) e o tutor
-            como contexto discreto. */}
+        {/* Bloco de identidade: o nome é o título do painel (não se repete aqui).
+            Chips com idade, peso e sexo; o tutor como contexto discreto. */}
         <div className="flex items-center gap-3.5 rounded-md border border-[var(--border)] bg-[var(--surface)] p-3.5">
           <Avatar name={pet.name} src={pet.photo || undefined} size={64} />
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-semibold text-[var(--text)] leading-tight break-words">{pet.name}</p>
-            <p className="mt-1 flex flex-wrap items-center gap-1">
+            <p className="flex flex-wrap items-center gap-1">
               {[
-                PET_SPECIES_LABELS[pet.species] || pet.species,
-                pet.breed,
                 age !== null ? `${age} ano(s)` : '',
                 pet.weightKg ? `${pet.weightKg} kg` : '',
+                sexLabel,
               ].filter(Boolean).map((chip) => (
                 <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
                   {chip}
@@ -154,13 +228,14 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                 Retorno previsto: {formatDateBR(upcomingReturn.due)}
               </p>
             )}
+            <PetAllergyChips pet={pet} max={3} className="mt-2" />
           </div>
-          {pet.sex && <Badge tone="zinc">{pet.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge>}
         </div>
 
         {error && <Notice tone="error">{error}</Notice>}
 
-        <Tabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" size="sm" />
+        {/* Canônico: as que cabem ficam visíveis; o excedente vai para 'Mais N' (sem rolagem escondida). */}
+        <OverflowTabs items={tabs} value={tab} onChange={setTab} ariaLabel="Seções da ficha do pet" className="pet360-tabs" variant="line" />
 
         {!loaded ? <ListSkeleton rows={4} /> : (
           <div className="ws-panel">
@@ -199,14 +274,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                 <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">Histórico clínico de {pet.name}</p>
                 {encounters.length === 0
                   ? <p className="text-sm text-[var(--text-muted)]">Nenhum atendimento registrado para este pet.</p>
-                  : onOpenEncounter
-                    ? <EncounterList rows={encounters} onOpen={onOpenEncounter} empty="" />
-                    : <ul className="space-y-2">{encounters.map((e) => (
-                      <li key={e.id} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                        <span className="text-xs font-semibold text-[var(--text-muted)] tabular-nums">{formatDateBR(e.date)}{e.time ? ` · ${e.time}` : ''}</span>
-                        <span className="block text-sm text-[var(--text)]">{e.evolution || e.complaint || e.serviceName}</span>
-                      </li>
-                    ))}</ul>}
+                  : <EncounterList rows={encounters} onOpen={onOpenEncounter} empty="" />}
               </div>
             )}
 
@@ -224,7 +292,7 @@ export function Pet360Sheet({ open, onClose, businessId, pet, tutorName, tutorPh
                             <span className="block text-xs text-[var(--text-muted)] truncate">{b.customerName}{b.status === 'completed' ? ' · concluído' : b.status === 'cancelled' ? ' · cancelado' : ''}</span>
                           </span>
                           <Link className="text-xs font-semibold text-[var(--brand-fg)] hover:underline shrink-0"
-                            href={`/agenda?b=${businessId}&data=${b.date}`}>Abrir</Link>
+                            href={`/agenda?b=${businessId}&view=day&data=${b.date}&booking=${encodeURIComponent(b.id)}`}>Abrir</Link>
                         </li>
                       ))}
                     </ul>

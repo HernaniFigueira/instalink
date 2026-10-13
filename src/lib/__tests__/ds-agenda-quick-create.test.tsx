@@ -189,7 +189,7 @@ async function pickQuick(layer: HTMLElement, label: string, value: string) {
 }
 
 describe('DS 1.0 §5 · quick create ancorado no slot', () => {
-  it('1 · clique abre o popover canônico ancorado, com os essenciais, data/duração recolhidos e "Mais opções"', async () => {
+  it('1 · clique abre o popover canônico ancorado: corpo só paciente/serviço, contexto no topo e "Mais opções"', async () => {
     render(<AgendaPage />);
     await clickSlot('10:00');
 
@@ -212,22 +212,18 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     expect(layer.style.left).toBeTruthy();
     expect(layer.style.top).toBeTruthy();
 
-    // Essenciais sempre visíveis (paciente, serviço, profissional, hora).
+    // CONTRATO (fechamento visual): o corpo tem SÓ paciente e serviço. Data,
+    // horário e profissional ficam no contexto superior (leitura, não campo).
     expect(within(layer).getByLabelText(/Paciente/)).toBeTruthy();
     expect(within(layer).getByLabelText(/^Serviço/)).toBeTruthy();
-    expect(within(layer).getByLabelText(/^Profissional/)).toBeTruthy();
-    expect(within(layer).getByLabelText(/^Hora/)).toBeTruthy();
-    // Progressive disclosure: data e duração ficam recolhidos com o resumo visível.
-    const toggle = within(layer).getByRole('button', { name: /Data e duração/ });
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(within(layer).queryByLabelText(/^Profissional/)).toBeNull();
+    expect(within(layer).queryByLabelText(/^Hora/)).toBeNull();
+    expect(within(layer).queryByRole('button', { name: /Data e duração/ })).toBeNull();
     expect(within(layer).queryByLabelText(/^Duração/)).toBeNull();
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(within(layer).getByLabelText(/^Duração/)).toBeTruthy();
-    expect(within(layer).getByRole('button', { name: /^Data$/ })).toBeTruthy();
-    expect(within(layer).getByRole('button', { name: 'Mais opções' })).toBeTruthy();
-    // O horário clicado já vem escolhido (intenção do gesto preservada).
-    expect((within(layer).getByLabelText(/^Hora/) as HTMLSelectElement).value).toBe('10:00');
+    // O horário do gesto aparece como contexto, e a ação de ajuste é "Mais opções".
+    expect(layer.querySelector('[data-quick-context]')?.textContent).toContain('10:00');
+    expect(within(layer).getByRole('button', { name: /Mais opções/ })).toBeTruthy();
+    expect(within(layer).getByRole('button', { name: 'Agendar' })).toBeTruthy();
   });
 
   it('A1 · X acessível fecha o Quick e limpa a seleção visual do gesto', async () => {
@@ -260,9 +256,12 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
       searchQuery: 'Pessoa nova', openRegistration: true,
       allowSingleEligibleServicePrefill: false,
     });
-    // O cadastro real já abre no painel aninhado, sem transformar a busca em
-    // um contato sintético no agendamento.
-    expect(screen.getByText('Cadastrar novo paciente')).toBeTruthy();
+    // Missão 02: o cadastro real é a página /clientes/novo. A busca segue no
+    // rascunho da unidade (sessão), sem virar contato sintético no agendamento.
+    const key = Object.keys(sessionStorage).find((k) => k.startsWith('gd.booking-return.'));
+    expect(key).toBeTruthy();
+    expect(JSON.parse(sessionStorage.getItem(key!) || 'null')).toMatchObject({ query: 'Pessoa nova', contactId: '' });
+    sessionStorage.removeItem(key!);
   });
 
   it('2 · abrir o popover NÃO cria agendamento (nenhum POST antes da confirmação)', async () => {
@@ -278,7 +277,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     await clickSlot('10:00');
     const layer = quick();
     await pickQuick(layer, 'Serviço', 'svc-1');
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     expect(await within(layer).findByText(/Escolha um paciente já cadastrado/)).toBeTruthy();
     expect(net.posts).toHaveLength(0);
@@ -287,7 +286,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     const hit = await within(layer).findByRole('button', { name: /Ana Tutora/ });
     fireEvent.click(hit);
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     await waitFor(() => expect(net.posts).toHaveLength(1));
     expect(net.posts[0]).toMatchObject({
@@ -311,7 +310,7 @@ describe('DS 1.0 §5 · quick create ancorado no slot', () => {
     fireEvent.change(within(layer).getByLabelText(/Paciente/), { target: { value: 'Ana' } });
     fireEvent.click(await within(layer).findByRole('button', { name: /Ana Tutora/ }));
     await pickQuick(layer, 'Serviço', 'svc-1');
-    fireEvent.click(within(layer).getByRole('button', { name: 'Criar agendamento' }));
+    fireEvent.click(within(layer).getByRole('button', { name: 'Agendar' }));
 
     expect(await within(layer).findByText('Este horário já está ocupado.')).toBeTruthy();
     expect(document.querySelector('[data-booking-created="true"]')).toBeNull();

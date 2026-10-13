@@ -229,10 +229,11 @@ describe('6 · correções cirúrgicas (contrato dos 8 pontos)', () => {
     expect(agendaCode).not.toMatch(/type="date"/);
   });
 
-  it('6 · modo “Mês” removido da UI (lógica profunda preservada)', () => {
-    expect(agenda).not.toContain("label: 'Mês'");
-    // …a lógica do modo mês continua para links diretos (view=month)
+  it('6 · modo “Mês” volta ao seletor único (E3): Dia/Semana/Mês/Lista, com <SelectMenu>', () => {
+    // E3: Mês é funcional e aparece no seletor canônico (SelectMenu), não como tab.
+    expect(agenda).toContain("'Mês'");
     expect(agenda).toContain("view === 'month'");
+    expect(agenda).toContain('<SelectMenu');
   });
 
   it('7 · quick create “+” de volta ao topo (missão 6 — premium)', () => {

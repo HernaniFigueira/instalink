@@ -24,6 +24,13 @@ import { Drawer } from '@/components/ui';
 import { NewBookingSheet } from '@/components/dashboard/NewBookingSheet';
 import { WORKSPACE_NESTED_PANEL, WORKSPACE_SHEET_SIZES } from '@/lib/workspace-sheet-sizes';
 
+// Novo agendamento navega para /clientes/novo pelo App Router (Missão 02).
+// Este teste monta o sheet isoladamente: o router é um stub sem efeito.
+const navPush = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: navPush, replace: () => {}, refresh: () => {}, back: () => {}, prefetch: () => {} }),
+}));
+
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
@@ -134,9 +141,10 @@ describe('5 · composição aninhada usa o preset compartilhado 50/50', () => {
     expect(screen.getByRole('heading', { name: 'Cadastrar novo paciente' })).toBeTruthy();
   });
 
-  it('o formulário padrão preserva a largura; criação rápida usa o preset compacto', () => {
+  it('criação completa é modal central com largura do token; criação rápida usa o popover', () => {
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
-    expect(booking).toContain('width={quick && !advanced ? WORKSPACE_SHEET_SIZES.compact : WORKSPACE_SHEET_SIZES.standard}');
+    expect(booking).toContain('variant="dialog"');
+    expect(booking).toContain('dialogWidth="var(--gd-booking-modal-w)"');
     expect(booking).not.toContain('width={WORKSPACE_SHEET_SIZES.wide}');
     // Preset existe na fonte única do Design System.
     const sizes = read('src/lib/workspace-sheet-sizes.ts');
@@ -157,7 +165,11 @@ describe('6 · viewport estreita: cadastro assume a faixa e o agendamento volta 
     expect(css).toContain(".il-drawer__strip[data-expanded='true'] .il-drawer__panel--side {");
   });
 
-  it('abrir o cadastro mantém o agendamento montado; fechar preserva data/hora/serviço/profissional', async () => {
+  it('"+ Novo cliente" guarda o agendamento na sessão e segue para a página; nada é criado', async () => {
+    // Missão 02: o cadastro não é mais painel aninhado. A preservação do que foi
+    // escolhido vive no rascunho de sessão da unidade (lib/booking-return.ts).
+    sessionStorage.removeItem('gd.booking-return.biz-t1');
+    navPush.mockClear();
     const user = userEvent.setup();
     render(
       <NewBookingSheet
@@ -172,32 +184,29 @@ describe('6 · viewport estreita: cadastro assume a faixa e o agendamento volta 
       />,
     );
 
-    // Estado inicial do prefill.
     const sheet = () => within(dialog());
-    expect(sheet().getByLabelText(/^3\. Data/).getAttribute('data-value')).toBe('2026-10-01');
-    // CP3 · Serviço é Combobox do DS: escolha pela UI (input → opção).
-    await user.click(sheet().getByLabelText(/^2\. Serviço/));
+    // Missão 03 (fluxo progressivo): o campo Data só existe depois do serviço;
+    // a data pré-preenchida é conferida logo abaixo, quando o campo aparece.
+    await user.click(sheet().getByLabelText(/^Serviço/));
     await user.click(await waitFor(() => { const o = document.querySelector<HTMLElement>('[role="option"][data-value="svc-1"]'); if (!o) throw new Error('svc-1'); return o; }));
     await waitFor(() => expect(sheet().queryByLabelText(/^Profissional/)).toBeTruthy());
     expect(sheet().getByLabelText(/^Profissional/).getAttribute('data-value')).toBe('pro-a');
+    expect(sheet().getByLabelText(/^Data/).getAttribute('data-value')).toBe('2026-10-01');
     await waitFor(() => expect(within(dialog()).getAllByRole('button').some((b) => b.textContent?.trim() === '09:30')).toBe(true));
 
-    // Abre o cadastro DENTRO do mesmo overlay.
-    const openRegister = within(dialog()).getAllByRole('button').find((b) => /Cadastrar/i.test(b.textContent || ''))!;
+    const openRegister = within(dialog()).getAllByRole('button').find((b) => /Cadastrar|Novo cliente/i.test(b.textContent || ''))!;
     await user.click(openRegister);
+
+    // Sem painel lateral: o único overlay continua sendo o agendamento.
     expect(document.querySelectorAll('dialog')).toHaveLength(1);
-    expect(sidePanel()).toBeTruthy();
-    // O agendamento continua MONTADO (é isso que preserva o estado na volta).
-    expect(basePanel()).toBeTruthy();
-
-    // Volta (cancelar o cadastro).
-    await user.click(within(dialog()).getByRole('button', { name: 'Voltar' }));
-
-    await waitFor(() => expect(sidePanel()).toBeNull());
-    expect(sheet().getByLabelText(/^3\. Data/).getAttribute('data-value')).toBe('2026-10-01');
-    expect(sheet().getByLabelText(/^2\. Serviço/).getAttribute('data-value')).toBe('svc-1');
-    expect(sheet().getByLabelText(/^Profissional/).getAttribute('data-value')).toBe('pro-a');
-    await waitFor(() => expect(within(dialog()).getAllByRole('button').some((b) => b.textContent?.trim() === '09:30')).toBe(true));
+    expect(sidePanel()).toBeNull();
+    // Rascunho da unidade com o que já foi escolhido.
+    const draft = JSON.parse(sessionStorage.getItem('gd.booking-return.biz-t1') || 'null');
+    expect(draft).toMatchObject({ businessId: 'biz-t1', date: '2026-10-01', time: '09:30', serviceId: 'svc-1', professionalId: 'pro-a' });
+    // Navegação para a página de cadastro, sem dados pessoais na URL.
+    expect(navPush).toHaveBeenCalledWith('/clientes/novo?b=biz-t1&from=agenda');
+    // Nenhum agendamento criado antes da confirmação.
     expect(slotsApi.posts).toBe(0);
+    sessionStorage.removeItem('gd.booking-return.biz-t1');
   });
 });

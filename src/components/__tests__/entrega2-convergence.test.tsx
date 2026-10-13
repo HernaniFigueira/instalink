@@ -287,6 +287,16 @@ describe('Abas com overflow explícito ("Mais")', () => {
     expect(src('src/components/dashboard/ClientProfileDrawer.tsx')).not.toMatch(/client360-tabs-wrap|data-overflow-right/);
   });
 
+  it('modo wrap (Cliente 360): nenhuma seção vai para "Mais" mesmo em largura estreita', () => {
+    function WrapHarness() {
+      const [value, setValue] = useState('a');
+      return createElement(OverflowTabs<string>, { items, value, ariaLabel: 'Seções', onChange: setValue, wrap: true });
+    }
+    render(createElement(WrapHarness));
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Visão geral', 'Agenda3', 'Atendimento', 'Conversas', 'Financeiro']);
+    expect(screen.queryByRole('button', { name: /Mais/ })).toBeNull();
+  });
+
   it('escolher no "Mais" seleciona e a aba passa a ficar visível; teclado abre o menu', () => {
     const onChange = vi.fn();
     render(createElement(Harness, { onChange }));

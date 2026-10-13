@@ -61,6 +61,14 @@ describe('overlayMotionMs · token CSS é a fonte da duração', () => {
   });
 });
 
+// jsdom não roda CSS animations: o fim da saída é o animationend do próprio dialog.
+function endDialogExit(el: Element | null) {
+  if (!el) throw new Error('dialog de saída ausente');
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: 'gd-dialog-out' });
+  act(() => { el.dispatchEvent(ev); });
+}
+
 describe('Dialog · saída animada', () => {
   it('fechar pelo X mantém o dialog montado com data-closing e só chama onClose ao fim', () => {
     const onClose = vi.fn();
@@ -75,7 +83,18 @@ describe('Dialog · saída animada', () => {
 
     act(() => { vi.advanceTimersByTime(149); });
     expect(onClose).not.toHaveBeenCalled();
+    endDialogExit(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem animationend, a rede de segurança (duração + folga) chama onClose uma única vez', () => {
+    const onClose = vi.fn();
+    render(<Dialog open onClose={onClose} title="Teste sem evento">corpo</Dialog>);
+    fireEvent.click(screen.getByRole('button', { name: /fechar/i }));
+    act(() => { vi.advanceTimersByTime(150 + 120 - 1); });
+    expect(onClose).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
+    act(() => { vi.advanceTimersByTime(1000); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -84,7 +103,8 @@ describe('Dialog · saída animada', () => {
     render(<Dialog open onClose={onClose} title="Teste Escape">corpo</Dialog>);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
-    act(() => { vi.advanceTimersByTime(200); });
+    expect(screen.getByRole('dialog').getAttribute('data-closing')).not.toBeNull();
+    endDialogExit(screen.getByRole('dialog'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -105,7 +125,14 @@ describe('DetailSideModal · saída sem efeito fantasma', () => {
     const dialog = document.querySelector('dialog.gd-detail') as HTMLElement;
     expect(dialog.getAttribute('data-closing')).not.toBeNull();
     expect(onClose).not.toHaveBeenCalled();
+    // A saída termina no animationend REAL do painel. Aos 170 ms (duração do token) a
+    // animação ainda não terminou; um timer de 170 ms cortava o deslocamento no meio.
     act(() => { vi.advanceTimersByTime(170); });
+    expect(onClose).not.toHaveBeenCalled();
+    const panel = document.querySelector('aside.gd-detail__panel') as HTMLElement;
+    const ev = new Event('animationend', { bubbles: true });
+    Object.defineProperty(ev, 'animationName', { value: 'gd-detail-out' });
+    act(() => { panel.dispatchEvent(ev); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

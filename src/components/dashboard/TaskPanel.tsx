@@ -19,6 +19,10 @@ export interface TaskView {
   createdAt: string; assignedUserId: string; assigneeName: string; leadName: string;
   bookingLabel: string; fromAutomation: boolean; source: string;
   leadId?: string; bookingId?: string;
+  /** Paciente (pet do atendimento/agendamento do mesmo tutor). Só leitura. */
+  patientName?: string;
+  /** Solicitante: quem criou a tarefa (ou 'Automação'). Só leitura. */
+  requesterName?: string;
 }
 
 export interface TaskSummaryView { open: number; overdue: number; dueToday: number; mine: number }
@@ -132,6 +136,8 @@ export function TaskPanel({ tasks, summary, businessId, members, onChanged }: {
                   {t.note && <p className="text-xs text-[var(--text-muted)] mt-1">{t.note}</p>}
                   <p className="text-[11.5px] text-[var(--text-muted)] mt-1.5 flex flex-wrap gap-x-2 gap-y-1 items-center">
                     <span>{formatTaskDue(t.dueAt, t.dueLabel)}</span>
+                    {t.patientName ? <span>· paciente {t.patientName}</span> : null}
+                    {t.requesterName ? <span>· pedido por {t.requesterName}</span> : null}
                     {t.assigneeName ? <span>· {t.assigneeName}</span> : null}
                     {t.leadName ? <span>· lead {t.leadName}</span> : null}
                     {t.bookingLabel ? <span>· agendamento {t.bookingLabel}</span> : null}

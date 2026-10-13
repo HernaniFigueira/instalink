@@ -72,7 +72,8 @@ describe('FASE 2 · P6 — cadeia pet na agenda/atendimento (regressão estátic
   it('agenda e detalhe preferem o PET; tutor continua identificado', () => {
     const agenda = read('src/app/(dashboard)/agenda/page.tsx');
     expect(agenda).toContain('b.petName || b.customerName');
-    expect(agenda).toContain('dropAsk.booking.petName');
+    // Lê do agendamento congelado (dropFrozen) enquanto a confirmação anima a saída.
+    expect(agenda).toContain('dropFrozen.booking.petName');
     const detail = read('src/components/dashboard/BookingDetailSheet.tsx');
     expect(detail).toContain('Tutor:');
   });

@@ -151,6 +151,9 @@ describe('F1A · o legado continua intacto (nada foi apagado do sistema)', () =>
     expect(sheet).toMatch(/Anamnese/);
     expect(sheet).toMatch(/Registrar pagamento/);
     expect(sheet).toMatch(/Reabrir para editar/);
-    expect(sheet).toMatch(/AnamneseFiller/);
+    // P1.3: a anamnese do legado navega à seção do workspace; o componente
+    // AnamneseFiller continua no repositório (nada apagado), fora da montagem.
+    expect(sheet).toMatch(/secao=anamnese/);
+    expect(read('src/components/dashboard/AnamneseFiller.tsx')).toMatch(/response\.save/);
   });
 });

@@ -64,9 +64,11 @@ interface Props {
   encounterId: string;
   /** Para onde "Voltar" leva (já saneado: só rota interna). */
   returnTo: string;
+  /** Seção que abre primeiro (`?secao=`, ex.: `anamnese` vindo do Registro). */
+  initialSection?: string;
 }
 
-export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props) {
+export function EncounterWorkspace({ businessId, encounterId, returnTo, initialSection }: Props) {
   const router = useRouter();
   const { permissions, ready: permissionsReady } = usePanelPermissions();
   const [row, setRow] = useState<EncounterWorkspaceRow | null>(null);
@@ -202,6 +204,7 @@ export function EncounterWorkspace({ businessId, encounterId, returnTo }: Props)
         onRow={syncRow}
         registerLeave={registerLeave}
         fullRecordHref={registroHref}
+        initialSection={initialSection}
         onNavigate={(href) => router.push(href)}
       />
       </div>

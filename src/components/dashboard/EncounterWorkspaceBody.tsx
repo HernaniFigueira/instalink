@@ -48,6 +48,8 @@ interface Props {
   fullRecordHref?: string;
   /** Navegação do workspace (router). Sempre passa pela guarda de saída. */
   onNavigate?: (href: string) => void;
+  /** Seção de abertura (`?secao=`); cai na Atendimento se não existir na vertical. */
+  initialSection?: string;
 }
 
 /** Navegação contextual AGRUPADA. Só seções reais; grupos sem itens não aparecem. */
@@ -104,7 +106,7 @@ function EncounterHistoryBlock({ files, onOpenRecord }: {
 
 interface PendingLeave { reason: DismissReason; proceed: () => void; }
 
-export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, fullRecordHref, onNavigate }: Props) {
+export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, fullRecordHref, onNavigate, initialSection }: Props) {
   const {
     authority, row: current, saveState, saveError, conflictMessage, dirtySections,
     publish, clearConflict, pendingSections, anyDirty,
@@ -113,7 +115,7 @@ export function EncounterWorkspaceBody({ businessId, row, onRow, registerLeave, 
   // clínica veterinária liga Anamnese/Avaliação; as demais ficam só com o CORE
   // até que a abstração de paciente daquela vertical seja fechada. Nenhum
   // `if (clinicType === ...)` aqui: a autoridade é `availableEncounterSections`.
-  const [sectionId, setSectionId] = useState<string>(() => resolveEncounterSection('atendimento', row.clinicType).id);
+  const [sectionId, setSectionId] = useState<string>(() => resolveEncounterSection(initialSection || 'atendimento', row.clinicType).id);
   const [adoptToken, setAdoptToken] = useState(0);
   const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null);
   // Revisão de finalização: elevada aqui para o rodapé abrir o MESMO diálogo.

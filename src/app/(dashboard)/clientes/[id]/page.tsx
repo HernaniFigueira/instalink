@@ -10,8 +10,8 @@
 //
 // A gaveta continua existindo como PASSAGEM rápida na lista, com a ação
 // "Ver perfil completo" apontando para cá.
-import { useCallback, useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { BusinessPipeline } from '@/lib/types';
 import { apiGet } from '@/lib/api-client';
@@ -22,11 +22,13 @@ import { useBusinessId } from '@/components/dashboard/useBusinessId';
 import { AccessDenied, AreaLoadError, useAreaLoad } from '@/components/dashboard/AccessNotice';
 import { effectiveHorizonDays } from '@/lib/booking-ops';
 import { clientListReturnHref } from '@/lib/client-return';
-import { Button, PageBackAction, Skeleton } from '@/components/ui';
+import { continueBookingHref, readBookingReturn } from '@/lib/booking-return';
+import { Button, Notice, PageBackAction, Skeleton } from '@/components/ui';
 
 export default function ClientePerfilPage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
+  const router = useRouter();
   // A empresa ativa vem do MESMO resolvedor das outras telas (?b= quando
   // existe, senão /api/auth/me) — a rota não inventa contexto próprio.
   const { businessId, resolving, noBusiness } = useBusinessId();
@@ -42,6 +44,12 @@ export default function ClientePerfilPage() {
   const [loaded, setLoaded] = useState(false);
   const [missing, setMissing] = useState(false);
   const [retry, setRetry] = useState(0);
+  // Missão 02 — veio do cadastro completo com agendamento em andamento na sessão?
+  const [returnToBooking, setReturnToBooking] = useState(false);
+  useEffect(() => {
+    setReturnToBooking(search.get('retorno') === 'agendamento' && !!businessId && !!readBookingReturn(businessId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, search]);
 
   const { denied, failed, report } = useAreaLoad('Clientes');
   const { permissions, ready: permsReady } = usePanelPermissions();
@@ -80,6 +88,10 @@ export default function ClientePerfilPage() {
   const [pros, setPros] = useState<any[]>([]);
   const [booking, setBooking] = useState<{ cfg: any; tz: string } | null>(null);
   const [bookingFor, setBookingFor] = useState<Person360 | null>(null);
+  // Último cliente de agendamento não nulo: a superfície sai animada com o conteúdo congelado.
+  const lastBookingRef = useRef(bookingFor);
+  if (bookingFor) lastBookingRef.current = bookingFor;
+  const bookingCtx = bookingFor ?? lastBookingRef.current;
 
   async function openBooking(p: Person360) {
     setBookingFor(p);
@@ -137,6 +149,16 @@ export default function ClientePerfilPage() {
 
   return (
     <>
+      {returnToBooking && (
+        <div className="mb-3" data-return-booking="true">
+          <Notice tone="success" title="Cadastro salvo">
+            <span className="block">Você pode voltar ao agendamento em andamento com este cliente selecionado.</span>
+            <span className="mt-2 block">
+              <Button type="button" variant="primary" size="sm" onClick={() => router.push(continueBookingHref(businessId))}>Continuar agendamento</Button>
+            </span>
+          </Notice>
+        </div>
+      )}
       <ClientProfileDrawer
         variant="page"
         pageBackHref={listHref}
@@ -149,14 +171,15 @@ export default function ClientePerfilPage() {
         onNewBooking={(p) => openBooking(p)}
       />
 
-      {bookingFor && (
+      {bookingCtx && (
         <NewBookingSheet
+          open={!!bookingFor}
           businessId={businessId}
           services={services}
           pros={pros}
           horizonDays={effectiveHorizonDays(booking?.cfg)}
           timezone={booking?.tz || ''}
-          initial={{ contactId: bookingFor.contactId, name: bookingFor.name, phone: bookingFor.phone, email: bookingFor.email }}
+          initial={{ contactId: bookingCtx.contactId, name: bookingCtx.name, phone: bookingCtx.phone, email: bookingCtx.email }}
           onClose={() => setBookingFor(null)}
           onCreated={load}
         />

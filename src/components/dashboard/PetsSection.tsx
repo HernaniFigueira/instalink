@@ -1,33 +1,28 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Icon } from '@/components/icons';
-import { Avatar, Badge, Button, Field, IconButton, Input, Notice, Textarea, SelectMenu } from '@/components/ui';
-import { WorkspaceSheet } from '@/components/dashboard/WorkspaceSheet';
-import { useOverlayDismissGuard } from '@/components/dashboard/OverlayDismissGuard';
+import { Avatar, Button, IconButton, Notice } from '@/components/ui';
+import { PetEditSheet, EMPTY_PET } from '@/components/dashboard/PetEditSheet';
+import { PetAllergyChips } from '@/components/dashboard/PetAllergies';
 import { apiGet, apiSend } from '@/lib/api-client';
-import { PET_SPECIES, PET_SPECIES_LABELS, breedSuggestions, petAge, petLabel, validatePet } from '@/lib/pets';
+import { PET_SPECIES_LABELS, petAge, petAgeLabel } from '@/lib/pets';
 import type { Pet } from '@/lib/types';
 
 // ═══════════════════════════════════════════════════════════════
-// FASE 2 · P6 — PETS DO TUTOR (só se apresenta em clínica veterinária)
+// FASE 2 · P6 / ETAPA 2 — PETS DO TUTOR (só se apresenta em clínica veterinária)
 // Um tutor pode ter vários pets; o pet é o PACIENTE da agenda.
+// O card abre a página completa do pet (/pets/[id]); o lápis edita o cadastro.
 // ═══════════════════════════════════════════════════════════════
-const EMPTY_PET: Partial<Pet> = {
-  name: '', species: 'cachorro', breed: '', sex: '', birthDate: '', weightKg: 0, notes: '', photo: '',
-};
-const PET_FORM_KEYS: Array<keyof Pet> = ['id', 'name', 'species', 'breed', 'sex', 'birthDate', 'weightKg', 'notes', 'photo'];
-const petFormKey = (pet: Partial<Pet>) => JSON.stringify(PET_FORM_KEYS.map((key) => pet[key] ?? ''));
 
-export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenPet }: {
+export function PetsSection({ businessId, tutorId, tutorName, onChanged }: {
   businessId: string; tutorId: string; tutorName: string; onChanged?: () => void;
-  /** Abre o Pet 360 (ficha do animal) — HOMOLOGAÇÃO P1. */
-  onOpenPet?: (pet: Pet) => void;
 }) {
   const [vet, setVet] = useState<boolean | null>(null); // null = ainda não perguntou
   const [pets, setPets] = useState<Pet[]>([]);
+  // P1 · falha de leitura é exibida como erro (com nova tentativa), nunca some em silêncio.
+  const [loadError, setLoadError] = useState(false);
   const [editing, setEditing] = useState<Partial<Pet> | null>(null);
-  const [editingBaseline, setEditingBaseline] = useState<Partial<Pet> | null>(null);
-  const petDismiss = useOverlayDismissGuard();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
@@ -38,49 +33,16 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
       `/api/pets?businessId=${encodeURIComponent(businessId)}&tutorId=${encodeURIComponent(tutorId)}`,
       { scope: 'area', area: 'Clientes' },
     );
-    if (!res.ok) { setVet(false); return; }
+    if (!res.ok) { setLoadError(true); return; }
+    setLoadError(false);
     setVet(!!res.data?.vet);
     setPets(res.data?.pets || []);
   }, [businessId, tutorId]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const petDirty = !!editing && !!editingBaseline && petFormKey(editing) !== petFormKey(editingBaseline);
-  const petDismissState = {
-    dirty: petDirty, saving: busy, context: 'edit' as const,
-    title: editing?.id ? 'Descartar alterações do pet?' : 'Descartar cadastro do pet?',
-    description: editing?.id ? 'As alterações feitas no cadastro serão perdidas.' : 'Os dados preenchidos serão perdidos.',
-  };
-  const closePetForm = () => { setEditing(null); setEditingBaseline(null); };
-  const requestPetClose = () => petDismiss.requestClose('close-button', petDismissState, closePetForm);
-  const startPetForm = (pet: Partial<Pet>) => {
-    const initial = { ...pet };
-    setError('');
-    setEditing(initial);
-    setEditingBaseline(initial);
-  };
-
-  async function save() {
-    if (!editing) return;
-    const problem = validatePet(editing);
-    if (problem) { setError(problem); return; }
-    setBusy(true); setError('');
-    const res = await apiSend('/api/pets', 'POST', {
-      action: editing.id ? 'update' : 'create',
-      businessId, tutorId,
-      pet: editing,
-    }, { scope: 'action', area: 'Clientes' });
-    setBusy(false);
-    if (!res.ok) { setError(res.message || 'Não foi possível salvar o pet.'); return; }
-    closePetForm();
-    setFlash('Pet salvo.');
-    void load();
-    onChanged?.();
-  }
-
   async function remove(pet: Pet) {
-    const label = `${pet.name}?`;
-    if (!window.confirm(`Remover o pet ${label}`)) return;
+    if (!window.confirm(`Remover o pet ${pet.name}?`)) return;
     setBusy(true); setError('');
     const res = await apiSend('/api/pets', 'POST', { action: 'delete', businessId, id: pet.id }, { scope: 'action', area: 'Clientes' });
     setBusy(false);
@@ -92,13 +54,22 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
     onChanged?.();
   }
 
+  if (loadError) {
+    return (
+      <div role="alert" className="mt-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+        <p className="text-sm font-semibold text-[var(--text)]">Não foi possível carregar os pets deste tutor.</p>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">A leitura falhou; isto não significa que o tutor não tem pet.</p>
+        <button type="button" className="mt-2 text-xs font-semibold text-[var(--brand)] underline" onClick={() => void load()}>Tentar novamente</button>
+      </div>
+    );
+  }
+
   // Não veterinária (ou ainda carregando): NADA desta estrutura aparece.
   if (!vet) return null;
 
   return (
     <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-      {/* MISSÃO 5 — o PET é o paciente: bloco creme quente protagonista;
-          o tutor (card acima) ficou neutro e discreto. */}
+      {/* MISSÃO 5 — o PET é o paciente: bloco protagonista; o tutor (card acima) ficou neutro. */}
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-[var(--border)] bg-[var(--surface-3)] text-[var(--accent)]">
           <Icon n="paw" size={18} />
@@ -122,27 +93,33 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
         <ul className="client360-pets-list mt-3 space-y-2">
           {pets.map((p) => {
             const age = petAge(p.birthDate);
-            const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
+            const chips = [PET_SPECIES_LABELS[p.species] || p.species, p.breed, p.sex === 'M' ? 'Macho' : p.sex === 'F' ? 'Fêmea' : '', age !== null ? `${age} ano(s)` : '', p.weightKg ? `${p.weightKg} kg` : ''].filter(Boolean);
             return (
-              <li key={p.id} className="client360-pet-card flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
-                <Avatar name={p.name} src={p.photo || undefined} size={44} />
-                <div className="min-w-0 flex-1">
-                  <button type="button" className="block max-w-full truncate text-left text-[16px] font-semibold leading-tight text-[var(--text-strong)] hover:underline"
-                    onClick={() => onOpenPet?.(p)} title={`Abrir ficha de ${p.name}`}>
-                    {p.name}{!p.active && <span className="ml-2 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
-                  </button>
-                  <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {chips.map((chip) => (
-                      <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
-                        {chip}
-                      </span>
-                    ))}
-                    {chips.length === 0 && <span className="text-xs text-[var(--text-muted)]">Sem detalhes</span>}
-                  </p>
-                </div>
-                {p.sex && <span className="client360-pet-card__sex"><Badge tone="zinc">{p.sex === 'M' ? 'Macho' : 'Fêmea'}</Badge></span>}
-                <span className="client360-pet-card__actions flex items-center gap-1">
-                  <IconButton icon="pencil" label={`Editar ${p.name}`} size="sm" onClick={() => startPetForm(p)} />
+              <li key={p.id} className="client360-pet-card flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-3 transition-colors hover:border-[var(--border-strong,var(--border))]">
+                <Link href={`/pets/${encodeURIComponent(p.id)}?b=${encodeURIComponent(businessId)}`}
+                  aria-label={`Abrir ficha completa de ${p.name}`}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  data-pet-card-link={p.id}>
+                  <Avatar name={p.name} src={p.photo || undefined} size={48} />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex min-w-0 items-center gap-2 text-[16px] font-semibold leading-tight text-[var(--text-strong)]">
+                      <span className="truncate">{p.name}</span>
+                      {!p.active && <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">(inativo)</span>}
+                    </p>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {chips.map((chip) => (
+                        <span key={chip} className="inline-flex items-center rounded-pill border border-[var(--border)] bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-muted)]">
+                          {chip}
+                        </span>
+                      ))}
+                      {chips.length === 0 && <span className="text-xs text-[var(--text-muted)]">{petAgeLabel(p.birthDate) || 'Sem detalhes'}</span>}
+                    </p>
+                    <PetAllergyChips pet={p} max={2} className="mt-1.5" />
+                  </div>
+                  <Icon n="chevronRight" size={16} className="shrink-0 text-[var(--text-soft)]" />
+                </Link>
+                <span className="client360-pet-card__actions flex shrink-0 items-center gap-1">
+                  <IconButton icon="pencil" label={`Editar cadastro de ${p.name}`} size="sm" disabled={busy} onClick={() => setEditing(p)} />
                   <IconButton icon="x" label={`Remover ${p.name}`} size="sm" variant="ghost" disabled={busy} onClick={() => { void remove(p); }} />
                 </span>
               </li>
@@ -151,80 +128,21 @@ export function PetsSection({ businessId, tutorId, tutorName, onChanged, onOpenP
         </ul>
       )}
 
-      {/* Missão 7 — a ação de cadastro mora EMBAIXO do bloco, à esquerda:
-          o canto superior direito ficou só para o conteúdo (leitura mais
-          natural; hierarquia pet × tutor preservada). */}
+      {/* A ação de cadastro mora embaixo do bloco, à esquerda (hierarquia pet × tutor). */}
       <div className="mt-3.5">
-        <Button size="sm" variant="primary" onClick={() => startPetForm(EMPTY_PET)}>
-          <Icon n="plus" size={14} /> Cadastrar pet
+        <Button size="sm" variant="secondary" onClick={() => { setError(''); setEditing({ ...EMPTY_PET }); }}>
+          <Icon n="plus" size={16} /> Cadastrar pet
         </Button>
       </div>
 
-      <WorkspaceSheet
-        open={!!editing}
-        onClose={closePetForm}
-        dismissGuard={petDismissState}
-        title={editing?.id ? `Editar ${editing.name || 'pet'}` : 'Novo pet'}
-        subtitle={tutorName ? `Paciente de ${tutorName}` : 'Novo paciente (pet)'}
-        icon="paw"
-        width="max-w-[520px]"
-        footer={(
-          <div className="flex w-full items-center justify-end gap-2.5">
-            <Button variant="secondary" onClick={requestPetClose} disabled={busy}>Cancelar</Button>
-            <Button variant="primary" onClick={() => { void save(); }} disabled={busy} className="min-w-[108px]">{busy ? 'Salvando…' : 'Salvar pet'}</Button>
-          </div>
-        )}
-      >
-        {petDismiss.dialog}
-        {editing && (
-          <div className="p-1 space-y-4">
-            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Identificação</p>
-              <Field label="Nome" required htmlFor="pet-name">
-                <Input id="pet-name" value={editing.name || ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="Ex.: Thor" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-              <Field label="Espécie" htmlFor="pet-species">
-                <SelectMenu id="pet-species" value={editing.species || ''} onChange={(v) => setEditing({ ...editing, species: v })}
-                  options={[{ value: '', label: '—' }, ...PET_SPECIES.map((s) => ({ value: s, label: PET_SPECIES_LABELS[s] }))]} />
-              </Field>
-              <Field label="Raça" htmlFor="pet-breed" hint="Autocomplete pela espécie — pode digitar outra.">
-                <Input id="pet-breed" list="pet-breeds-datalist" value={editing.breed || ''} onChange={(e) => setEditing({ ...editing, breed: e.target.value })} placeholder="Ex.: Pastor alemão" />
-                <datalist id="pet-breeds-datalist">
-                  {breedSuggestions(editing.species || '').map((b) => <option key={b} value={b} />)}
-                </datalist>
-              </Field>
-              </div>
-            </section>
-            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Características</p>
-              <div className="grid grid-cols-2 gap-3">
-              <Field label="Sexo" htmlFor="pet-sex">
-                <SelectMenu id="pet-sex" value={editing.sex || ''} onChange={(v) => setEditing({ ...editing, sex: v as any })}
-                  options={[{ value: '', label: 'Não informado' }, { value: 'M', label: 'Macho' }, { value: 'F', label: 'Fêmea' }]} />
-              </Field>
-              <Field label="Nascimento" htmlFor="pet-birth">
-                <Input id="pet-birth" type="date" value={editing.birthDate || ''} onChange={(e) => setEditing({ ...editing, birthDate: e.target.value })} />
-              </Field>
-              <Field label="Peso (kg)" htmlFor="pet-weight">
-                <Input id="pet-weight" type="number" min="0" max="500" step="0.01" value={editing.weightKg ?? ''} onChange={(e) => setEditing({ ...editing, weightKg: Number(e.target.value) })} />
-              </Field>
-              <Field label="Foto (URL)" htmlFor="pet-photo" hint="Opcional.">
-                <Input id="pet-photo" value={editing.photo || ''} onChange={(e) => setEditing({ ...editing, photo: e.target.value })} placeholder="https://…" />
-              </Field>
-              </div>
-            </section>
-            <section className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-subtle)] p-3.5">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-soft)]">Observações</p>
-              <Field label="Observações" htmlFor="pet-notes" hint="Comportamento, alergias, cuidados.">
-                <Textarea id="pet-notes" rows={4} value={editing.notes || ''} onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
-                  placeholder="Ex.: alergia a frango; calmo com crianças; medo de aspirador."
-                  className="min-h-[104px] resize-none leading-relaxed rounded-[var(--radius-sm)]" />
-              </Field>
-            </section>
-          </div>
-        )}
-      </WorkspaceSheet>
+      <PetEditSheet
+        businessId={businessId}
+        tutorId={tutorId}
+        tutorName={tutorName}
+        pet={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setFlash('Pet salvo.'); void load(); onChanged?.(); }}
+      />
     </div>
   );
 }

@@ -54,7 +54,13 @@ const NEXT_ACTION: Record<string, { to: QueueStatus; label: string; variant: 'pr
   in_service: { to: 'done', label: 'Concluir', variant: 'success' },
 };
 
-export function QueuePanel({ businessId, date, rows, done = [], loading, canWrite, canEncounter, canSearchContacts = true, timezone, onChanged, professionals, services, onOpenBooking, onEncounter, onOpenClient, onFitIn, onClose }: {
+/** P0.4 — complemento do nome acessível do botão: diz o paciente (pet) e o tutor. */
+function complementoPaciente(row: QueueRow, petNameOf?: (bookingId: string) => string | undefined): string {
+  const pet = row.bookingId && petNameOf ? petNameOf(row.bookingId) : undefined;
+  return `${pet ? `de ${pet}, ` : ''}tutor ${row.customerName || 'sem nome'}`;
+}
+
+export function QueuePanel({ businessId, date, rows, done = [], loading, canWrite, canEncounter, canSearchContacts = true, timezone, onChanged, professionals, services, onOpenBooking, petNameOf, onEncounter, onOpenClient, onFitIn, onClose }: {
   businessId: string;
   /** Dia do negócio em exibição (a fila mostrada é sempre a de HOJE + a viva). */
   date: string;
@@ -82,6 +88,8 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
   services: Array<{ id: string; name: string; professionalIds?: string[]; professionalMode?: 'all' | 'selected' }>;
   /** Abre o agendamento de origem (quando a entrada veio de um horário marcado). */
   onOpenBooking?: (bookingId: string) => void;
+  /** P0.4 — paciente (pet) do agendamento de origem, só para leitura. Sem ele, a linha mostra só o tutor. */
+  petNameOf?: (bookingId: string) => string | undefined;
   /** "Iniciar atendimento" com permissão: a fila avança E o registro abre. */
   onEncounter?: (row: QueueRow) => void;
   /** Abrir a ficha do cliente (a que existe no CRM desta unidade). */
@@ -380,7 +388,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
                     {long && <Badge tone="red">esperando {waitLabel(waited)}</Badge>}
                   </p>
                   <p className="text-xs text-[var(--text-muted)] break-words">
-                    {[row.serviceName || 'Serviço a definir', row.professionalName || 'quem estiver livre'].join(' · ')}
+                    {[petNameOf && row.bookingId && petNameOf(row.bookingId) ? `Paciente: ${petNameOf(row.bookingId)}` : null, row.serviceName || 'Serviço a definir', row.professionalName || 'quem estiver livre'].filter(Boolean).join(' · ')}
                     {' · '}
                     {row.status === 'in_service' || row.status === 'done'
                       ? `esperou ${waitLabel(waited)}`
@@ -415,7 +423,7 @@ export function QueuePanel({ businessId, date, rows, done = [], loading, canWrit
                         status da fila. Sem a permissão, a linha segue só
                         operacional (nada de conteúdo profissional). */}
                     {row.status === 'in_service' && canEncounter && onEncounter && (
-                      <Button size="sm" variant="secondary" onClick={() => onEncounter(row)}>Abrir atendimento</Button>
+                      <Button size="sm" variant="secondary" onClick={() => onEncounter(row)} aria-label={`Abrir atendimento ${complementoPaciente(row, petNameOf)}`}>Abrir atendimento</Button>
                     )}
                     {row.bookingId && onOpenBooking && (
                       <Button size="sm" variant="secondary" onClick={() => onOpenBooking(row.bookingId)}>Ver horário</Button>

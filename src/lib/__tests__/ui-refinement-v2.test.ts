@@ -23,18 +23,22 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(clients).not.toMatch(/Abrir WhatsApp[\s\S]{0,250}success-bg/);
   });
 
-  it('Client 360 reserves primary for booking; edit/note soft, WhatsApp green', () => {
+  it('Client 360 reserves primary for booking; note secondary, edit/WhatsApp tertiary (ghost)', () => {
     const profile = read('src/components/dashboard/ClientProfileDrawer.tsx');
     expect(profile).toMatch(/variant="primary" size="sm" onClick=\{\(\) => onNewBooking\(person\)\}/);
-    expect(profile).toMatch(/variant="secondary" size="sm" onClick=\{\(\) => \{ setTab\('notes'\)/);
-    expect(profile).toMatch(/variant="secondary" size="sm" onClick=\{\(\) => \{\s*const opening = !editing/);
+    // Cabeçalho enxuto: nota e edição saíram da barra e moram no menu "Mais"
+    // canônico (DropdownMenu); o primary fica sozinho à direita.
+    expect(profile).toMatch(/id: 'note', label: 'Registrar nota'/);
+    expect(profile).toMatch(/const toggleEdit = \(\) => \{\s*const opening = !editing/);
+    expect(profile).toMatch(/variant="ghost" size="sm">Mais/);
+    expect(profile).toContain("className={buttonCls('ghost', 'sm')}");
     const whatsapp = profile.slice(profile.indexOf('function A2'), profile.indexOf('function Empty', profile.indexOf('function A2')));
     expect(whatsapp).toContain("className={buttonCls(icon === 'whatsapp' ? 'whatsapp' : 'secondary', 'sm')}");
     expect(whatsapp).not.toContain('hover:text-[var(--brand-fg)]');
     const ui = read('src/components/ui.tsx');
     // Pass 2 — secundário sem contorno OU acento em repouso; só o estado ganha
     // superfície neutra. Links reais continuam sendo a variante `link`.
-    expect(ui).toContain("'bg-transparent text-[var(--text)] border border-transparent hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]'");
+    expect(ui).toContain("'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-3)] active:bg-[var(--surface-3)]'");
     expect(ui).not.toContain("secondary:\n    'bg-transparent text-[var(--brand-fg)] border border-[var(--brand)]");
   });
 
@@ -72,14 +76,17 @@ describe('2.0 refinement pass — lower action and surface competition', () => {
     expect(css).toContain('height: 100dvh');
   });
 
-  it('booking sheet expands responsively while retaining the shared sheet and side panel', () => {
+  it('booking sheet is a central modal; the shared sheet and side panel primitives remain for other flows', () => {
+    // Missão 02: o cadastro de paciente saiu do Novo agendamento (é a página /clientes/novo).
+    // O modal continua central; a composição lateral segue existindo no primitivo compartilhado.
     const booking = read('src/components/dashboard/NewBookingSheet.tsx');
     const drawer = read('src/components/ui.tsx');
     const css = read('src/app/globals.css');
-    // Sozinho: preset operacional compartilhado. Aninhado: a faixa expande.
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.standard');
-    expect(booking).toContain('WORKSPACE_SHEET_SIZES.nestedForm');
-    expect(booking).toContain('sideTitle="Cadastrar novo paciente"');
+    expect(booking).toContain('variant="dialog"');
+    expect(booking).toContain('var(--gd-booking-modal-w)');
+    expect(booking).not.toContain('WORKSPACE_SHEET_SIZES.nestedForm');
+    expect(booking).not.toContain('sideTitle="Cadastrar novo paciente"');
+    expect(booking).toContain("router.push(newClientFromBookingHref(businessId))");
     expect(css).toContain('@media (max-width: 1359px)');
     // Composição 50/50: os DOIS painéis usam o mesmo preset compartilhado.
     expect(drawer).toContain('WORKSPACE_NESTED_PANEL');

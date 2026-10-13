@@ -19,6 +19,8 @@ import type { AnamneseResponse, AnamneseTemplate } from '@/lib/types';
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get('businessId') || '';
   const responsesFor = req.nextUrl.searchParams.get('responsesFor') || '';
+  // Etapa 2: `petId` restringe às fichas DESTE paciente (nunca a do tutor de outro pet).
+  const petId = req.nextUrl.searchParams.get('petId') || '';
   const guard = await requireBusiness(req, businessId, ['atendimento', 'config']);
   if (!guard.ok) return guard.res;
   const db = guard.db;
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
   if (responsesFor) {
     out.responses = db.anamneseResponses
       .filter((r) => r.businessId === businessId && r.contactId === responsesFor)
+      .filter((r) => !petId || r.petId === petId)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }
   return NextResponse.json(out);

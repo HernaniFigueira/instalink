@@ -59,5 +59,5 @@ export default function AtendimentoEncounterPage() {
       </div>
     );
   }
-  return <EncounterWorkspace businessId={businessId} encounterId={encounterId} returnTo={returnTo} />;
+  return <EncounterWorkspace businessId={businessId} encounterId={encounterId} returnTo={returnTo} initialSection={search.get('secao') || undefined} />;
 }

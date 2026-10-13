@@ -3,6 +3,7 @@ import { requireBusiness, scopeInfo } from '@/lib/access';
 import { can } from '@/lib/access';
 import { isProfessionalScoped, scopedDbView } from '@/lib/data-scope';
 import { summarizeDay, pendingClosures } from '@/lib/booking-ops';
+import { bookingWorkflowState } from '@/lib/appointment-workflow-tx';
 import { integrationStatus } from '@/lib/whatsapp';
 import { operationalEnabledFeatureIds } from '@/lib/features';
 import { dashboardAttention, dashboardContext, dashboardLinks, pageIsCustomized, recentActivityLists, setupChecklist, setupProgress, type PageCustomizationInput } from '@/lib/dashboard';
@@ -14,7 +15,7 @@ import {
   REVENUE_HINTS, REVENUE_LABELS, REVENUE_UNIT_LABELS, bookingRevenue, orderRevenue,
 } from '@/lib/revenue';
 import { financeMetrics } from '@/lib/finance-metrics';
-import { addDaysISO, nowHM, todayISO } from '@/lib/tz';
+import { addDaysISO, effectiveTimezone, nowHM, todayISO } from '@/lib/tz';
 import { timeToMin } from '@/lib/utils';
 import { parsePeriodParam, periodWindows, resolvePeriodSpec } from '@/lib/periods';
 import { collectResults, resultsSummary } from '@/lib/insights';
@@ -77,7 +78,11 @@ export async function GET(req: NextRequest) {
   const m = context.modules;
   const activity = recentActivityLists(m);
 
-  const today = todayISO();
+  // E3 · "hoje" do painel é o dia da CLÍNICA (fuso efetivo do negócio), não o do
+  // servidor: à noite em UTC o dia já virou e os próximos/fechamentos sumiriam.
+  const clinicTz = effectiveTimezone(business.businessTimezone);
+  const today = todayISO(new Date(), clinicTz);
+  const nowClinic = () => nowHM(new Date(), clinicTz);
   const win = periodWindows(period, today);
   const from = win.from;
   const periodWindow = { from: win.from, to: win.to };
@@ -174,23 +179,40 @@ export async function GET(req: NextRequest) {
       .slice(0, 5)
       .map((b) => ({
         id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
+        professionalId: b.professionalId || '',
         service: serviceNames.get(b.serviceId) || 'Serviço',
         professional: b.professionalId ? pros.get(b.professionalId) || '' : '',
+      }))
+    : [];
+
+  // E3 · FLUXO DE HOJE por papel: a MESMA etapa canônica do workflow (Agendado →
+  // Chegou → Em atendimento → Finalizado), derivada no servidor e já filtrada pelo
+  // escopo do profissional. Só leitura — não muda status nem check-in.
+  const todayFlow = m.bookings
+    ? bookings
+      .filter((b) => b.date === today && !['cancelled', 'no_show'].includes(b.status))
+      .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
+      .slice(0, 12)
+      .map((b) => ({
+        id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
+        workflowState: bookingWorkflowState(db, bId, b),
+        professionalId: b.professionalId || '',
+        service: serviceNames.get(b.serviceId) || 'Serviço',
       }))
     : [];
 
   const vids = new Set(events.filter((e) => e.type === 'page_view' && e.meta?.vid).map((e) => String(e.meta.vid)));
 
   // ── Operação de HOJE + pendências de fechamento ──
-  const todaySummary = m.bookings ? summarizeDay(bookings, today, servicesById, today, nowHM()) : null;
+  const todaySummary = m.bookings ? summarizeDay(bookings, today, servicesById, today, nowClinic()) : null;
   // ONTEM (comparação dos KPIs do dia): mesma função, mesma fonte de dados, já
   // em memória. Aditivo — quem só lê `today` não muda nada.
   const yesterdayISO = addDaysISO(today, -1);
   const yesterdaySummary = m.bookings
-    ? summarizeDay(bookings, yesterdayISO, servicesById, today, nowHM())
+    ? summarizeDay(bookings, yesterdayISO, servicesById, today, nowClinic())
     : null;
   const closures = m.bookings
-    ? pendingClosures(bookings, servicesById, today, nowHM()).map((b) => ({
+    ? pendingClosures(bookings, servicesById, today, nowClinic()).map((b) => ({
       id: b.id, customerName: b.customerName, date: b.date, time: b.time, status: b.status,
       service: serviceNames.get(b.serviceId) || 'Serviço',
     }))
@@ -229,7 +251,7 @@ export async function GET(req: NextRequest) {
   const arrivalsPendingNow = m.bookings
     ? bookings.filter((b) =>
       b.date === today && b.status === 'confirmed' &&
-      !b.checkedInAt && timeToMin(b.time) <= timeToMin(nowHM())).length
+      !b.checkedInAt && timeToMin(b.time) <= timeToMin(nowClinic())).length
     : 0;
   // FASE 2 · P10 — RETORNOS PENDENTES (dado real): finalizado com retorno
   // estruturado vencido/até hoje e o paciente SEM futuro agendamento.
@@ -355,7 +377,7 @@ export async function GET(req: NextRequest) {
   // a permissão de resultados: ninguém recebe número que não pode ver.
   const resultsBlock = can(guard.ctx, 'financeiro')
     ? (() => {
-      const spec = resolvePeriodSpec({ period: String(period), today: todayISO() });
+      const spec = resolvePeriodSpec({ period: String(period), today: todayISO(new Date(), clinicTz) });
       const payload = collectResults(
         db,
         [{
@@ -437,6 +459,7 @@ export async function GET(req: NextRequest) {
     pageStats,
     whatsapp,
     upcoming,
+    todayFlow,
     checklist,
     pct: setupProgress(setupItems),
     pendingSetup,
