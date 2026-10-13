@@ -63,6 +63,18 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
+// P0.2 — nome para comparação de duplicidade: sem acento, caixa ou título (Dr./Dra.).
+function normalizeProName(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/^\s*(dr|dra)\.?\s+/, '').replace(/\s+/g, ' ').trim();
+}
+
+class ProfessionalNameTakenError extends Error {
+  constructor(public candidate: { id: string; name: string }) {
+    super('Já existe um profissional com este nome nesta unidade, sem login vinculado.');
+  }
+}
+
 // POST { action: 'link_as_professional', businessId, professionalName? }
 // Cria (se preciso) um Professional vinculado a ESTE User na unidade.
 // User e Professional permanecem entidades separadas — só o vínculo userId.
@@ -100,6 +112,12 @@ export async function POST(req: NextRequest) {
         const cur = d.professionals.find((p) => p.businessId === businessId && p.userId === auth.user.id)!;
         return { id: cur.id, name: cur.name, role: cur.role || '' };
       }
+      // P0.2 — não criar um segundo cadastro para quem já está na unidade como profissional
+      // sem login (ex.: cadastrado pela clínica). Não vincula automaticamente: quem decide é a
+      // equipe, pelo fluxo de Equipe (vínculo com profissional existente).
+      const wanted = normalizeProName(name);
+      const twin = d.professionals.find((p) => p.businessId === businessId && !p.userId && normalizeProName(p.name) === wanted);
+      if (twin) throw new ProfessionalNameTakenError({ id: twin.id, name: twin.name });
       const pro = {
         id: randomUUID(), businessId, name,
         role: '', photo: auth.user.photo || '', active: true,
@@ -120,6 +138,12 @@ export async function POST(req: NextRequest) {
       professional: { id: created.id, name: created.name, role: created.role },
     });
   } catch (e: unknown) {
+    if (e instanceof ProfessionalNameTakenError) {
+      return NextResponse.json({
+        error: `${e.message} Peça a um gestor para vincular "${e.candidate.name}" em Equipe, em vez de criar outro cadastro.`,
+        code: 'professional_name_taken', candidate: e.candidate,
+      }, { status: 409 });
+    }
     const msg = e instanceof Error ? e.message : 'Não foi possível vincular o profissional.';
     return NextResponse.json({ error: msg }, { status: 400 });
   }

@@ -275,6 +275,11 @@ export function createBookingTx(d: DB, p: CreateBookingParams): {
   const fitIn = p.bookingKind === 'fit_in';
   if (fitIn && !isOwner) throw txError('Encaixe é uma decisão da equipe.', 403);
   if (!fitIn && !r.slots.includes(p.time)) {
+    // P0.1 — dia fechado (exceção ou sem expediente) não é "horário ocupado": motivo explícito.
+    // A recusa continua a mesma (409); só a mensagem muda. Encaixe segue pelo caminho próprio.
+    if (r.closed && (r.closedReason === 'exception' || r.closedReason === 'no_windows')) {
+      throw txError(r.closedReason === 'exception' ? 'Dia fechado neste calendário (exceção cadastrada).' : 'Sem expediente neste dia. Para atender fora do expediente, use encaixe.', 409);
+    }
     throw txError('Este horário acabou de ser ocupado. Escolha outro.', 409);
   }
   const pair = bufferPair(service, cfg || { bufferMin: 0 });

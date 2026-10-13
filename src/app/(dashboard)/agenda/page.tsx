@@ -711,6 +711,13 @@ export default function AgendaPage() {
   // O fluxo COMPLETO (`creating`) continua existindo e é o destino de
   // "Mais opções" e do CTA "Novo agendamento".
   const [quickCreate, setQuickCreate] = useState<QuickBookingAnchor | null>(null);
+  // P0.1 — clique em dia/intervalo fechado não abre o Quick Create: mostra o motivo.
+  const [closedHint, setClosedHint] = useState<{ x: number; y: number; title: string; detail: string } | null>(null);
+  useEffect(() => {
+    if (!closedHint) return;
+    const t = setTimeout(() => setClosedHint(null), 4500);
+    return () => clearTimeout(t);
+  }, [closedHint]);
   const [creating, setCreating] = useState<{
     date: string; time: string; professionalId: string; selectedDurationMin?: number; quick?: boolean;
     /** A3.4 fix (revisão B5): "Encaixar na agenda" vem da FILA já preenchido. */
@@ -801,6 +808,8 @@ export default function AgendaPage() {
   const dragSlotsRef = useRef<DragSlots>(emptyDragSlots());
   const hoverRef = useRef<HoverTarget | null>(null);
   const columnsRef = useRef<DropColumn[]>([]);
+  // P0.1 — motivo de fechamento por coluna, lido pelos handlers estáveis (useCallback).
+  const closedRef = useRef<Map<string, { title: string; detail: string } | null>>(new Map());
   const bookingsRef = useRef<Map<string, Booking>>(new Map());
   const durationRef = useRef(30);
   // Distância (px) entre o ponteiro e o topo do evento no momento da pegada: o
@@ -1163,6 +1172,7 @@ export default function AgendaPage() {
     if (ex) return null; // horário especial: a própria faixa já mostra a janela
     return normalWindowsFor(c).length > 0 ? null : { title: 'Fechado', detail: 'Sem expediente neste dia' };
   };
+  closedRef.current = new Map(columns.map((c) => [c.key, closedFor(c)]));
   const outsideFor = (c: ColumnVM): Array<{ start: number; end: number }> => {
     if (exceptions.some(e => e.date === c.date)) return [];
     const windows = normalWindowsFor(c).sort((a, b) => a.start - b.start);
@@ -1505,6 +1515,10 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
+    if (!blockMode) {
+      const closed = closedRef.current.get(columnKey);
+      if (closed) { setSelectedRange(null); setClosedHint({ x: point.x, y: point.y, title: closed.title, detail: closed.detail }); return; }
+    }
     const seed = { date: col.date, time, professionalId: col.professionalId, selectedDurationMin };
     setSelectedRange({ columnKey, time, durationMin: selectedDurationMin });
     // Bloquear horário continua sendo o fluxo de BLOQUEIO (não cria atendimento).
@@ -1556,6 +1570,10 @@ export default function AgendaPage() {
     const col = columnsRef.current.find((c) => c.key === columnKey);
     if (!col) return;
     setDetail(null);
+    if (!blockMode) {
+      const closed = closedRef.current.get(columnKey);
+      if (closed) { setSelectedRange(null); setClosedHint({ x: point.x, y: point.y, title: closed.title, detail: closed.detail }); return; }
+    }
     if (blockMode) { setSelectedRange({ columnKey, time, durationMin: 60 }); openBlock(newBookingSeedFromAgendaCell(col, time)); }
     else {
       setSelectedRange({ columnKey, time, durationMin: 30 });
@@ -2763,6 +2781,13 @@ export default function AgendaPage() {
           )}
         </div>
       </Drawer>
+      {closedHint && (
+        <div data-closed-hint className="fixed z-50 w-[260px]" style={{ left: Math.max(8, Math.min(closedHint.x + 12, (typeof window !== 'undefined' ? window.innerWidth : 1024) - 276)), top: closedHint.y + 12 }}>
+          <Notice tone="warning" live title={`Não é possível agendar: ${closedHint.title.toLowerCase()}`} onDismiss={() => setClosedHint(null)}>
+            {closedHint.detail}. Atendimento fora do expediente? A equipe registra em Novo agendamento → Encaixe.
+          </Notice>
+        </div>
+      )}
       {quickCreate && (
         <QuickBookingPopover
           anchor={quickCreate}
